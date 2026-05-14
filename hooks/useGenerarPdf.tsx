@@ -634,24 +634,39 @@ const remitoStyles = StyleSheet.create({
   text: { fontSize: 8.5 },
   textXs: { fontSize: 7 },
   // ── Table ──
-  table: { border: "1px solid black", marginBottom: 10 },
+  table: { border: "1px solid black", marginBottom: 6 },
   tableHeader: {
     flexDirection: "row",
     borderBottom: "1.5px solid black",
     backgroundColor: "#f5f5f5",
-    padding: "6px 8px",
+    padding: "5px 6px",
     fontWeight: "bold",
-    fontSize: 8,
+    fontSize: 7.5,
   },
   tableRow: {
     flexDirection: "row",
     borderBottom: "0.5px solid #ccc",
-    padding: "5px 8px",
-    fontSize: 8,
+    padding: "4px 6px",
+    fontSize: 7.5,
   },
-  colCodigo: { width: "14%", textAlign: "center" },
-  colCant: { width: "10%", textAlign: "center" },
-  colDesc: { width: "76%" },
+  colCodigo: { width: "9%", textAlign: "center" },
+  colCant: { width: "7%", textAlign: "center" },
+  colDesc: { width: "26%" },
+  colPrecioUnit: { width: "14%", textAlign: "right" },
+  colDto: { width: "8%", textAlign: "center" },
+  colUnitDto: { width: "14%", textAlign: "right" },
+  colFinal: { width: "14%", textAlign: "right" },
+  // ── Total row ──
+  totalSection: {
+    flexDirection: "row",
+    justifyContent: "flex-end",
+    borderTop: "1.5px solid black",
+    marginBottom: 8,
+    paddingTop: 5,
+    paddingRight: 6,
+  },
+  totalLabel: { fontSize: 9, fontWeight: "bold", marginRight: 8 },
+  totalValue: { fontSize: 9, fontWeight: "bold", width: "14%", textAlign: "right" },
   // ── Observaciones ──
   obsSection: {
     border: "1px solid black",
@@ -796,27 +811,50 @@ const RemitoPDF = ({ venta }: { venta: Venta }) => {
           )}
         </View>
 
-        {/* ══ TABLA DE ITEMS (sin precios - es remito) ══ */}
+        {/* ══ TABLA DE ITEMS ══ */}
         <View style={remitoStyles.table}>
           <View style={remitoStyles.tableHeader}>
-            <Text style={remitoStyles.colCodigo}>Codigo</Text>
+            <Text style={remitoStyles.colCodigo}>Cod.</Text>
             <Text style={remitoStyles.colCant}>Cant.</Text>
             <Text style={remitoStyles.colDesc}>Descripcion</Text>
+            <Text style={remitoStyles.colPrecioUnit}>P. Unitario</Text>
+            <Text style={remitoStyles.colDto}>Dto.%</Text>
+            <Text style={remitoStyles.colUnitDto}>P. Unit. c/Dto</Text>
+            <Text style={remitoStyles.colFinal}>Precio Final</Text>
           </View>
-          {items.map((item, i) => (
-            <View key={i} style={remitoStyles.tableRow}>
-              <Text style={remitoStyles.colCodigo}>{String(i + 1).padStart(4, "0")}</Text>
-              <Text style={remitoStyles.colCant}>{item.quantity}</Text>
-              <Text style={remitoStyles.colDesc}>{item.name}</Text>
-            </View>
-          ))}
+          {items.map((item, i) => {
+            const dto = item.itemDiscount || 0;
+            const unitConDto = item.price * (1 - dto / 100);
+            const precioFinal = unitConDto * item.quantity;
+            return (
+              <View key={i} style={remitoStyles.tableRow}>
+                <Text style={remitoStyles.colCodigo}>{String(i + 1).padStart(4, "0")}</Text>
+                <Text style={remitoStyles.colCant}>{item.quantity}</Text>
+                <Text style={remitoStyles.colDesc}>{item.name}</Text>
+                <Text style={remitoStyles.colPrecioUnit}>{formatCurrency(item.price)}</Text>
+                <Text style={remitoStyles.colDto}>{dto > 0 ? `${dto.toFixed(0)}%` : "-"}</Text>
+                <Text style={remitoStyles.colUnitDto}>{formatCurrency(unitConDto)}</Text>
+                <Text style={remitoStyles.colFinal}>{formatCurrency(precioFinal)}</Text>
+              </View>
+            );
+          })}
           {Array.from({ length: emptyRows }).map((_, i) => (
             <View key={`e${i}`} style={remitoStyles.tableRow}>
               <Text style={remitoStyles.colCodigo}>{" "}</Text>
               <Text style={remitoStyles.colCant}>{" "}</Text>
               <Text style={remitoStyles.colDesc}>{" "}</Text>
+              <Text style={remitoStyles.colPrecioUnit}>{" "}</Text>
+              <Text style={remitoStyles.colDto}>{" "}</Text>
+              <Text style={remitoStyles.colUnitDto}>{" "}</Text>
+              <Text style={remitoStyles.colFinal}>{" "}</Text>
             </View>
           ))}
+        </View>
+
+        {/* ══ TOTAL ══ */}
+        <View style={remitoStyles.totalSection}>
+          <Text style={remitoStyles.totalLabel}>Total:</Text>
+          <Text style={remitoStyles.totalValue}>{formatCurrency(venta.total || 0)}</Text>
         </View>
 
         {/* ══ OBSERVACIONES ══ */}
