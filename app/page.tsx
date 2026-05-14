@@ -17,12 +17,12 @@ export default function HomePage() {
     }
     // Redirigir según rol
     if (user.role === 'admin') {
-      router.push('/dashboard')
+      router.push('/caja')
     } else if (user.role === 'seller') {
       if (user.employeeType === 'transportista') {
         router.push('/pedidos')
       } else {
-        router.push('/vendedor')
+        router.push('/comisiones')
       }
     } else {
       router.push('/login')

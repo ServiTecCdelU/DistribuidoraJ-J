@@ -14,9 +14,9 @@ import type { User } from '@/lib/types'
 function getHomeRoute(user: User): string {
   if (user.role === 'seller') {
     if (user.employeeType === 'transportista') return '/pedidos'
-    return '/ventas/nueva'
+    return '/comisiones'
   }
-  return '/dashboard'
+  return '/caja'
 }
 
 export default function LoginPage() {
