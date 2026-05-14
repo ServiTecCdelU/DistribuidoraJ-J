@@ -583,29 +583,23 @@ export default function PedidosPage() {
         wsData.push([f.codigo, f.nombre, f.cantidad, f.stockDisponible, f.faltante]);
       }
 
+      // 2 filas vacías de separación
+      wsData.push([]);
+      wsData.push([]);
+
       // Fila de totales
       wsData.push([`TOTAL  items: ${filas.length}`, "", totalUnidades, "", ""]);
 
       const ws = XLSX.utils.aoa_to_sheet(wsData);
 
-      // Anchos de columna ajustados para A4 portrait
+      // Anchos de columna — total ~80 caracteres, entra en A4 portrait
       ws["!cols"] = [
-        { wch: 12 },  // Código
-        { wch: 36 },  // Descripción
-        { wch: 14 },  // Unidades pedidas
-        { wch: 14 },  // Stock disponible
-        { wch: 14 },  // Faltante
+        { wch: 10 },  // Código
+        { wch: 32 },  // Descripción
+        { wch: 10 },  // Unidades pedidas
+        { wch: 10 },  // Stock disponible
+        { wch: 10 },  // Faltante
       ];
-
-      // Configuración de página A4 portrait, márgenes mínimos
-      ws["!pageSetup"] = {
-        paperSize: 9,       // A4
-        orientation: "portrait",
-        fitToPage: true,
-        fitToWidth: 1,
-        fitToHeight: 0,
-      };
-      ws["!margins"] = { left: 0.4, right: 0.4, top: 0.5, bottom: 0.5, header: 0.2, footer: 0.2 };
 
       const cols = ["A", "B", "C", "D", "E"];
 
@@ -614,7 +608,7 @@ export default function PedidosPage() {
         const cellRef = `${col}1`;
         if (ws[cellRef]) {
           ws[cellRef].s = {
-            font: { bold: true, sz: 10, color: { rgb: "FFFFFF" } },
+            font: { bold: true, sz: 9, color: { rgb: "FFFFFF" } },
             fill: { fgColor: { rgb: "0F766E" } },
             alignment: { horizontal: "center", vertical: "center" },
           };
@@ -635,7 +629,7 @@ export default function PedidosPage() {
       });
 
       // Estilo fila de totales
-      const totalRowIdx = wsData.length; // 1-indexado
+      const totalRowIdx = wsData.length;
       for (const col of cols) {
         const cellRef = `${col}${totalRowIdx}`;
         if (ws[cellRef]) {

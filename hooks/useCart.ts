@@ -740,6 +740,7 @@ export function useCart(role: UserRole, userEmail?: string) {
               quantity: item.quantity,
               price: item.product.price,
               itemDiscount: item.itemDiscount ?? null,
+              ...(item.product.codigo ? { codigo: item.product.codigo } : {}),
             })),
             deliveryMethod,
             city: deliveryMethod === "pickup" ? null : selectedCity || null,

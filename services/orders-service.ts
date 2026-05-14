@@ -173,6 +173,7 @@ export const createOrder = async (data: {
       unidadesPorBulto: item.product.unidadesPorBulto ?? null,
       seDivideEn: item.product.seDivideEn ?? null,
       precioUnitarioMayorista: (item.product as any).precioUnitarioMayorista ?? null,
+      ...(item.product.codigo ? { codigo: item.product.codigo } : {}),
     })),
     city: data.city ?? null,
     address: data.address,

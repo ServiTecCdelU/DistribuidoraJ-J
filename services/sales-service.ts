@@ -533,6 +533,7 @@ export const processSaleMayorista = async (data: {
       cantidadStockLocal,
       cantidadPendienteMayorista,
       ...(item.itemDiscount ? { itemDiscount: item.itemDiscount } : {}),
+      ...(item.product.codigo ? { codigo: item.product.codigo } : {}),
     };
   });
 
