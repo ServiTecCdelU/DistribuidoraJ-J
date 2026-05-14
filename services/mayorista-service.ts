@@ -455,11 +455,15 @@ export type ImportRow = {
   lista1: number;
 };
 
+const IMPORT_BATCH_SIZE = 250; // 250 filas = 500 writes (2 por fila), límite Firestore
+
 export const importarListaPrecios = async (
   rows: ImportRow[],
   onProgress?: (done: number, total: number) => void
 ): Promise<{ procesados: number; noEncontrados: string[] }> => {
   const GANANCIA = 30;
+
+  onProgress?.(0, rows.length);
 
   // Cargar todos los mayorista_productos para hacer el match por codigo
   const snap = await getDocs(collection(firestore, COL));
@@ -475,61 +479,80 @@ export const importarListaPrecios = async (
     });
   });
 
-  let procesados = 0;
+  // Separar filas válidas de las que no tienen match
+  type PreparedRow = ImportRow & { mp: { id: string; productoId?: string; rubro?: string; categoria?: string }; productoId: string };
+  const prepared: PreparedRow[] = [];
   const noEncontrados: string[] = [];
 
-  for (let i = 0; i < rows.length; i++) {
-    const row = rows[i];
+  for (const row of rows) {
     const mp = mpMap.get(row.codigo);
-
     if (!mp) {
       noEncontrados.push(row.codigo);
-      onProgress?.(i + 1, rows.length);
       continue;
     }
-
-    const precioVenta = Math.round(row.lista1 * (1 + GANANCIA / 100) * 100) / 100;
-    const productoId = mp.productoId || `prod_${mp.id}`;
-
-    // Actualizar mayorista_productos
-    await updateDoc(doc(firestore, COL, mp.id), {
-      precioUnitarioMayorista: row.lista1,
-      nombre: row.descripcion,
-      habilitado: true,
-      productoId,
-      updatedAt: serverTimestamp(),
+    prepared.push({
+      ...row,
+      mp,
+      productoId: mp.productoId || `prod_${mp.id}`,
     });
-
-    // Crear o actualizar productos
-    const base: Record<string, unknown> = {
-      name: row.descripcion,
-      description: row.codigo,
-      price: precioVenta,
-      precioVenta,
-      gananciaGlobal: GANANCIA,
-      stock: row.stockUnidades,
-      unidadesPorBulto: row.unPack,
-      disabled: false,
-      updatedAt: serverTimestamp(),
-    };
-
-    if (mp.productoId) {
-      await updateDoc(doc(firestore, PRODUCTS_COLLECTION, productoId), base);
-    } else {
-      await setDoc(doc(firestore, PRODUCTS_COLLECTION, productoId), {
-        ...base,
-        imageUrl: "",
-        category: mp.rubro || mp.categoria || "Sin categoría",
-        createdAt: serverTimestamp(),
-      });
-    }
-
-    procesados++;
-    onProgress?.(i + 1, rows.length);
   }
 
+  // Partir en chunks y escribir con writeBatch
+  const chunks: PreparedRow[][] = [];
+  for (let i = 0; i < prepared.length; i += IMPORT_BATCH_SIZE) {
+    chunks.push(prepared.slice(i, i + IMPORT_BATCH_SIZE));
+  }
+
+  let done = 0;
+
+  for (const chunk of chunks) {
+    const batch = writeBatch(firestore);
+
+    for (const row of chunk) {
+      const precioVenta = Math.round(row.lista1 * (1 + GANANCIA / 100) * 100) / 100;
+
+      // 1. Actualizar mayorista_productos
+      batch.update(doc(firestore, COL, row.mp.id), {
+        precioUnitarioMayorista: row.lista1,
+        nombre: row.descripcion,
+        habilitado: true,
+        productoId: row.productoId,
+        updatedAt: serverTimestamp(),
+      });
+
+      // 2. Crear o actualizar productos
+      const base: Record<string, unknown> = {
+        name: row.descripcion,
+        description: row.codigo,
+        price: precioVenta,
+        precioVenta,
+        gananciaGlobal: GANANCIA,
+        stock: row.stockUnidades,
+        unidadesPorBulto: row.unPack,
+        disabled: false,
+        updatedAt: serverTimestamp(),
+      };
+
+      if (row.mp.productoId) {
+        batch.update(doc(firestore, PRODUCTS_COLLECTION, row.productoId), base);
+      } else {
+        batch.set(doc(firestore, PRODUCTS_COLLECTION, row.productoId), {
+          ...base,
+          imageUrl: "",
+          category: row.mp.rubro || row.mp.categoria || "Sin categoría",
+          createdAt: serverTimestamp(),
+        }, { merge: true });
+      }
+    }
+
+    await batch.commit();
+    done += chunk.length;
+    onProgress?.(done + noEncontrados.length, rows.length);
+  }
+
+  onProgress?.(rows.length, rows.length);
   invalidateMayoristaCache();
   invalidateProductsCache();
 
-  return { procesados, noEncontrados };
+  return { procesados: prepared.length, noEncontrados };
 };

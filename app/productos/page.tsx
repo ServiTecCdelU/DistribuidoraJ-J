@@ -1013,11 +1013,6 @@ export default function ProductosPage() {
               >
                 <RefreshCw className={`h-3.5 w-3.5 sm:h-4 sm:w-4 ${cargandoLista ? "animate-spin" : ""}`} />
                 <span className="hidden sm:inline">Cargar Lista</span>
-                {cargandoLista && progresoCarga.total > 0 && (
-                  <span className="hidden sm:inline text-xs ml-1 text-muted-foreground">
-                    {progresoCarga.done}/{progresoCarga.total}
-                  </span>
-                )}
                 <input
                   id="lista-precios-upload"
                   type="file"
@@ -1319,6 +1314,27 @@ export default function ProductosPage() {
           </div>
         </div>
       </div>
+
+      {/* Barra de progreso carga de lista */}
+      {cargandoLista && progresoCarga.total > 0 && (
+        <div className="mb-4 rounded-2xl border p-4 bg-card space-y-2">
+          <div className="flex items-center justify-between text-sm">
+            <span className="font-medium flex items-center gap-2">
+              <RefreshCw className="h-4 w-4 animate-spin text-teal-600" />
+              Cargando lista de precios...
+            </span>
+            <span className="tabular-nums text-muted-foreground">
+              {progresoCarga.done} / {progresoCarga.total}
+            </span>
+          </div>
+          <div className="w-full h-2 bg-muted rounded-full overflow-hidden">
+            <div
+              className="h-full bg-teal-500 rounded-full transition-all duration-200"
+              style={{ width: `${Math.round((progresoCarga.done / progresoCarga.total) * 100)}%` }}
+            />
+          </div>
+        </div>
+      )}
 
       {/* Barra de selección masiva - AHORA CON "Deshabilitar" */}
       {selectedProducts.length > 0 && (
