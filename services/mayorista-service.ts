@@ -98,15 +98,12 @@ export const getMayoristaProductos = async (forceRefresh = false): Promise<Mayor
   const data = snap.docs.map((d) => mapDoc(d.id, d.data() as Record<string, unknown>));
 
   // Join con "productos" para los habilitados — obtiene precioVenta, gananciaGlobal, etc.
+  // Una sola lectura de toda la colección en vez de N getDoc individuales.
   const habilitados = data.filter((p) => p.habilitado && p.productoId);
   if (habilitados.length > 0) {
-    const productosSnaps = await Promise.all(
-      habilitados.map((p) => getDoc(doc(firestore, PRODUCTS_COLLECTION, p.productoId!)))
-    );
+    const prodSnap = await getDocs(collection(firestore, PRODUCTS_COLLECTION));
     const productosMap = new Map<string, Record<string, unknown>>();
-    productosSnaps.forEach((snap) => {
-      if (snap.exists()) productosMap.set(snap.id, snap.data() as Record<string, unknown>);
-    });
+    prodSnap.docs.forEach((d) => productosMap.set(d.id, d.data() as Record<string, unknown>));
 
     for (const p of data) {
       if (!p.productoId) continue;
