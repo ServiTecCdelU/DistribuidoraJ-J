@@ -99,6 +99,7 @@ Siempre hacer commit y push al terminar cada tarea, sin esperar confirmacion del
 - Auditoria en `services/audit-service.ts` -> Firestore collection "auditoria".
 - Listas de precios en `services/price-list-service.ts` -> Firestore collection "listas_precios".
 - Caja diaria en Firestore collection "caja".
+- `lib/api.ts` es la fachada sobre todos los services. Las pages deben importar desde `@/lib/api`, no directamente desde `services/`.
 
 ## Arquitectura General
 
@@ -106,18 +107,29 @@ Next.js 15 (App Router) desplegado en Vercel. Maneja ventas, pedidos, inventario
 
 ### Stack Tecnologico
 - **Frontend**: Next.js App Router, React 19, Tailwind CSS v4, shadcn/ui (Radix UI primitives)
-- **Database**: Firebase Firestore (collections: `ventas`, `clientes`, `productos`, `vendedores`, `pedidos`, `comisiones`)
-- **Auth**: Firebase Authentication con acceso por roles (`admin`, `seller`, `customer`)
+- **Database**: Firebase Firestore — collections: `ventas`, `clientes`, `productos`, `vendedores`, `pedidos`, `comisiones`, `usuarios`, `caja`, `auditoria`, `listas_precios`, `mayorista_productos`, `stock_movimientos`. Offline persistence habilitada con `persistentLocalCache` + `persistentMultipleTabManager` (`lib/firebase.ts`).
+- **Auth**: Firebase Authentication con acceso por roles (`admin`, `seller`, `customer`). El perfil se cachea en módulo + `sessionStorage`; llamar `invalidateAuthCache()` de `hooks/use-auth.ts` tras cambios de rol para evitar datos stale.
 - **PDF Generation**: `@react-pdf/renderer` client-side; `puppeteer-core` + `@sparticuz/chromium` server-side en `/api/generate-pdf`
 - **Facturacion**: `@afipsdk/afip.js` para AFIP (Facturas A/B/C, CAE)
 - **Notificaciones**: `sonner` para toasts
 
 ### Layout y Navegacion
-`components/layout/main-layout.tsx` envuelve todas las paginas autenticadas con `AppSidebar`. El sidebar filtra items de navegacion por rol — `Vendedores` es solo `admin`. El root `app/layout.tsx` solo agrega fonts, analytics y `RouteLoader`.
+`components/layout/main-layout.tsx` envuelve todas las paginas autenticadas con `AppSidebar`. El sidebar filtra items de navegacion por rol — `Vendedores` es solo `admin`. El root `app/layout.tsx` solo agrega fonts, analytics y `RouteLoader`. Varios items de nav estan comentados en el sidebar: Dashboard, Transporte, Reportes, Listas de Precios, Auditoria.
+
+### Routing por rol (app/page.tsx)
+- `admin` → `/caja`
+- `seller` con `employeeType === "transportista"` → `/pedidos`
+- `seller` con `employeeType === "vendedor"` o `"ambos"` → `/comisiones`
+
+### IDs legibles en Firestore
+`generateReadableId()` en `services/firestore-helpers.ts` genera IDs del tipo `prefix_slug_N` (ej: `usuario_juanperez_1`). Usuarios legacy tienen el Auth UID como doc ID — `getUserProfile` hace lookup dual (doc directo + query por `authUid`).
 
 ### Utilidades Compartidas
 - **`lib/utils/format.ts`** — formateo centralizado ARS (`formatCurrency`, `formatCurrencyDecimals`) y formatters de fecha/hora. Siempre importar desde aca; no crear instancias `Intl` inline.
 - **`services/firestore-helpers.ts`** — exporta `toDate(value)` que convierte Firestore `Timestamp`, `Date` o string a `Date`. Usar siempre al leer campos de fecha desde Firestore.
+
+### Mayorista
+`mayorista_productos` es una coleccion separada de `productos`. Al leer, se hace join con `productos` para traer `precioVenta`, `gananciaGlobal`, `stockLocal`, `unidadesPorBulto`, `seDivideEn`. Los movimientos de stock mayorista viven en `stock_movimientos`.
 
 ### Caveats Importantes
 - `next.config.mjs` tiene `typescript.ignoreBuildErrors: true` — errores TS no fallan el build
