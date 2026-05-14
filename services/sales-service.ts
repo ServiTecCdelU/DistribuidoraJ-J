@@ -192,6 +192,7 @@ export const processSale = async (data: {
       quantity: item.quantity,
       price: item.product.price ?? null,
       name: item.product.name ?? null,
+      ...(item.product.codigo ? { codigo: item.product.codigo } : {}),
       ...(item.itemDiscount ? { itemDiscount: item.itemDiscount } : {}),
     })),
     total,

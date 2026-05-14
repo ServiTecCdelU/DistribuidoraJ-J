@@ -15,6 +15,7 @@ export interface VentaItem {
   quantity: number;
   price: number;
   itemDiscount?: number; // porcentaje
+  codigo?: string;
 }
 
 export interface Venta {
@@ -728,7 +729,7 @@ const RemitoPDF = ({ venta }: { venta: Venta }) => {
             const precioFinal = unitConDto * item.quantity;
             return (
               <View key={i} style={remitoStyles.tableRow}>
-                <Text style={remitoStyles.colCodigo}>{String(i + 1).padStart(4, "0")}</Text>
+                <Text style={remitoStyles.colCodigo}>{item.codigo || String(i + 1).padStart(4, "0")}</Text>
                 <Text style={remitoStyles.colCant}>{item.quantity}</Text>
                 <Text style={remitoStyles.colDesc}>{item.name}</Text>
                 <Text style={remitoStyles.colPrecioUnit}>{formatCurrency(item.price)}</Text>
