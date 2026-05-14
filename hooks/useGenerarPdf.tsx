@@ -25,6 +25,8 @@ export interface Venta {
   clientAddress?: string;
   clientCuit?: string;
   clientTaxCategory?: string;
+  sellerName?: string;
+  saldoAnterior?: number;
   items: VentaItem[];
   total: number;
   paymentType: "cash" | "credit" | "mixed";
@@ -574,67 +576,35 @@ const BoletaPDF = ({ venta, afipData }: { venta: Venta; afipData?: any }) => {
 // ===================== ESTILOS REMITO =====================
 const remitoStyles = StyleSheet.create({
   page: {
-    padding: "12mm",
+    padding: "14mm",
     fontFamily: "Helvetica",
     fontSize: 9,
     color: "#1a1a1a",
     backgroundColor: "white",
   },
-  // ── Header principal ──
-  headerBox: { border: "1.5px solid black", marginBottom: 10 },
-  headerTopRow: { flexDirection: "row", borderBottom: "1.5px solid black", minHeight: 70 },
-  headerLeft: {
-    width: "42%",
-    padding: 10,
-    borderRight: "1.5px solid black",
-    alignItems: "center",
-    justifyContent: "center",
+  // ── Header minimalista ──
+  header: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "flex-start",
+    marginBottom: 14,
+    borderBottom: "1.5px solid black",
+    paddingBottom: 10,
   },
-  headerCenter: {
-    width: "16%",
-    padding: 6,
-    borderRight: "1.5px solid black",
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  headerRight: {
-    width: "42%",
-    padding: 10,
-    justifyContent: "center",
-  },
-  logo: { width: 90, height: 55, objectFit: "contain", marginBottom: 2 },
-  docTypeBox: {
-    border: "2px solid black",
-    width: 36,
-    height: 36,
-    alignItems: "center",
-    justifyContent: "center",
-    marginBottom: 3,
-  },
-  docTypeText: { fontSize: 22, fontWeight: "bold" },
-  docTypeLabel: { fontSize: 6, textAlign: "center", lineHeight: 1.3 },
-  invoiceTitle: { fontSize: 14, fontWeight: "bold", marginBottom: 4 },
-  invoiceInfo: { fontSize: 9, lineHeight: 1.6 },
-  // ── Header info row (datos empresa) ──
-  headerBottomRow: { flexDirection: "row", padding: "8px 10px", minHeight: 44 },
-  headerInfoLeft: { width: "50%", paddingRight: 10, borderRight: "0.5px solid #999" },
-  headerInfoRight: { width: "50%", paddingLeft: 10 },
-  infoText: { fontSize: 8, lineHeight: 1.7 },
-  originalBadge: {
-    alignSelf: "flex-end",
-    fontSize: 8,
-    fontWeight: "bold",
-    marginTop: 4,
-  },
-  // ── Client section ──
-  clientSection: { border: "1px solid black", padding: "8px 10px", marginBottom: 10 },
-  row: { flexDirection: "row", marginBottom: 2 },
-  col: { width: "50%" },
+  headerLeft: { flex: 1 },
+  headerRight: { alignItems: "flex-end" },
+  remitoTitle: { fontSize: 20, fontWeight: "bold", marginBottom: 2 },
+  remitoNro: { fontSize: 10, color: "#555", marginBottom: 1 },
+  remitoFecha: { fontSize: 9, color: "#555" },
+  clienteLabel: { fontSize: 8, color: "#888", marginBottom: 1 },
+  clienteNombre: { fontSize: 11, fontWeight: "bold" },
+  vendedorLabel: { fontSize: 8, color: "#888", marginTop: 4, marginBottom: 1 },
+  vendedorNombre: { fontSize: 9 },
   bold: { fontWeight: "bold" },
   text: { fontSize: 8.5 },
   textXs: { fontSize: 7 },
   // ── Table ──
-  table: { border: "1px solid black", marginBottom: 6 },
+  table: { border: "1px solid black", marginBottom: 0 },
   tableHeader: {
     flexDirection: "row",
     borderBottom: "1.5px solid black",
@@ -656,50 +626,52 @@ const remitoStyles = StyleSheet.create({
   colDto: { width: "8%", textAlign: "center" },
   colUnitDto: { width: "14%", textAlign: "right" },
   colFinal: { width: "14%", textAlign: "right" },
-  // ── Total row ──
-  totalSection: {
+  // ── Summary bar ──
+  summaryBar: {
+    flexDirection: "row",
+    borderTop: "1.5px solid black",
+    borderLeft: "1px solid black",
+    borderRight: "1px solid black",
+    borderBottom: "1px solid black",
+    padding: "6px 8px",
+    fontSize: 8.5,
+    marginBottom: 0,
+  },
+  summaryItem: { marginRight: 20 },
+  summaryLabel: { color: "#555" },
+  summaryValue: { fontWeight: "bold" },
+  saldoRow: {
     flexDirection: "row",
     justifyContent: "flex-end",
-    borderTop: "1.5px solid black",
-    marginBottom: 8,
     paddingTop: 5,
-    paddingRight: 6,
-  },
-  totalLabel: { fontSize: 9, fontWeight: "bold", marginRight: 8 },
-  totalValue: { fontSize: 9, fontWeight: "bold", width: "14%", textAlign: "right" },
-  // ── Observaciones ──
-  obsSection: {
-    border: "1px solid black",
-    padding: "6px 10px",
-    marginBottom: 10,
-    minHeight: 30,
+    paddingRight: 2,
+    fontSize: 8.5,
   },
   // ── Firma ──
   firmaSection: {
     flexDirection: "row",
     gap: 10,
-    marginTop: 18,
+    marginTop: "auto",
+    paddingTop: 20,
   },
   firmaBox: {
     flex: 1,
-    border: "1px solid black",
-    padding: "18px 10px 6px 10px",
-    minHeight: 60,
+    borderTop: "1px solid black",
+    paddingTop: 4,
   },
   firmaLabel: {
     fontSize: 7,
-    color: "#666",
+    color: "#888",
     textAlign: "center",
-    marginTop: 14,
   },
   footer: {
-    marginTop: "auto",
     paddingTop: 8,
     borderTop: "0.5px solid #ccc",
     flexDirection: "row",
     justifyContent: "space-between",
     fontSize: 7,
-    color: "#999",
+    color: "#bbb",
+    marginTop: 12,
   },
 });
 
@@ -707,108 +679,36 @@ const remitoStyles = StyleSheet.create({
 const RemitoPDF = ({ venta }: { venta: Venta }) => {
   const items = venta.items || [];
   const emptyRows = Math.max(0, 10 - items.length);
-  // Formato AFIP: punto de venta - número (0001-00000001)
   const remitoRaw = venta.remitoNumber || "";
-  const [pvPart, nroPart] = remitoRaw.includes("-")
-    ? remitoRaw.split("-")
-    : ["0001", remitoRaw || "00000001"];
-  const pv = String(pvPart).padStart(4, "0");
-  const nro = String(nroPart).padStart(8, "0");
+  const nroPart = remitoRaw.includes("-") ? remitoRaw.split("-")[1] : remitoRaw;
+  const nro = String(nroPart || "00000001").padStart(8, "0");
 
-  const clientCuit = venta.clientCuit || venta.clientData?.cuit || "-";
-  const clientName =
-    venta.clientName || venta.clientData?.name || "Consumidor Final";
-  const clientAddress =
-    venta.deliveryAddress ||
-    venta.clientAddress ||
-    venta.clientData?.address ||
-    "-";
-  const taxCategory = venta.clientTaxCategory || venta.clientData?.taxCategory;
-
-  const logoSrc = typeof window !== "undefined"
-    ? `${window.location.origin}/logo-small.png`
-    : "/logo-small.png";
+  const clientName = venta.clientName || venta.clientData?.name || "Consumidor Final";
+  const sellerName = venta.sellerName || null;
+  const totalItems = items.length;
+  const totalUnidades = items.reduce((acc, item) => acc + (item.quantity || 0), 0);
 
   return (
     <Document>
       <Page size="A4" style={remitoStyles.page}>
-        {/* ══ HEADER ══ */}
-        <View style={remitoStyles.headerBox}>
-          <View style={remitoStyles.headerTopRow}>
-            {/* Izquierda: Logo */}
-            <View style={remitoStyles.headerLeft}>
-              <Image src={logoSrc} style={remitoStyles.logo} />
-            </View>
-            {/* Centro: Tipo de documento */}
-            <View style={remitoStyles.headerCenter}>
-              <View style={remitoStyles.docTypeBox}>
-                <Text style={remitoStyles.docTypeText}>R</Text>
-              </View>
-              <Text style={remitoStyles.docTypeLabel}>
-                DOCUMENTO{"\n"}NO FISCAL
-              </Text>
-            </View>
-            {/* Derecha: Datos remito */}
-            <View style={remitoStyles.headerRight}>
-              <Text style={remitoStyles.invoiceTitle}>REMITO</Text>
-              <Text style={remitoStyles.invoiceInfo}>
-                {`Punto de Venta: ${pv}    Nro: ${nro}\n`}
-                {`Fecha: ${safeFormatDate(venta.createdAt)}  ${safeFormatTime(venta.createdAt)}`}
-              </Text>
-              <Text style={remitoStyles.originalBadge}>ORIGINAL</Text>
-            </View>
-          </View>
-          {/* Fila inferior: Datos del emisor */}
-          <View style={remitoStyles.headerBottomRow}>
-            <View style={remitoStyles.headerInfoLeft}>
-              <Text style={remitoStyles.infoText}>
-                {"Razon Social: DOMINGUEZ MARIO CESAR\n"}
-                {"Domicilio Comercial: DR. BASTIAN 1049 - SAN JOSE\n"}
-                {"Condicion frente al IVA: IVA Responsable Inscripto"}
-              </Text>
-            </View>
-            <View style={remitoStyles.headerInfoRight}>
-              <Text style={remitoStyles.infoText}>
-                {"CUIT: 20-14598383-6\n"}
-                {"Ingresos Brutos: 20-14598383-6\n"}
-                {"Inicio de Actividades: 01/01/2000"}
-              </Text>
-            </View>
-          </View>
-        </View>
 
-        {/* ══ DATOS DEL DESTINATARIO ══ */}
-        <View style={remitoStyles.clientSection}>
-          <View style={remitoStyles.row}>
-            <View style={remitoStyles.col}>
-              <Text style={remitoStyles.text}>
-                <Text style={remitoStyles.bold}>CUIT/DNI: </Text>
-                {clientCuit}
-              </Text>
-              <Text style={[remitoStyles.text, { marginTop: 2 }]}>
-                <Text style={remitoStyles.bold}>Condicion frente al IVA: </Text>
-                {getTaxCategoryLabel(taxCategory)}
-              </Text>
-            </View>
-            <View style={remitoStyles.col}>
-              <Text style={remitoStyles.text}>
-                <Text style={remitoStyles.bold}>Destinatario: </Text>
-                {clientName}
-              </Text>
-              <Text style={[remitoStyles.text, { marginTop: 2 }]}>
-                <Text style={remitoStyles.bold}>Domicilio de Entrega: </Text>
-                {clientAddress}
-              </Text>
-            </View>
+        {/* ══ HEADER ══ */}
+        <View style={remitoStyles.header}>
+          <View style={remitoStyles.headerLeft}>
+            <Text style={remitoStyles.remitoTitle}>REMITO</Text>
+            <Text style={remitoStyles.remitoNro}>N° {nro}</Text>
+            <Text style={remitoStyles.remitoFecha}>{safeFormatDate(venta.createdAt)}  {safeFormatTime(venta.createdAt)}</Text>
           </View>
-          {venta.clientPhone && (
-            <View style={[remitoStyles.row, { marginTop: 2 }]}>
-              <Text style={remitoStyles.text}>
-                <Text style={remitoStyles.bold}>Telefono: </Text>
-                {venta.clientPhone}
-              </Text>
-            </View>
-          )}
+          <View style={remitoStyles.headerRight}>
+            <Text style={remitoStyles.clienteLabel}>CLIENTE</Text>
+            <Text style={remitoStyles.clienteNombre}>{clientName}</Text>
+            {sellerName && (
+              <>
+                <Text style={remitoStyles.vendedorLabel}>VENDEDOR</Text>
+                <Text style={remitoStyles.vendedorNombre}>{sellerName}</Text>
+              </>
+            )}
+          </View>
         </View>
 
         {/* ══ TABLA DE ITEMS ══ */}
@@ -840,48 +740,51 @@ const RemitoPDF = ({ venta }: { venta: Venta }) => {
           })}
           {Array.from({ length: emptyRows }).map((_, i) => (
             <View key={`e${i}`} style={remitoStyles.tableRow}>
-              <Text style={remitoStyles.colCodigo}>{" "}</Text>
-              <Text style={remitoStyles.colCant}>{" "}</Text>
-              <Text style={remitoStyles.colDesc}>{" "}</Text>
-              <Text style={remitoStyles.colPrecioUnit}>{" "}</Text>
-              <Text style={remitoStyles.colDto}>{" "}</Text>
-              <Text style={remitoStyles.colUnitDto}>{" "}</Text>
-              <Text style={remitoStyles.colFinal}>{" "}</Text>
+              <Text style={remitoStyles.colCodigo}> </Text>
+              <Text style={remitoStyles.colCant}> </Text>
+              <Text style={remitoStyles.colDesc}> </Text>
+              <Text style={remitoStyles.colPrecioUnit}> </Text>
+              <Text style={remitoStyles.colDto}> </Text>
+              <Text style={remitoStyles.colUnitDto}> </Text>
+              <Text style={remitoStyles.colFinal}> </Text>
             </View>
           ))}
         </View>
 
-        {/* ══ TOTAL ══ */}
-        <View style={remitoStyles.totalSection}>
-          <Text style={remitoStyles.totalLabel}>Total:</Text>
-          <Text style={remitoStyles.totalValue}>{formatCurrency(venta.total || 0)}</Text>
+        {/* ══ SUMMARY BAR ══ */}
+        <View style={remitoStyles.summaryBar}>
+          <View style={remitoStyles.summaryItem}>
+            <Text><Text style={remitoStyles.summaryLabel}>Items: </Text><Text style={remitoStyles.summaryValue}>{totalItems}</Text></Text>
+          </View>
+          <View style={remitoStyles.summaryItem}>
+            <Text><Text style={remitoStyles.summaryLabel}>Unidades: </Text><Text style={remitoStyles.summaryValue}>{totalUnidades}</Text></Text>
+          </View>
+          <View style={{ flex: 1 }} />
+          <View>
+            <Text><Text style={remitoStyles.summaryLabel}>Total: </Text><Text style={remitoStyles.summaryValue}>{formatCurrency(venta.total || 0)}</Text></Text>
+          </View>
         </View>
 
-        {/* ══ OBSERVACIONES ══ */}
-        <View style={remitoStyles.obsSection}>
-          <Text style={[remitoStyles.text, remitoStyles.bold]}>Observaciones:</Text>
-          <Text style={[remitoStyles.textXs, { marginTop: 2, color: "#666" }]}>
-            Este documento acompaña la mercadería detallada. No tiene valor fiscal.
-          </Text>
-        </View>
+        {/* ══ SALDO ANTERIOR ══ */}
+        {venta.saldoAnterior != null && venta.saldoAnterior !== 0 && (
+          <View style={remitoStyles.saldoRow}>
+            <Text><Text style={remitoStyles.summaryLabel}>Saldo Anterior: </Text><Text style={remitoStyles.summaryValue}>{formatCurrency(venta.saldoAnterior)}</Text></Text>
+          </View>
+        )}
 
         {/* ══ FIRMAS ══ */}
         <View style={remitoStyles.firmaSection}>
           <View style={remitoStyles.firmaBox}>
-            <Text style={remitoStyles.firmaLabel}>
-              Firma y Aclaracion - Entregó
-            </Text>
+            <Text style={remitoStyles.firmaLabel}>Firma - Entregó</Text>
           </View>
           <View style={remitoStyles.firmaBox}>
-            <Text style={remitoStyles.firmaLabel}>
-              Firma, Aclaracion y DNI - Recibió conforme
-            </Text>
+            <Text style={remitoStyles.firmaLabel}>Firma y DNI - Recibió conforme</Text>
           </View>
         </View>
 
         {/* ══ FOOTER ══ */}
         <View style={remitoStyles.footer}>
-          <Text>Documento no fiscal - Comprobante de entrega</Text>
+          <Text>Documento no fiscal</Text>
           <Text>Pagina 1 de 1</Text>
         </View>
       </Page>
