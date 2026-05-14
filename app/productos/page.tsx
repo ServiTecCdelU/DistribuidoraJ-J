@@ -338,13 +338,13 @@ export default function ProductosPage() {
       for (const row of raw) {
         const rawCodigo = row[0];
         if (rawCodigo == null) continue;
-        // XLSX puede parsear el código como número (pierde leading zeros) o como string
+        // Aceptar string o número — sin forzar longitud, el código va tal cual
         const codigo = typeof rawCodigo === "number"
-          ? String(rawCodigo).padStart(7, "0")
-          : typeof rawCodigo === "string" && /^\d+/.test(rawCodigo.trim())
+          ? String(rawCodigo)
+          : typeof rawCodigo === "string" && /\S/.test(rawCodigo)
             ? rawCodigo.trim()
             : null;
-        if (!codigo) continue;
+        if (!codigo || !/^\d/.test(codigo)) continue;
         const descripcion = row[4];
         const lista1 = row[9];
         const stockPacks = row[11];

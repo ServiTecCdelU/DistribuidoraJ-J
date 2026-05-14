@@ -463,26 +463,37 @@ export const importarListaPrecios = async (
   onProgress?.(0, rows.length);
 
   // Cargar todos los mayorista_productos para hacer el match por codigo
+  // Indexar por código exacto y por código sin leading zeros (para matchear
+  // cuando XLSX parsea "0100932" como número 100932 y viceversa)
   const snap = await getDocs(collection(firestore, COL));
-  const mpMap = new Map<string, { id: string; productoId?: string; rubro?: string; categoria?: string }>();
+  type MpEntry = { id: string; productoId?: string; rubro?: string; categoria?: string };
+  const mpExact = new Map<string, MpEntry>();
+  const mpStripped = new Map<string, MpEntry>();
   snap.docs.forEach((d) => {
     const data = d.data();
     const codigo = (data.codigo as string) ?? "";
-    if (codigo) mpMap.set(codigo, {
+    if (!codigo) return;
+    const entry: MpEntry = {
       id: d.id,
       productoId: data.productoId as string | undefined,
       rubro: data.rubro as string | undefined,
       categoria: data.categoria as string | undefined,
-    });
+    };
+    mpExact.set(codigo, entry);
+    // Clave sin leading zeros para lookup fuzzy
+    const stripped = codigo.replace(/^0+/, "") || codigo;
+    if (!mpStripped.has(stripped)) mpStripped.set(stripped, entry);
   });
 
   // Separar filas válidas de las que no tienen match
-  type PreparedRow = ImportRow & { mp: { id: string; productoId?: string; rubro?: string; categoria?: string }; productoId: string };
+  type PreparedRow = ImportRow & { mp: MpEntry; productoId: string };
   const prepared: PreparedRow[] = [];
   const noEncontrados: string[] = [];
 
   for (const row of rows) {
-    const mp = mpMap.get(row.codigo);
+    // Intentar match exacto, luego sin leading zeros
+    const mp = mpExact.get(row.codigo)
+      || mpStripped.get(row.codigo.replace(/^0+/, "") || row.codigo);
     if (!mp) {
       noEncontrados.push(row.codigo);
       continue;
