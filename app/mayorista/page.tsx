@@ -575,17 +575,12 @@ function HabilitarModal({
   onConfirm: (changes: Partial<MayoristaProducto>) => void;
 }) {
   const [lote, setLote] = useState(producto.unidadesPorBulto ? String(producto.unidadesPorBulto) : "");
-  const [seDivide, setSeDivide] = useState(
-    producto.seDivideEn ? String(producto.seDivideEn) : ""
-  );
   const [gananciaPorc, setGananciaPorc] = useState(
-    producto.gananciaGlobal != null ? String(producto.gananciaGlobal) : ""
+    producto.gananciaGlobal != null ? String(producto.gananciaGlobal) : "30"
   );
   const [saving, setSaving] = useState(false);
 
   const loteNum = parseInt(lote) || 0;
-  const divideNum = parseInt(seDivide) || 0;
-  const porciones = divideNum > 0 ? Math.floor(loteNum / divideNum) : 0;
 
   const gananciaNum = parseFloat(gananciaPorc);
   const precioVentaCalc =
@@ -594,8 +589,8 @@ function HabilitarModal({
       : producto.precioVenta;
 
   const handleConfirmar = async () => {
-    if (loteNum <= 0 || divideNum <= 0) {
-      toast.error("Ingresá valores válidos para lote y división");
+    if (loteNum <= 0) {
+      toast.error("Ingresá un valor válido para el lote");
       return;
     }
     setSaving(true);
@@ -603,15 +598,14 @@ function HabilitarModal({
       await habilitarProducto(
         producto,
         loteNum,
-        divideNum,
+        undefined,
         precioVentaCalc > 0 ? precioVentaCalc : undefined,
         !isNaN(gananciaNum) ? gananciaNum : undefined
       );
-      toast.success(`"${producto.nombre}" habilitado — ${porciones} porciones en stock`);
+      toast.success(`"${producto.nombre}" habilitado`);
       onConfirm({
         habilitado: true,
         unidadesPorBulto: loteNum,
-        seDivideEn: divideNum,
         precioVenta: precioVentaCalc > 0 ? precioVentaCalc : producto.precioVenta,
         gananciaGlobal: !isNaN(gananciaNum) ? gananciaNum : producto.gananciaGlobal,
       });
@@ -635,7 +629,7 @@ function HabilitarModal({
           </DialogDescription>
         </DialogHeader>
 
-        {producto.productoId && (producto.unidadesPorBulto || producto.seDivideEn) && (
+        {producto.productoId && producto.unidadesPorBulto && (
           <div className="rounded-xl bg-amber-50 dark:bg-amber-950/20 border border-amber-200 dark:border-amber-800 px-3 py-2 text-xs text-amber-800 dark:text-amber-300 flex items-center gap-2">
             <AlertCircle className="h-3.5 w-3.5 shrink-0" />
             Valores anteriores precargados — modificalos si cambió el lote
@@ -674,51 +668,22 @@ function HabilitarModal({
             </div>
           </div>
 
-          <div className="grid grid-cols-2 gap-4">
-            <div className="space-y-1.5">
-              <Label htmlFor="lote" className="text-sm">
-                Lote total
-              </Label>
-              <Input
-                id="lote"
-                type="number"
-                min="1"
-                placeholder="Ej: 30"
-                value={lote}
-                onChange={(e) => setLote(e.target.value)}
-                className="rounded-xl"
-                autoFocus
-              />
-              <p className="text-xs text-muted-foreground">Cuántas unidades entran</p>
-            </div>
-            <div className="space-y-1.5">
-              <Label htmlFor="divide" className="text-sm">
-                Se divide en
-              </Label>
-              <Input
-                id="divide"
-                type="number"
-                min="1"
-                placeholder="Ej: 10"
-                value={seDivide}
-                onChange={(e) => setSeDivide(e.target.value)}
-                className="rounded-xl"
-              />
-              <p className="text-xs text-muted-foreground">Unidades por porción</p>
-            </div>
+          <div className="space-y-1.5">
+            <Label htmlFor="lote" className="text-sm">
+              Unidades por bulto
+            </Label>
+            <Input
+              id="lote"
+              type="number"
+              min="1"
+              placeholder="Ej: 12"
+              value={lote}
+              onChange={(e) => setLote(e.target.value)}
+              className="rounded-xl"
+              autoFocus
+            />
+            <p className="text-xs text-muted-foreground">Cuántas unidades entran en el bulto</p>
           </div>
-
-          {loteNum > 0 && divideNum > 0 && (
-            <div className="rounded-xl bg-teal-50 dark:bg-teal-950/20 border border-teal-200 dark:border-teal-800 p-3 text-center">
-              <p className="text-2xl font-bold text-teal-600">{porciones}</p>
-              <p className="text-xs text-muted-foreground mt-0.5">
-                porciones de {divideNum} unidades cada una
-              </p>
-              <p className="text-xs text-muted-foreground mt-1">
-                El stock se suma manualmente o por importación
-              </p>
-            </div>
-          )}
         </div>
 
         <DialogFooter>
@@ -727,7 +692,7 @@ function HabilitarModal({
           </Button>
           <Button
             onClick={handleConfirmar}
-            disabled={saving || loteNum <= 0 || divideNum <= 0}
+            disabled={saving || loteNum <= 0}
             className="gap-2"
           >
             {saving ? (

@@ -83,9 +83,8 @@ export function ProductModal({
   // Stock aditivo (solo en edición)
   const [stockToAdd, setStockToAdd] = useState(0);
 
-  // Lote y seDivideEn (solo para productos de mayorista: id empieza con "prod_")
+  // Lote (solo para productos de mayorista: id empieza con "prod_")
   const [lote, setLote] = useState<string>("");
-  const [seDivideEn, setSeDivideEn] = useState<string>("");
 
   const [formData, setFormData] = useState({
     name: "",
@@ -118,7 +117,6 @@ export function ProductModal({
       setNewMarcaInput("");
       setStockToAdd(0);
       setLote("");
-      setSeDivideEn("");
     }
   }, [open]);
 
@@ -137,7 +135,6 @@ export function ProductModal({
       setImagePreview(product.imageUrl || null);
       setStockToAdd(0);
       setLote((product as any).unidadesPorBulto ? String((product as any).unidadesPorBulto) : "");
-      setSeDivideEn((product as any).seDivideEn ? String((product as any).seDivideEn) : "");
     } else {
       setFormData({
         name: "",
@@ -152,7 +149,6 @@ export function ProductModal({
       setImagePreview(null);
       setStockToAdd(0);
       setLote("");
-      setSeDivideEn("");
     }
   }, [product, open]);
 
@@ -193,9 +189,8 @@ export function ProductModal({
     setLoading(true);
     try {
       const loteNum = parseInt(lote) || 0;
-      const divideNum = parseInt(seDivideEn) || 0;
       const isMayorista = !!product?.id?.startsWith("prod_");
-      // El stock se gestiona manualmente — nunca se calcula desde lote/seDivideEn
+      // El stock se gestiona manualmente — nunca se calcula desde lote
       const finalStock = isEditing ? formData.stock + stockToAdd : formData.stock;
       await onSave({
         ...formData,
@@ -203,8 +198,8 @@ export function ProductModal({
         imageUrl: formData.imageUrl || "",
         stock: finalStock,
         // Campos extra para mayorista — se guardan directamente en productos
-        ...(isMayorista && loteNum > 0 && divideNum > 0
-          ? { unidadesPorBulto: loteNum, seDivideEn: divideNum }
+        ...(isMayorista && loteNum > 0
+          ? { unidadesPorBulto: loteNum }
           : {}),
       } as any);
     } finally {
@@ -224,10 +219,8 @@ export function ProductModal({
   const isEditing = !!product;
   const isMayorista = !!product?.id?.startsWith("prod_");
   const loteNum = parseInt(lote) || 0;
-  const divideNum = parseInt(seDivideEn) || 0;
-  const porcionesCalc = loteNum > 0 && divideNum > 0 ? Math.floor(loteNum / divideNum) : null;
   const isValid = isMayorista && isEditing
-    ? loteNum > 0 && divideNum > 0
+    ? loteNum > 0
     : formData.name.trim() && formData.category && formData.price > 0;
 
   const displayImage = imagePreview || DEFAULT_IMAGE;
@@ -250,46 +243,21 @@ export function ProductModal({
         </DialogHeader>
 
         <form onSubmit={handleSubmit} className="px-6 py-4 space-y-5">
-          {/* Para productos mayorista en edición: solo el lote */}
+          {/* Para productos mayorista en edición: solo el bulto */}
           {isEditing && isMayorista ? (
-            <div className="space-y-3">
-              <div className="grid grid-cols-2 gap-4">
-                <div className="space-y-1.5">
-                  <Label htmlFor="lote-edit" className="text-xs text-muted-foreground">Lote total</Label>
-                  <Input
-                    id="lote-edit"
-                    type="number"
-                    min="1"
-                    placeholder="Ej: 30"
-                    value={lote}
-                    onChange={(e) => setLote(e.target.value)}
-                    className="h-10"
-                    autoFocus
-                  />
-                  <p className="text-xs text-muted-foreground">Unidades que entran</p>
-                </div>
-                <div className="space-y-1.5">
-                  <Label htmlFor="divide-edit" className="text-xs text-muted-foreground">Se divide en</Label>
-                  <Input
-                    id="divide-edit"
-                    type="number"
-                    min="1"
-                    placeholder="Ej: 10"
-                    value={seDivideEn}
-                    onChange={(e) => setSeDivideEn(e.target.value)}
-                    className="h-10"
-                  />
-                  <p className="text-xs text-muted-foreground">Unidades por porción</p>
-                </div>
-              </div>
-              {porcionesCalc !== null && (
-                <div className="rounded-xl bg-teal-50 dark:bg-teal-950/20 border border-teal-200 dark:border-teal-800 p-3 text-center">
-                  <p className="text-xl font-bold text-teal-600">{porcionesCalc}</p>
-                  <p className="text-xs text-muted-foreground mt-0.5">
-                    porciones de {parseInt(seDivideEn) || 0} unidades cada una
-                  </p>
-                </div>
-              )}
+            <div className="space-y-1.5">
+              <Label htmlFor="lote-edit" className="text-xs text-muted-foreground">Unidades por bulto</Label>
+              <Input
+                id="lote-edit"
+                type="number"
+                min="1"
+                placeholder="Ej: 12"
+                value={lote}
+                onChange={(e) => setLote(e.target.value)}
+                className="h-10"
+                autoFocus
+              />
+              <p className="text-xs text-muted-foreground">Cuántas unidades entran en el bulto</p>
             </div>
           ) : (
             <>

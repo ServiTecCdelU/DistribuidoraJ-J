@@ -28,6 +28,8 @@ import {
   applyGananciaToProducts,
   updateProductoPrecioVenta,
   sincronizarHabilitadoEnMayorista,
+  importarListaPrecios,
+  type ImportRow,
 } from "@/services/mayorista-service";
 import {
   Plus,
@@ -314,6 +316,63 @@ export default function ProductosPage() {
       toast.error(`Error: ${error.message}`, { id: toastId });
     } finally {
       setImportando(false);
+    }
+  };
+
+  // --- Excel: Cargar lista de precios mayorista ---
+  const [cargandoLista, setCargandoLista] = useState(false);
+  const [progresoCarga, setProgresoCarga] = useState({ done: 0, total: 0 });
+
+  const cargarListaPrecios = async (file: File) => {
+    setCargandoLista(true);
+    const toastId = "carga-lista";
+    toast.loading("Procesando lista de precios...", { id: toastId });
+    try {
+      const XLSX = await import("xlsx");
+      const buffer = await file.arrayBuffer();
+      const wb = XLSX.read(buffer, { type: "array" });
+      const ws = wb.Sheets[wb.SheetNames[0]];
+      const raw: unknown[][] = XLSX.utils.sheet_to_json(ws, { header: 1 }) as unknown[][];
+
+      const rows: ImportRow[] = [];
+      for (const row of raw) {
+        const codigo = row[0];
+        if (!codigo || typeof codigo !== "string" || !/^\d+/.test(codigo.trim())) continue;
+        const descripcion = row[4];
+        const lista1 = row[9];
+        const stockPacks = row[11];
+        const unPack = row[15];
+        if (typeof descripcion !== "string" || !descripcion.trim()) continue;
+        if (typeof lista1 !== "number" || lista1 <= 0) continue;
+        if (typeof unPack !== "number" || unPack <= 0) continue;
+        const stockNum = typeof stockPacks === "number" ? stockPacks : 0;
+        rows.push({
+          codigo: codigo.trim(),
+          descripcion: descripcion.trim(),
+          stockUnidades: Math.round(stockNum * unPack),
+          unPack,
+          lista1,
+        });
+      }
+
+      if (rows.length === 0) throw new Error("No se encontraron filas válidas en el archivo");
+
+      setProgresoCarga({ done: 0, total: rows.length });
+      const { procesados, noEncontrados } = await importarListaPrecios(rows, (done, total) => {
+        setProgresoCarga({ done, total });
+      });
+
+      const data = await productsApi.getAll();
+      setProducts(data);
+
+      let msg = `${procesados} productos procesados`;
+      if (noEncontrados.length > 0) msg += ` · ${noEncontrados.length} sin coincidencia en mayorista`;
+      toast.success(msg, { id: toastId, duration: 6000 });
+    } catch (error: any) {
+      toast.error(`Error: ${error.message}`, { id: toastId });
+    } finally {
+      setCargandoLista(false);
+      setProgresoCarga({ done: 0, total: 0 });
     }
   };
 
@@ -943,6 +1002,33 @@ export default function ProductosPage() {
               >
                 <FileUp className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
                 <span className="hidden sm:inline">Importar Remito</span>
+              </Button>
+
+              <Button
+                variant="outline"
+                size="sm"
+                disabled={cargandoLista}
+                className="gap-1 sm:gap-2 h-8 sm:h-9 px-2 sm:px-3 relative"
+                onClick={() => document.getElementById("lista-precios-upload")?.click()}
+              >
+                <RefreshCw className={`h-3.5 w-3.5 sm:h-4 sm:w-4 ${cargandoLista ? "animate-spin" : ""}`} />
+                <span className="hidden sm:inline">Cargar Lista</span>
+                {cargandoLista && progresoCarga.total > 0 && (
+                  <span className="hidden sm:inline text-xs ml-1 text-muted-foreground">
+                    {progresoCarga.done}/{progresoCarga.total}
+                  </span>
+                )}
+                <input
+                  id="lista-precios-upload"
+                  type="file"
+                  accept=".xls,.xlsx"
+                  className="hidden"
+                  onChange={(e) => {
+                    const file = e.target.files?.[0];
+                    if (file) cargarListaPrecios(file);
+                    e.target.value = "";
+                  }}
+                />
               </Button>
 
               <Button

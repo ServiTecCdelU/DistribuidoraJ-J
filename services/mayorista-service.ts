@@ -299,7 +299,7 @@ export const updateProductoPrecioVenta = async (
 export const habilitarProducto = async (
   mp: MayoristaProducto,
   unidadesPorBulto: number,
-  seDivideEn: number,
+  seDivideEn?: number,
   precioVentaOverride?: number,
   gananciaGlobal?: number
 ): Promise<void> => {
@@ -336,7 +336,7 @@ export const habilitarProducto = async (
       price: precio,
       precioVenta: precio,
       unidadesPorBulto,
-      seDivideEn,
+      ...(seDivideEn != null ? { seDivideEn } : {}),
       disabled: false,
       ...(finalGanancia != null ? { gananciaGlobal: finalGanancia } : {}),
     });
@@ -353,7 +353,7 @@ export const habilitarProducto = async (
       category: mp.rubro || mp.categoria || "Sin categoría",
       disabled: false,
       unidadesPorBulto,
-      seDivideEn,
+      ...(seDivideEn != null ? { seDivideEn } : {}),
       ...(finalGanancia != null ? { gananciaGlobal: finalGanancia } : {}),
       createdAt: serverTimestamp(),
     });
@@ -371,7 +371,7 @@ export const habilitarProducto = async (
   if (cached) {
     const updated = cached.data.map((p) =>
       p.id === mp.id
-        ? { ...p, habilitado: true, unidadesPorBulto, seDivideEn, productoId, precioVenta: precio, gananciaGlobal: finalGanancia ?? p.gananciaGlobal, updatedAt: new Date() }
+        ? { ...p, habilitado: true, unidadesPorBulto, ...(seDivideEn != null ? { seDivideEn } : {}), productoId, precioVenta: precio, gananciaGlobal: finalGanancia ?? p.gananciaGlobal, updatedAt: new Date() }
         : p
     );
     writeCache(updated);
@@ -443,4 +443,93 @@ export const saveMayoristaPrefs = async (
   prefs: MayoristaPrefs
 ): Promise<void> => {
   await setDoc(doc(firestore, PREFS_COL, `${userId}_mayorista_prefs`), prefs);
+};
+
+// ─── Importación masiva desde lista de precios Excel ─────────────────────────
+
+export type ImportRow = {
+  codigo: string;
+  descripcion: string;
+  stockUnidades: number;
+  unPack: number;
+  lista1: number;
+};
+
+export const importarListaPrecios = async (
+  rows: ImportRow[],
+  onProgress?: (done: number, total: number) => void
+): Promise<{ procesados: number; noEncontrados: string[] }> => {
+  const GANANCIA = 30;
+
+  // Cargar todos los mayorista_productos para hacer el match por codigo
+  const snap = await getDocs(collection(firestore, COL));
+  const mpMap = new Map<string, { id: string; productoId?: string; rubro?: string; categoria?: string }>();
+  snap.docs.forEach((d) => {
+    const data = d.data();
+    const codigo = (data.codigo as string) ?? "";
+    if (codigo) mpMap.set(codigo, {
+      id: d.id,
+      productoId: data.productoId as string | undefined,
+      rubro: data.rubro as string | undefined,
+      categoria: data.categoria as string | undefined,
+    });
+  });
+
+  let procesados = 0;
+  const noEncontrados: string[] = [];
+
+  for (let i = 0; i < rows.length; i++) {
+    const row = rows[i];
+    const mp = mpMap.get(row.codigo);
+
+    if (!mp) {
+      noEncontrados.push(row.codigo);
+      onProgress?.(i + 1, rows.length);
+      continue;
+    }
+
+    const precioVenta = Math.round(row.lista1 * (1 + GANANCIA / 100) * 100) / 100;
+    const productoId = mp.productoId || `prod_${mp.id}`;
+
+    // Actualizar mayorista_productos
+    await updateDoc(doc(firestore, COL, mp.id), {
+      precioUnitarioMayorista: row.lista1,
+      nombre: row.descripcion,
+      habilitado: true,
+      productoId,
+      updatedAt: serverTimestamp(),
+    });
+
+    // Crear o actualizar productos
+    const base: Record<string, unknown> = {
+      name: row.descripcion,
+      description: row.codigo,
+      price: precioVenta,
+      precioVenta,
+      gananciaGlobal: GANANCIA,
+      stock: row.stockUnidades,
+      unidadesPorBulto: row.unPack,
+      disabled: false,
+      updatedAt: serverTimestamp(),
+    };
+
+    if (mp.productoId) {
+      await updateDoc(doc(firestore, PRODUCTS_COLLECTION, productoId), base);
+    } else {
+      await setDoc(doc(firestore, PRODUCTS_COLLECTION, productoId), {
+        ...base,
+        imageUrl: "",
+        category: mp.rubro || mp.categoria || "Sin categoría",
+        createdAt: serverTimestamp(),
+      });
+    }
+
+    procesados++;
+    onProgress?.(i + 1, rows.length);
+  }
+
+  invalidateMayoristaCache();
+  invalidateProductsCache();
+
+  return { procesados, noEncontrados };
 };
