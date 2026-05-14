@@ -3,10 +3,10 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
-    "build": "next build",
-    "dev": "next dev",
+    "build": "node ./node_modules/next/dist/bin/next build",
+    "dev": "node ./node_modules/next/dist/bin/next dev",
     "lint": "eslint .",
-    "start": "next start"
+    "start": "node ./node_modules/next/dist/bin/next start"
   },
   "dependencies": {
     "@afipsdk/afip.js": "^1.2.2",
@@ -50,7 +50,7 @@
     "date-fns": "4.1.0",
     "embla-carousel-react": "8.5.1",
     "firebase": "^12.8.0",
-    "firebase-admin": "^13.6.0",
+    "firebase-admin": "^10.3.0",
     "googleapis": "^171.4.0",
     "html2canvas-pro": "^1.6.7",
     "input-otp": "1.4.1",
