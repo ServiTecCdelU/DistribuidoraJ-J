@@ -508,17 +508,18 @@ export const importarListaPrecios = async (
     for (const row of chunk) {
       const precioVenta = Math.round(row.lista1 * (1 + GANANCIA / 100) * 100) / 100;
 
-      // 1. Actualizar mayorista_productos
-      batch.update(doc(firestore, COL, row.mp.id), {
+      // 1. mayorista_productos — set+merge para evitar fallas si el doc fue recreado
+      batch.set(doc(firestore, COL, row.mp.id), {
         precioUnitarioMayorista: row.lista1,
         nombre: row.descripcion,
         habilitado: true,
         productoId: row.productoId,
         updatedAt: serverTimestamp(),
-      });
+      }, { merge: true });
 
-      // 2. Crear o actualizar productos
-      const base: Record<string, unknown> = {
+      // 2. productos — set+merge siempre (crea si no existe, actualiza si existe)
+      const isNew = !row.mp.productoId;
+      batch.set(doc(firestore, PRODUCTS_COLLECTION, row.productoId), {
         name: row.descripcion,
         description: row.codigo,
         price: precioVenta,
@@ -528,21 +529,15 @@ export const importarListaPrecios = async (
         unidadesPorBulto: row.unPack,
         disabled: false,
         updatedAt: serverTimestamp(),
-      };
-
-      if (row.mp.productoId) {
-        batch.update(doc(firestore, PRODUCTS_COLLECTION, row.productoId), base);
-      } else {
-        batch.set(doc(firestore, PRODUCTS_COLLECTION, row.productoId), {
-          ...base,
-          imageUrl: "",
-          category: row.mp.rubro || row.mp.categoria || "Sin categoría",
-          createdAt: serverTimestamp(),
-        }, { merge: true });
-      }
+        ...(isNew ? { imageUrl: "", category: row.mp.rubro || row.mp.categoria || "Sin categoría", createdAt: serverTimestamp() } : {}),
+      }, { merge: true });
     }
 
-    await batch.commit();
+    try {
+      await batch.commit();
+    } catch (err) {
+      console.error(`Batch falló (${chunk.length} filas):`, err);
+    }
     done += chunk.length;
     onProgress?.(done + noEncontrados.length, rows.length);
   }
