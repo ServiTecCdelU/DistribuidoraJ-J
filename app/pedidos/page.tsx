@@ -567,99 +567,49 @@ export default function PedidosPage() {
           const codigo = prod?.codigo ?? "";
           const stockDisponible = prod?.stock ?? 0;
           const faltante = Math.max(0, f.cantidad - stockDisponible);
-          const bultos = f.unidadesPorBulto && f.unidadesPorBulto > 0
-            ? Math.ceil(f.cantidad / f.unidadesPorBulto)
-            : "";
-          const precioTotal = (bultos !== "" && f.unidadesPorBulto && f.precioUnitarioMayorista)
-            ? Math.round((bultos as number) * f.unidadesPorBulto * f.precioUnitarioMayorista * 100) / 100
-            : "";
-          return { codigo, nombre: f.nombre, cantidad: f.cantidad, stockDisponible, faltante, bultos, precioUnitarioMayorista: f.precioUnitarioMayorista, precioTotal };
+          return { codigo, nombre: f.nombre, cantidad: f.cantidad, stockDisponible, faltante };
         });
 
       const totalUnidades = filas.reduce((s, r) => s + r.cantidad, 0);
-      const totalStock = filas.reduce((s, r) => s + r.stockDisponible, 0);
-      const totalFaltante = filas.reduce((s, r) => s + r.faltante, 0);
-      const totalPrecio = filas.reduce((s, r) => s + (typeof r.precioTotal === "number" ? r.precioTotal : 0), 0);
 
-      const fecha = new Date().toLocaleDateString("es-AR");
-
-      // Construir datos de la hoja
+      // Construir datos de la hoja — arranca directo desde fila 1
       const wsData: (string | number)[][] = [];
 
-      // Título
-      wsData.push([`Pedido Mayorista — ${fecha}`]);
-      wsData.push([]);
-
-      // Encabezados
-      wsData.push(["Código", "Descripción", "Unidades pedidas", "Stock disponible", "Faltante (unid.)", "Bultos", "Precio x bulto", "Total estimado"]);
+      // Fila 1: encabezados
+      wsData.push(["Código", "Descripción", "Unidades pedidas", "Stock disponible", "Faltante (unid.)"]);
 
       // Filas de datos
       for (const f of filas) {
-        wsData.push([
-          f.codigo,
-          f.nombre,
-          f.cantidad,
-          f.stockDisponible,
-          f.faltante,
-          f.bultos !== "" ? f.bultos : "",
-          f.precioUnitarioMayorista ?? "",
-          f.precioTotal !== "" ? f.precioTotal : "",
-        ]);
+        wsData.push([f.codigo, f.nombre, f.cantidad, f.stockDisponible, f.faltante]);
       }
 
-      // Fila vacía + totales
-      wsData.push([]);
-      wsData.push([
-        "",
-        "TOTAL",
-        totalUnidades,
-        totalStock,
-        totalFaltante,
-        "",
-        "",
-        totalPrecio > 0 ? totalPrecio : "",
-      ]);
+      // Fila de totales
+      wsData.push([`TOTAL  items: ${filas.length}`, "", totalUnidades, "", ""]);
 
       const ws = XLSX.utils.aoa_to_sheet(wsData);
 
       // Anchos de columna
       ws["!cols"] = [
-        { wch: 14 },  // Código
-        { wch: 40 },  // Descripción
+        { wch: 16 },  // Código
+        { wch: 42 },  // Descripción
         { wch: 18 },  // Unidades pedidas
         { wch: 18 },  // Stock disponible
         { wch: 18 },  // Faltante
-        { wch: 10 },  // Bultos
-        { wch: 16 },  // Precio x bulto
-        { wch: 18 },  // Total estimado
       ];
 
-      // Estilos para encabezado (fila 3, índice 2)
-      const headerRow = 3; // fila 1-indexada en la hoja (fila título=1, vacía=2, encabezado=3)
-      const cols = ["A", "B", "C", "D", "E", "F", "G", "H"];
+      const cols = ["A", "B", "C", "D", "E"];
+
+      // Estilos encabezado (fila 1)
       for (const col of cols) {
-        const cellRef = `${col}${headerRow}`;
+        const cellRef = `${col}1`;
         if (ws[cellRef]) {
           ws[cellRef].s = {
             font: { bold: true, color: { rgb: "FFFFFF" } },
             fill: { fgColor: { rgb: "0F766E" } },
-            alignment: { horizontal: "center", vertical: "center", wrapText: true },
-            border: {
-              bottom: { style: "thin", color: { rgb: "CCCCCC" } },
-            },
+            alignment: { horizontal: "center", vertical: "center" },
           };
         }
       }
-
-      // Estilo título
-      if (ws["A1"]) {
-        ws["A1"].s = {
-          font: { bold: true, sz: 14, color: { rgb: "0F766E" } },
-        };
-      }
-
-      // Merge título A1:H1
-      ws["!merges"] = [{ s: { r: 0, c: 0 }, e: { r: 0, c: 7 } }];
 
       // Estilo fila de totales
       const totalRowIdx = wsData.length; // 1-indexado
@@ -674,8 +624,8 @@ export default function PedidosPage() {
         }
       }
 
-      // Resaltar filas con faltante > 0 en columna E (Faltante)
-      const dataStartRow = 4; // fila 4 en adelante son datos
+      // Resaltar faltante > 0 en columna E
+      const dataStartRow = 2; // datos desde fila 2
       filas.forEach((f, i) => {
         if (f.faltante > 0) {
           const cellRef = `E${dataStartRow + i}`;
