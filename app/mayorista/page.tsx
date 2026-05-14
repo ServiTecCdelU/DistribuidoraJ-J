@@ -123,7 +123,8 @@ export default function MayoristaPage() {
 
   const cargar = useCallback(async (forceRefresh = false) => {
     try {
-      const data = await getMayoristaProductos(forceRefresh);
+      // skipJoin: la tabla solo muestra datos de mayorista, no necesita join con productos
+      const data = await getMayoristaProductos(forceRefresh, false);
       setProductos(data);
     } catch {
       toast.error("Error al cargar productos del mayorista");

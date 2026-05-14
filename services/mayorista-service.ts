@@ -86,35 +86,41 @@ function mapDoc(id: string, data: Record<string, unknown>): MayoristaProducto {
   };
 }
 
-export const getMayoristaProductos = async (forceRefresh = false): Promise<MayoristaProducto[]> => {
+export const getMayoristaProductos = async (forceRefresh = false, includeJoin = true): Promise<MayoristaProducto[]> => {
   if (!forceRefresh) {
     const cached = readCache();
     if (cached && Date.now() - cached.ts < CACHE_TTL) {
-      return cached.data;
+      // Si el caché no tiene join data y se pidió join, refrescar
+      if (includeJoin && cached.data.length > 0 && cached.data.some(p => p.habilitado && p.productoId) && !cached.data.some(p => p.precioVenta > 0)) {
+        // Caché sin join — continuar para hacer el join
+      } else {
+        return cached.data;
+      }
     }
   }
 
   const snap = await getDocs(collection(firestore, COL));
   const data = snap.docs.map((d) => mapDoc(d.id, d.data() as Record<string, unknown>));
 
-  // Join con "productos" para los habilitados — obtiene precioVenta, gananciaGlobal, etc.
-  // Una sola lectura de toda la colección en vez de N getDoc individuales.
-  const habilitados = data.filter((p) => p.habilitado && p.productoId);
-  if (habilitados.length > 0) {
-    const prodSnap = await getDocs(collection(firestore, PRODUCTS_COLLECTION));
-    const productosMap = new Map<string, Record<string, unknown>>();
-    prodSnap.docs.forEach((d) => productosMap.set(d.id, d.data() as Record<string, unknown>));
+  // Join con "productos" para los habilitados — solo si se pide (ahorra leer 2000+ docs)
+  if (includeJoin) {
+    const habilitados = data.filter((p) => p.habilitado && p.productoId);
+    if (habilitados.length > 0) {
+      const prodSnap = await getDocs(collection(firestore, PRODUCTS_COLLECTION));
+      const productosMap = new Map<string, Record<string, unknown>>();
+      prodSnap.docs.forEach((d) => productosMap.set(d.id, d.data() as Record<string, unknown>));
 
-    for (const p of data) {
-      if (!p.productoId) continue;
-      const pd = productosMap.get(p.productoId);
-      if (!pd) continue;
-      p.precioVenta = (pd.precioVenta as number) ?? (pd.price as number) ?? 0;
-      p.gananciaGlobal = pd.gananciaGlobal as number | undefined;
-      p.gananciaIndividual = (pd.gananciaIndividual as boolean) ?? false;
-      p.stockLocal = (pd.stock as number) ?? 0;
-      p.unidadesPorBulto = pd.unidadesPorBulto as number | undefined;
-      p.seDivideEn = pd.seDivideEn as number | undefined;
+      for (const p of data) {
+        if (!p.productoId) continue;
+        const pd = productosMap.get(p.productoId);
+        if (!pd) continue;
+        p.precioVenta = (pd.precioVenta as number) ?? (pd.price as number) ?? 0;
+        p.gananciaGlobal = pd.gananciaGlobal as number | undefined;
+        p.gananciaIndividual = (pd.gananciaIndividual as boolean) ?? false;
+        p.stockLocal = (pd.stock as number) ?? 0;
+        p.unidadesPorBulto = pd.unidadesPorBulto as number | undefined;
+        p.seDivideEn = pd.seDivideEn as number | undefined;
+      }
     }
   }
 

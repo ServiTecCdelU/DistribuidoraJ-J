@@ -184,16 +184,13 @@ export default function ProductosPage() {
     let mounted = true;
     const doLoad = async () => {
       try {
-        const [data, mayoristaData] = await Promise.all([
-          productsApi.getAll(),
-          getMayoristaProductos(),
-        ]);
+        // Solo cargar productos — filtrar por !disabled en vez de cargar mayorista
+        const data = await productsApi.getAll();
         if (!mounted) return;
         setProducts(data);
+        // habilitadosIds se construye directo de productos (disabled === false)
         const ids = new Set(
-          mayoristaData
-            .filter((p) => p.habilitado && p.productoId)
-            .map((p) => p.productoId!)
+          data.filter((p) => !(p as any).disabled).map((p) => p.id)
         );
         setHabilitadosIds(ids);
       } catch (error) {
@@ -369,16 +366,11 @@ export default function ProductosPage() {
         setProgresoCarga({ done, total });
       });
 
-      // Recargar productos Y habilitadosIds (productos nuevos no estaban en el set)
-      const [data, mayoristaData] = await Promise.all([
-        productsApi.getAll(),
-        getMayoristaProductos(),
-      ]);
+      // Recargar productos y reconstruir habilitadosIds desde disabled
+      const data = await productsApi.getAll();
       setProducts(data);
       setHabilitadosIds(new Set(
-        mayoristaData
-          .filter((p) => p.habilitado && p.productoId)
-          .map((p) => p.productoId!)
+        data.filter((p) => !(p as any).disabled).map((p) => p.id)
       ));
 
       let msg = `${procesados} productos procesados`;
