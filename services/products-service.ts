@@ -72,6 +72,7 @@ function mapProduct(docSnap: { id: string; data: () => Record<string, unknown> }
     precioVenta: data.precioVenta as number | undefined,
     gananciaGlobal: data.gananciaGlobal as number | undefined,
     gananciaIndividual: data.gananciaIndividual as boolean | undefined,
+    codigo: (data.codigo as string) ?? undefined,
   };
 }
 

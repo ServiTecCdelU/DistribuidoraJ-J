@@ -588,14 +588,24 @@ export default function PedidosPage() {
 
       const ws = XLSX.utils.aoa_to_sheet(wsData);
 
-      // Anchos de columna
+      // Anchos de columna ajustados para A4 portrait
       ws["!cols"] = [
-        { wch: 16 },  // Código
-        { wch: 42 },  // Descripción
-        { wch: 18 },  // Unidades pedidas
-        { wch: 18 },  // Stock disponible
-        { wch: 18 },  // Faltante
+        { wch: 12 },  // Código
+        { wch: 36 },  // Descripción
+        { wch: 14 },  // Unidades pedidas
+        { wch: 14 },  // Stock disponible
+        { wch: 14 },  // Faltante
       ];
+
+      // Configuración de página A4 portrait, márgenes mínimos
+      ws["!pageSetup"] = {
+        paperSize: 9,       // A4
+        orientation: "portrait",
+        fitToPage: true,
+        fitToWidth: 1,
+        fitToHeight: 0,
+      };
+      ws["!margins"] = { left: 0.4, right: 0.4, top: 0.5, bottom: 0.5, header: 0.2, footer: 0.2 };
 
       const cols = ["A", "B", "C", "D", "E"];
 
@@ -604,12 +614,25 @@ export default function PedidosPage() {
         const cellRef = `${col}1`;
         if (ws[cellRef]) {
           ws[cellRef].s = {
-            font: { bold: true, color: { rgb: "FFFFFF" } },
+            font: { bold: true, sz: 10, color: { rgb: "FFFFFF" } },
             fill: { fgColor: { rgb: "0F766E" } },
             alignment: { horizontal: "center", vertical: "center" },
           };
         }
       }
+
+      // Fuente base sz 9 para todas las filas de datos
+      const dataStartRow = 2;
+      filas.forEach((_, i) => {
+        for (const col of cols) {
+          const cellRef = `${col}${dataStartRow + i}`;
+          if (ws[cellRef] && !ws[cellRef].s) {
+            ws[cellRef].s = { font: { sz: 9 }, alignment: { vertical: "center" } };
+          } else if (ws[cellRef]) {
+            ws[cellRef].s = { ...ws[cellRef].s, font: { ...ws[cellRef].s?.font, sz: 9 } };
+          }
+        }
+      });
 
       // Estilo fila de totales
       const totalRowIdx = wsData.length; // 1-indexado
@@ -617,7 +640,7 @@ export default function PedidosPage() {
         const cellRef = `${col}${totalRowIdx}`;
         if (ws[cellRef]) {
           ws[cellRef].s = {
-            font: { bold: true },
+            font: { bold: true, sz: 9 },
             fill: { fgColor: { rgb: "F0FDFA" } },
             border: { top: { style: "thin", color: { rgb: "0F766E" } } },
           };
@@ -625,13 +648,12 @@ export default function PedidosPage() {
       }
 
       // Resaltar faltante > 0 en columna E
-      const dataStartRow = 2; // datos desde fila 2
       filas.forEach((f, i) => {
         if (f.faltante > 0) {
           const cellRef = `E${dataStartRow + i}`;
           if (ws[cellRef]) {
             ws[cellRef].s = {
-              font: { bold: true, color: { rgb: "DC2626" } },
+              font: { bold: true, sz: 9, color: { rgb: "DC2626" } },
               fill: { fgColor: { rgb: "FEF2F2" } },
               alignment: { horizontal: "center" },
             };
