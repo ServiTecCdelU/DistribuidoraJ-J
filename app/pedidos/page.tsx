@@ -8,7 +8,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { DataTableSkeleton } from "@/components/ui/data-table-skeleton";
 import { Input } from "@/components/ui/input";
 import { ClientModal } from "@/components/clientes/client-modal";
-import { ordersApi, salesApi, clientsApi, paymentsApi, sellersApi } from "@/lib/api";
+import { ordersApi, salesApi, clientsApi, paymentsApi, sellersApi, productsApi } from "@/lib/api";
 import type { Order, OrderStatus, Client, Seller } from "@/lib/types";
 import { Package, Search, User, Filter, X, Loader2, Navigation, ClipboardList, ShoppingCart, Warehouse, Clock, CheckCircle2, FileSpreadsheet } from "lucide-react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
@@ -515,25 +515,33 @@ export default function PedidosPage() {
     setSelectedOrder(null);
   }, []);
 
-  const handleDescargarExcel = useCallback(() => {
+  const handleDescargarExcel = useCallback(async () => {
     setGenerandoExcel(true);
     try {
-      // Usar orders ya cargados en estado — sin fetches adicionales
+      const XLSX = await import("xlsx");
+
       const activos = orders.filter((o) => o.status !== "completed");
 
-      // Consolidar items por nombre de producto, conservando datos de lote
-      type AcumItem = { nombre: string; cantidad: number; unidadesPorBulto?: number; precioUnitarioMayorista?: number };
+      // Consolidar items por productId
+      type AcumItem = {
+        productId: string;
+        nombre: string;
+        cantidad: number;
+        unidadesPorBulto?: number;
+        precioUnitarioMayorista?: number;
+      };
       const acum = new Map<string, AcumItem>();
       for (const orden of activos) {
         for (const item of orden.items) {
-          const existing = acum.get(item.name);
+          const key = item.productId || item.name;
+          const existing = acum.get(key);
           if (existing) {
             existing.cantidad += item.quantity;
-            // Si antes no teníamos datos de lote y ahora sí, los tomamos
             if (!existing.unidadesPorBulto && item.unidadesPorBulto) existing.unidadesPorBulto = item.unidadesPorBulto;
             if (!existing.precioUnitarioMayorista && item.precioUnitarioMayorista) existing.precioUnitarioMayorista = item.precioUnitarioMayorista;
           } else {
-            acum.set(item.name, {
+            acum.set(key, {
+              productId: item.productId,
               nombre: item.name,
               cantidad: item.quantity,
               unidadesPorBulto: item.unidadesPorBulto,
@@ -548,47 +556,145 @@ export default function PedidosPage() {
         return;
       }
 
+      // Traer productos para obtener código y stock
+      const productos = await productsApi.getAll();
+      const productoMap = new Map(productos.map((p) => [p.id, p]));
+
       const filas = Array.from(acum.values())
         .sort((a, b) => a.nombre.localeCompare(b.nombre, "es"))
         .map((f) => {
+          const prod = productoMap.get(f.productId);
+          const codigo = prod?.codigo ?? "";
+          const stockDisponible = prod?.stock ?? 0;
+          const faltante = Math.max(0, f.cantidad - stockDisponible);
           const bultos = f.unidadesPorBulto && f.unidadesPorBulto > 0
             ? Math.ceil(f.cantidad / f.unidadesPorBulto)
             : "";
           const precioTotal = (bultos !== "" && f.unidadesPorBulto && f.precioUnitarioMayorista)
             ? Math.round((bultos as number) * f.unidadesPorBulto * f.precioUnitarioMayorista * 100) / 100
             : "";
-          return { ...f, bultos, precioTotal };
+          return { codigo, nombre: f.nombre, cantidad: f.cantidad, stockDisponible, faltante, bultos, precioUnitarioMayorista: f.precioUnitarioMayorista, precioTotal };
         });
 
-      // CSV con BOM para Excel en español (separador ;)
-      const sep = ";";
-      const esc = (v: string | number) =>
-        typeof v === "string" ? `"${v.replace(/"/g, '""')}"` : String(v);
-
-      const cabecera = ["Producto", "Unidades pedidas", "Bultos", "Precio x bulto", "Total estimado"].map(esc).join(sep);
-      const cuerpo = filas.map((f) => [
-        f.nombre,
-        f.cantidad,
-        f.bultos !== "" ? f.bultos : "—",
-        f.precioUnitarioMayorista ? f.precioUnitarioMayorista : "—",
-        f.precioTotal !== "" ? f.precioTotal : "—",
-      ].map(esc).join(sep));
       const totalUnidades = filas.reduce((s, r) => s + r.cantidad, 0);
+      const totalStock = filas.reduce((s, r) => s + r.stockDisponible, 0);
+      const totalFaltante = filas.reduce((s, r) => s + r.faltante, 0);
       const totalPrecio = filas.reduce((s, r) => s + (typeof r.precioTotal === "number" ? r.precioTotal : 0), 0);
-      const pie = ["TOTAL", totalUnidades, "", "", totalPrecio > 0 ? totalPrecio : "—"].map(esc).join(sep);
 
-      const csv = "\uFEFF" + [cabecera, ...cuerpo, pie].join("\r\n");
+      const fecha = new Date().toLocaleDateString("es-AR");
 
-      const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement("a");
-      const fecha = new Date().toLocaleDateString("es-AR").replace(/\//g, "-");
-      a.href = url;
-      a.download = `pedido-mayorista-${fecha}.csv`;
-      document.body.appendChild(a);
-      a.click();
-      document.body.removeChild(a);
-      URL.revokeObjectURL(url);
+      // Construir datos de la hoja
+      const wsData: (string | number)[][] = [];
+
+      // Título
+      wsData.push([`Pedido Mayorista — ${fecha}`]);
+      wsData.push([]);
+
+      // Encabezados
+      wsData.push(["Código", "Descripción", "Unidades pedidas", "Stock disponible", "Faltante (unid.)", "Bultos", "Precio x bulto", "Total estimado"]);
+
+      // Filas de datos
+      for (const f of filas) {
+        wsData.push([
+          f.codigo,
+          f.nombre,
+          f.cantidad,
+          f.stockDisponible,
+          f.faltante,
+          f.bultos !== "" ? f.bultos : "",
+          f.precioUnitarioMayorista ?? "",
+          f.precioTotal !== "" ? f.precioTotal : "",
+        ]);
+      }
+
+      // Fila vacía + totales
+      wsData.push([]);
+      wsData.push([
+        "",
+        "TOTAL",
+        totalUnidades,
+        totalStock,
+        totalFaltante,
+        "",
+        "",
+        totalPrecio > 0 ? totalPrecio : "",
+      ]);
+
+      const ws = XLSX.utils.aoa_to_sheet(wsData);
+
+      // Anchos de columna
+      ws["!cols"] = [
+        { wch: 14 },  // Código
+        { wch: 40 },  // Descripción
+        { wch: 18 },  // Unidades pedidas
+        { wch: 18 },  // Stock disponible
+        { wch: 18 },  // Faltante
+        { wch: 10 },  // Bultos
+        { wch: 16 },  // Precio x bulto
+        { wch: 18 },  // Total estimado
+      ];
+
+      // Estilos para encabezado (fila 3, índice 2)
+      const headerRow = 3; // fila 1-indexada en la hoja (fila título=1, vacía=2, encabezado=3)
+      const cols = ["A", "B", "C", "D", "E", "F", "G", "H"];
+      for (const col of cols) {
+        const cellRef = `${col}${headerRow}`;
+        if (ws[cellRef]) {
+          ws[cellRef].s = {
+            font: { bold: true, color: { rgb: "FFFFFF" } },
+            fill: { fgColor: { rgb: "0F766E" } },
+            alignment: { horizontal: "center", vertical: "center", wrapText: true },
+            border: {
+              bottom: { style: "thin", color: { rgb: "CCCCCC" } },
+            },
+          };
+        }
+      }
+
+      // Estilo título
+      if (ws["A1"]) {
+        ws["A1"].s = {
+          font: { bold: true, sz: 14, color: { rgb: "0F766E" } },
+        };
+      }
+
+      // Merge título A1:H1
+      ws["!merges"] = [{ s: { r: 0, c: 0 }, e: { r: 0, c: 7 } }];
+
+      // Estilo fila de totales
+      const totalRowIdx = wsData.length; // 1-indexado
+      for (const col of cols) {
+        const cellRef = `${col}${totalRowIdx}`;
+        if (ws[cellRef]) {
+          ws[cellRef].s = {
+            font: { bold: true },
+            fill: { fgColor: { rgb: "F0FDFA" } },
+            border: { top: { style: "thin", color: { rgb: "0F766E" } } },
+          };
+        }
+      }
+
+      // Resaltar filas con faltante > 0 en columna E (Faltante)
+      const dataStartRow = 4; // fila 4 en adelante son datos
+      filas.forEach((f, i) => {
+        if (f.faltante > 0) {
+          const cellRef = `E${dataStartRow + i}`;
+          if (ws[cellRef]) {
+            ws[cellRef].s = {
+              font: { bold: true, color: { rgb: "DC2626" } },
+              fill: { fgColor: { rgb: "FEF2F2" } },
+              alignment: { horizontal: "center" },
+            };
+          }
+        }
+      });
+
+      const wb = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(wb, ws, "Pedido");
+
+      const fechaArchivo = new Date().toLocaleDateString("es-AR").replace(/\//g, "-");
+      XLSX.writeFile(wb, `pedido-mayorista-${fechaArchivo}.xlsx`);
+
       toast.success(`Descargado — ${filas.length} productos`);
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Error al descargar");
