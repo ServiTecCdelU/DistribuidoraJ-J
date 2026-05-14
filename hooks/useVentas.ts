@@ -41,6 +41,7 @@ export interface VentaItem {
   quantity: number;
   price: number;
   itemDiscount?: number;
+  codigo?: string;
 }
 
 export interface Venta {
@@ -76,6 +77,7 @@ export interface Venta {
   sellerName?: string;
   saleNumber?: number;
   deliveryAddress?: string;
+  saldoAnterior?: number;
   discount?: number;
   discountType?: "percent" | "fixed";
   clientData?: {
@@ -594,7 +596,17 @@ export function useVentas(filterBySellerId?: string, clientCityMap?: Record<stri
           if (match) ultimoNumero = parseInt(match[1], 10);
         }
         const remitoNumber = `R-${new Date().getFullYear()}-${String(ultimoNumero + 1).padStart(5, "0")}`;
-        const pdfBase64 = await generarPdfCompleto({ ...venta, remitoNumber }, "remito");
+        let saldoAnterior: number | undefined = undefined;
+        if (venta.clientId) {
+          try {
+            const clientSnap = await getDoc(doc(db, "clientes", venta.clientId));
+            if (clientSnap.exists()) {
+              const bal = clientSnap.data().currentBalance;
+              if (typeof bal === "number" && bal !== 0) saldoAnterior = bal;
+            }
+          } catch {}
+        }
+        const pdfBase64 = await generarPdfCompleto({ ...venta, remitoNumber, saldoAnterior }, "remito");
         await updateDoc(doc(db, "ventas", venta.id), {
           remitoPdfBase64: pdfBase64, remitoNumber, remitoGeneratedAt: serverTimestamp(),
         });

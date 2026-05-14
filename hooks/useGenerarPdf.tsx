@@ -599,6 +599,7 @@ const remitoStyles = StyleSheet.create({
   remitoFecha: { fontSize: 9, color: "#555" },
   clienteLabel: { fontSize: 8, color: "#888", marginBottom: 1 },
   clienteNombre: { fontSize: 11, fontWeight: "bold" },
+  clienteDireccion: { fontSize: 8, color: "#555", marginTop: 2 },
   vendedorLabel: { fontSize: 8, color: "#888", marginTop: 4, marginBottom: 1 },
   vendedorNombre: { fontSize: 9 },
   bold: { fontWeight: "bold" },
@@ -644,9 +645,11 @@ const remitoStyles = StyleSheet.create({
   saldoRow: {
     flexDirection: "row",
     justifyContent: "flex-end",
-    paddingTop: 5,
+    paddingTop: 4,
     paddingRight: 2,
+    paddingBottom: 2,
     fontSize: 8.5,
+    gap: 24,
   },
   // ── Firma ──
   firmaSection: {
@@ -685,6 +688,7 @@ const RemitoPDF = ({ venta }: { venta: Venta }) => {
   const nro = String(nroPart || "00000001").padStart(8, "0");
 
   const clientName = venta.clientName || venta.clientData?.name || "Consumidor Final";
+  const clientAddress = venta.deliveryAddress || venta.clientAddress || venta.clientData?.address || null;
   const sellerName = venta.sellerName || null;
   const totalItems = items.length;
   const totalUnidades = items.reduce((acc, item) => acc + (item.quantity || 0), 0);
@@ -703,6 +707,9 @@ const RemitoPDF = ({ venta }: { venta: Venta }) => {
           <View style={remitoStyles.headerRight}>
             <Text style={remitoStyles.clienteLabel}>CLIENTE</Text>
             <Text style={remitoStyles.clienteNombre}>{clientName}</Text>
+            {clientAddress && (
+              <Text style={remitoStyles.clienteDireccion}>{clientAddress}</Text>
+            )}
             {sellerName && (
               <>
                 <Text style={remitoStyles.vendedorLabel}>VENDEDOR</Text>
@@ -766,10 +773,17 @@ const RemitoPDF = ({ venta }: { venta: Venta }) => {
           </View>
         </View>
 
-        {/* ══ SALDO ANTERIOR ══ */}
+        {/* ══ SALDO ANTERIOR + TOTAL CON CC ══ */}
         {venta.saldoAnterior != null && venta.saldoAnterior !== 0 && (
           <View style={remitoStyles.saldoRow}>
-            <Text><Text style={remitoStyles.summaryLabel}>Saldo Anterior: </Text><Text style={remitoStyles.summaryValue}>{formatCurrency(venta.saldoAnterior)}</Text></Text>
+            <Text>
+              <Text style={remitoStyles.summaryLabel}>Saldo Anterior: </Text>
+              <Text style={remitoStyles.summaryValue}>{formatCurrency(venta.saldoAnterior)}</Text>
+            </Text>
+            <Text>
+              <Text style={remitoStyles.summaryLabel}>Total c/ CC: </Text>
+              <Text style={remitoStyles.summaryValue}>{formatCurrency((venta.saldoAnterior || 0) + (venta.total || 0))}</Text>
+            </Text>
           </View>
         )}
 
