@@ -336,8 +336,15 @@ export default function ProductosPage() {
 
       const rows: ImportRow[] = [];
       for (const row of raw) {
-        const codigo = row[0];
-        if (!codigo || typeof codigo !== "string" || !/^\d+/.test(codigo.trim())) continue;
+        const rawCodigo = row[0];
+        if (rawCodigo == null) continue;
+        // XLSX puede parsear el código como número (pierde leading zeros) o como string
+        const codigo = typeof rawCodigo === "number"
+          ? String(rawCodigo).padStart(7, "0")
+          : typeof rawCodigo === "string" && /^\d+/.test(rawCodigo.trim())
+            ? rawCodigo.trim()
+            : null;
+        if (!codigo) continue;
         const descripcion = row[4];
         const lista1 = row[9];
         const stockPacks = row[11];
@@ -347,7 +354,7 @@ export default function ProductosPage() {
         if (typeof unPack !== "number" || unPack <= 0) continue;
         const stockNum = typeof stockPacks === "number" ? stockPacks : 0;
         rows.push({
-          codigo: codigo.trim(),
+          codigo,
           descripcion: descripcion.trim(),
           stockUnidades: Math.round(stockNum * unPack),
           unPack,
@@ -362,8 +369,17 @@ export default function ProductosPage() {
         setProgresoCarga({ done, total });
       });
 
-      const data = await productsApi.getAll();
+      // Recargar productos Y habilitadosIds (productos nuevos no estaban en el set)
+      const [data, mayoristaData] = await Promise.all([
+        productsApi.getAll(),
+        getMayoristaProductos(),
+      ]);
       setProducts(data);
+      setHabilitadosIds(new Set(
+        mayoristaData
+          .filter((p) => p.habilitado && p.productoId)
+          .map((p) => p.productoId!)
+      ));
 
       let msg = `${procesados} productos procesados`;
       if (noEncontrados.length > 0) msg += ` · ${noEncontrados.length} sin coincidencia en mayorista`;
