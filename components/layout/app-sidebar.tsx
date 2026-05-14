@@ -40,22 +40,17 @@ export function AppSidebar() {
   const isTransportista = employeeType === "transportista" || employeeType === "ambos";
 
   const navItems = [
-    { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard, roles: ["admin"] },
+    // { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard, roles: ["admin"] },
+    { href: "/caja", label: "Caja Diaria", icon: Banknote, roles: ["admin"] },
+    { href: "/pedidos", label: "Pedidos", icon: Truck, roles: ["admin", ...(isTransportista ? ["seller"] : [])] },
+    { href: "/ventas", label: user?.role === "seller" ? "Mis Ventas" : "Ventas", icon: Receipt, roles: ["admin", ...(isVendedor ? ["seller"] : [])] },
+    { href: "/mayorista", label: "Mayorista", icon: Store, roles: ["admin"] },
     { href: "/productos", label: "Productos", icon: Package, roles: ["admin"] },
     { href: "/clientes", label: "Clientes", icon: Users, roles: ["admin"] },
-    {
-      href: "/empleados",
-      label: "Empleados",
-      icon: UserCheck,
-      roles: ["admin"],
-    },
-    { href: "/ventas", label: user?.role === "seller" ? "Mis Ventas" : "Ventas", icon: Receipt, roles: ["admin", ...(isVendedor ? ["seller"] : [])] },
+    { href: "/empleados", label: "Empleados", icon: UserCheck, roles: ["admin"] },
     { href: user?.role === "seller" ? "/vendedor" : "/ventas/nueva", label: "Nueva Venta", icon: ShoppingCart, roles: ["admin", ...(isVendedor ? ["seller"] : [])] },
-    { href: "/pedidos", label: "Pedidos", icon: Truck, roles: ["admin", ...(isTransportista ? ["seller"] : [])] },
-    { href: "/mayorista", label: "Mayorista", icon: Store, roles: ["admin"] },
     // { href: "/transporte", label: "Transporte", icon: MapPin, roles: ["admin", ...(isTransportista ? ["seller"] : [])] },
     { href: "/comisiones", label: "Mis Comisiones", icon: Banknote, roles: ["seller"] },
-    // { href: "/caja", label: "Caja Diaria", icon: Banknote, roles: ["admin"] },
     // { href: "/reportes", label: "Reportes", icon: BarChart3, roles: ["admin"] },
     // { href: "/listas-precios", label: "Listas de Precios", icon: Tag, roles: ["admin"] },
     // { href: "/auditoria", label: "Auditoria", icon: Shield, roles: ["admin"] },
