@@ -30,13 +30,22 @@ export function invalidateProductsCache(): void {
 }
 
 export const getProducts = async (_forceRefresh = false): Promise<Product[]> => {
-  const { data, error } = await supabase
-    .from('productos')
-    .select('*')
-    .order('created_at', { ascending: false })
-
-  if (error) throw error
-  return (data ?? []).map(mapRow)
+  const all: any[] = []
+  const PAGE = 1000
+  let from = 0
+  while (true) {
+    const { data, error } = await supabase
+      .from('productos')
+      .select('*')
+      .order('created_at', { ascending: false })
+      .range(from, from + PAGE - 1)
+    if (error) throw error
+    if (!data || data.length === 0) break
+    all.push(...data)
+    if (data.length < PAGE) break
+    from += PAGE
+  }
+  return all.map(mapRow)
 }
 
 export const getProductById = async (id: string): Promise<Product | undefined> => {

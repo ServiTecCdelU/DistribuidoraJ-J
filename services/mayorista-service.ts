@@ -32,25 +32,39 @@ export const invalidateMayoristaCache = () => {
 }
 
 export const getMayoristaProductos = async (_forceRefresh = false, includeJoin = true): Promise<MayoristaProducto[]> => {
-  const { data: rows } = await supabase
-    .from('mayorista_productos')
-    .select('*')
-    .order('descripcion', { ascending: true })
+  const all: any[] = []
+  const PAGE = 1000
+  let from = 0
+  while (true) {
+    const { data, error } = await supabase
+      .from('mayorista_productos')
+      .select('*')
+      .order('descripcion', { ascending: true })
+      .range(from, from + PAGE - 1)
+    if (error) throw error
+    if (!data || data.length === 0) break
+    all.push(...data)
+    if (data.length < PAGE) break
+    from += PAGE
+  }
 
-  const productos = (rows ?? []).map(mapDoc)
+  const productos = all.map(mapDoc)
 
   // Join con "productos" para los habilitados
   if (includeJoin) {
     const habilitados = productos.filter((p) => p.habilitado && p.productoId)
     if (habilitados.length > 0) {
       const prodIds = habilitados.map((p) => p.productoId!)
-      const { data: prodRows } = await supabase
-        .from('productos')
-        .select('id, precio_venta, price, ganancia_global, ganancia_individual, stock, unidades_por_bulto, se_divide_en')
-        .in('id', prodIds)
-
+      // Supabase .in() tiene límite, paginar en chunks
       const productosMap = new Map<string, Record<string, any>>()
-      ;(prodRows ?? []).forEach((p) => productosMap.set(p.id, p))
+      for (let i = 0; i < prodIds.length; i += 500) {
+        const chunk = prodIds.slice(i, i + 500)
+        const { data: prodRows } = await supabase
+          .from('productos')
+          .select('id, precio_venta, price, ganancia_global, ganancia_individual, stock, unidades_por_bulto, se_divide_en')
+          .in('id', chunk)
+        ;(prodRows ?? []).forEach((p) => productosMap.set(p.id, p))
+      }
 
       for (const p of productos) {
         if (!p.productoId) continue
@@ -295,9 +309,19 @@ export const importarListaPrecios = async (
   onProgress?.(0, rows.length)
 
   // Cargar todos los mayorista_productos para hacer el match por codigo
-  const { data: mpRows } = await supabase
-    .from('mayorista_productos')
-    .select('id, codigo, producto_id, rubro, categoria, descripcion')
+  const mpRows: any[] = []
+  let mpFrom = 0
+  while (true) {
+    const { data, error } = await supabase
+      .from('mayorista_productos')
+      .select('id, codigo, producto_id, rubro, categoria, descripcion')
+      .range(mpFrom, mpFrom + 999)
+    if (error) throw error
+    if (!data || data.length === 0) break
+    mpRows.push(...data)
+    if (data.length < 1000) break
+    mpFrom += 1000
+  }
 
   type MpEntry = { id: string; productoId?: string; rubro?: string; categoria?: string; descripcion?: string }
   const mpExact = new Map<string, MpEntry>()
