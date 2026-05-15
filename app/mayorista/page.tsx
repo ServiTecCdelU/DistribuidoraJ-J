@@ -834,7 +834,15 @@ function ExcelImportDialog({
         };
       })
       // Excluir filas vacías Y filas de encabezado (precio = 0 y sin código numérico real)
-      .filter((r) => r.codigo && r.nombre && r.precioUnitarioMayorista > 0);
+      .filter((r) => {
+        if (!r.codigo && !r.nombre && r.precioUnitarioMayorista === 0) return false; // fila vacía
+        if (!r.codigo) { console.log('[Mayorista] Fila descartada sin código:', r.nombre); return false; }
+        if (!r.nombre) { console.log('[Mayorista] Fila descartada sin nombre:', r.codigo); return false; }
+        if (r.precioUnitarioMayorista <= 0) { console.log('[Mayorista] Fila descartada sin precio:', r.codigo, r.nombre); return false; }
+        return true;
+      });
+
+    console.log(`[Mayorista] ${rows.length} filas en Excel → ${result.length} válidas después del filtro`);
 
     if (result.length === 0) {
       toast.error("No se encontraron filas válidas con el mapeo actual");

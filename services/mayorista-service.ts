@@ -75,7 +75,7 @@ export const upsertMayoristaProductos = async (
 ): Promise<void> => {
   onProgress?.(0, productos.length)
 
-  const rows = productos.map((p) => ({
+  const allRows = productos.map((p) => ({
     id: `mp_${p.codigo.replace(/[^a-zA-Z0-9]/g, '_')}`,
     codigo: p.codigo,
     descripcion: p.nombre,
@@ -85,6 +85,14 @@ export const upsertMayoristaProductos = async (
     subrubro: p.subrubro ?? '',
     categoria: p.categoria ?? '',
   }))
+
+  // Deduplicar por ID — si hay colisiones, el último gana
+  const byId = new Map<string, typeof allRows[0]>()
+  for (const r of allRows) byId.set(r.id, r)
+  const rows = [...byId.values()]
+  const dupes = allRows.length - rows.length
+  if (dupes > 0) console.warn(`[upsertMayorista] ${dupes} productos con ID duplicado (códigos colisionan)`)
+  console.log(`[upsertMayorista] ${productos.length} recibidos → ${rows.length} únicos por ID`)
 
   // Upsert en batches
   for (let i = 0; i < rows.length; i += BATCH_SIZE) {
