@@ -796,9 +796,29 @@ function ExcelImportDialog({
           cols.push({ letter, header, preview });
         }
 
+        // Auto-detectar mapeo desde headers
+        const autoMapping: Partial<ColumnMapping> = {};
+        for (const col of cols) {
+          const h = col.header.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+          if (!autoMapping.codigoBarras && (h.includes("barra") || h.includes("ean") || h.includes("upc"))) autoMapping.codigoBarras = col.letter as ColumnLetter;
+          else if (!autoMapping.codigo && (h.includes("codigo") || h.includes("code") || h.includes("cod") || h === "id")) autoMapping.codigo = col.letter as ColumnLetter;
+          else if (!autoMapping.nombre && (h.includes("descripcion") || h.includes("nombre") || h.includes("producto") || h.includes("articulo"))) autoMapping.nombre = col.letter as ColumnLetter;
+          else if (!autoMapping.precioUnitario && (h.includes("precio") || h.includes("lista") || h.includes("p.u") || h.includes("costo"))) autoMapping.precioUnitario = col.letter as ColumnLetter;
+          else if (!autoMapping.rubro && h.includes("rubro")) autoMapping.rubro = col.letter as ColumnLetter;
+          else if (!autoMapping.subrubro && h.includes("subrubro")) autoMapping.subrubro = col.letter as ColumnLetter;
+        }
+
         setHeaderRowIndex(detectedHeader);
         setColumns(cols);
         setRawRows(rows);
+        setMapping((prev) => ({
+          codigoBarras: autoMapping.codigoBarras || autoMapping.codigo || prev.codigoBarras,
+          codigo: autoMapping.codigo || prev.codigo,
+          nombre: autoMapping.nombre || prev.nombre,
+          precioUnitario: autoMapping.precioUnitario || prev.precioUnitario,
+          rubro: autoMapping.rubro || prev.rubro,
+          subrubro: autoMapping.subrubro || prev.subrubro,
+        }));
         setStep("mapping");
       } catch {
         toast.error("Error al leer el archivo Excel");
@@ -867,13 +887,13 @@ function ExcelImportDialog({
     }
   };
 
-  const camposRequeridos: { key: keyof ColumnMapping; label: string }[] = [
-    { key: "codigoBarras", label: "Código de barras (col A)" },
-    { key: "codigo", label: "Código (col B)" },
-    { key: "nombre", label: "Descripción / Nombre (col C)" },
-    { key: "precioUnitario", label: "Precio Cons. Final (col D)" },
-    { key: "rubro", label: "Rubro (col E)" },
-    { key: "subrubro", label: "Subrubro (col F)" },
+  const camposRequeridos: { key: keyof ColumnMapping; label: string; required?: boolean }[] = [
+    { key: "codigo", label: "Código", required: true },
+    { key: "nombre", label: "Descripción / Nombre", required: true },
+    { key: "precioUnitario", label: "Precio", required: true },
+    { key: "codigoBarras", label: "Código de barras (opcional)" },
+    { key: "rubro", label: "Rubro (opcional)" },
+    { key: "subrubro", label: "Subrubro (opcional)" },
   ];
 
   return (
