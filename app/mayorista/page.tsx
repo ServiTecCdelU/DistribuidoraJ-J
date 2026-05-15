@@ -990,6 +990,7 @@ function ExcelImportDialog({
                 <table className="w-full">
                   <thead>
                     <tr className="bg-teal-50/50 dark:bg-teal-950/20">
+                      <th className="px-2 py-1.5 text-left border-r whitespace-nowrap font-mono text-muted-foreground">#</th>
                       {columns.slice(0, 8).map((col) => (
                         <th key={col.letter} className="px-2 py-1.5 text-left border-r last:border-r-0 whitespace-nowrap">
                           <span className="font-mono font-bold text-teal-600">{col.letter}</span>
@@ -1003,6 +1004,7 @@ function ExcelImportDialog({
                   <tbody>
                     {rawRows.slice(headerRowIndex + 1, headerRowIndex + 6).map((row, ri) => (
                       <tr key={ri} className="border-t hover:bg-muted/20">
+                        <td className="px-2 py-1 text-muted-foreground font-mono border-r">{ri + 1}</td>
                         {(row as unknown[]).slice(0, 8).map((cell, ci) => (
                           <td key={ci} className="px-2 py-1 border-r last:border-r-0 max-w-[90px] truncate">
                             {cellToString(cell)}
@@ -1034,6 +1036,7 @@ function ExcelImportDialog({
                 <table className="w-full text-xs">
                   <thead className="bg-muted/50 sticky top-0">
                     <tr>
+                      <th className="text-left px-2 py-2 font-semibold whitespace-nowrap">#</th>
                       <th className="text-left px-2 py-2 font-semibold whitespace-nowrap">Cód.barras</th>
                       <th className="text-left px-2 py-2 font-semibold">Código</th>
                       <th className="text-left px-2 py-2 font-semibold">Nombre</th>
@@ -1044,6 +1047,7 @@ function ExcelImportDialog({
                   <tbody className="divide-y">
                     {parsed.slice(0, 200).map((row, i) => (
                       <tr key={i} className="hover:bg-muted/20">
+                        <td className="px-2 py-1 font-mono text-muted-foreground whitespace-nowrap">{i + 1}</td>
                         <td className="px-2 py-1 font-mono text-muted-foreground whitespace-nowrap">{row.codigoBarras || "—"}</td>
                         <td className="px-2 py-1 font-mono text-muted-foreground whitespace-nowrap">{row.codigo}</td>
                         <td className="px-2 py-1 max-w-[140px] truncate">{row.nombre}</td>
