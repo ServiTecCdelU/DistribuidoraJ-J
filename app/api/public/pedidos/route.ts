@@ -1,6 +1,6 @@
 // app/api/public/pedidos/route.ts
 import { NextResponse } from "next/server";
-import { adminFirestore } from "@/lib/firebase-admin";
+import { supabaseAdmin } from "@/lib/supabase-admin";
 import { rateLimit } from "@/lib/rate-limit";
 
 export const runtime = "nodejs";
@@ -14,7 +14,7 @@ function slugify(text: string): string {
 }
 
 async function generateAdminReadableId(
-  collection: string,
+  table: string,
   prefix: string,
   identifier: string,
 ): Promise<string> {
@@ -22,8 +22,12 @@ async function generateAdminReadableId(
   const base = `${prefix}_${slug}`;
   for (let num = 1; num < 1000; num++) {
     const candidateId = `${base}_${num}`;
-    const doc = await adminFirestore.collection(collection).doc(candidateId).get();
-    if (!doc.exists) return candidateId;
+    const { data } = await supabaseAdmin
+      .from(table)
+      .select("id")
+      .eq("id", candidateId)
+      .single();
+    if (!data) return candidateId;
   }
   return `${base}_${Date.now()}`;
 }
@@ -62,42 +66,47 @@ export async function POST(request: Request) {
 
   if (!clientId) {
     // Buscar cliente existente por CUIT, DNI o email
-    let existingSnap = null;
+    let existingDoc: any = null;
 
     if (cuit) {
-      existingSnap = await adminFirestore
-        .collection("clientes")
-        .where("cuit", "==", cuit)
-        .limit(1)
-        .get();
+      const { data } = await supabaseAdmin
+        .from("clientes")
+        .select("*")
+        .eq("cuit", cuit)
+        .limit(1);
+      if (data && data.length > 0) existingDoc = data[0];
     }
-    if ((!existingSnap || existingSnap.empty) && dni) {
-      existingSnap = await adminFirestore
-        .collection("clientes")
-        .where("dni", "==", dni)
-        .limit(1)
-        .get();
+    if (!existingDoc && dni) {
+      const { data } = await supabaseAdmin
+        .from("clientes")
+        .select("*")
+        .eq("dni", dni)
+        .limit(1);
+      if (data && data.length > 0) existingDoc = data[0];
     }
-    if ((!existingSnap || existingSnap.empty) && email) {
-      existingSnap = await adminFirestore
-        .collection("clientes")
-        .where("email", "==", email)
-        .limit(1)
-        .get();
+    if (!existingDoc && email) {
+      const { data } = await supabaseAdmin
+        .from("clientes")
+        .select("*")
+        .eq("email", email)
+        .limit(1);
+      if (data && data.length > 0) existingDoc = data[0];
     }
 
-    if (existingSnap && !existingSnap.empty) {
-      const docSnap = existingSnap.docs[0];
-      clientId = docSnap.id;
-      clientName = docSnap.data().name || name;
+    if (existingDoc) {
+      clientId = existingDoc.id;
+      clientName = existingDoc.name || name;
 
       // Actualizar datos si cambió algo
       const updates: Record<string, unknown> = {};
-      if (phone && !docSnap.data().phone) updates.phone = phone;
-      if (email && !docSnap.data().email) updates.email = email;
-      if (address && !docSnap.data().address) updates.address = address;
+      if (phone && !existingDoc.phone) updates.phone = phone;
+      if (email && !existingDoc.email) updates.email = email;
+      if (address && !existingDoc.address) updates.address = address;
       if (Object.keys(updates).length > 0) {
-        await adminFirestore.collection("clientes").doc(clientId).update(updates);
+        await supabaseAdmin
+          .from("clientes")
+          .update(updates)
+          .eq("id", clientId);
       }
     } else {
       // Crear nuevo cliente con ID legible: cliente_{name}_{cuit} o cliente_{name}_{counter}
@@ -108,8 +117,12 @@ export async function POST(request: Request) {
         const cuitPart = cuit.replace(/[^0-9]/g, "");
         clientDocId = `cliente_${namePart}_${cuitPart}`;
         // Verificar si ya existe ese ID
-        const existing = await adminFirestore.collection("clientes").doc(clientDocId).get();
-        if (existing.exists) {
+        const { data: existing } = await supabaseAdmin
+          .from("clientes")
+          .select("id")
+          .eq("id", clientDocId)
+          .single();
+        if (existing) {
           // Fallback a contador
           clientDocId = await generateAdminReadableId("clientes", "cliente", name);
         }
@@ -117,17 +130,18 @@ export async function POST(request: Request) {
         clientDocId = await generateAdminReadableId("clientes", "cliente", name);
       }
 
-      await adminFirestore.collection("clientes").doc(clientDocId).set({
+      await supabaseAdmin.from("clientes").upsert({
+        id: clientDocId,
         name,
         dni: dni || null,
         cuit: cuit || null,
         email: email || null,
         phone,
         address: address || null,
-        taxCategory,
-        creditLimit: 0,
-        currentBalance: 0,
-        createdAt: new Date(),
+        tax_category: taxCategory,
+        credit_limit: 0,
+        current_balance: 0,
+        created_at: new Date().toISOString(),
       });
       clientId = clientDocId;
     }
@@ -143,26 +157,27 @@ export async function POST(request: Request) {
   // Crear pedido con ID legible: pedido_{clientName}_{counter}
   const orderDocId = await generateAdminReadableId("pedidos", "pedido", clientName);
 
-  await adminFirestore.collection("pedidos").doc(orderDocId).set({
-    saleId: null,
-    clientId,
-    clientName,
-    clientPhone: phone || null,
-    clientEmail: email || null,
-    sellerId: null,
-    sellerName: null,
+  await supabaseAdmin.from("pedidos").upsert({
+    id: orderDocId,
+    sale_id: null,
+    client_id: clientId,
+    client_name: clientName,
+    client_phone: phone || null,
+    client_email: email || null,
+    seller_id: null,
+    seller_name: null,
     items: body.items,
     city: isPickup ? null : (body.city || null),
     address: resolvedAddress,
     lat: isPickup ? null : (body.lat ?? null),
     lng: isPickup ? null : (body.lng ?? null),
-    deliveryMethod,
+    delivery_method: deliveryMethod,
     status: "pending",
     source: "tienda",
     discount: body.discount ?? null,
-    discountType: body.discountType ?? null,
-    createdAt: new Date(),
-    updatedAt: new Date(),
+    discount_type: body.discountType ?? null,
+    created_at: new Date().toISOString(),
+    updated_at: new Date().toISOString(),
   });
 
   return NextResponse.json({ orderId: orderDocId });

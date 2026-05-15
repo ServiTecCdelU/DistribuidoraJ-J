@@ -1,20 +1,22 @@
 // app/api/public/mas-vendidos/route.ts
 import { NextResponse } from "next/server";
-import { adminFirestore } from "@/lib/firebase-admin";
+import { supabaseAdmin } from "@/lib/supabase-admin";
 
 export const runtime = "nodejs";
 
 export async function GET() {
-  const [ventasSnap, productosSnap] = await Promise.all([
-    adminFirestore.collection("ventas").get(),
-    adminFirestore.collection("productos").get(),
+  const [ventasRes, productosRes] = await Promise.all([
+    supabaseAdmin.from("ventas").select("*"),
+    supabaseAdmin.from("productos").select("*"),
   ]);
+
+  const ventas = ventasRes.data || [];
+  const productos = productosRes.data || [];
 
   // Aggregate quantities sold per productId
   const countMap: Record<string, number> = {};
-  for (const doc of ventasSnap.docs) {
-    const data = doc.data();
-    const items: { productId: string; quantity: number }[] = data.items || [];
+  for (const row of ventas) {
+    const items: { productId: string; quantity: number }[] = row.items || [];
     for (const item of items) {
       if (item.productId) {
         countMap[item.productId] = (countMap[item.productId] || 0) + (item.quantity || 1);
@@ -24,18 +26,17 @@ export async function GET() {
 
   // Build product map
   const productMap: Record<string, any> = {};
-  for (const doc of productosSnap.docs) {
-    const data = doc.data();
+  for (const data of productos) {
     if (data.disabled === true) continue;
-    productMap[doc.id] = {
-      id: doc.id,
+    productMap[data.id] = {
+      id: data.id,
       name: data.name,
       description: data.description,
       price: data.price,
       stock: data.stock,
-      imageUrl: data.imageUrl,
+      imageUrl: data.image_url,
       category: data.category,
-      sinTacc: data.sinTacc ?? false,
+      sinTacc: data.sin_tacc ?? false,
     };
   }
 

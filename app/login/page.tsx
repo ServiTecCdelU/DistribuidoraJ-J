@@ -37,9 +37,10 @@ export default function LoginPage() {
 
     try {
       await signInWithGoogle()
-      // El redirect lo maneja el useEffect cuando user se actualiza
+      // Supabase OAuth usa redirect — el usuario sale y vuelve.
+      // onAuthStateChange captura el retorno.
     } catch (error) {
-      setError('No se pudo iniciar sesión con Google')
+      setError('No se pudo iniciar sesion con Google')
       setLoading(false)
     }
   }

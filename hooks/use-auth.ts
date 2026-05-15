@@ -7,7 +7,7 @@ import { ensureUserProfile } from '@/services/users-service'
 
 const STORAGE_KEY = 'auth_profile'
 
-// Restaurar perfil de sessionStorage para render instantáneo
+// Restaurar perfil de sessionStorage para render instantaneo
 function getStoredProfile(): { uid: string; user: User } | null {
   if (typeof window === 'undefined') return null
   try {
@@ -29,24 +29,23 @@ function clearStoredProfile() {
   try { sessionStorage.removeItem(STORAGE_KEY) } catch {}
 }
 
-// Caché en memoria + sessionStorage
+// Cache en memoria + sessionStorage
 let cachedProfile: { uid: string; user: User } | null = getStoredProfile()
 
 export const useAuth = () => {
   // Siempre null en el render inicial para que server y client coincidan (evita hydration mismatch).
-  // El caché se restaura en el efecto, que corre sólo en el cliente.
   const [user, setUser] = useState<User | null>(null)
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
-    // Restaurar perfil cacheado inmediatamente (antes de que Firebase responda)
+    // Restaurar perfil cacheado inmediatamente
     if (cachedProfile) {
       setUser(cachedProfile.user)
       setLoading(false)
     }
 
-    const unsubscribe = onAuthChange(async (firebaseUser) => {
-      if (!firebaseUser) {
+    const unsubscribe = onAuthChange(async (supabaseUser) => {
+      if (!supabaseUser) {
         cachedProfile = null
         clearStoredProfile()
         setUser(null)
@@ -55,16 +54,16 @@ export const useAuth = () => {
       }
 
       // Si ya tenemos el perfil cacheado para este uid, usarlo directamente
-      if (cachedProfile && cachedProfile.uid === firebaseUser.uid) {
+      if (cachedProfile && cachedProfile.uid === supabaseUser.id) {
         setUser(cachedProfile.user)
         setLoading(false)
         return
       }
 
       const profile = await ensureUserProfile({
-        id: firebaseUser.uid,
-        email: firebaseUser.email || '',
-        name: firebaseUser.displayName || firebaseUser.email?.split('@')[0] || 'Usuario',
+        id: supabaseUser.id,
+        email: supabaseUser.email || '',
+        name: supabaseUser.user_metadata?.full_name || supabaseUser.user_metadata?.name || supabaseUser.email?.split('@')[0] || 'Usuario',
       })
       if (!profile.isActive) {
         cachedProfile = null
@@ -74,8 +73,8 @@ export const useAuth = () => {
         setLoading(false)
         return
       }
-      cachedProfile = { uid: firebaseUser.uid, user: profile }
-      storeProfile(firebaseUser.uid, profile)
+      cachedProfile = { uid: supabaseUser.id, user: profile }
+      storeProfile(supabaseUser.id, profile)
       setUser(profile)
       setLoading(false)
     })
@@ -86,7 +85,7 @@ export const useAuth = () => {
   return { user, loading }
 }
 
-/** Invalida el caché del perfil (usar tras cambios de rol, etc.) */
+/** Invalida el cache del perfil (usar tras cambios de rol, etc.) */
 export const invalidateAuthCache = () => {
   cachedProfile = null
   clearStoredProfile()

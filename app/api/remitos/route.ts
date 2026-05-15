@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { adminAuth, adminFirestore } from "@/lib/firebase-admin";
+import { supabaseAdmin } from "@/lib/supabase-admin";
 
 export async function POST(request: NextRequest) {
   try {
@@ -9,7 +9,7 @@ export async function POST(request: NextRequest) {
     }
 
     const token = authHeader.substring(7);
-    await adminAuth.verifyIdToken(token);
+    await supabaseAdmin.auth.getUser(token);
 
     const body = await request.json();
     const { saleId } = body;
@@ -19,24 +19,27 @@ export async function POST(request: NextRequest) {
     }
 
     // Obtener venta
-    const ventaRef = adminFirestore.collection("ventas").doc(saleId);
-    const ventaSnap = await ventaRef.get();
+    const { data: venta, error: ventaError } = await supabaseAdmin
+      .from("ventas")
+      .select("*")
+      .eq("id", saleId)
+      .single();
 
-    if (!ventaSnap.exists) {
+    if (ventaError || !venta) {
       return NextResponse.json({ message: "Venta no encontrada" }, { status: 404 });
     }
 
     // Generar número de remito secuencial
-    const remitosQuery = await adminFirestore
-      .collection("ventas")
-      .where("remitoNumber", "!=", null)
-      .orderBy("remitoNumber", "desc")
-      .limit(1)
-      .get();
+    const { data: lastRemitos } = await supabaseAdmin
+      .from("ventas")
+      .select("remito_number")
+      .not("remito_number", "is", null)
+      .order("remito_number", { ascending: false })
+      .limit(1);
 
     let lastNumber = 0;
-    if (!remitosQuery.empty) {
-      const lastRemito = remitosQuery.docs[0].data().remitoNumber;
+    if (lastRemitos && lastRemitos.length > 0) {
+      const lastRemito = lastRemitos[0].remito_number;
       const match = lastRemito?.match(/R-\d+-(\d+)/);
       if (match) lastNumber = parseInt(match[1], 10);
     }
@@ -44,10 +47,13 @@ export async function POST(request: NextRequest) {
     const remitoNumber = `R-${new Date().getFullYear()}-${String(lastNumber + 1).padStart(5, "0")}`;
 
     // Actualizar venta con el número de remito (el PDF se genera en el frontend)
-    await ventaRef.update({
-      remitoNumber,
-      remitoGeneratedAt: new Date().toISOString(),
-    });
+    await supabaseAdmin
+      .from("ventas")
+      .update({
+        remito_number: remitoNumber,
+        remito_generated_at: new Date().toISOString(),
+      })
+      .eq("id", saleId);
 
     return NextResponse.json({
       success: true,

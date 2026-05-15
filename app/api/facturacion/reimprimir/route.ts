@@ -1,7 +1,7 @@
 // app/api/facturacion/reimprimir/route.ts
 // Reimprime el PDF de un comprobante ya emitido via Bit Ingeniería
 import { NextRequest, NextResponse } from "next/server";
-import { adminAuth, adminFirestore } from "@/lib/firebase-admin";
+import { supabaseAdmin } from "@/lib/supabase-admin";
 import { reimprimirPdf, buildPdfRequest, BitCustomerData } from "@/lib/bitingenieria";
 
 export async function POST(request: NextRequest) {
@@ -11,7 +11,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "No autorizado" }, { status: 401 });
     }
     try {
-      await adminAuth.verifyIdToken(authHeader.substring(7));
+      await supabaseAdmin.auth.getUser(authHeader.substring(7));
     } catch {
       return NextResponse.json({ error: "Token inválido" }, { status: 401 });
     }
@@ -26,17 +26,21 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Buscar la venta en Firestore
-    const ventaSnap = await adminFirestore.collection("ventas").doc(saleId).get();
-    if (!ventaSnap.exists) {
+    // Buscar la venta
+    const { data: sale, error: saleError } = await supabaseAdmin
+      .from("ventas")
+      .select("*")
+      .eq("id", saleId)
+      .single();
+
+    if (saleError || !sale) {
       return NextResponse.json(
         { error: "Venta no encontrada" },
         { status: 404 }
       );
     }
 
-    const sale = ventaSnap.data() || {};
-    const afipData = sale.afipData;
+    const afipData = sale.afip_data;
 
     if (!afipData?.cae || !afipData?.numeroComprobante) {
       return NextResponse.json(
@@ -64,7 +68,7 @@ export async function POST(request: NextRequest) {
     }
 
     // Construir customer_data desde la venta
-    const clientData = sale.clientData || {};
+    const clientData = sale.client_data || {};
     const customerData: BitCustomerData = {
       name: clientData.name || "Consumidor Final",
       address: clientData.address || "",
@@ -90,7 +94,7 @@ export async function POST(request: NextRequest) {
     const pdfReq = buildPdfRequest({
       tipoComprobante: afipData.tipoComprobante,
       fecha: dateFormatted,
-      paymentMethod: sale.paymentMethod || "Efectivo",
+      paymentMethod: sale.payment_method || "Efectivo",
       cae: afipData.cae,
       vto: vtoFormatted,
       nro: afipData.numeroComprobante,
@@ -104,11 +108,14 @@ export async function POST(request: NextRequest) {
 
     const pdfBase64 = await reimprimirPdf(pdfReq);
 
-    // Actualizar el PDF en Firestore
-    await adminFirestore.collection("ventas").doc(saleId).update({
-      invoicePdfBase64: pdfBase64,
-      updatedAt: new Date().toISOString(),
-    });
+    // Actualizar el PDF
+    await supabaseAdmin
+      .from("ventas")
+      .update({
+        invoice_pdf_base64: pdfBase64,
+        updated_at: new Date().toISOString(),
+      })
+      .eq("id", saleId);
 
     return NextResponse.json({
       success: true,

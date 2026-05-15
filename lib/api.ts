@@ -25,6 +25,8 @@ import {
   processSale,
   saveBoletaToSale,
   saveRemitoToSale,
+  updateSaleInvoice,
+  updateSaleRemito,
 } from '@/services/sales-service'
 import { registerCashPayment } from '@/services/payments-service'
 import {
@@ -52,8 +54,6 @@ import {
   saveBoletaToOrder,
   updateCheckedItems,
 } from '@/services/orders-service'
-import { doc, updateDoc } from 'firebase/firestore'
-import { firestore } from '@/lib/firebase'
 import {
   getDashboardStats,
   getSalesLastDays,
@@ -159,12 +159,11 @@ export const salesApi = {
   },
   async emitInvoice(saleId: string, client?: { name?: string; phone?: string; email?: string }) {
     const invoice = await createInvoice({ saleId, client })
-    await updateDoc(doc(firestore, 'ventas', saleId), {
-      invoiceEmitted: true,
+    await updateSaleInvoice(saleId, {
       invoiceNumber: invoice.invoiceNumber,
-      invoiceStatus: 'generated',
       invoicePdfUrl: invoice.pdfUrl,
-      invoiceWhatsappUrl: invoice.whatsappUrl ?? null,
+      invoiceWhatsappUrl: invoice.whatsappUrl,
+      afipData: invoice.afipData,
     })
     return invoice
   },
@@ -195,7 +194,7 @@ export const invoiceApi = {
 export const remitoApi = {
   async createRemito(saleId: string) {
     const remito = await createRemito({ saleId })
-    await updateDoc(doc(firestore, 'ventas', saleId), {
+    await updateSaleRemito(saleId, {
       remitoNumber: remito.remitoNumber,
       remitoPdfUrl: remito.pdfUrl,
     })

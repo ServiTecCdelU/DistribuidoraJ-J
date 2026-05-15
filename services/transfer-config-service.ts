@@ -1,6 +1,5 @@
 // services/transfer-config-service.ts
-import { doc, getDoc, setDoc } from "firebase/firestore";
-import { firestore } from "@/lib/firebase";
+import { supabase } from '@/lib/supabase'
 
 export interface TransferConfig {
   alias: string;
@@ -8,21 +7,26 @@ export interface TransferConfig {
   banco: string;
 }
 
-const DOC_REF = doc(firestore, "configuracion", "transferencia");
-
 export async function getTransferConfig(): Promise<TransferConfig> {
-  const snap = await getDoc(DOC_REF);
-  if (snap.exists()) {
-    const data = snap.data();
+  const { data } = await supabase
+    .from('configuracion')
+    .select('value')
+    .eq('key', 'transferencia')
+    .maybeSingle()
+
+  if (data?.value) {
+    const v = data.value as Record<string, string>
     return {
-      alias: data.alias || "",
-      titular: data.titular || "",
-      banco: data.banco || "",
-    };
+      alias: v.alias || "",
+      titular: v.titular || "",
+      banco: v.banco || "",
+    }
   }
-  return { alias: "", titular: "", banco: "" };
+  return { alias: "", titular: "", banco: "" }
 }
 
 export async function saveTransferConfig(config: TransferConfig): Promise<void> {
-  await setDoc(DOC_REF, config, { merge: true });
+  await supabase
+    .from('configuracion')
+    .upsert({ key: 'transferencia', value: config }, { onConflict: 'key' })
 }

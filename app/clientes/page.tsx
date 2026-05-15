@@ -50,7 +50,7 @@ import {
   Loader2,
 } from 'lucide-react'
 import { toast } from 'sonner'
-import { auth } from '@/lib/firebase'
+import { getAuthToken } from '@/services/auth-service'
 
 export default function ClientesPage() {
   const [clients, setClients] = useState<Client[]>([])
@@ -83,9 +83,8 @@ export default function ClientesPage() {
     }
     setArcaLoading(true)
     try {
-      const user = auth.currentUser
-      if (!user) throw new Error('No autenticado')
-      const token = await user.getIdToken()
+      const token = await getAuthToken()
+      if (!token) throw new Error('No autenticado')
       const res = await fetch(`/api/afip/cuit?cuit=${cuitLimpio}`, {
         headers: { Authorization: `Bearer ${token}` },
       })

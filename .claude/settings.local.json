@@ -15,7 +15,13 @@
       "Bash(winget install:*)",
       "Bash(curl -s -X POST \"https://distri-helados-mio.vercel.app/api/ventas/emitir\" -H \"Content-Type: application/json\" -d '{\"\"\"\"saleId\"\"\"\":\"\"\"\"test\"\"\"\"}')",
       "Bash(npm install:*)",
-      "Bash(./node_modules/.bin/next build:*)"
+      "Bash(./node_modules/.bin/next build:*)",
+      "Bash(npx tsx:*)",
+      "Bash(tasklist)",
+      "Bash(taskkill //F //PID 10576)",
+      "Bash(taskkill //F //PID 15352)",
+      "Bash(taskkill //F //PID 17280)",
+      "Bash(taskkill //F //PID 13004)"
     ]
   }
 }

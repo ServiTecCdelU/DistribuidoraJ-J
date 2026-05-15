@@ -1,43 +1,46 @@
-import { collection, doc, getDoc, getDocs, query, serverTimestamp, setDoc, updateDoc, where } from 'firebase/firestore'
-import { firestore } from '@/lib/firebase'
+import { supabase } from '@/lib/supabase'
 import type { User, UserRole, EmployeeType } from '@/lib/types'
-import { toDate, generateReadableId } from '@/services/firestore-helpers'
-
-const USERS_COLLECTION = 'usuarios'
+import { generateReadableId } from '@/services/supabase-helpers'
 
 export const getUserProfile = async (userId: string): Promise<User | null> => {
-  // Primero buscar por doc ID directo (usuarios legacy con Auth UID)
-  const snapshot = await getDoc(doc(firestore, USERS_COLLECTION, userId))
-  if (snapshot.exists()) {
-    const data = snapshot.data()
+  // Primero buscar por doc ID directo (usuarios legacy con Auth UID como id)
+  const { data: direct } = await supabase
+    .from('usuarios')
+    .select('*')
+    .eq('id', userId)
+    .maybeSingle()
+
+  if (direct) {
     return {
-      id: snapshot.id,
-      email: data.email,
-      name: data.name,
-      role: data.role as UserRole,
-      sellerId: data.sellerId,
-      employeeType: data.employeeType as EmployeeType | undefined,
-      isActive: data.isActive ?? true,
-      createdAt: toDate(data.createdAt),
+      id: direct.id,
+      email: direct.email,
+      name: direct.name,
+      role: direct.role as UserRole,
+      sellerId: direct.seller_id,
+      employeeType: direct.employee_type as EmployeeType | undefined,
+      isActive: direct.is_active ?? true,
+      createdAt: new Date(direct.created_at),
     }
   }
 
-  // Buscar por authUid (usuarios nuevos con ID legible)
-  const q = query(collection(firestore, USERS_COLLECTION), where('authUid', '==', userId))
-  const querySnapshot = await getDocs(q)
-  if (querySnapshot.empty) return null
+  // Buscar por auth_uid (usuarios nuevos con ID legible)
+  const { data: byAuth } = await supabase
+    .from('usuarios')
+    .select('*')
+    .eq('auth_uid', userId)
+    .maybeSingle()
 
-  const docSnap = querySnapshot.docs[0]
-  const data = docSnap.data()
+  if (!byAuth) return null
+
   return {
-    id: docSnap.id,
-    email: data.email,
-    name: data.name,
-    role: data.role as UserRole,
-    employeeType: data.employeeType as EmployeeType | undefined,
-    sellerId: data.sellerId,
-    isActive: data.isActive ?? true,
-    createdAt: toDate(data.createdAt),
+    id: byAuth.id,
+    email: byAuth.email,
+    name: byAuth.name,
+    role: byAuth.role as UserRole,
+    employeeType: byAuth.employee_type as EmployeeType | undefined,
+    sellerId: byAuth.seller_id,
+    isActive: byAuth.is_active ?? true,
+    createdAt: new Date(byAuth.created_at),
   }
 }
 
@@ -48,23 +51,27 @@ export const ensureUserProfile = async (data: {
   role?: UserRole
 }): Promise<User> => {
   // Siempre chequear si el email coincide con un vendedor registrado
-  const sellersSnapshot = await getDocs(
-    query(collection(firestore, 'vendedores'), where('email', '==', data.email))
-  )
-  const matchingSellerDoc = sellersSnapshot.docs[0]
-  const matchingSeller = matchingSellerDoc?.id
-  const matchingEmployeeType = matchingSellerDoc?.data()?.employeeType as EmployeeType | undefined
+  const { data: sellerRows } = await supabase
+    .from('vendedores')
+    .select('id, employee_type')
+    .eq('email', data.email)
+    .limit(1)
+
+  const matchingSeller = sellerRows?.[0]?.id
+  const matchingEmployeeType = sellerRows?.[0]?.employee_type as EmployeeType | undefined
 
   const existing = await getUserProfile(data.id)
   if (existing) {
-    // Si existe un perfil pero el rol no es seller/admin y ahora hay un vendedor vinculado,
-    // actualizar el perfil para darle acceso como vendedor
+    // Si existe un perfil pero el rol no es seller/admin y ahora hay un vendedor vinculado
     if (matchingSeller && existing.role !== 'seller' && existing.role !== 'admin') {
-      await updateDoc(doc(firestore, USERS_COLLECTION, existing.id), {
-        role: 'seller',
-        sellerId: matchingSeller,
-        employeeType: matchingEmployeeType ?? null,
-      })
+      await supabase
+        .from('usuarios')
+        .update({
+          role: 'seller',
+          seller_id: matchingSeller,
+          employee_type: matchingEmployeeType ?? null,
+        })
+        .eq('id', existing.id)
       return {
         ...existing,
         role: 'seller',
@@ -72,12 +79,15 @@ export const ensureUserProfile = async (data: {
         employeeType: matchingEmployeeType,
       }
     }
-    // Si ya es seller pero le falta el sellerId o cambió, sincronizar
+    // Si ya es seller pero le falta el sellerId o cambio, sincronizar
     if (matchingSeller && existing.role === 'seller' && existing.sellerId !== matchingSeller) {
-      await updateDoc(doc(firestore, USERS_COLLECTION, existing.id), {
-        sellerId: matchingSeller,
-        employeeType: matchingEmployeeType ?? existing.employeeType ?? null,
-      })
+      await supabase
+        .from('usuarios')
+        .update({
+          seller_id: matchingSeller,
+          employee_type: matchingEmployeeType ?? existing.employeeType ?? null,
+        })
+        .eq('id', existing.id)
       return {
         ...existing,
         sellerId: matchingSeller,
@@ -87,14 +97,16 @@ export const ensureUserProfile = async (data: {
     return existing
   }
 
-  const docId = await generateReadableId(firestore, USERS_COLLECTION, 'usuario', data.name)
+  const docId = await generateReadableId('usuarios', 'usuario', data.name)
 
-  // Si no hay ningún admin, el primer usuario se convierte en admin
+  // Si no hay ningun admin, el primer usuario se convierte en admin
   let autoRole: UserRole = matchingSeller ? 'seller' : (data.role ?? 'customer')
   if (!matchingSeller && autoRole !== 'admin') {
-    const adminsQuery = query(collection(firestore, USERS_COLLECTION), where('role', '==', 'admin'))
-    const adminsSnapshot = await getDocs(adminsQuery)
-    if (adminsSnapshot.empty) {
+    const { count } = await supabase
+      .from('usuarios')
+      .select('id', { count: 'exact', head: true })
+      .eq('role', 'admin')
+    if (count === 0) {
       autoRole = 'admin'
     }
   }
@@ -110,15 +122,15 @@ export const ensureUserProfile = async (data: {
     createdAt: new Date(),
   }
 
-  await setDoc(doc(firestore, USERS_COLLECTION, docId), {
-    authUid: data.id,
+  await supabase.from('usuarios').insert({
+    id: docId,
+    auth_uid: data.id,
     email: profile.email,
     name: profile.name,
     role: autoRole,
-    sellerId: profile.sellerId ?? null,
-    employeeType: profile.employeeType ?? null,
-    isActive: profile.isActive,
-    createdAt: serverTimestamp(),
+    seller_id: profile.sellerId ?? null,
+    employee_type: profile.employeeType ?? null,
+    is_active: profile.isActive,
   })
 
   return profile

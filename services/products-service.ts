@@ -1,185 +1,131 @@
-import {
-  collection,
-  deleteDoc,
-  doc,
-  getDoc,
-  getDocs,
-  serverTimestamp,
-  setDoc,
-  updateDoc,
-  query,
-  orderBy,
-  limit,
-  startAfter,
-  type QueryDocumentSnapshot,
-} from "firebase/firestore";
-import { firestore } from "@/lib/firebase";
-import type { Product } from "@/lib/types";
-import { toDate, generateReadableId } from "@/services/firestore-helpers";
+import { supabase } from '@/lib/supabase'
+import type { Product } from '@/lib/types'
+import { generateReadableId } from '@/services/supabase-helpers'
 
-const PRODUCTS_COLLECTION = "productos";
-
-// ─── Caché en localStorage (30 min) ──────────────────────────────────────────
-const PROD_CACHE_KEY = "products_cache_v1";
-const PROD_CACHE_TTL = 30 * 60 * 1000; // 30 minutos
-
-let _prodMemCache: { data: Product[]; ts: number } | null = null;
-
-function readProductsCache(): { data: Product[]; ts: number } | null {
-  if (_prodMemCache) return _prodMemCache;
-  if (typeof window === "undefined") return null;
-  try {
-    const raw = localStorage.getItem(PROD_CACHE_KEY);
-    if (!raw) return null;
-    const parsed = JSON.parse(raw) as { data: Product[]; ts: number };
-    if (!parsed?.ts || !Array.isArray(parsed.data)) return null;
-    _prodMemCache = parsed;
-    return _prodMemCache;
-  } catch { return null; }
-}
-
-function writeProductsCache(data: Product[]): void {
-  _prodMemCache = { data, ts: Date.now() };
-  if (typeof window === "undefined") return;
-  try { localStorage.setItem(PROD_CACHE_KEY, JSON.stringify(_prodMemCache)); } catch { /* noop */ }
+function mapRow(d: Record<string, any>): Product {
+  return {
+    id: d.id,
+    name: d.name ?? '',
+    description: d.description ?? '',
+    price: Number(d.price) || 0,
+    stock: d.stock ?? 0,
+    imageUrl: d.image_url ?? '',
+    category: d.category ?? '',
+    base: d.base ?? 'crema',
+    marca: d.brand ?? 'Sin identificar',
+    sinTacc: d.sin_tacc ?? false,
+    disabled: d.disabled ?? false,
+    createdAt: new Date(d.created_at),
+    unidadesPorBulto: d.unidades_por_bulto ?? undefined,
+    seDivideEn: d.se_divide_en ? Number(d.se_divide_en) : undefined,
+    precioVenta: d.precio_venta ? Number(d.precio_venta) : undefined,
+    gananciaGlobal: d.ganancia_global ? Number(d.ganancia_global) : undefined,
+    gananciaIndividual: d.ganancia_individual ?? undefined,
+    codigo: d.codigo ?? undefined,
+  }
 }
 
 export function invalidateProductsCache(): void {
-  _prodMemCache = null;
-  if (typeof window !== "undefined") {
-    try { localStorage.removeItem(PROD_CACHE_KEY); } catch { /* noop */ }
-  }
+  // No-op — sin cache con Supabase
 }
 
-function mapProduct(docSnap: { id: string; data: () => Record<string, unknown> }): Product {
-  const data = docSnap.data();
-  return {
-    id: docSnap.id,
-    name: data.name as string,
-    description: data.description as string,
-    price: data.price as number,
-    stock: data.stock as number,
-    imageUrl: data.imageUrl as string,
-    category: data.category as string,
-    base: (data.base as string) ?? 'crema',
-    marca: (data.marca as string) ?? 'Sin identificar',
-    sinTacc: (data.sinTacc as boolean) ?? false,
-    disabled: (data.disabled as boolean) ?? false,
-    createdAt: toDate(data.createdAt),
-    // Campos mayorista (presentes cuando el producto fue creado desde mayorista_productos)
-    unidadesPorBulto: data.unidadesPorBulto as number | undefined,
-    seDivideEn: data.seDivideEn as number | undefined,
-    precioVenta: data.precioVenta as number | undefined,
-    gananciaGlobal: data.gananciaGlobal as number | undefined,
-    gananciaIndividual: data.gananciaIndividual as boolean | undefined,
-    codigo: (data.codigo as string) ?? undefined,
-  };
-}
+export const getProducts = async (_forceRefresh = false): Promise<Product[]> => {
+  const { data, error } = await supabase
+    .from('productos')
+    .select('*')
+    .order('created_at', { ascending: false })
 
-export const getProducts = async (forceRefresh = false): Promise<Product[]> => {
-  if (!forceRefresh) {
-    const cached = readProductsCache();
-    if (cached && Date.now() - cached.ts < PROD_CACHE_TTL) return cached.data;
-  }
-  const snapshot = await getDocs(collection(firestore, PRODUCTS_COLLECTION));
-  const data = snapshot.docs
-    .map((d) => mapProduct(d as any))
-    .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
-  writeProductsCache(data);
-  return data;
+  if (error) throw error
+  return (data ?? []).map(mapRow)
 }
-
 
 export const getProductById = async (id: string): Promise<Product | undefined> => {
-  const snapshot = await getDoc(doc(firestore, PRODUCTS_COLLECTION, id))
-  if (!snapshot.exists()) return undefined
-  return mapProduct(snapshot as any)
+  const { data } = await supabase
+    .from('productos')
+    .select('*')
+    .eq('id', id)
+    .maybeSingle()
+
+  return data ? mapRow(data) : undefined
 }
 
-
 export const createProduct = async (
-  product: Omit<Product, "id" | "createdAt">
+  product: Omit<Product, 'id' | 'createdAt'>
 ): Promise<Product> => {
-  const docId = await generateReadableId(firestore, PRODUCTS_COLLECTION, 'producto', product.name)
-  await setDoc(doc(firestore, PRODUCTS_COLLECTION, docId), {
-    ...product,
-    disabled: product.disabled ?? false,
-    createdAt: serverTimestamp(),
-  });
-  invalidateProductsCache();
-  return {
-    ...product,
+  const docId = await generateReadableId('productos', 'producto', product.name)
+  const row: Record<string, any> = {
     id: docId,
+    name: product.name,
+    description: product.description,
+    price: product.price,
+    stock: product.stock,
+    image_url: product.imageUrl,
+    category: product.category,
     disabled: product.disabled ?? false,
-    createdAt: new Date(),
-  };
-};
+    code: product.codigo ?? null,
+    codigo: product.codigo ?? null,
+    unidades_por_bulto: product.unidadesPorBulto ?? null,
+    se_divide_en: product.seDivideEn ?? null,
+    precio_venta: product.precioVenta ?? null,
+    ganancia_global: product.gananciaGlobal ?? null,
+    ganancia_individual: product.gananciaIndividual ?? null,
+  }
+  await supabase.from('productos').insert(row)
+  return { ...product, id: docId, disabled: product.disabled ?? false, createdAt: new Date() }
+}
 
 export const updateProduct = async (
   id: string,
   updates: Partial<Product>
 ): Promise<Product> => {
-  await updateDoc(doc(firestore, PRODUCTS_COLLECTION, id), { ...updates });
-  invalidateProductsCache();
-  // Actualizar caché local en lugar de releer Firestore
-  const cached = readProductsCache();
-  if (cached) {
-    const updated = cached.data.map(p => p.id === id ? { ...p, ...updates } : p);
-    writeProductsCache(updated);
-    return updated.find(p => p.id === id) ?? { id, ...updates } as Product;
-  }
-  const fresh = await getProductById(id);
-  if (!fresh) throw new Error("Product not found");
-  return fresh;
-};
+  const mapped: Record<string, any> = {}
+  if (updates.name !== undefined) mapped.name = updates.name
+  if (updates.description !== undefined) mapped.description = updates.description
+  if (updates.price !== undefined) mapped.price = updates.price
+  if (updates.stock !== undefined) mapped.stock = updates.stock
+  if (updates.imageUrl !== undefined) mapped.image_url = updates.imageUrl
+  if (updates.category !== undefined) mapped.category = updates.category
+  if (updates.disabled !== undefined) mapped.disabled = updates.disabled
+  if (updates.codigo !== undefined) mapped.codigo = updates.codigo
+  if (updates.unidadesPorBulto !== undefined) mapped.unidades_por_bulto = updates.unidadesPorBulto
+  if (updates.seDivideEn !== undefined) mapped.se_divide_en = updates.seDivideEn
+  if (updates.precioVenta !== undefined) mapped.precio_venta = updates.precioVenta
+  if (updates.gananciaGlobal !== undefined) mapped.ganancia_global = updates.gananciaGlobal
+  if (updates.gananciaIndividual !== undefined) mapped.ganancia_individual = updates.gananciaIndividual
+  if ((updates as any).base !== undefined) mapped.base = (updates as any).base
+  if ((updates as any).marca !== undefined) mapped.brand = (updates as any).marca
+  if ((updates as any).sinTacc !== undefined) mapped.sin_tacc = (updates as any).sinTacc
+
+  const { data } = await supabase
+    .from('productos')
+    .update(mapped)
+    .eq('id', id)
+    .select()
+    .single()
+
+  if (!data) throw new Error('Product not found')
+  return mapRow(data)
+}
 
 export const deleteProduct = async (id: string): Promise<void> => {
-  await deleteDoc(doc(firestore, PRODUCTS_COLLECTION, id));
-  invalidateProductsCache();
-};
+  await supabase.from('productos').delete().eq('id', id)
+}
 
 export const getProductsPaginated = async (
   pageSize: number = 50,
-  lastDoc?: QueryDocumentSnapshot,
-): Promise<{ data: Product[]; lastDoc: QueryDocumentSnapshot | null; hasMore: boolean }> => {
-  let q = query(
-    collection(firestore, PRODUCTS_COLLECTION),
-    orderBy("createdAt", "desc"),
-    limit(pageSize),
-  );
+  lastDoc?: any,
+): Promise<{ data: Product[]; lastDoc: any; hasMore: boolean }> => {
+  const offset = lastDoc ?? 0
+  const { data } = await supabase
+    .from('productos')
+    .select('*')
+    .order('created_at', { ascending: false })
+    .range(offset, offset + pageSize - 1)
 
-  if (lastDoc) {
-    q = query(
-      collection(firestore, PRODUCTS_COLLECTION),
-      orderBy("createdAt", "desc"),
-      startAfter(lastDoc),
-      limit(pageSize),
-    );
-  }
-
-  const snapshot = await getDocs(q);
-  const data = snapshot.docs.map((docSnap) => {
-    const d = docSnap.data();
-    return {
-      id: docSnap.id,
-      name: d.name,
-      description: d.description,
-      price: d.price,
-      stock: d.stock,
-      imageUrl: d.imageUrl,
-      category: d.category,
-      base: d.base ?? 'crema',
-      marca: d.marca ?? 'Sin identificar',
-      sinTacc: d.sinTacc ?? false,
-      disabled: d.disabled ?? false,
-      createdAt: toDate(d.createdAt),
-    } as Product;
-  });
-  const lastVisible = snapshot.docs[snapshot.docs.length - 1] || null;
-
+  const products = (data ?? []).map(mapRow)
   return {
-    data,
-    lastDoc: lastVisible,
-    hasMore: snapshot.docs.length === pageSize,
-  };
-};
+    data: products,
+    lastDoc: products.length === pageSize ? offset + pageSize : null,
+    hasMore: products.length === pageSize,
+  }
+}

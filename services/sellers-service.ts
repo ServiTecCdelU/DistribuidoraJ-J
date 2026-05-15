@@ -1,70 +1,76 @@
-//services\sellers-service.ts
-import {
-  collection,
-  deleteDoc,
-  doc,
-  getDoc,
-  getDocs,
-  query,
-  serverTimestamp,
-  setDoc,
-  updateDoc,
-  where,
-  orderBy,
-} from 'firebase/firestore'
-import { firestore } from '@/lib/firebase'
+//services/sellers-service.ts
+import { supabase } from '@/lib/supabase'
 import type { Seller, SellerCommission } from '@/lib/types'
-import { toDate, generateReadableId } from '@/services/firestore-helpers'
+import { generateReadableId } from '@/services/supabase-helpers'
 
-const SELLERS_COLLECTION = 'vendedores'
-const COMMISSIONS_COLLECTION = 'comisiones'
+function mapSeller(d: Record<string, any>): Seller {
+  return {
+    id: d.id,
+    name: d.name,
+    email: d.email ?? '',
+    phone: d.phone ?? '',
+    employeeType: d.employee_type ?? 'vendedor',
+    commissionRate: Number(d.commission_rate) || 10,
+    transportistaCommissionRate: d.transportista_commission_rate ? Number(d.transportista_commission_rate) : undefined,
+    isActive: d.is_active ?? true,
+    totalSales: Number(d.total_sales) || 0,
+    totalCommission: Number(d.total_commission) || 0,
+    createdAt: new Date(d.created_at),
+  }
+}
+
+function mapCommission(d: Record<string, any>): SellerCommission {
+  return {
+    id: d.id,
+    sellerId: d.seller_id,
+    saleId: d.sale_id,
+    saleNumber: d.sale_number ?? undefined,
+    clientName: d.seller_name ?? undefined,
+    saleTotal: Number(d.sale_total),
+    commissionRate: Number(d.commission_rate),
+    commissionAmount: Number(d.commission_amount),
+    isPaid: d.is_paid ?? false,
+    paidAt: d.paid_at ? new Date(d.paid_at) : undefined,
+    createdAt: new Date(d.created_at),
+  }
+}
 
 export const getSellers = async (): Promise<Seller[]> => {
-  const snapshot = await getDocs(collection(firestore, SELLERS_COLLECTION))
-  return snapshot.docs
-    .map((docSnap) => {
-      const data = docSnap.data()
-      return {
-        id: docSnap.id,
-        name: data.name,
-        email: data.email,
-        phone: data.phone,
-        employeeType: data.employeeType ?? 'vendedor',
-        commissionRate: data.commissionRate,
-        isActive: data.isActive ?? true,
-        totalSales: data.totalSales ?? 0,
-        totalCommission: data.totalCommission ?? 0,
-        createdAt: toDate(data.createdAt),
-      }
-    })
-    .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime())
+  const { data } = await supabase
+    .from('vendedores')
+    .select('*')
+    .order('created_at', { ascending: false })
+
+  return (data ?? []).map(mapSeller)
 }
 
 export const getSellerById = async (id: string): Promise<Seller | undefined> => {
-  const snapshot = await getDoc(doc(firestore, SELLERS_COLLECTION, id))
-  if (!snapshot.exists()) return undefined
-  const data = snapshot.data()
-  return {
-    id: snapshot.id,
-    name: data.name,
-    email: data.email,
-    phone: data.phone,
-    employeeType: data.employeeType ?? 'vendedor',
-    commissionRate: data.commissionRate,
-    isActive: data.isActive ?? true,
-    totalSales: data.totalSales ?? 0,
-    totalCommission: data.totalCommission ?? 0,
-    createdAt: toDate(data.createdAt),
-  }
+  const { data } = await supabase
+    .from('vendedores')
+    .select('*')
+    .eq('id', id)
+    .maybeSingle()
+
+  return data ? mapSeller(data) : undefined
 }
 
 export const createSeller = async (
   seller: Omit<Seller, 'id' | 'createdAt' | 'totalSales' | 'totalCommission'>
 ): Promise<Seller> => {
-  const docId = await generateReadableId(firestore, SELLERS_COLLECTION, 'vendedor', seller.name)
-  const payload: Record<string, any> = { totalSales: 0, totalCommission: 0, createdAt: serverTimestamp() }
-  for (const [k, v] of Object.entries(seller)) { if (v !== undefined) payload[k] = v }
-  await setDoc(doc(firestore, SELLERS_COLLECTION, docId), payload)
+  const docId = await generateReadableId('vendedores', 'vendedor', seller.name)
+  const row: Record<string, any> = {
+    id: docId,
+    name: seller.name,
+    email: seller.email || null,
+    phone: seller.phone || null,
+    employee_type: seller.employeeType,
+    commission_rate: seller.commissionRate,
+    transportista_commission_rate: seller.transportistaCommissionRate ?? null,
+    is_active: seller.isActive,
+    total_sales: 0,
+    total_commission: 0,
+  }
+  await supabase.from('vendedores').insert(row)
   return {
     ...seller,
     id: docId,
@@ -75,106 +81,71 @@ export const createSeller = async (
 }
 
 export const updateSeller = async (id: string, updates: Partial<Seller>): Promise<Seller> => {
-  const cleanUpdates = Object.fromEntries(Object.entries(updates).filter(([, v]) => v !== undefined))
-  await updateDoc(doc(firestore, SELLERS_COLLECTION, id), cleanUpdates)
+  const mapped: Record<string, any> = {}
+  if (updates.name !== undefined) mapped.name = updates.name
+  if (updates.email !== undefined) mapped.email = updates.email
+  if (updates.phone !== undefined) mapped.phone = updates.phone
+  if (updates.employeeType !== undefined) mapped.employee_type = updates.employeeType
+  if (updates.commissionRate !== undefined) mapped.commission_rate = updates.commissionRate
+  if (updates.transportistaCommissionRate !== undefined) mapped.transportista_commission_rate = updates.transportistaCommissionRate
+  if (updates.isActive !== undefined) mapped.is_active = updates.isActive
+  if (updates.totalSales !== undefined) mapped.total_sales = updates.totalSales
+  if (updates.totalCommission !== undefined) mapped.total_commission = updates.totalCommission
+
+  await supabase.from('vendedores').update(mapped).eq('id', id)
   const updated = await getSellerById(id)
   if (!updated) throw new Error('Seller not found')
 
   // Si cambio el employeeType, actualizar tambien el usuario vinculado
   if (updates.employeeType) {
-    const usersSnapshot = await getDocs(
-      query(collection(firestore, 'usuarios'), where('sellerId', '==', id))
-    )
-    const userUpdates = usersSnapshot.docs.map((userDoc) =>
-      updateDoc(doc(firestore, 'usuarios', userDoc.id), { employeeType: updates.employeeType })
-    )
-    await Promise.all(userUpdates)
+    await supabase
+      .from('usuarios')
+      .update({ employee_type: updates.employeeType })
+      .eq('seller_id', id)
   }
 
   return updated
 }
 
 export const deleteSeller = async (id: string): Promise<void> => {
-  await deleteDoc(doc(firestore, SELLERS_COLLECTION, id))
+  await supabase.from('vendedores').delete().eq('id', id)
 }
 
 export const getSellerCommissions = async (sellerId: string): Promise<SellerCommission[]> => {
-  const snapshot = await getDocs(
-    query(
-      collection(firestore, COMMISSIONS_COLLECTION),
-      where('sellerId', '==', sellerId)
-    )
-  )
-  return snapshot.docs
-    .map((docSnap) => {
-      const data = docSnap.data()
-      return {
-        id: docSnap.id,
-        sellerId: data.sellerId,
-        saleId: data.saleId,
-        saleTotal: data.saleTotal,
-        commissionRate: data.commissionRate,
-        commissionAmount: data.commissionAmount,
-        isPaid: data.isPaid ?? false,
-        paidAt: data.paidAt ? toDate(data.paidAt) : undefined,
-        createdAt: toDate(data.createdAt),
-      }
-    })
-    .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime())
+  const { data } = await supabase
+    .from('comisiones')
+    .select('*')
+    .eq('seller_id', sellerId)
+    .order('created_at', { ascending: false })
+
+  return (data ?? []).map(mapCommission)
 }
 
 export const getAllCommissions = async (): Promise<SellerCommission[]> => {
-  const snapshot = await getDocs(collection(firestore, COMMISSIONS_COLLECTION))
-  return snapshot.docs.map((docSnap) => {
-    const data = docSnap.data()
-    return {
-      id: docSnap.id,
-      sellerId: data.sellerId,
-      saleId: data.saleId,
-      saleTotal: data.saleTotal,
-      commissionRate: data.commissionRate,
-      commissionAmount: data.commissionAmount,
-      isPaid: data.isPaid ?? false,
-      paidAt: data.paidAt ? toDate(data.paidAt) : undefined,
-      createdAt: toDate(data.createdAt),
-    }
-  })
+  const { data } = await supabase
+    .from('comisiones')
+    .select('*')
+    .order('created_at', { ascending: false })
+
+  return (data ?? []).map(mapCommission)
 }
 
 export const payCommission = async (commissionId: string): Promise<SellerCommission> => {
-  await updateDoc(doc(firestore, COMMISSIONS_COLLECTION, commissionId), {
-    isPaid: true,
-    paidAt: serverTimestamp(),
-  })
-  const updated = await getDoc(doc(firestore, COMMISSIONS_COLLECTION, commissionId))
-  if (!updated.exists()) throw new Error('Commission not found')
-  const data = updated.data()
-  return {
-    id: updated.id,
-    sellerId: data.sellerId,
-    saleId: data.saleId,
-    saleTotal: data.saleTotal,
-    commissionRate: data.commissionRate,
-    commissionAmount: data.commissionAmount,
-    isPaid: data.isPaid ?? true,
-    paidAt: data.paidAt ? toDate(data.paidAt) : undefined,
-    createdAt: toDate(data.createdAt),
-  }
+  const { data } = await supabase
+    .from('comisiones')
+    .update({ is_paid: true, paid_at: new Date().toISOString() })
+    .eq('id', commissionId)
+    .select()
+    .single()
+
+  if (!data) throw new Error('Commission not found')
+  return mapCommission(data)
 }
 
 export const payAllCommissions = async (sellerId: string): Promise<void> => {
-  const snapshot = await getDocs(
-    query(
-      collection(firestore, COMMISSIONS_COLLECTION),
-      where('sellerId', '==', sellerId),
-      where('isPaid', '==', false)
-    )
-  )
-  const updates = snapshot.docs.map((docSnap) =>
-    updateDoc(doc(firestore, COMMISSIONS_COLLECTION, docSnap.id), {
-      isPaid: true,
-      paidAt: serverTimestamp(),
-    })
-  )
-  await Promise.all(updates)
+  await supabase
+    .from('comisiones')
+    .update({ is_paid: true, paid_at: new Date().toISOString() })
+    .eq('seller_id', sellerId)
+    .eq('is_paid', false)
 }

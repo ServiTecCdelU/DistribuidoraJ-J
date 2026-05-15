@@ -1,46 +1,48 @@
 // lib/storage.ts
-import { ref, uploadBytes, getDownloadURL, deleteObject } from 'firebase/storage';
-import { storage } from '@/lib/firebase';
+import { supabase } from '@/lib/supabase'
 
 export const storageService = {
   /**
-   * Sube un archivo PDF a Firebase Storage
+   * Sube un archivo PDF a Supabase Storage
    */
   async uploadPDF(
     fileBuffer: Buffer,
     path: string,
     filename: string
   ): Promise<string> {
-    const storageRef = ref(storage, `${path}/${filename}`);
-    const metadata = {
-      contentType: 'application/pdf',
-      customMetadata: {
-        uploadedAt: new Date().toISOString(),
-      },
-    };
+    const filePath = `${path}/${filename}`
+    const { error } = await supabase.storage
+      .from('facturas')
+      .upload(filePath, fileBuffer, {
+        contentType: 'application/pdf',
+        upsert: true,
+      })
 
-    await uploadBytes(storageRef, fileBuffer, metadata);
-    const downloadURL = await getDownloadURL(storageRef);
-    return downloadURL;
+    if (error) throw error
+
+    const { data: { publicUrl } } = supabase.storage
+      .from('facturas')
+      .getPublicUrl(filePath)
+
+    return publicUrl
   },
 
   /**
    * Elimina un archivo de Storage
    */
-  async deleteFile(url: string): Promise<void> {
+  async deleteFile(path: string): Promise<void> {
     try {
-      const storageRef = ref(storage, url);
-      await deleteObject(storageRef);
+      await supabase.storage.from('facturas').remove([path])
     } catch (error) {
-      console.error('Error eliminando archivo:', error);
+      console.error('Error eliminando archivo:', error)
     }
   },
 
   /**
-   * Genera nombre único para el archivo
+   * Genera nombre unico para el archivo
    */
   generateFilename(saleId: string, type: 'boleta' | 'remito'): string {
-    const timestamp = Date.now();
-    return `${type}-${saleId}-${timestamp}.pdf`;
+    const timestamp = Date.now()
+    return `${type}-${saleId}-${timestamp}.pdf`
   },
-};
+}

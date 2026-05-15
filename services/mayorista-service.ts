@@ -1,274 +1,132 @@
-import {
-  collection,
-  doc,
-  getDocs,
-  getDoc,
-  query,
-  serverTimestamp,
-  setDoc,
-  updateDoc,
-  where,
-  writeBatch,
-  limit,
-} from "firebase/firestore";
-import { firestore } from "@/lib/firebase";
-import type { MayoristaProducto, MayoristaPrefs } from "@/lib/types";
-import { toDate } from "@/services/firestore-helpers";
-import { invalidateProductsCache } from "@/services/products-service";
+import { supabase } from '@/lib/supabase'
+import type { MayoristaProducto, MayoristaPrefs } from '@/lib/types'
+import { invalidateProductsCache } from '@/services/products-service'
 
-const COL = "mayorista_productos";
-const PRODUCTS_COLLECTION = "productos";
-const PREFS_COL = "configuracion";
+const BATCH_SIZE = 300
 
-// ─── Caché persistente (localStorage + memoria) ───────────────────────────────
-// Persiste entre recargas de página para no gastar lecturas de Firestore (50K/día).
-// TTL de 2 horas. Se invalida manualmente tras importar o forzar recarga.
-const CACHE_KEY = "mayorista_cache_v1";
-const CACHE_TTL = 2 * 60 * 60 * 1000; // 2 horas
-
-let _memCache: { data: MayoristaProducto[]; ts: number } | null = null;
-
-function readCache(): { data: MayoristaProducto[]; ts: number } | null {
-  if (_memCache) return _memCache;
-  if (typeof window === "undefined") return null;
-  try {
-    const raw = localStorage.getItem(CACHE_KEY);
-    if (!raw) return null;
-    const parsed = JSON.parse(raw) as { data: MayoristaProducto[]; ts: number };
-    if (!parsed?.ts || !Array.isArray(parsed.data)) return null;
-    _memCache = parsed;
-    return _memCache;
-  } catch {
-    return null;
-  }
-}
-
-function writeCache(data: MayoristaProducto[]): void {
-  _memCache = { data, ts: Date.now() };
-  if (typeof window === "undefined") return;
-  try {
-    localStorage.setItem(CACHE_KEY, JSON.stringify(_memCache));
-  } catch {
-    // localStorage puede estar lleno — el caché en memoria sigue activo
+function mapDoc(d: Record<string, any>): MayoristaProducto {
+  return {
+    id: d.id,
+    codigoBarras: d.codigo_barras ?? '',
+    codigo: d.codigo ?? '',
+    nombre: d.descripcion ?? d.nombre ?? '',
+    precioUnitarioMayorista: Number(d.precio_lista) || 0,
+    rubro: d.rubro ?? '',
+    subrubro: d.subrubro ?? '',
+    categoria: d.categoria ?? 'Sin categoria',
+    habilitado: d.habilitado ?? false,
+    productoId: d.producto_id ?? undefined,
+    updatedAt: new Date(d.updated_at ?? d.created_at),
+    // Campos desde "productos" — se completan en el join
+    precioVenta: 0,
+    gananciaGlobal: undefined,
+    gananciaIndividual: false,
+    stockLocal: d.stock_local ?? 0,
+    unidadesPorBulto: undefined,
+    seDivideEn: undefined,
   }
 }
 
 export const invalidateMayoristaCache = () => {
-  _memCache = null;
-  if (typeof window !== "undefined") {
-    try { localStorage.removeItem(CACHE_KEY); } catch { /* noop */ }
-  }
-};
-
-// Mapea un documento de mayorista_productos.
-// Los campos que ahora viven en "productos" (precioVenta, gananciaGlobal, etc.)
-// quedan en 0/undefined hasta que getMayoristaProductos los complete via join.
-function mapDoc(id: string, data: Record<string, unknown>): MayoristaProducto {
-  return {
-    id,
-    codigoBarras: (data.codigoBarras as string) ?? "",
-    codigo: (data.codigo as string) ?? "",
-    nombre: (data.nombre as string) ?? "",
-    precioUnitarioMayorista: (data.precioUnitarioMayorista as number) ?? 0,
-    rubro: (data.rubro as string) ?? "",
-    subrubro: (data.subrubro as string) ?? "",
-    categoria: (data.categoria as string) ?? "Sin categoría",
-    habilitado: (data.habilitado as boolean) ?? false,
-    productoId: data.productoId as string | undefined,
-    updatedAt: toDate(data.updatedAt),
-    // Campos desde "productos" — se completan en el join de getMayoristaProductos
-    precioVenta: 0,
-    gananciaGlobal: undefined,
-    gananciaIndividual: false,
-    stockLocal: 0,
-    unidadesPorBulto: undefined,
-    seDivideEn: undefined,
-  };
+  // No-op con Supabase
 }
 
-export const getMayoristaProductos = async (forceRefresh = false, includeJoin = true): Promise<MayoristaProducto[]> => {
-  if (!forceRefresh) {
-    const cached = readCache();
-    if (cached && Date.now() - cached.ts < CACHE_TTL) {
-      // Si el caché no tiene join data y se pidió join, refrescar
-      if (includeJoin && cached.data.length > 0 && cached.data.some(p => p.habilitado && p.productoId) && !cached.data.some(p => p.precioVenta > 0)) {
-        // Caché sin join — continuar para hacer el join
-      } else {
-        return cached.data;
-      }
-    }
-  }
+export const getMayoristaProductos = async (_forceRefresh = false, includeJoin = true): Promise<MayoristaProducto[]> => {
+  const { data: rows } = await supabase
+    .from('mayorista_productos')
+    .select('*')
+    .order('descripcion', { ascending: true })
 
-  const snap = await getDocs(collection(firestore, COL));
-  const data = snap.docs.map((d) => mapDoc(d.id, d.data() as Record<string, unknown>));
+  const productos = (rows ?? []).map(mapDoc)
 
-  // Join con "productos" para los habilitados — solo si se pide (ahorra leer 2000+ docs)
+  // Join con "productos" para los habilitados
   if (includeJoin) {
-    const habilitados = data.filter((p) => p.habilitado && p.productoId);
+    const habilitados = productos.filter((p) => p.habilitado && p.productoId)
     if (habilitados.length > 0) {
-      const prodSnap = await getDocs(collection(firestore, PRODUCTS_COLLECTION));
-      const productosMap = new Map<string, Record<string, unknown>>();
-      prodSnap.docs.forEach((d) => productosMap.set(d.id, d.data() as Record<string, unknown>));
+      const prodIds = habilitados.map((p) => p.productoId!)
+      const { data: prodRows } = await supabase
+        .from('productos')
+        .select('id, precio_venta, price, ganancia_global, ganancia_individual, stock, unidades_por_bulto, se_divide_en')
+        .in('id', prodIds)
 
-      for (const p of data) {
-        if (!p.productoId) continue;
-        const pd = productosMap.get(p.productoId);
-        if (!pd) continue;
-        p.precioVenta = (pd.precioVenta as number) ?? (pd.price as number) ?? 0;
-        p.gananciaGlobal = pd.gananciaGlobal as number | undefined;
-        p.gananciaIndividual = (pd.gananciaIndividual as boolean) ?? false;
-        p.stockLocal = (pd.stock as number) ?? 0;
-        p.unidadesPorBulto = pd.unidadesPorBulto as number | undefined;
-        p.seDivideEn = pd.seDivideEn as number | undefined;
+      const productosMap = new Map<string, Record<string, any>>()
+      ;(prodRows ?? []).forEach((p) => productosMap.set(p.id, p))
+
+      for (const p of productos) {
+        if (!p.productoId) continue
+        const pd = productosMap.get(p.productoId)
+        if (!pd) continue
+        p.precioVenta = Number(pd.precio_venta) || Number(pd.price) || 0
+        p.gananciaGlobal = pd.ganancia_global ? Number(pd.ganancia_global) : undefined
+        p.gananciaIndividual = pd.ganancia_individual ?? false
+        p.stockLocal = pd.stock ?? 0
+        p.unidadesPorBulto = pd.unidades_por_bulto ?? undefined
+        p.seDivideEn = pd.se_divide_en ? Number(pd.se_divide_en) : undefined
       }
     }
   }
 
-  const sorted = data.sort((a, b) => a.nombre.localeCompare(b.nombre, "es"));
-  writeCache(sorted);
-  return sorted;
-};
-
-const BATCH_SIZE = 300;
-const PARALLEL_BATCHES = 2; // 2 x 300 = 600 writes concurrentes, dentro del límite
+  return productos
+}
 
 export const upsertMayoristaProductos = async (
-  productos: Omit<MayoristaProducto, "id" | "updatedAt" | "stockLocal" | "precioVenta" | "gananciaGlobal" | "gananciaIndividual" | "habilitado" | "unidadesPorBulto" | "seDivideEn" | "productoId">[],
+  productos: Omit<MayoristaProducto, 'id' | 'updatedAt' | 'stockLocal' | 'precioVenta' | 'gananciaGlobal' | 'gananciaIndividual' | 'habilitado' | 'unidadesPorBulto' | 'seDivideEn' | 'productoId'>[],
   onProgress?: (done: number, total: number) => void
 ): Promise<void> => {
-  // Pre-lectura para detectar cambios y solo escribir los productos que cambiaron.
-  onProgress?.(0, productos.length);
-  const snap = await getDocs(collection(firestore, COL));
-  const existingMap = new Map<string, Record<string, unknown>>();
-  snap.docs.forEach((d) => existingMap.set(d.id, d.data() as Record<string, unknown>));
+  onProgress?.(0, productos.length)
 
-  const toWrite = productos.filter((p) => {
-    const id = `mp_${p.codigo.replace(/[^a-zA-Z0-9]/g, "_")}`;
-    const ex = existingMap.get(id);
-    if (!ex) return true; // nuevo producto
-    return (
-      ex.nombre !== p.nombre ||
-      ex.precioUnitarioMayorista !== p.precioUnitarioMayorista ||
-      ex.codigoBarras !== (p.codigoBarras ?? "") ||
-      ex.rubro !== (p.rubro ?? "") ||
-      ex.subrubro !== (p.subrubro ?? "")
-    );
-  });
+  const rows = productos.map((p) => ({
+    id: `mp_${p.codigo.replace(/[^a-zA-Z0-9]/g, '_')}`,
+    codigo: p.codigo,
+    descripcion: p.nombre,
+    precio_lista: p.precioUnitarioMayorista,
+    codigo_barras: p.codigoBarras ?? '',
+    rubro: p.rubro ?? '',
+    subrubro: p.subrubro ?? '',
+    categoria: p.categoria,
+  }))
 
-  if (toWrite.length === 0) {
-    onProgress?.(productos.length, productos.length);
-    return;
+  // Upsert en batches
+  for (let i = 0; i < rows.length; i += BATCH_SIZE) {
+    const chunk = rows.slice(i, i + BATCH_SIZE)
+    await supabase
+      .from('mayorista_productos')
+      .upsert(chunk, { onConflict: 'id', ignoreDuplicates: false })
+    onProgress?.(Math.min(i + BATCH_SIZE, rows.length), productos.length)
   }
 
-  const chunks: typeof toWrite[] = [];
-  for (let i = 0; i < toWrite.length; i += BATCH_SIZE) {
-    chunks.push(toWrite.slice(i, i + BATCH_SIZE));
-  }
+  onProgress?.(productos.length, productos.length)
+}
 
-  let done = 0;
-
-  for (const chunk of chunks) {
-    const batch = writeBatch(firestore);
-    for (const p of chunk) {
-      const id = `mp_${p.codigo.replace(/[^a-zA-Z0-9]/g, "_")}`;
-      batch.set(
-        doc(firestore, COL, id),
-        {
-          codigoBarras: p.codigoBarras ?? "",
-          codigo: p.codigo,
-          nombre: p.nombre,
-          precioUnitarioMayorista: p.precioUnitarioMayorista,
-          rubro: p.rubro ?? "",
-          subrubro: p.subrubro ?? "",
-          categoria: p.categoria,
-          updatedAt: serverTimestamp(),
-        },
-        { merge: true } // preserva habilitado, productoId, etc.
-      );
-    }
-    await batch.commit();
-    done += chunk.length;
-    onProgress?.(Math.round((done / toWrite.length) * productos.length), productos.length);
-  }
-  onProgress?.(productos.length, productos.length);
-
-  // Reconstruir caché aplicando los cambios escritos
-  const updatedMap = new Map(existingMap);
-  for (const p of toWrite) {
-    const id = `mp_${p.codigo.replace(/[^a-zA-Z0-9]/g, "_")}`;
-    const existing = existingMap.get(id) ?? {};
-    updatedMap.set(id, {
-      ...existing,
-      codigoBarras: p.codigoBarras ?? "",
-      codigo: p.codigo,
-      nombre: p.nombre,
-      precioUnitarioMayorista: p.precioUnitarioMayorista,
-      rubro: p.rubro ?? "",
-      subrubro: p.subrubro ?? "",
-      categoria: p.categoria,
-      updatedAt: new Date(),
-    });
-  }
-  const updatedData = Array.from(updatedMap.entries())
-    .map(([id, data]) => mapDoc(id, data))
-    .sort((a, b) => a.nombre.localeCompare(b.nombre, "es"));
-  writeCache(updatedData);
-};
-
-// Aplica un porcentaje a una lista de productos — escribe en "productos", no en mayorista_productos.
+// Aplica un porcentaje a una lista de productos — escribe en "productos"
 export const applyGananciaToProducts = async (
   porcentaje: number,
   products: Array<{ id: string; productoId: string; precioUnitarioMayorista: number }>,
   onProgress?: (done: number, total: number) => void
 ): Promise<void> => {
-  const chunks: typeof products[] = [];
+  let done = 0
   for (let i = 0; i < products.length; i += BATCH_SIZE) {
-    chunks.push(products.slice(i, i + BATCH_SIZE));
-  }
-
-  let done = 0;
-  for (let i = 0; i < chunks.length; i += PARALLEL_BATCHES) {
-    const group = chunks.slice(i, i + PARALLEL_BATCHES);
+    const chunk = products.slice(i, i + BATCH_SIZE)
     await Promise.all(
-      group.map(async (chunk) => {
-        const batch = writeBatch(firestore);
-        chunk.forEach(({ productoId, precioUnitarioMayorista }) => {
-          const precioVenta = Math.round(precioUnitarioMayorista * (1 + porcentaje / 100) * 100) / 100;
-          batch.update(doc(firestore, PRODUCTS_COLLECTION, productoId), {
-            price: precioVenta,
-            precioVenta,
-            gananciaGlobal: porcentaje,
-            gananciaIndividual: false,
-          });
-        });
-        await batch.commit();
-        done += chunk.length;
-        onProgress?.(done, products.length);
+      chunk.map(({ productoId, precioUnitarioMayorista }) => {
+        const precioVenta = Math.round(precioUnitarioMayorista * (1 + porcentaje / 100) * 100) / 100
+        return supabase.from('productos').update({
+          price: precioVenta,
+          precio_venta: precioVenta,
+          ganancia_global: porcentaje,
+          ganancia_individual: false,
+        }).eq('id', productoId)
       })
-    );
+    )
+    done += chunk.length
+    onProgress?.(done, products.length)
   }
 
-  // Invalidar caché de productos (catálogo, nueva venta) y actualizar caché mayorista
-  invalidateProductsCache();
-  const cached = readCache();
-  if (cached) {
-    const updateMap = new Map(products.map((p) => [p.id, p.precioUnitarioMayorista]));
-    const updated = cached.data.map((p) => {
-      if (!updateMap.has(p.id)) return p;
-      return {
-        ...p,
-        precioVenta: Math.round(updateMap.get(p.id)! * (1 + porcentaje / 100) * 100) / 100,
-        gananciaGlobal: porcentaje,
-        gananciaIndividual: false,
-      };
-    });
-    writeCache(updated);
-    // Notificar a la UI que mayorista/productos se actualizó (para que componentes hagan refresh)
-    if (typeof window !== "undefined") {
-      try { window.dispatchEvent(new CustomEvent("mayorista:updated", { detail: { porcentaje } })); } catch { /* noop */ }
-    }
+  invalidateProductsCache()
+  if (typeof window !== 'undefined') {
+    try { window.dispatchEvent(new CustomEvent('mayorista:updated', { detail: { porcentaje } })) } catch { /* noop */ }
   }
-};
+}
 
 // Actualiza precio de venta individual en "productos"
 export const updateProductoPrecioVenta = async (
@@ -276,26 +134,17 @@ export const updateProductoPrecioVenta = async (
   precio: number,
   gananciaIndividual: boolean
 ): Promise<void> => {
-  await updateDoc(doc(firestore, PRODUCTS_COLLECTION, productoId), {
+  await supabase.from('productos').update({
     price: precio,
-    precioVenta: precio,
-    gananciaIndividual,
-  });
-  // Invalidar caché de productos (catálogo, nueva venta) y actualizar caché mayorista
-  invalidateProductsCache();
-  const cached = readCache();
-  if (cached) {
-    const updated = cached.data.map((p) =>
-      p.productoId === productoId
-        ? { ...p, precioVenta: precio, gananciaIndividual }
-        : p
-    );
-    writeCache(updated);
-    if (typeof window !== "undefined") {
-      try { window.dispatchEvent(new CustomEvent("mayorista:updated", { detail: { productoId, precio } })); } catch { /* noop */ }
-    }
+    precio_venta: precio,
+    ganancia_individual: gananciaIndividual,
+  }).eq('id', productoId)
+
+  invalidateProductsCache()
+  if (typeof window !== 'undefined') {
+    try { window.dispatchEvent(new CustomEvent('mayorista:updated', { detail: { productoId, precio } })) } catch { /* noop */ }
   }
-};
+}
 
 // ─── Habilitar / Deshabilitar ─────────────────────────────────────────────────
 
@@ -306,121 +155,85 @@ export const habilitarProducto = async (
   precioVentaOverride?: number,
   gananciaGlobal?: number
 ): Promise<void> => {
-  // Si no se pasó gananciaGlobal, intentar obtener la ganancia "global" vigente
-  // leyendo un producto que tenga gananciaGlobal registrada (si existe).
-  let finalGanancia: number | undefined = gananciaGlobal;
+  let finalGanancia: number | undefined = gananciaGlobal
   if (finalGanancia == null) {
     try {
-      const q = query(collection(firestore, PRODUCTS_COLLECTION), where("gananciaGlobal", ">=", 0), limit(1));
-      const snap = await getDocs(q);
-      if (!snap.empty) {
-        const pd = snap.docs[0].data() as Record<string, unknown>;
-        const g = pd.gananciaGlobal as number | undefined;
-        if (typeof g === "number" && !isNaN(g)) finalGanancia = g;
+      const { data: rows } = await supabase
+        .from('productos')
+        .select('ganancia_global')
+        .gte('ganancia_global', 0)
+        .limit(1)
+      if (rows && rows.length > 0) {
+        const g = Number(rows[0].ganancia_global)
+        if (!isNaN(g)) finalGanancia = g
       }
-    } catch {
-      // si falla la lectura, simplemente no aplicamos ganancia global
-    }
+    } catch { /* noop */ }
   }
 
-  // Calcular precio final: prioridad -> override pasado por UI, sino aplicar ganancia final si existe,
-  // sino usar precio ya presente en mp.precioVenta
   const precio = precioVentaOverride != null
     ? precioVentaOverride
     : finalGanancia != null && mp.precioUnitarioMayorista > 0
       ? Math.round(mp.precioUnitarioMayorista * (1 + finalGanancia / 100) * 100) / 100
-      : mp.precioVenta;
+      : mp.precioVenta
 
-  let productoId = mp.productoId;
+  let productoId = mp.productoId
 
   if (productoId) {
-    // Actualizar producto existente
-    await updateDoc(doc(firestore, PRODUCTS_COLLECTION, productoId), {
+    await supabase.from('productos').update({
       price: precio,
-      precioVenta: precio,
-      unidadesPorBulto,
-      ...(seDivideEn != null ? { seDivideEn } : {}),
+      precio_venta: precio,
+      unidades_por_bulto: unidadesPorBulto,
+      ...(seDivideEn != null ? { se_divide_en: seDivideEn } : {}),
       disabled: false,
-      ...(finalGanancia != null ? { gananciaGlobal: finalGanancia } : {}),
-    });
+      ...(finalGanancia != null ? { ganancia_global: finalGanancia } : {}),
+    }).eq('id', productoId)
   } else {
-    // Crear nuevo producto con ID determinístico
-    productoId = `prod_${mp.id}`;
-    await setDoc(doc(firestore, PRODUCTS_COLLECTION, productoId), {
+    productoId = `prod_${mp.id}`
+    await supabase.from('productos').insert({
+      id: productoId,
       name: mp.nombre,
       description: mp.codigo,
       price: precio,
-      precioVenta: precio,
+      precio_venta: precio,
       stock: 0,
-      imageUrl: "",
-      category: mp.rubro || mp.categoria || "Sin categoría",
+      image_url: '',
+      category: mp.rubro || mp.categoria || 'Sin categoria',
       disabled: false,
-      unidadesPorBulto,
-      ...(seDivideEn != null ? { seDivideEn } : {}),
-      ...(finalGanancia != null ? { gananciaGlobal: finalGanancia } : {}),
-      createdAt: serverTimestamp(),
-    });
+      unidades_por_bulto: unidadesPorBulto,
+      ...(seDivideEn != null ? { se_divide_en: seDivideEn } : {}),
+      ...(finalGanancia != null ? { ganancia_global: finalGanancia } : {}),
+    })
   }
 
-  // Solo habilitado y productoId se guardan en mayorista_productos
-  await updateDoc(doc(firestore, COL, mp.id), {
+  await supabase.from('mayorista_productos').update({
     habilitado: true,
-    productoId,
-    updatedAt: serverTimestamp(),
-  });
+    producto_id: productoId,
+  }).eq('id', mp.id)
 
-  // Actualizar caché local
-  const cached = readCache();
-  if (cached) {
-    const updated = cached.data.map((p) =>
-      p.id === mp.id
-        ? { ...p, habilitado: true, unidadesPorBulto, ...(seDivideEn != null ? { seDivideEn } : {}), productoId, precioVenta: precio, gananciaGlobal: finalGanancia ?? p.gananciaGlobal, updatedAt: new Date() }
-        : p
-    );
-    writeCache(updated);
-    if (typeof window !== "undefined") {
-      try { window.dispatchEvent(new CustomEvent("mayorista:updated", { detail: { mpId: mp.id, productoId } })); } catch { /* noop */ }
-    }
+  if (typeof window !== 'undefined') {
+    try { window.dispatchEvent(new CustomEvent('mayorista:updated', { detail: { mpId: mp.id, productoId } })) } catch { /* noop */ }
   }
-};
+}
 
 export const deshabilitarProducto = async (mp: MayoristaProducto): Promise<void> => {
-  await updateDoc(doc(firestore, COL, mp.id), {
-    habilitado: false,
-    updatedAt: serverTimestamp(),
-  });
+  await supabase.from('mayorista_productos').update({ habilitado: false }).eq('id', mp.id)
 
-  // Deshabilitar en "productos"
-  const productoId = mp.productoId ?? `prod_${mp.id}`;
+  const productoId = mp.productoId ?? `prod_${mp.id}`
   try {
-    await updateDoc(doc(firestore, PRODUCTS_COLLECTION, productoId), {
-      disabled: true,
-    });
+    await supabase.from('productos').update({ disabled: true }).eq('id', productoId)
   } catch { /* si el doc no existe, ignorar */ }
 
-  // Actualizar caché local
-  const cached = readCache();
-  if (cached) {
-    const updated = cached.data.map((p) =>
-      p.id === mp.id ? { ...p, habilitado: false, updatedAt: new Date() } : p
-    );
-    writeCache(updated);
-    if (typeof window !== "undefined") {
-      try { window.dispatchEvent(new CustomEvent("mayorista:updated", { detail: { mpId: mp.id, habilitado: false } })); } catch { /* noop */ }
-    }
+  if (typeof window !== 'undefined') {
+    try { window.dispatchEvent(new CustomEvent('mayorista:updated', { detail: { mpId: mp.id, habilitado: false } })) } catch { /* noop */ }
   }
-};
+}
 
-// Sincroniza habilitado en mayorista_productos dado un productoId (relación inversa)
 export const sincronizarHabilitadoEnMayorista = async (productoId: string, habilitado: boolean): Promise<void> => {
-  const q = query(collection(firestore, COL), where("productoId", "==", productoId));
-  const snap = await getDocs(q);
-  if (snap.empty) return;
-  await Promise.all(
-    snap.docs.map((d) => updateDoc(d.ref, { habilitado, updatedAt: serverTimestamp() }))
-  );
-  invalidateMayoristaCache();
-};
+  await supabase
+    .from('mayorista_productos')
+    .update({ habilitado })
+    .eq('producto_id', productoId)
+}
 
 // ─── Preferencias de columnas (por usuario) ───────────────────────────────────
 
@@ -428,140 +241,127 @@ const PREFS_DEFAULTS: MayoristaPrefs = {
   showCodigoBarras: true,
   showRubro: true,
   showSubrubro: true,
-};
+}
 
 export const getMayoristaPrefs = async (userId: string): Promise<MayoristaPrefs> => {
-  const snap = await getDoc(doc(firestore, PREFS_COL, `${userId}_mayorista_prefs`));
-  if (!snap.exists()) return { ...PREFS_DEFAULTS };
-  const data = snap.data();
+  const { data } = await supabase
+    .from('configuracion')
+    .select('value')
+    .eq('key', `${userId}_mayorista_prefs`)
+    .maybeSingle()
+
+  if (!data?.value) return { ...PREFS_DEFAULTS }
+  const v = data.value as Record<string, boolean>
   return {
-    showCodigoBarras: data.showCodigoBarras ?? true,
-    showRubro: data.showRubro ?? true,
-    showSubrubro: data.showSubrubro ?? true,
-  };
-};
+    showCodigoBarras: v.showCodigoBarras ?? true,
+    showRubro: v.showRubro ?? true,
+    showSubrubro: v.showSubrubro ?? true,
+  }
+}
 
 export const saveMayoristaPrefs = async (
   userId: string,
   prefs: MayoristaPrefs
 ): Promise<void> => {
-  await setDoc(doc(firestore, PREFS_COL, `${userId}_mayorista_prefs`), prefs);
-};
+  await supabase
+    .from('configuracion')
+    .upsert({ key: `${userId}_mayorista_prefs`, value: prefs }, { onConflict: 'key' })
+}
 
-// ─── Importación masiva desde lista de precios Excel ─────────────────────────
+// ─── Importacion masiva desde lista de precios Excel ─────────────────────────
 
 export type ImportRow = {
-  codigo: string;
-  descripcion: string;
-  stockUnidades: number;
-  unPack: number;
-  lista1: number;
-};
-
-const IMPORT_BATCH_SIZE = 250; // 250 filas = 500 writes (2 por fila), límite Firestore
+  codigo: string
+  descripcion: string
+  stockUnidades: number
+  unPack: number
+  lista1: number
+}
 
 export const importarListaPrecios = async (
   rows: ImportRow[],
   onProgress?: (done: number, total: number) => void
 ): Promise<{ procesados: number; noEncontrados: string[] }> => {
-  const GANANCIA = 30;
+  const GANANCIA = 30
 
-  onProgress?.(0, rows.length);
+  onProgress?.(0, rows.length)
 
   // Cargar todos los mayorista_productos para hacer el match por codigo
-  // Indexar por código exacto y por código sin leading zeros (para matchear
-  // cuando XLSX parsea "0100932" como número 100932 y viceversa)
-  const snap = await getDocs(collection(firestore, COL));
-  type MpEntry = { id: string; productoId?: string; rubro?: string; categoria?: string };
-  const mpExact = new Map<string, MpEntry>();
-  const mpStripped = new Map<string, MpEntry>();
-  snap.docs.forEach((d) => {
-    const data = d.data();
-    const codigo = (data.codigo as string) ?? "";
-    if (!codigo) return;
+  const { data: mpRows } = await supabase
+    .from('mayorista_productos')
+    .select('id, codigo, producto_id, rubro, categoria')
+
+  type MpEntry = { id: string; productoId?: string; rubro?: string; categoria?: string }
+  const mpExact = new Map<string, MpEntry>()
+  const mpStripped = new Map<string, MpEntry>()
+  ;(mpRows ?? []).forEach((d) => {
+    const codigo = d.codigo ?? ''
+    if (!codigo) return
     const entry: MpEntry = {
       id: d.id,
-      productoId: data.productoId as string | undefined,
-      rubro: data.rubro as string | undefined,
-      categoria: data.categoria as string | undefined,
-    };
-    mpExact.set(codigo, entry);
-    // Clave sin leading zeros para lookup fuzzy
-    const stripped = codigo.replace(/^0+/, "") || codigo;
-    if (!mpStripped.has(stripped)) mpStripped.set(stripped, entry);
-  });
+      productoId: d.producto_id ?? undefined,
+      rubro: d.rubro ?? undefined,
+      categoria: d.categoria ?? undefined,
+    }
+    mpExact.set(codigo, entry)
+    const stripped = codigo.replace(/^0+/, '') || codigo
+    if (!mpStripped.has(stripped)) mpStripped.set(stripped, entry)
+  })
 
-  // Separar filas válidas de las que no tienen match
-  type PreparedRow = ImportRow & { mp: MpEntry; productoId: string };
-  const prepared: PreparedRow[] = [];
-  const noEncontrados: string[] = [];
+  type PreparedRow = ImportRow & { mp: MpEntry; productoId: string }
+  const prepared: PreparedRow[] = []
+  const noEncontrados: string[] = []
 
   for (const row of rows) {
-    // Intentar match exacto, luego sin leading zeros
     const mp = mpExact.get(row.codigo)
-      || mpStripped.get(row.codigo.replace(/^0+/, "") || row.codigo);
+      || mpStripped.get(row.codigo.replace(/^0+/, '') || row.codigo)
     if (!mp) {
-      noEncontrados.push(row.codigo);
-      continue;
+      noEncontrados.push(row.codigo)
+      continue
     }
-    prepared.push({
-      ...row,
-      mp,
-      productoId: mp.productoId || `prod_${mp.id}`,
-    });
+    prepared.push({ ...row, mp, productoId: mp.productoId || `prod_${mp.id}` })
   }
 
-  // Partir en chunks y escribir con writeBatch
-  const chunks: PreparedRow[][] = [];
-  for (let i = 0; i < prepared.length; i += IMPORT_BATCH_SIZE) {
-    chunks.push(prepared.slice(i, i + IMPORT_BATCH_SIZE));
-  }
+  // Procesar en batches
+  let done = 0
+  for (let i = 0; i < prepared.length; i += BATCH_SIZE) {
+    const chunk = prepared.slice(i, i + BATCH_SIZE)
 
-  let done = 0;
+    // 1. Upsert mayorista_productos
+    const mpUpserts = chunk.map((row) => ({
+      id: row.mp.id,
+      precio_lista: row.lista1,
+      descripcion: row.descripcion,
+      habilitado: true,
+      producto_id: row.productoId,
+    }))
+    await supabase.from('mayorista_productos').upsert(mpUpserts, { onConflict: 'id' })
 
-  for (const chunk of chunks) {
-    const batch = writeBatch(firestore);
-
-    for (const row of chunk) {
-      const precioVenta = Math.round(row.lista1 * (1 + GANANCIA / 100) * 100) / 100;
-
-      // 1. mayorista_productos — set+merge para evitar fallas si el doc fue recreado
-      batch.set(doc(firestore, COL, row.mp.id), {
-        precioUnitarioMayorista: row.lista1,
-        nombre: row.descripcion,
-        habilitado: true,
-        productoId: row.productoId,
-        updatedAt: serverTimestamp(),
-      }, { merge: true });
-
-      // 2. productos — set+merge siempre (crea si no existe, actualiza si existe)
-      const isNew = !row.mp.productoId;
-      batch.set(doc(firestore, PRODUCTS_COLLECTION, row.productoId), {
+    // 2. Upsert productos
+    const prodUpserts = chunk.map((row) => {
+      const precioVenta = Math.round(row.lista1 * (1 + GANANCIA / 100) * 100) / 100
+      const isNew = !row.mp.productoId
+      return {
+        id: row.productoId,
         name: row.descripcion,
         description: row.codigo,
         price: precioVenta,
-        precioVenta,
-        gananciaGlobal: GANANCIA,
+        precio_venta: precioVenta,
+        ganancia_global: GANANCIA,
         stock: row.stockUnidades,
-        unidadesPorBulto: row.unPack,
+        unidades_por_bulto: row.unPack,
         disabled: false,
-        updatedAt: serverTimestamp(),
-        ...(isNew ? { imageUrl: "", category: row.mp.rubro || row.mp.categoria || "Sin categoría", createdAt: serverTimestamp() } : {}),
-      }, { merge: true });
-    }
+        ...(isNew ? { image_url: '', category: row.mp.rubro || row.mp.categoria || 'Sin categoria' } : {}),
+      }
+    })
+    await supabase.from('productos').upsert(prodUpserts, { onConflict: 'id' })
 
-    try {
-      await batch.commit();
-    } catch (err) {
-      console.error(`Batch falló (${chunk.length} filas):`, err);
-    }
-    done += chunk.length;
-    onProgress?.(done + noEncontrados.length, rows.length);
+    done += chunk.length
+    onProgress?.(done + noEncontrados.length, rows.length)
   }
 
-  onProgress?.(rows.length, rows.length);
-  invalidateMayoristaCache();
-  invalidateProductsCache();
+  onProgress?.(rows.length, rows.length)
+  invalidateProductsCache()
 
-  return { procesados: prepared.length, noEncontrados };
-};
+  return { procesados: prepared.length, noEncontrados }
+}

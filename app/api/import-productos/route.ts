@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { adminFirestore } from "@/lib/firebase-admin";
+import { supabaseAdmin } from "@/lib/supabase-admin";
 
 export async function POST(req: Request) {
   try {
@@ -13,39 +13,33 @@ export async function POST(req: Request) {
     }
 
     let count = 0;
-    let batch = adminFirestore.batch();
-    let batchCount = 0;
+    const batch: any[] = [];
 
     for (const producto of productos) {
       if (!producto.codigo || !producto.nombre) continue;
 
-      const docRef = adminFirestore.collection("productos").doc();
-      batch.set(docRef, {
+      batch.push({
         name: producto.nombre.trim(),
         description: producto.nombre.trim(),
         codigo: producto.codigo.trim(),
         price: 0,
         stock: 0,
-        imageUrl: "",
+        image_url: "",
         category: producto.categoria || "Sin categoría",
         base: "crema",
         marca: "Sin identificar",
-        sinTacc: false,
+        sin_tacc: false,
         disabled: false,
-        createdAt: new Date(),
+        created_at: new Date().toISOString(),
       });
       count++;
-      batchCount++;
-
-      if (batchCount === 499) {
-        await batch.commit();
-        batch = adminFirestore.batch();
-        batchCount = 0;
-      }
     }
 
-    if (batchCount > 0) {
-      await batch.commit();
+    // Insert in chunks of 499 to match original batch size
+    for (let i = 0; i < batch.length; i += 499) {
+      const chunk = batch.slice(i, i + 499);
+      const { error } = await supabaseAdmin.from("productos").insert(chunk);
+      if (error) throw error;
     }
 
     return NextResponse.json({ success: true, imported: count });

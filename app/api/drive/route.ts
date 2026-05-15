@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { adminAuth } from "@/lib/firebase-admin";
+import { supabaseAdmin } from "@/lib/supabase-admin";
 import { google } from "googleapis";
 import { Readable } from "stream";
 
@@ -11,7 +11,8 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "No autorizado" }, { status: 401 });
     }
     try {
-      await adminAuth.verifyIdToken(authHeader.substring(7));
+      const { error: authError } = await supabaseAdmin.auth.getUser(authHeader.substring(7));
+      if (authError) throw authError;
     } catch {
       return NextResponse.json({ error: "Token invalido" }, { status: 401 });
     }

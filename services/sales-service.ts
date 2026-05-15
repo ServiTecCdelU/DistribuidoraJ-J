@@ -1,314 +1,315 @@
 // services/sales-service.ts
-import {
-  collection,
-  doc,
-  setDoc,
-  getDoc,
-  getDocs,
-  query,
-  where,
-  orderBy,
-  updateDoc,
-  serverTimestamp,
-  limit,
-  startAfter,
-  type QueryDocumentSnapshot,
-} from "firebase/firestore";
-import { firestore } from "@/lib/firebase";
-import type { CartItem, Sale } from "@/lib/types";
-import { generateReadableId, slugify } from "@/services/firestore-helpers";
+import { supabase } from '@/lib/supabase'
+import type { CartItem, Sale } from '@/lib/types'
+import { generateReadableId, slugify } from '@/services/supabase-helpers'
 
-const SALES_PATH = "ventas";
-const PRODUCTS_PATH = "productos";
-const CLIENTS_PATH = "clientes";
-const TRANSACTIONS_PATH = "transacciones";
-const SELLERS_PATH = "vendedores";
-const COMMISSIONS_PATH = "comisiones";
+const COMMISSION_RATE = 0.1
 
-const COMMISSION_RATE = 0.1;
+function mapSale(d: Record<string, any>): Sale {
+  return {
+    id: d.id,
+    saleNumber: d.sale_number ?? undefined,
+    clientId: d.client_id ?? undefined,
+    clientName: d.client_name ?? undefined,
+    clientPhone: d.client_phone ?? undefined,
+    clientCuit: d.client_cuit ?? undefined,
+    clientDni: d.client_dni ?? undefined,
+    clientEmail: d.client_email ?? undefined,
+    clientAddress: d.client_address ?? undefined,
+    clientTaxCategory: d.client_tax_category ?? undefined,
+    sellerId: d.seller_id ?? undefined,
+    sellerName: d.seller_name ?? undefined,
+    source: d.source ?? 'direct',
+    items: d.items ?? [],
+    total: Number(d.total) || 0,
+    paymentType: d.payment_type ?? 'cash',
+    paymentMethod: d.payment_method ?? 'efectivo',
+    cashAmount: d.cash_amount ? Number(d.cash_amount) : undefined,
+    creditAmount: d.credit_amount ? Number(d.credit_amount) : undefined,
+    status: d.status ?? 'completed',
+    invoiceEmitted: d.invoice_emitted ?? false,
+    invoiceNumber: d.invoice_number ?? undefined,
+    invoiceStatus: d.invoice_status ?? undefined,
+    invoicePdfUrl: d.invoice_pdf_url ?? undefined,
+    invoiceWhatsappUrl: d.invoice_whatsapp_url ?? undefined,
+    remitoPdfUrl: d.remito_pdf_url ?? undefined,
+    remitoNumber: d.remito_number ?? undefined,
+    discount: d.discount ? Number(d.discount) : undefined,
+    discountType: d.discount_type ?? undefined,
+    orderId: d.order_id ?? undefined,
+    deliveryMethod: d.delivery_method ?? 'pickup',
+    deliveryAddress: d.delivery_address ?? undefined,
+    createdAt: new Date(d.created_at),
+    invoiceDriveUrl: d.invoice_drive_url ?? undefined,
+    invoiceDriveFileId: d.invoice_drive_file_id ?? undefined,
+    remitoDriveUrl: d.remito_drive_url ?? undefined,
+    remitoDriveFileId: d.remito_drive_file_id ?? undefined,
+  }
+}
 
 export const getSales = async (): Promise<Sale[]> => {
-  const salesRef = collection(firestore, SALES_PATH);
-  const snapshot = await getDocs(query(salesRef, orderBy("createdAt", "desc")));
+  const { data } = await supabase
+    .from('ventas')
+    .select('*')
+    .order('created_at', { ascending: false })
 
-  return snapshot.docs.map((doc) => {
-    const data = doc.data();
-    return {
-      id: doc.id,
-      ...data,
-      createdAt: data.createdAt?.toDate ? data.createdAt.toDate() : new Date(),
-    } as Sale;
-  });
-};
+  return (data ?? []).map(mapSale)
+}
 
 export const getSalesBySeller = async (sellerId: string): Promise<Sale[]> => {
-  const salesRef = collection(firestore, SALES_PATH);
-  const q = query(
-    salesRef,
-    where("sellerId", "==", sellerId),
-    orderBy("createdAt", "desc"),
-  );
-  const snapshot = await getDocs(q);
+  const { data } = await supabase
+    .from('ventas')
+    .select('*')
+    .eq('seller_id', sellerId)
+    .order('created_at', { ascending: false })
 
-  return snapshot.docs.map((doc) => {
-    const data = doc.data();
-    return {
-      id: doc.id,
-      ...data,
-      createdAt: data.createdAt?.toDate ? data.createdAt.toDate() : new Date(),
-    } as Sale;
-  });
-};
+  return (data ?? []).map(mapSale)
+}
 
 export const getSalesByClient = async (clientId: string): Promise<Sale[]> => {
-  const salesRef = collection(firestore, SALES_PATH);
-  const q = query(
-    salesRef,
-    where("clientId", "==", clientId),
-    orderBy("createdAt", "desc"),
-  );
-  const snapshot = await getDocs(q);
+  const { data } = await supabase
+    .from('ventas')
+    .select('*')
+    .eq('client_id', clientId)
+    .order('created_at', { ascending: false })
 
-  return snapshot.docs.map((doc) => {
-    const data = doc.data();
-    return {
-      id: doc.id,
-      ...data,
-      createdAt: data.createdAt?.toDate ? data.createdAt.toDate() : new Date(),
-    } as Sale;
-  });
-};
+  return (data ?? []).map(mapSale)
+}
 
 export const getSaleById = async (id: string): Promise<Sale | null> => {
-  const saleRef = doc(firestore, SALES_PATH, id);
-  const snapshot = await getDoc(saleRef);
+  const { data } = await supabase
+    .from('ventas')
+    .select('*')
+    .eq('id', id)
+    .maybeSingle()
 
-  if (!snapshot.exists()) return null;
-
-  const data = snapshot.data();
-  return {
-    id: snapshot.id,
-    ...data,
-    createdAt: data.createdAt?.toDate ? data.createdAt.toDate() : new Date(),
-  } as Sale;
-};
+  return data ? mapSale(data) : null
+}
 
 export const generateSaleNumber = (date: Date, index: number) => {
-  const d = new Date(date);
-  const day = String(d.getDate()).padStart(2, "0");
-  const month = String(d.getMonth() + 1).padStart(2, "0");
-  const year = d.getFullYear();
-  return `N°${index + 1}-${day}-${month}-${year}`;
-};
+  const d = new Date(date)
+  const day = String(d.getDate()).padStart(2, '0')
+  const month = String(d.getMonth() + 1).padStart(2, '0')
+  const year = d.getFullYear()
+  return `N${index + 1}-${day}-${month}-${year}`
+}
 
 export const processSale = async (data: {
-  clientId?: string;
-  clientName?: string;
-  clientPhone?: string;
-  sellerId?: string;
-  sellerName?: string;
-  items: CartItem[];
-  paymentType: "cash" | "credit" | "mixed";
-  paymentMethod?: "efectivo" | "transferencia";
-  cashAmount?: number;
-  creditAmount?: number;
-  overpayment?: number;
-  discount?: number;
-  discountType?: "percent" | "fixed";
-  source: "direct" | "order";
-  createOrder: boolean;
-  orderId?: string;
-  deliveryMethod: "pickup" | "delivery";
-  deliveryAddress: string;
+  clientId?: string
+  clientName?: string
+  clientPhone?: string
+  sellerId?: string
+  sellerName?: string
+  items: CartItem[]
+  paymentType: 'cash' | 'credit' | 'mixed'
+  paymentMethod?: 'efectivo' | 'transferencia'
+  cashAmount?: number
+  creditAmount?: number
+  overpayment?: number
+  discount?: number
+  discountType?: 'percent' | 'fixed'
+  source: 'direct' | 'order'
+  createOrder: boolean
+  orderId?: string
+  deliveryMethod: 'pickup' | 'delivery'
+  deliveryAddress: string
 }): Promise<Sale> => {
-  const subtotalBruto = data.items.reduce(
-    (acc, item) => acc + item.product.price * item.quantity,
-    0,
-  );
-  // Subtotal con descuentos por item aplicados
   const subtotal = data.items.reduce((acc, item) => {
-    const base = item.product.price * item.quantity;
-    const disc = item.itemDiscount ? (base * item.itemDiscount) / 100 : 0;
-    return acc + base - disc;
-  }, 0);
+    const base = item.product.price * item.quantity
+    const disc = item.itemDiscount ? (base * item.itemDiscount) / 100 : 0
+    return acc + base - disc
+  }, 0)
   const discountAmount =
     data.discount && data.discount > 0
-      ? data.discountType === "percent"
+      ? data.discountType === 'percent'
         ? (subtotal * data.discount) / 100
         : data.discount
-      : 0;
-  const total = Math.max(0, subtotal - discountAmount);
+      : 0
+  const total = Math.max(0, subtotal - discountAmount)
 
-  const sales = await getSales();
-  const saleNumber = generateSaleNumber(new Date(), sales.length);
+  // Contar ventas para generar saleNumber
+  const { count } = await supabase
+    .from('ventas')
+    .select('id', { count: 'exact', head: true })
+  const saleNumber = generateSaleNumber(new Date(), count ?? 0)
 
-  let resolvedClientName = data.clientName ?? "Venta directa";
-  let resolvedTaxCategory: any;
-  let resolvedClientPhone = data.clientPhone ?? null;
-  let resolvedClientCuit: string | null = null;
-  let resolvedClientAddress: string | null = null;
-  let resolvedClientEmail: string | null = null;
-  let resolvedClientDni: string | null = null;
-  let clientAddress = data.deliveryAddress;
+  let resolvedClientName = data.clientName ?? 'Venta directa'
+  let resolvedTaxCategory: any
+  let resolvedClientPhone = data.clientPhone ?? null
+  let resolvedClientCuit: string | null = null
+  let resolvedClientAddress: string | null = null
+  let resolvedClientEmail: string | null = null
+  let resolvedClientDni: string | null = null
+  let clientAddress = data.deliveryAddress
 
-  // ✅ Tomar TODOS los datos del cliente desde Firestore
   if (data.clientId) {
-    const clientRef = doc(firestore, CLIENTS_PATH, data.clientId);
-    const clientSnap = await getDoc(clientRef);
-    if (clientSnap.exists()) {
-      const clientData = clientSnap.data();
-      resolvedClientName = clientData.name ?? resolvedClientName;
-      resolvedTaxCategory = clientData.taxCategory ?? null;
-      resolvedClientPhone = clientData.phone ?? resolvedClientPhone ?? null;
-      resolvedClientCuit = clientData.cuit ?? null;
-      resolvedClientAddress = clientData.address ?? null;
-      resolvedClientEmail = clientData.email ?? null;
-      resolvedClientDni = clientData.dni ?? null;
-
-      if (data.deliveryMethod === "delivery" && !data.deliveryAddress) {
-        clientAddress = clientData.address ?? data.deliveryAddress;
+    const { data: clientData } = await supabase
+      .from('clientes')
+      .select('*')
+      .eq('id', data.clientId)
+      .single()
+    if (clientData) {
+      resolvedClientName = clientData.name ?? resolvedClientName
+      resolvedTaxCategory = clientData.tax_category ?? null
+      resolvedClientPhone = clientData.phone ?? resolvedClientPhone ?? null
+      resolvedClientCuit = clientData.cuit ?? null
+      resolvedClientAddress = clientData.address ?? null
+      resolvedClientEmail = clientData.email ?? null
+      resolvedClientDni = clientData.dni ?? null
+      if (data.deliveryMethod === 'delivery' && !data.deliveryAddress) {
+        clientAddress = clientData.address ?? data.deliveryAddress
       }
     }
   }
 
-  const saleId = await generateReadableId(firestore, SALES_PATH, 'venta', resolvedClientName);
-  const saleRef = doc(firestore, SALES_PATH, saleId);
+  const saleId = await generateReadableId('ventas', 'venta', resolvedClientName)
 
-  const salePayload = {
-    saleNumber,
-    clientId: data.clientId ?? null,
-    clientName: resolvedClientName ?? null,
-    clientPhone: resolvedClientPhone ?? null,
-    clientCuit: resolvedClientCuit ?? null,
-    clientDni: resolvedClientDni ?? null,
-    clientEmail: resolvedClientEmail ?? null,
-    clientAddress: resolvedClientAddress ?? null,
-    clientTaxCategory: resolvedTaxCategory ?? null,
-    sellerId: data.sellerId ?? null,
-    sellerName: data.sellerName ?? null,
-    source: data.source ?? "direct",
-    items: data.items.map((item) => ({
-      productId: item.product.id ?? null,
-      quantity: item.quantity,
-      price: item.product.price ?? null,
-      name: item.product.name ?? null,
-      ...(item.product.codigo ? { codigo: item.product.codigo } : {}),
-      ...(item.itemDiscount ? { itemDiscount: item.itemDiscount } : {}),
-    })),
+  const saleItems = data.items.map((item) => ({
+    productId: item.product.id ?? null,
+    quantity: item.quantity,
+    price: item.product.price ?? null,
+    name: item.product.name ?? null,
+    ...(item.product.codigo ? { codigo: item.product.codigo } : {}),
+    ...(item.itemDiscount ? { itemDiscount: item.itemDiscount } : {}),
+  }))
+
+  await supabase.from('ventas').insert({
+    id: saleId,
+    sale_number: saleNumber,
+    client_id: data.clientId ?? null,
+    client_name: resolvedClientName ?? null,
+    client_phone: resolvedClientPhone ?? null,
+    seller_id: data.sellerId ?? null,
+    seller_name: data.sellerName ?? null,
+    source: data.source ?? 'direct',
+    items: saleItems,
+    subtotal,
     total,
-    paymentType: data.paymentType,
-    paymentMethod: data.paymentMethod ?? "efectivo",
-    cashAmount: data.cashAmount ?? null,
-    creditAmount: data.creditAmount ?? null,
-    overpayment: data.overpayment ?? null,
-    discount: data.discount || null,
-    discountType: data.discount ? (data.discountType ?? null) : null,
-    orderId: data.orderId ?? null,
-    status: "completed",
-    invoiceEmitted: false,
-    invoiceStatus: "pending",
-    deliveryMethod: data.deliveryMethod ?? "pickup",
-    deliveryAddress: clientAddress ?? null,
-    createdAt: serverTimestamp(),
-  };
+    payment_type: data.paymentType,
+    cash_amount: data.cashAmount ?? null,
+    credit_amount: data.creditAmount ?? null,
+    status: 'completed',
+    invoice_emitted: false,
+    delivery_method: data.deliveryMethod ?? 'pickup',
+    delivery_address: clientAddress ?? null,
+    order_id: data.orderId ?? null,
+  })
 
-  await setDoc(saleRef, salePayload);
-
-  // Actualizar stock
+  // Descontar stock
   for (const item of data.items) {
-    const productRef = doc(firestore, PRODUCTS_PATH, item.product.id);
-    const productSnap = await getDoc(productRef);
-    if (productSnap.exists()) {
-      const currentStock = productSnap.data().stock || 0;
-      await updateDoc(productRef, {
-        stock: currentStock - item.quantity,
-      });
-    }
+    await supabase.rpc('decrement_stock', {
+      p_id: item.product.id,
+      p_qty: item.quantity,
+    }).then(({ error }) => {
+      // Fallback: update directo si RPC no existe
+      if (error) {
+        return supabase
+          .from('productos')
+          .select('stock')
+          .eq('id', item.product.id)
+          .single()
+          .then(({ data: prod }) => {
+            if (prod) {
+              return supabase
+                .from('productos')
+                .update({ stock: (prod.stock || 0) - item.quantity })
+                .eq('id', item.product.id)
+            }
+          })
+      }
+    })
   }
 
-  // Procesar crédito
+  // Procesar credito
   const amountToCredit =
-    data.paymentType === "credit"
+    data.paymentType === 'credit'
       ? total
-      : data.paymentType === "mixed"
+      : data.paymentType === 'mixed'
         ? (data.creditAmount ?? 0)
-        : 0;
+        : 0
 
   if (amountToCredit > 0 && data.clientId) {
-    const clientRef = doc(firestore, CLIENTS_PATH, data.clientId);
-    const clientSnap = await getDoc(clientRef);
-    if (clientSnap.exists()) {
-      const currentBalance = clientSnap.data().currentBalance || 0;
-      await updateDoc(clientRef, {
-        currentBalance: currentBalance + amountToCredit,
-      });
+    const { data: clientRow } = await supabase
+      .from('clientes')
+      .select('current_balance')
+      .eq('id', data.clientId)
+      .single()
+    if (clientRow) {
+      await supabase
+        .from('clientes')
+        .update({ current_balance: (Number(clientRow.current_balance) || 0) + amountToCredit })
+        .eq('id', data.clientId)
     }
 
-    const transactionId = await generateReadableId(firestore, TRANSACTIONS_PATH, 'transaccion', resolvedClientName);
-    const transactionRef = doc(firestore, TRANSACTIONS_PATH, transactionId);
-    await setDoc(transactionRef, {
-      clientId: data.clientId,
-      type: "debt",
+    const txId = await generateReadableId('transacciones', 'transaccion', resolvedClientName)
+    await supabase.from('transacciones').insert({
+      id: txId,
+      client_id: data.clientId,
+      type: 'debt',
       amount: amountToCredit,
       description: `Venta #${saleNumber}`,
-      date: serverTimestamp(),
-      saleId: saleId,
-      saleNumber,
-    });
+      date: new Date().toISOString(),
+      sale_id: saleId,
+    })
   }
 
-  // Saldo a favor (pago en efectivo mayor al total) -> reduce el saldo del cliente
-  const overpaymentAmount = data.overpayment ?? 0;
+  // Saldo a favor
+  const overpaymentAmount = data.overpayment ?? 0
   if (overpaymentAmount > 0 && data.clientId) {
-    const clientRef = doc(firestore, CLIENTS_PATH, data.clientId);
-    const clientSnap = await getDoc(clientRef);
-    if (clientSnap.exists()) {
-      const currentBalance = clientSnap.data().currentBalance || 0;
-      await updateDoc(clientRef, {
-        currentBalance: currentBalance - overpaymentAmount,
-      });
+    const { data: clientRow } = await supabase
+      .from('clientes')
+      .select('current_balance')
+      .eq('id', data.clientId)
+      .single()
+    if (clientRow) {
+      await supabase
+        .from('clientes')
+        .update({ current_balance: (Number(clientRow.current_balance) || 0) - overpaymentAmount })
+        .eq('id', data.clientId)
     }
 
-    const transactionId = await generateReadableId(firestore, TRANSACTIONS_PATH, 'transaccion', resolvedClientName);
-    const transactionRef = doc(firestore, TRANSACTIONS_PATH, transactionId);
-    await setDoc(transactionRef, {
-      clientId: data.clientId,
-      type: "payment",
+    const txId = await generateReadableId('transacciones', 'transaccion', resolvedClientName)
+    await supabase.from('transacciones').insert({
+      id: txId,
+      client_id: data.clientId,
+      type: 'payment',
       amount: overpaymentAmount,
       description: `Saldo a favor (Venta #${saleNumber})`,
-      date: serverTimestamp(),
-      saleId: saleId,
-      saleNumber,
-    });
+      date: new Date().toISOString(),
+      sale_id: saleId,
+    })
   }
 
-  // Comisión para vendedor
+  // Comision para vendedor
   if (data.sellerId) {
-    const commissionAmount = total * COMMISSION_RATE;
-    const now = new Date();
-    const yyyymm = `${now.getFullYear()}${String(now.getMonth() + 1).padStart(2, '0')}`;
-    const commissionId = await generateReadableId(firestore, COMMISSIONS_PATH, 'comision', `${data.sellerName || 'vendedor'}_${yyyymm}`);
-    const commissionRef = doc(firestore, COMMISSIONS_PATH, commissionId);
-    await setDoc(commissionRef, {
-      sellerId: data.sellerId,
-      saleId: saleId,
-      saleNumber,
-      clientName: data.clientName || null,
-      saleTotal: total,
-      commissionRate: COMMISSION_RATE * 100,
-      commissionAmount,
-      isPaid: false,
-      createdAt: serverTimestamp(),
-    });
+    const commissionAmount = total * COMMISSION_RATE
+    const now = new Date()
+    const yyyymm = `${now.getFullYear()}${String(now.getMonth() + 1).padStart(2, '0')}`
+    const cId = await generateReadableId('comisiones', 'comision', `${data.sellerName || 'vendedor'}_${yyyymm}`)
+    await supabase.from('comisiones').insert({
+      id: cId,
+      seller_id: data.sellerId,
+      seller_name: data.sellerName ?? null,
+      sale_id: saleId,
+      sale_total: total,
+      commission_rate: COMMISSION_RATE * 100,
+      commission_amount: commissionAmount,
+      is_paid: false,
+    })
 
-    const sellerRef = doc(firestore, SELLERS_PATH, data.sellerId);
-    const sellerSnap = await getDoc(sellerRef);
-    if (sellerSnap.exists()) {
-      const sellerData = sellerSnap.data();
-      await updateDoc(sellerRef, {
-        totalSales: (sellerData.totalSales || 0) + total,
-        totalCommission: (sellerData.totalCommission || 0) + commissionAmount,
-      });
+    const { data: sellerRow } = await supabase
+      .from('vendedores')
+      .select('total_sales, total_commission')
+      .eq('id', data.sellerId)
+      .single()
+    if (sellerRow) {
+      await supabase
+        .from('vendedores')
+        .update({
+          total_sales: (Number(sellerRow.total_sales) || 0) + total,
+          total_commission: (Number(sellerRow.total_commission) || 0) + commissionAmount,
+        })
+        .eq('id', data.sellerId)
     }
   }
 
@@ -326,23 +327,23 @@ export const processSale = async (data: {
     sellerId: data.sellerId,
     sellerName: data.sellerName,
     source: data.source,
-    items: salePayload.items,
+    items: saleItems,
     total,
     paymentType: data.paymentType,
-    paymentMethod: data.paymentMethod ?? "efectivo",
+    paymentMethod: data.paymentMethod ?? 'efectivo',
     cashAmount: data.cashAmount,
     creditAmount: data.creditAmount,
     discount: data.discount,
     discountType: data.discountType,
     orderId: data.orderId,
-    status: "completed",
+    status: 'completed',
     invoiceEmitted: false,
-    invoiceStatus: "pending",
+    invoiceStatus: 'pending',
     deliveryMethod: data.deliveryMethod,
     deliveryAddress: clientAddress,
     createdAt: new Date(),
-  };
-};
+  }
+}
 
 export const saveBoletaToSale = async (
   saleId: string,
@@ -350,180 +351,156 @@ export const saveBoletaToSale = async (
   invoicePdfBase64: string,
   extra?: { afipData?: any },
 ): Promise<void> => {
-  const saleRef = doc(firestore, SALES_PATH, saleId);
-  await updateDoc(saleRef, {
-    invoiceNumber,
-    invoicePdfBase64,
-    invoiceEmitted: true,
-    invoiceStatus: "emitted",
-    ...(extra?.afipData ? { afipData: extra.afipData } : {}),
-    invoiceEmittedAt: serverTimestamp(),
-  });
-};
+  await supabase.from('ventas').update({
+    invoice_number: invoiceNumber,
+    invoice_pdf_base64: invoicePdfBase64,
+    invoice_emitted: true,
+    invoice_status: 'emitted',
+    ...(extra?.afipData ? { afip_data: extra.afipData } : {}),
+  }).eq('id', saleId)
+}
 
 export const saveRemitoToSale = async (
   saleId: string,
   remitoNumber: string,
   remitoPdfBase64: string,
 ): Promise<void> => {
-  const saleRef = doc(firestore, SALES_PATH, saleId);
-  await updateDoc(saleRef, {
-    remitoNumber,
-    remitoPdfBase64,
-  });
-};
+  await supabase.from('ventas').update({
+    remito_number: remitoNumber,
+    remito_pdf_base64: remitoPdfBase64,
+  }).eq('id', saleId)
+}
 
 export const updateSaleInvoice = async (
   saleId: string,
   invoiceData: {
-    invoiceNumber: string;
-    invoicePdfUrl: string;
-    invoiceWhatsappUrl?: string;
-    afipData?: any;
+    invoiceNumber: string
+    invoicePdfUrl: string
+    invoiceWhatsappUrl?: string
+    afipData?: any
   },
 ) => {
-  const saleRef = doc(firestore, SALES_PATH, saleId);
-  await updateDoc(saleRef, {
-    invoiceEmitted: true,
-    invoiceNumber: invoiceData.invoiceNumber,
-    invoicePdfUrl: invoiceData.invoicePdfUrl,
-    invoiceWhatsappUrl: invoiceData.invoiceWhatsappUrl || null,
-    invoiceStatus: "emitted",
-    afipData: invoiceData.afipData || null,
-    invoiceEmittedAt: serverTimestamp(),
-  });
-};
+  await supabase.from('ventas').update({
+    invoice_emitted: true,
+    invoice_number: invoiceData.invoiceNumber,
+    invoice_pdf_url: invoiceData.invoicePdfUrl,
+    invoice_whatsapp_url: invoiceData.invoiceWhatsappUrl || null,
+    invoice_status: 'emitted',
+    afip_data: invoiceData.afipData || null,
+  }).eq('id', saleId)
+}
 
 export const updateSaleRemito = async (
   saleId: string,
   remitoData: {
-    remitoNumber: string;
-    remitoPdfUrl: string;
+    remitoNumber: string
+    remitoPdfUrl: string
   },
 ) => {
-  const saleRef = doc(firestore, SALES_PATH, saleId);
-  await updateDoc(saleRef, {
-    remitoNumber: remitoData.remitoNumber,
-    remitoPdfUrl: remitoData.remitoPdfUrl,
-    remitoGeneratedAt: serverTimestamp(),
-  });
-};
+  await supabase.from('ventas').update({
+    remito_number: remitoData.remitoNumber,
+    remito_pdf_url: remitoData.remitoPdfUrl,
+  }).eq('id', saleId)
+}
 
 export const emitInvoice = async (saleId: string, clientData: any) => {
-  const response = await fetch("/api/facturacion", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
+  const response = await fetch('/api/facturacion', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ saleId, client: clientData }),
-  });
-  if (!response.ok) throw new Error("Error emitiendo factura");
-  return response.json();
-};
+  })
+  if (!response.ok) throw new Error('Error emitiendo factura')
+  return response.json()
+}
 
 export const getSalesPaginated = async (
   pageSize: number = 50,
-  lastDoc?: QueryDocumentSnapshot,
-): Promise<{ data: Sale[]; lastDoc: QueryDocumentSnapshot | null; hasMore: boolean }> => {
-  const salesRef = collection(firestore, SALES_PATH);
-  let q = query(salesRef, orderBy("createdAt", "desc"), limit(pageSize));
+  lastDoc?: any,
+): Promise<{ data: Sale[]; lastDoc: any; hasMore: boolean }> => {
+  const offset = lastDoc ?? 0
+  const { data } = await supabase
+    .from('ventas')
+    .select('*')
+    .order('created_at', { ascending: false })
+    .range(offset, offset + pageSize - 1)
 
-  if (lastDoc) {
-    q = query(salesRef, orderBy("createdAt", "desc"), startAfter(lastDoc), limit(pageSize));
-  }
-
-  const snapshot = await getDocs(q);
-  const data = snapshot.docs.map((docSnap) => {
-    const d = docSnap.data();
-    return {
-      id: docSnap.id,
-      ...d,
-      createdAt: d.createdAt?.toDate ? d.createdAt.toDate() : new Date(),
-    } as Sale;
-  });
-  const lastVisible = snapshot.docs[snapshot.docs.length - 1] || null;
-
+  const sales = (data ?? []).map(mapSale)
   return {
-    data,
-    lastDoc: lastVisible,
-    hasMore: snapshot.docs.length === pageSize,
-  };
-};
+    data: sales,
+    lastDoc: sales.length === pageSize ? offset + pageSize : null,
+    hasMore: sales.length === pageSize,
+  }
+}
 
-/**
- * Crea una venta desde el flujo mayorista.
- * - modo "esperar": status=pendiente, NO descuenta stock
- * - modo "disponible": zeroa cantidadPendienteMayorista, status=listo, descuenta stockLocal
- */
 export const processSaleMayorista = async (data: {
-  clientId?: string;
-  clientName?: string;
-  clientPhone?: string;
-  sellerId?: string;
-  sellerName?: string;
-  items: CartItem[];
-  paymentType: "cash" | "credit" | "mixed";
-  paymentMethod?: "efectivo" | "transferencia";
-  cashAmount?: number;
-  creditAmount?: number;
-  overpayment?: number;
-  discount?: number;
-  discountType?: "percent" | "fixed";
-  deliveryMethod: "pickup" | "delivery";
-  deliveryAddress: string;
-  modo: "esperar" | "disponible";
+  clientId?: string
+  clientName?: string
+  clientPhone?: string
+  sellerId?: string
+  sellerName?: string
+  items: CartItem[]
+  paymentType: 'cash' | 'credit' | 'mixed'
+  paymentMethod?: 'efectivo' | 'transferencia'
+  cashAmount?: number
+  creditAmount?: number
+  overpayment?: number
+  discount?: number
+  discountType?: 'percent' | 'fixed'
+  deliveryMethod: 'pickup' | 'delivery'
+  deliveryAddress: string
+  modo: 'esperar' | 'disponible'
 }): Promise<Sale> => {
-  const { modo } = data;
+  const { modo } = data
 
   const subtotal = data.items.reduce((acc, item) => {
-    const base = item.product.price * item.quantity;
-    const disc = item.itemDiscount ? (base * item.itemDiscount) / 100 : 0;
-    return acc + base - disc;
-  }, 0);
+    const base = item.product.price * item.quantity
+    const disc = item.itemDiscount ? (base * item.itemDiscount) / 100 : 0
+    return acc + base - disc
+  }, 0)
   const discountAmount =
     data.discount && data.discount > 0
-      ? data.discountType === "percent"
+      ? data.discountType === 'percent'
         ? (subtotal * data.discount) / 100
         : data.discount
-      : 0;
-  const total = Math.max(0, subtotal - discountAmount);
+      : 0
+  const total = Math.max(0, subtotal - discountAmount)
 
-  const sales = await getSales();
-  const saleNumber = generateSaleNumber(new Date(), sales.length);
+  const { count } = await supabase.from('ventas').select('id', { count: 'exact', head: true })
+  const saleNumber = generateSaleNumber(new Date(), count ?? 0)
 
-  let resolvedClientName = data.clientName ?? "Venta directa";
-  let resolvedTaxCategory: any;
-  let resolvedClientPhone = data.clientPhone ?? null;
-  let resolvedClientCuit: string | null = null;
-  let resolvedClientAddress: string | null = null;
-  let resolvedClientEmail: string | null = null;
-  let resolvedClientDni: string | null = null;
-  let clientAddress = data.deliveryAddress;
+  let resolvedClientName = data.clientName ?? 'Venta directa'
+  let resolvedTaxCategory: any
+  let resolvedClientPhone = data.clientPhone ?? null
+  let resolvedClientCuit: string | null = null
+  let resolvedClientAddress: string | null = null
+  let resolvedClientEmail: string | null = null
+  let resolvedClientDni: string | null = null
+  let clientAddress = data.deliveryAddress
 
   if (data.clientId) {
-    const clientSnap = await getDoc(doc(firestore, CLIENTS_PATH, data.clientId));
-    if (clientSnap.exists()) {
-      const cd = clientSnap.data();
-      resolvedClientName = cd.name ?? resolvedClientName;
-      resolvedTaxCategory = cd.taxCategory ?? null;
-      resolvedClientPhone = cd.phone ?? resolvedClientPhone ?? null;
-      resolvedClientCuit = cd.cuit ?? null;
-      resolvedClientAddress = cd.address ?? null;
-      resolvedClientEmail = cd.email ?? null;
-      resolvedClientDni = cd.dni ?? null;
-      if (data.deliveryMethod === "delivery" && !data.deliveryAddress) {
-        clientAddress = cd.address ?? data.deliveryAddress;
+    const { data: cd } = await supabase.from('clientes').select('*').eq('id', data.clientId).single()
+    if (cd) {
+      resolvedClientName = cd.name ?? resolvedClientName
+      resolvedTaxCategory = cd.tax_category ?? null
+      resolvedClientPhone = cd.phone ?? resolvedClientPhone ?? null
+      resolvedClientCuit = cd.cuit ?? null
+      resolvedClientAddress = cd.address ?? null
+      resolvedClientEmail = cd.email ?? null
+      resolvedClientDni = cd.dni ?? null
+      if (data.deliveryMethod === 'delivery' && !data.deliveryAddress) {
+        clientAddress = cd.address ?? data.deliveryAddress
       }
     }
   }
 
-  const saleId = await generateReadableId(firestore, SALES_PATH, "venta", resolvedClientName);
+  const saleId = await generateReadableId('ventas', 'venta', resolvedClientName)
 
-  // Calcular cantidades por ítem según stockLocal
   const itemsConStock = data.items.map((item) => {
-    const stockLocal = item.product.stockLocal ?? 0;
-    const cantidadPedida = item.quantity;
-    const cantidadStockLocal = Math.min(cantidadPedida, stockLocal);
+    const stockLocal = (item.product as any).stockLocal ?? 0
+    const cantidadPedida = item.quantity
+    const cantidadStockLocal = Math.min(cantidadPedida, stockLocal)
     const cantidadPendienteMayorista =
-      modo === "disponible" ? 0 : Math.max(0, cantidadPedida - stockLocal);
+      modo === 'disponible' ? 0 : Math.max(0, cantidadPedida - stockLocal)
     return {
       productId: item.product.id,
       name: item.product.name,
@@ -534,196 +511,135 @@ export const processSaleMayorista = async (data: {
       cantidadPendienteMayorista,
       ...(item.itemDiscount ? { itemDiscount: item.itemDiscount } : {}),
       ...(item.product.codigo ? { codigo: item.product.codigo } : {}),
-    };
-  });
+    }
+  })
 
-  const saleStatus: Sale["status"] = modo === "esperar" ? "pendiente" : "listo";
+  const saleStatus: Sale['status'] = modo === 'esperar' ? 'pendiente' : 'listo'
 
-  await setDoc(doc(firestore, SALES_PATH, saleId), {
-    saleNumber,
-    clientId: data.clientId ?? null,
-    clientName: resolvedClientName ?? null,
-    clientPhone: resolvedClientPhone ?? null,
-    clientCuit: resolvedClientCuit ?? null,
-    clientDni: resolvedClientDni ?? null,
-    clientEmail: resolvedClientEmail ?? null,
-    clientAddress: resolvedClientAddress ?? null,
-    clientTaxCategory: resolvedTaxCategory ?? null,
-    sellerId: data.sellerId ?? null,
-    sellerName: data.sellerName ?? null,
-    source: "direct",
+  await supabase.from('ventas').insert({
+    id: saleId,
+    sale_number: saleNumber,
+    client_id: data.clientId ?? null,
+    client_name: resolvedClientName ?? null,
+    client_phone: resolvedClientPhone ?? null,
+    seller_id: data.sellerId ?? null,
+    seller_name: data.sellerName ?? null,
+    source: 'direct',
     items: itemsConStock,
     total,
-    paymentType: data.paymentType,
-    paymentMethod: data.paymentMethod ?? "efectivo",
-    cashAmount: data.cashAmount ?? null,
-    creditAmount: data.creditAmount ?? null,
-    overpayment: data.overpayment ?? null,
-    discount: data.discount || null,
-    discountType: data.discount ? (data.discountType ?? null) : null,
+    payment_type: data.paymentType,
+    cash_amount: data.cashAmount ?? null,
+    credit_amount: data.creditAmount ?? null,
     status: saleStatus,
-    invoiceEmitted: false,
-    invoiceStatus: "pending",
-    deliveryMethod: data.deliveryMethod ?? "pickup",
-    deliveryAddress: clientAddress ?? null,
-    createdAt: serverTimestamp(),
-  });
+    invoice_emitted: false,
+    delivery_method: data.deliveryMethod ?? 'pickup',
+    delivery_address: clientAddress ?? null,
+  })
 
   // Descontar stock solo en modo "disponible"
-  if (modo === "disponible") {
-    const { descontarStockVenta } = await import("@/services/stock-service");
+  if (modo === 'disponible') {
+    const { descontarStockVenta } = await import('@/services/stock-service')
     const itemsConStockLocal = itemsConStock
       .filter((i) => i.cantidadStockLocal > 0)
-      .map((i) => ({ productoId: i.productId, cantidad: i.cantidadStockLocal }));
+      .map((i) => ({ productoId: i.productId, cantidad: i.cantidadStockLocal }))
     if (itemsConStockLocal.length > 0) {
-      await descontarStockVenta(itemsConStockLocal, saleId);
+      await descontarStockVenta(itemsConStockLocal, saleId)
     }
   }
 
-  // Crédito
+  // Credito
   const amountToCredit =
-    data.paymentType === "credit"
+    data.paymentType === 'credit'
       ? total
-      : data.paymentType === "mixed"
+      : data.paymentType === 'mixed'
         ? (data.creditAmount ?? 0)
-        : 0;
+        : 0
 
   if (amountToCredit > 0 && data.clientId) {
-    const clientRef = doc(firestore, CLIENTS_PATH, data.clientId);
-    const clientSnap = await getDoc(clientRef);
-    if (clientSnap.exists()) {
-      await updateDoc(clientRef, {
-        currentBalance: (clientSnap.data().currentBalance || 0) + amountToCredit,
-      });
+    const { data: cr } = await supabase.from('clientes').select('current_balance').eq('id', data.clientId).single()
+    if (cr) {
+      await supabase.from('clientes').update({ current_balance: (Number(cr.current_balance) || 0) + amountToCredit }).eq('id', data.clientId)
     }
-    const txId = await generateReadableId(firestore, TRANSACTIONS_PATH, "transaccion", resolvedClientName);
-    await setDoc(doc(firestore, TRANSACTIONS_PATH, txId), {
-      clientId: data.clientId,
-      type: "debt",
-      amount: amountToCredit,
-      description: `Venta #${saleNumber}`,
-      date: serverTimestamp(),
-      saleId,
-      saleNumber,
-    });
+    const txId = await generateReadableId('transacciones', 'transaccion', resolvedClientName)
+    await supabase.from('transacciones').insert({
+      id: txId, client_id: data.clientId, type: 'debt', amount: amountToCredit,
+      description: `Venta #${saleNumber}`, date: new Date().toISOString(), sale_id: saleId,
+    })
   }
 
   // Saldo a favor
-  const overpaymentAmount = data.overpayment ?? 0;
+  const overpaymentAmount = data.overpayment ?? 0
   if (overpaymentAmount > 0 && data.clientId) {
-    const clientRef = doc(firestore, CLIENTS_PATH, data.clientId);
-    const clientSnap = await getDoc(clientRef);
-    if (clientSnap.exists()) {
-      await updateDoc(clientRef, {
-        currentBalance: (clientSnap.data().currentBalance || 0) - overpaymentAmount,
-      });
+    const { data: cr } = await supabase.from('clientes').select('current_balance').eq('id', data.clientId).single()
+    if (cr) {
+      await supabase.from('clientes').update({ current_balance: (Number(cr.current_balance) || 0) - overpaymentAmount }).eq('id', data.clientId)
     }
-    const txId = await generateReadableId(firestore, TRANSACTIONS_PATH, "transaccion", resolvedClientName);
-    await setDoc(doc(firestore, TRANSACTIONS_PATH, txId), {
-      clientId: data.clientId,
-      type: "payment",
-      amount: overpaymentAmount,
-      description: `Saldo a favor (Venta #${saleNumber})`,
-      date: serverTimestamp(),
-      saleId,
-      saleNumber,
-    });
+    const txId = await generateReadableId('transacciones', 'transaccion', resolvedClientName)
+    await supabase.from('transacciones').insert({
+      id: txId, client_id: data.clientId, type: 'payment', amount: overpaymentAmount,
+      description: `Saldo a favor (Venta #${saleNumber})`, date: new Date().toISOString(), sale_id: saleId,
+    })
   }
 
-  // Comisión
+  // Comision
   if (data.sellerId) {
-    const commissionAmount = total * COMMISSION_RATE;
-    const now = new Date();
-    const yyyymm = `${now.getFullYear()}${String(now.getMonth() + 1).padStart(2, "00")}`;
-    const cId = await generateReadableId(firestore, COMMISSIONS_PATH, "comision", `${data.sellerName || "vendedor"}_${yyyymm}`);
-    await setDoc(doc(firestore, COMMISSIONS_PATH, cId), {
-      sellerId: data.sellerId,
-      saleId,
-      saleNumber,
-      clientName: data.clientName || null,
-      saleTotal: total,
-      commissionRate: COMMISSION_RATE * 100,
-      commissionAmount,
-      isPaid: false,
-      createdAt: serverTimestamp(),
-    });
-    const sellerSnap = await getDoc(doc(firestore, SELLERS_PATH, data.sellerId));
-    if (sellerSnap.exists()) {
-      await updateDoc(doc(firestore, SELLERS_PATH, data.sellerId), {
-        totalSales: (sellerSnap.data().totalSales || 0) + total,
-        totalCommission: (sellerSnap.data().totalCommission || 0) + commissionAmount,
-      });
+    const commissionAmount = total * COMMISSION_RATE
+    const now = new Date()
+    const yyyymm = `${now.getFullYear()}${String(now.getMonth() + 1).padStart(2, '00')}`
+    const cId = await generateReadableId('comisiones', 'comision', `${data.sellerName || 'vendedor'}_${yyyymm}`)
+    await supabase.from('comisiones').insert({
+      id: cId, seller_id: data.sellerId, sale_id: saleId, sale_total: total,
+      commission_rate: COMMISSION_RATE * 100, commission_amount: commissionAmount, is_paid: false,
+    })
+    const { data: sr } = await supabase.from('vendedores').select('total_sales, total_commission').eq('id', data.sellerId).single()
+    if (sr) {
+      await supabase.from('vendedores').update({
+        total_sales: (Number(sr.total_sales) || 0) + total,
+        total_commission: (Number(sr.total_commission) || 0) + commissionAmount,
+      }).eq('id', data.sellerId)
     }
   }
 
   return {
-    id: saleId,
-    saleNumber,
-    clientId: data.clientId,
-    clientName: resolvedClientName,
-    clientPhone: resolvedClientPhone ?? undefined,
-    clientCuit: resolvedClientCuit ?? undefined,
-    clientAddress: resolvedClientAddress ?? undefined,
-    sellerId: data.sellerId,
-    sellerName: data.sellerName,
-    source: "direct",
-    items: itemsConStock,
-    total,
-    paymentType: data.paymentType,
-    paymentMethod: data.paymentMethod ?? "efectivo",
-    cashAmount: data.cashAmount,
-    creditAmount: data.creditAmount,
-    discount: data.discount,
-    discountType: data.discountType,
-    status: saleStatus,
-    invoiceEmitted: false,
-    invoiceStatus: "pending",
-    deliveryMethod: data.deliveryMethod,
-    deliveryAddress: clientAddress,
+    id: saleId, saleNumber, clientId: data.clientId, clientName: resolvedClientName,
+    clientPhone: resolvedClientPhone ?? undefined, clientCuit: resolvedClientCuit ?? undefined,
+    clientAddress: resolvedClientAddress ?? undefined, sellerId: data.sellerId,
+    sellerName: data.sellerName, source: 'direct', items: itemsConStock, total,
+    paymentType: data.paymentType, paymentMethod: data.paymentMethod ?? 'efectivo',
+    cashAmount: data.cashAmount, creditAmount: data.creditAmount, discount: data.discount,
+    discountType: data.discountType, status: saleStatus, invoiceEmitted: false,
+    invoiceStatus: 'pending', deliveryMethod: data.deliveryMethod, deliveryAddress: clientAddress,
     createdAt: new Date(),
-  };
-};
+  }
+}
 
 export const updateSaleMayoristaStatus = async (
   saleId: string,
-  status: "listo" | "pendiente"
+  status: 'listo' | 'pendiente'
 ): Promise<void> => {
-  await updateDoc(doc(firestore, SALES_PATH, saleId), { status });
-};
+  await supabase.from('ventas').update({ status }).eq('id', saleId)
+}
 
 export const getSalesPendientesMayorista = async (): Promise<Sale[]> => {
-  const q = query(
-    collection(firestore, SALES_PATH),
-    where("status", "==", "pendiente"),
-    orderBy("createdAt", "asc")
-  );
-  const snap = await getDocs(q);
-  return snap.docs.map((d) => ({
-    id: d.id,
-    ...d.data(),
-    createdAt: d.data().createdAt?.toDate ? d.data().createdAt.toDate() : new Date(),
-  } as Sale));
-};
+  const { data } = await supabase
+    .from('ventas')
+    .select('*')
+    .eq('status', 'pendiente')
+    .order('created_at', { ascending: true })
+
+  return (data ?? []).map(mapSale)
+}
 
 export const getSalesByDateRange = async (
   startDate: Date,
   endDate: Date,
 ): Promise<Sale[]> => {
-  const salesRef = collection(firestore, SALES_PATH);
-  const q = query(
-    salesRef,
-    where("createdAt", ">=", startDate),
-    where("createdAt", "<=", endDate),
-    orderBy("createdAt", "desc"),
-  );
-  const snapshot = await getDocs(q);
+  const { data } = await supabase
+    .from('ventas')
+    .select('*')
+    .gte('created_at', startDate.toISOString())
+    .lte('created_at', endDate.toISOString())
+    .order('created_at', { ascending: false })
 
-  return snapshot.docs.map((docSnap) => {
-    const d = docSnap.data();
-    return {
-      id: docSnap.id,
-      ...d,
-      createdAt: d.createdAt?.toDate ? d.createdAt.toDate() : new Date(),
-    } as Sale;
-  });
-};
+  return (data ?? []).map(mapSale)
+}

@@ -10,7 +10,7 @@ import { Search, X, CheckCircle2, Clock, RefreshCw, ChevronDown, ChevronUp } fro
 import { getSales } from "@/services/sales-service";
 import type { Sale } from "@/lib/types";
 import { formatCurrency } from "@/lib/utils/format";
-import { toDate } from "@/services/firestore-helpers";
+import { toDate } from "@/services/supabase-helpers";
 import { cn } from "@/lib/utils";
 
 // Una venta es "mayorista" si tiene status pendiente o listo

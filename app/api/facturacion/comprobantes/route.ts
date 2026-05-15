@@ -1,7 +1,7 @@
 // app/api/facturacion/comprobantes/route.ts
 // Consulta comprobantes emitidos en AFIP via Bit Ingeniería
 import { NextRequest, NextResponse } from "next/server";
-import { adminAuth } from "@/lib/firebase-admin";
+import { supabaseAdmin } from "@/lib/supabase-admin";
 import { consultarComprobantes, obtenerUltimoNumero } from "@/lib/bitingenieria";
 
 export async function POST(request: NextRequest) {
@@ -11,7 +11,8 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "No autorizado" }, { status: 401 });
     }
     try {
-      await adminAuth.verifyIdToken(authHeader.substring(7));
+      const { error: authError } = await supabaseAdmin.auth.getUser(authHeader.substring(7));
+      if (authError) throw authError;
     } catch {
       return NextResponse.json({ error: "Token inválido" }, { status: 401 });
     }

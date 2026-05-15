@@ -15,8 +15,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/u
 import { toast } from "sonner";
 import { useAuth } from "@/hooks/use-auth";
 import { useRouter } from "next/navigation";
-import { collection, getDocs, query, where, orderBy, limit } from "firebase/firestore";
-import { firestore } from "@/lib/firebase";
+import { supabase } from "@/lib/supabase";
 import { OrdersFilters } from "@/components/pedidos/orders-filters";
 import { OrderCard } from "@/components/pedidos/order-card";
 import { OrderDetailModal } from "@/components/pedidos/order-detail-modal";
@@ -145,16 +144,15 @@ export default function PedidosPage() {
     setGeneratingDoc(true);
     try {
       // Generate sequential remito number (query ventas for last number)
-      const remitosQuery = query(
-        collection(firestore, "ventas"),
-        where("remitoNumber", "!=", null),
-        orderBy("remitoNumber", "desc"),
-        limit(1),
-      );
-      const snap = await getDocs(remitosQuery);
+      const { data: lastRemitos } = await supabase
+        .from("ventas")
+        .select("remito_number")
+        .not("remito_number", "is", null)
+        .order("remito_number", { ascending: false })
+        .limit(1);
       let ultimoNumero = 0;
-      if (!snap.empty) {
-        const lastRemito = snap.docs[0].data().remitoNumber;
+      if (lastRemitos && lastRemitos.length > 0) {
+        const lastRemito = lastRemitos[0].remito_number;
         const match = lastRemito?.match(/R-\d+-(\d+)/);
         if (match) ultimoNumero = parseInt(match[1], 10);
       }
@@ -204,11 +202,9 @@ export default function PedidosPage() {
       // Si el pedido ya fue procesado como venta, emitir sobre la venta (tiene
       // total, paymentMethod, etc.). Si no, emitir directo sobre el pedido —
       // el helper calcula el total desde los items.
-      const { getAuth } = await import("firebase/auth");
-      const auth = getAuth();
-      const currentUser = auth.currentUser;
-      if (!currentUser) throw new Error("Usuario no autenticado");
-      const token = await currentUser.getIdToken();
+      const { getAuthToken } = await import("@/services/auth-service");
+      const token = await getAuthToken();
+      if (!token) throw new Error("Usuario no autenticado");
 
       // Resolver datos del cliente
       let clientData: any = {

@@ -1,10 +1,7 @@
 // services/audit-service.ts
-import { collection, doc, setDoc, getDocs, query, orderBy, limit, where, Timestamp } from "firebase/firestore";
-import { firestore } from "@/lib/firebase";
-import type { AuditAction, AuditEntry } from "@/lib/types";
-import { toDate, generateReadableId } from "@/services/firestore-helpers";
-
-const AUDIT_COLLECTION = "auditoria";
+import { supabase } from '@/lib/supabase'
+import type { AuditAction, AuditEntry } from '@/lib/types'
+import { generateReadableId } from '@/services/supabase-helpers'
 
 export const logAudit = async (entry: {
   action: AuditAction;
@@ -16,55 +13,61 @@ export const logAudit = async (entry: {
   metadata?: Record<string, any>;
 }) => {
   try {
-    const docId = await generateReadableId(firestore, AUDIT_COLLECTION, 'auditoria', entry.userName)
-    await setDoc(doc(firestore, AUDIT_COLLECTION, docId), {
-      ...entry,
-      createdAt: new Date(),
-    });
+    const docId = await generateReadableId('auditoria', 'auditoria', entry.userName)
+    await supabase.from('auditoria').insert({
+      id: docId,
+      action: entry.action,
+      user_id: entry.userId,
+      user_email: entry.userName,
+      entity_type: entry.entityType ?? null,
+      entity_id: entry.entityId ?? null,
+      details: entry.metadata ?? null,
+    })
   } catch (error) {
-    // Audit should never break the main operation
-    console.error("[Audit] Error logging:", error);
+    console.error("[Audit] Error logging:", error)
   }
-};
+}
 
 export const getAuditLog = async (maxEntries = 100): Promise<AuditEntry[]> => {
-  const snapshot = await getDocs(
-    query(
-      collection(firestore, AUDIT_COLLECTION),
-      orderBy("createdAt", "desc"),
-      limit(maxEntries),
-    ),
-  );
+  const { data } = await supabase
+    .from('auditoria')
+    .select('*')
+    .order('created_at', { ascending: false })
+    .limit(maxEntries)
 
-  return snapshot.docs.map((doc) => {
-    const data = doc.data();
-    return {
-      id: doc.id,
-      ...data,
-      createdAt: toDate(data.createdAt),
-    } as AuditEntry;
-  });
-};
+  return (data ?? []).map((d) => ({
+    id: d.id,
+    action: d.action as AuditAction,
+    userId: d.user_id ?? '',
+    userName: d.user_email ?? '',
+    description: d.details?.description ?? d.action,
+    entityType: d.entity_type,
+    entityId: d.entity_id,
+    metadata: d.details,
+    createdAt: new Date(d.created_at),
+  }))
+}
 
 export const getAuditByEntity = async (
   entityType: string,
   entityId: string,
 ): Promise<AuditEntry[]> => {
-  const snapshot = await getDocs(
-    query(
-      collection(firestore, AUDIT_COLLECTION),
-      where("entityType", "==", entityType),
-      where("entityId", "==", entityId),
-      orderBy("createdAt", "desc"),
-    ),
-  );
+  const { data } = await supabase
+    .from('auditoria')
+    .select('*')
+    .eq('entity_type', entityType)
+    .eq('entity_id', entityId)
+    .order('created_at', { ascending: false })
 
-  return snapshot.docs.map((doc) => {
-    const data = doc.data();
-    return {
-      id: doc.id,
-      ...data,
-      createdAt: toDate(data.createdAt),
-    } as AuditEntry;
-  });
-};
+  return (data ?? []).map((d) => ({
+    id: d.id,
+    action: d.action as AuditAction,
+    userId: d.user_id ?? '',
+    userName: d.user_email ?? '',
+    description: d.details?.description ?? d.action,
+    entityType: d.entity_type,
+    entityId: d.entity_id,
+    metadata: d.details,
+    createdAt: new Date(d.created_at),
+  }))
+}

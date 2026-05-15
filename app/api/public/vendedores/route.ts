@@ -1,6 +1,6 @@
 // app/api/public/vendedores/route.ts
 import { NextResponse } from "next/server";
-import { adminFirestore } from "@/lib/firebase-admin";
+import { supabaseAdmin } from "@/lib/supabase-admin";
 import { rateLimit } from "@/lib/rate-limit";
 
 export const runtime = "nodejs";
@@ -18,20 +18,20 @@ export async function GET(request: Request) {
     return NextResponse.json({ found: false });
   }
 
-  const snapshot = await adminFirestore
-    .collection("vendedores")
-    .where("email", "==", email)
-    .limit(1)
-    .get();
-  if (snapshot.empty) {
+  const { data, error } = await supabaseAdmin
+    .from("vendedores")
+    .select("*")
+    .eq("email", email)
+    .limit(1);
+
+  if (error || !data || data.length === 0) {
     return NextResponse.json({ found: false });
   }
 
-  const doc = snapshot.docs[0];
-  const data = doc.data();
+  const doc = data[0];
   return NextResponse.json({
     found: true,
     sellerId: doc.id,
-    sellerName: data.name || "",
+    sellerName: doc.name || "",
   });
 }

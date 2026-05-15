@@ -39,7 +39,7 @@ import {
 import Link from "next/link";
 import type { ListaVentasProps } from "../types";
 import { formatDate, formatTime, formatCurrency } from "@/lib/utils/format";
-import { toDate } from "@/services/firestore-helpers";
+import { toDate } from "@/services/supabase-helpers";
 import { useMemo, useState, useCallback } from "react";
 import {
   Dialog,

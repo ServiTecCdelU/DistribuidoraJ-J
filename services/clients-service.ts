@@ -1,82 +1,62 @@
-import {
-  collection,
-  deleteDoc,
-  doc,
-  getDoc,
-  getDocs,
-  query,
-  serverTimestamp,
-  setDoc,
-  updateDoc,
-  where,
-  orderBy,
-  limit,
-  startAfter,
-  type QueryDocumentSnapshot,
-} from 'firebase/firestore'
-import { firestore } from '@/lib/firebase'
+import { supabase } from '@/lib/supabase'
 import type { Client, Transaction } from '@/lib/types'
-import { toDate, generateReadableId } from '@/services/firestore-helpers'
+import { generateReadableId } from '@/services/supabase-helpers'
 
-const CLIENTS_COLLECTION = 'clientes'
-const TRANSACTIONS_COLLECTION = 'transacciones'
+function mapClient(d: Record<string, any>): Client {
+  return {
+    id: d.id,
+    name: d.name,
+    dni: d.dni ?? '',
+    cuit: d.cuit ?? '',
+    email: d.email ?? '',
+    phone: d.phone ?? '',
+    address: d.address ?? '',
+    addresses: Array.isArray(d.addresses)
+      ? d.addresses.filter((a: any) => a && typeof a.address === 'string')
+      : undefined,
+    taxCategory: d.tax_category ?? 'consumidor_final',
+    creditLimit: Number(d.credit_limit) || 0,
+    currentBalance: Number(d.current_balance) || 0,
+    notes: d.notes ?? '',
+    createdAt: new Date(d.created_at),
+  }
+}
 
 export const getClients = async (): Promise<Client[]> => {
-  const snapshot = await getDocs(collection(firestore, CLIENTS_COLLECTION))
-  return snapshot.docs
-    .map((docSnap) => {
-      const data = docSnap.data()
-      return {
-        id: docSnap.id,
-        name: data.name,
-        dni: data.dni ?? '',
-        cuit: data.cuit,
-        email: data.email,
-        phone: data.phone,
-        address: data.address,
-        addresses: Array.isArray(data.addresses)
-          ? data.addresses.filter((a: any) => a && typeof a.address === 'string')
-          : undefined,
-        taxCategory: data.taxCategory ?? 'consumidor_final',
-        creditLimit: data.creditLimit,
-        currentBalance: data.currentBalance ?? 0,
-        notes: data.notes ?? '', // ← AGREGADO
-        createdAt: toDate(data.createdAt),
-      }
-    })
-    .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime())
+  const { data } = await supabase
+    .from('clientes')
+    .select('*')
+    .order('created_at', { ascending: false })
+
+  return (data ?? []).map(mapClient)
 }
 
 export const getClientById = async (id: string): Promise<Client | undefined> => {
-  const snapshot = await getDoc(doc(firestore, CLIENTS_COLLECTION, id))
-  if (!snapshot.exists()) return undefined
-  const data = snapshot.data()
-  return {
-    id: snapshot.id,
-    name: data.name,
-    dni: data.dni ?? '',
-    cuit: data.cuit,
-    email: data.email,
-    phone: data.phone,
-    address: data.address,
-    taxCategory: data.taxCategory ?? 'consumidor_final',
-    creditLimit: data.creditLimit,
-    currentBalance: data.currentBalance ?? 0,
-    notes: data.notes ?? '', // ← AGREGADO
-    createdAt: toDate(data.createdAt),
-  }
+  const { data } = await supabase
+    .from('clientes')
+    .select('*')
+    .eq('id', id)
+    .maybeSingle()
+
+  return data ? mapClient(data) : undefined
 }
 
 export const createClient = async (
   client: Omit<Client, 'id' | 'createdAt' | 'currentBalance'>
 ): Promise<Client> => {
-  const docId = await generateReadableId(firestore, CLIENTS_COLLECTION, 'cliente', client.name)
-  await setDoc(doc(firestore, CLIENTS_COLLECTION, docId), {
-    ...client,
-    currentBalance: 0,
-    taxCategory: client.taxCategory ?? 'consumidor_final',
+  const docId = await generateReadableId('clientes', 'cliente', client.name)
+  await supabase.from('clientes').insert({
+    id: docId,
+    name: client.name,
+    email: client.email || null,
+    phone: client.phone || null,
+    dni: client.dni || null,
+    cuit: client.cuit || null,
+    tax_category: client.taxCategory ?? 'consumidor_final',
+    credit_limit: client.creditLimit || 0,
+    current_balance: 0,
+    addresses: client.addresses ?? [],
     notes: client.notes ?? '',
-    createdAt: serverTimestamp(),
   })
   return {
     ...client,
@@ -89,85 +69,62 @@ export const createClient = async (
 }
 
 export const updateClient = async (id: string, updates: Partial<Client>): Promise<Client> => {
-  await updateDoc(doc(firestore, CLIENTS_COLLECTION, id), {
-    ...updates,
-  })
+  const mapped: Record<string, any> = {}
+  if (updates.name !== undefined) mapped.name = updates.name
+  if (updates.email !== undefined) mapped.email = updates.email
+  if (updates.phone !== undefined) mapped.phone = updates.phone
+  if (updates.dni !== undefined) mapped.dni = updates.dni
+  if (updates.cuit !== undefined) mapped.cuit = updates.cuit
+  if (updates.taxCategory !== undefined) mapped.tax_category = updates.taxCategory
+  if (updates.creditLimit !== undefined) mapped.credit_limit = updates.creditLimit
+  if (updates.currentBalance !== undefined) mapped.current_balance = updates.currentBalance
+  if (updates.address !== undefined) mapped.address = updates.address
+  if (updates.addresses !== undefined) mapped.addresses = updates.addresses
+  if (updates.notes !== undefined) mapped.notes = updates.notes
+
+  await supabase.from('clientes').update(mapped).eq('id', id)
   const updated = await getClientById(id)
   if (!updated) throw new Error('Client not found')
   return updated
 }
 
 export const deleteClient = async (id: string): Promise<void> => {
-  await deleteDoc(doc(firestore, CLIENTS_COLLECTION, id))
+  await supabase.from('clientes').delete().eq('id', id)
 }
 
 export const getClientsPaginated = async (
   pageSize: number = 50,
-  lastDoc?: QueryDocumentSnapshot,
-): Promise<{ data: Client[]; lastDoc: QueryDocumentSnapshot | null; hasMore: boolean }> => {
-  let q = query(
-    collection(firestore, CLIENTS_COLLECTION),
-    orderBy('createdAt', 'desc'),
-    limit(pageSize),
-  )
+  lastDoc?: any,
+): Promise<{ data: Client[]; lastDoc: any; hasMore: boolean }> => {
+  const offset = lastDoc ?? 0
+  const { data } = await supabase
+    .from('clientes')
+    .select('*')
+    .order('created_at', { ascending: false })
+    .range(offset, offset + pageSize - 1)
 
-  if (lastDoc) {
-    q = query(
-      collection(firestore, CLIENTS_COLLECTION),
-      orderBy('createdAt', 'desc'),
-      startAfter(lastDoc),
-      limit(pageSize),
-    )
-  }
-
-  const snapshot = await getDocs(q)
-  const data = snapshot.docs.map((docSnap) => {
-    const d = docSnap.data()
-    return {
-      id: docSnap.id,
-      name: d.name,
-      dni: d.dni ?? '',
-      cuit: d.cuit,
-      email: d.email,
-      phone: d.phone,
-      address: d.address,
-      addresses: Array.isArray(d.addresses)
-        ? d.addresses.filter((a: any) => a && typeof a.address === 'string')
-        : undefined,
-      taxCategory: d.taxCategory ?? 'consumidor_final',
-      creditLimit: d.creditLimit,
-      currentBalance: d.currentBalance ?? 0,
-      notes: d.notes ?? '',
-      createdAt: toDate(d.createdAt),
-    } as Client
-  })
-  const lastVisible = snapshot.docs[snapshot.docs.length - 1] || null
-
+  const clients = (data ?? []).map(mapClient)
   return {
-    data,
-    lastDoc: lastVisible,
-    hasMore: snapshot.docs.length === pageSize,
+    data: clients,
+    lastDoc: clients.length === pageSize ? offset + pageSize : null,
+    hasMore: clients.length === pageSize,
   }
 }
 
 export const getClientTransactions = async (clientId: string): Promise<Transaction[]> => {
-  const snapshot = await getDocs(
-    query(
-      collection(firestore, TRANSACTIONS_COLLECTION),
-      where('clientId', '==', clientId),
-      orderBy('date', 'desc')
-    )
-  )
-  return snapshot.docs.map((docSnap) => {
-    const data = docSnap.data()
-    return {
-      id: docSnap.id,
-      clientId: data.clientId,
-      type: data.type,
-      amount: data.amount,
-      description: data.description,
-      date: toDate(data.date),
-      saleId: data.saleId,
-    }
-  })
+  const { data } = await supabase
+    .from('transacciones')
+    .select('*')
+    .eq('client_id', clientId)
+    .order('date', { ascending: false })
+
+  return (data ?? []).map((d) => ({
+    id: d.id,
+    clientId: d.client_id,
+    type: d.type as 'debt' | 'payment',
+    amount: Number(d.amount),
+    description: d.description ?? '',
+    date: new Date(d.date),
+    saleId: d.sale_id ?? undefined,
+  }))
 }

@@ -1,6 +1,6 @@
 // lib/facturacion-helper.ts
 // Logica compartida para emision de comprobantes AFIP — integración directa WSAA + WSFEv1
-import { adminFirestore } from "@/lib/firebase-admin";
+import { supabaseAdmin } from "@/lib/supabase-admin";
 import { solicitarCAE } from "@/lib/afip-direct";
 // Bit Ingeniería desactivado — integración directa con AFIP
 // import { autorizarComprobante, buildAutorizarRequest, parseCaeVto, BitCustomerData } from "@/lib/bitingenieria";
@@ -66,10 +66,13 @@ export async function procesarEmision(
   emitirAfip?: boolean,
   collectionName: string = "ventas",
 ): Promise<EmitirResult> {
-  const ventaRef = adminFirestore.collection(collectionName).doc(saleId);
-  const ventaSnap = await ventaRef.get();
+  const { data: sale, error: saleError } = await supabaseAdmin
+    .from(collectionName)
+    .select("*")
+    .eq("id", saleId)
+    .single();
 
-  if (!ventaSnap.exists) {
+  if (saleError || !sale) {
     return {
       success: false,
       invoiceNumber: null,
@@ -79,22 +82,21 @@ export async function procesarEmision(
     };
   }
 
-  const sale = ventaSnap.data() || {};
-
   // Resolver datos del cliente
   let clientData: any = clientOverride || {};
-  if (sale.clientId && !clientOverride?.name) {
-    const clientSnap = await adminFirestore
-      .collection("clientes")
-      .doc(sale.clientId)
-      .get();
-    if (clientSnap.exists) {
-      const c = clientSnap.data() || {};
+  const clientId = sale.client_id || sale.clientId;
+  if (clientId && !clientOverride?.name) {
+    const { data: c } = await supabaseAdmin
+      .from("clientes")
+      .select("*")
+      .eq("id", clientId)
+      .single();
+    if (c) {
       clientData = {
         name: c.name,
         phone: c.phone,
         email: c.email,
-        taxCategory: c.taxCategory || "consumidor_final",
+        taxCategory: c.tax_category || "consumidor_final",
         cuit: c.cuit,
         dni: c.dni,
         address: c.address,
@@ -184,13 +186,13 @@ export async function procesarEmision(
     }
   }
 
-  // Guardar en Firestore
+  // Guardar en Supabase
   const tipoComprobanteGuardado = afipResponse
     ? (TAX_CATEGORY_TO_TIPO_COMP[clientData.taxCategory] ?? 6)
     : null;
 
   const updateData: any = {
-    clientData: {
+    client_data: {
       name: clientData.name,
       phone: clientData.phone,
       email: clientData.email || "",
@@ -198,24 +200,27 @@ export async function procesarEmision(
       cuit: clientData.cuit || "",
       dni: clientData.dni || "",
     },
-    updatedAt: new Date().toISOString(),
+    updated_at: new Date().toISOString(),
   };
 
   if (afipResponse) {
-    updateData.invoiceNumber = invoiceNumber;
-    updateData.invoiceEmitted = true;
-    updateData.invoiceStatus = "emitted";
-    updateData.afipData = {
+    updateData.invoice_number = invoiceNumber;
+    updateData.invoice_emitted = true;
+    updateData.invoice_status = "emitted";
+    updateData.afip_data = {
       cae: afipResponse.cae,
       caeVencimiento: afipResponse.caeVencimiento,
       tipoComprobante: tipoComprobanteGuardado,
       puntoVenta: afipResponse.puntoVenta,
       numeroComprobante: afipResponse.numeroComprobante,
     };
-    // PDF se genera del lado del cliente con diseño personalizado
   }
 
-  await ventaRef.update(updateData);
+  const { error: updateError } = await supabaseAdmin
+    .from(collectionName)
+    .update(updateData)
+    .eq("id", saleId);
+  if (updateError) throw updateError;
 
   return {
     success: true,

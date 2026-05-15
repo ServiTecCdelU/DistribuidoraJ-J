@@ -1,55 +1,49 @@
-import {
-  collection,
-  doc,
-  getDocs,
-  setDoc,
-  updateDoc,
-  query,
-  orderBy,
-  serverTimestamp,
-  limit,
-} from "firebase/firestore";
-import { firestore } from "@/lib/firebase";
+import { supabase } from "@/lib/supabase";
 import type { PedidoMayorista } from "@/lib/types";
-import { toDate } from "@/services/firestore-helpers";
 
-const COL = "pedidos_mayorista";
+const TABLE = "pedidos_mayorista";
 
-function mapDoc(id: string, data: Record<string, unknown>): PedidoMayorista {
+function mapRow(row: any): PedidoMayorista {
   return {
-    id,
-    fecha: toDate(data.fecha),
-    estado: (data.estado as PedidoMayorista["estado"]) ?? "borrador",
-    productos: (data.productos as PedidoMayorista["productos"]) ?? [],
+    id: row.id,
+    fecha: new Date(row.fecha || row.created_at),
+    estado: row.estado ?? "borrador",
+    productos: row.productos ?? [],
   };
 }
 
 export const getPedidosMayorista = async (): Promise<PedidoMayorista[]> => {
-  const q = query(collection(firestore, COL), orderBy("fecha", "desc"));
-  const snap = await getDocs(q);
-  return snap.docs.map((d) => mapDoc(d.id, d.data() as Record<string, unknown>));
+  const { data, error } = await supabase
+    .from(TABLE)
+    .select("*")
+    .order("fecha", { ascending: false });
+  if (error) throw error;
+  return (data || []).map(mapRow);
 };
 
 export const getPedidoMayoristaActivo = async (): Promise<PedidoMayorista | null> => {
-  const q = query(collection(firestore, COL), orderBy("fecha", "desc"), limit(10));
-  const snap = await getDocs(q);
-  const activo = snap.docs.find((d) => {
-    const estado = d.data().estado;
-    return estado === "enviado" || estado === "recibido_parcial";
-  });
-  if (!activo) return null;
-  return mapDoc(activo.id, activo.data() as Record<string, unknown>);
+  const { data, error } = await supabase
+    .from(TABLE)
+    .select("*")
+    .in("estado", ["enviado", "recibido_parcial"])
+    .order("fecha", { ascending: false })
+    .limit(1);
+  if (error) throw error;
+  if (!data || data.length === 0) return null;
+  return mapRow(data[0]);
 };
 
 export const crearPedidoMayorista = async (
   productos: PedidoMayorista["productos"]
 ): Promise<PedidoMayorista> => {
   const id = `pm_${Date.now()}`;
-  await setDoc(doc(firestore, COL, id), {
-    fecha: serverTimestamp(),
+  const { error } = await supabase.from(TABLE).insert({
+    id,
+    fecha: new Date().toISOString(),
     estado: "borrador",
     productos,
   });
+  if (error) throw error;
   return { id, fecha: new Date(), estado: "borrador", productos };
 };
 
@@ -57,12 +51,14 @@ export const actualizarEstadoPedidoMayorista = async (
   id: string,
   estado: PedidoMayorista["estado"]
 ): Promise<void> => {
-  await updateDoc(doc(firestore, COL, id), { estado });
+  const { error } = await supabase.from(TABLE).update({ estado }).eq("id", id);
+  if (error) throw error;
 };
 
 export const actualizarUnidadesRecibidas = async (
   pedidoId: string,
   productos: PedidoMayorista["productos"]
 ): Promise<void> => {
-  await updateDoc(doc(firestore, COL, pedidoId), { productos });
+  const { error } = await supabase.from(TABLE).update({ productos }).eq("id", pedidoId);
+  if (error) throw error;
 };

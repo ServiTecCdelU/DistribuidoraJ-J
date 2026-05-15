@@ -1,7 +1,7 @@
 // app/api/afip/cuit/route.ts
 import { NextRequest, NextResponse } from "next/server";
 import { consultarCUIT } from "@/lib/afip-direct";
-import { adminAuth } from "@/lib/firebase-admin";
+import { supabaseAdmin } from "@/lib/supabase-admin";
 
 export async function GET(req: NextRequest) {
   const authHeader = req.headers.get("Authorization");
@@ -9,7 +9,8 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ error: "No autorizado" }, { status: 401 });
   }
   try {
-    await adminAuth.verifyIdToken(authHeader.substring(7));
+    const { error: authError } = await supabaseAdmin.auth.getUser(authHeader.substring(7));
+    if (authError) throw authError;
   } catch {
     return NextResponse.json({ error: "Token inválido" }, { status: 401 });
   }

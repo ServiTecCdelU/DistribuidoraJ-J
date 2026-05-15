@@ -1,6 +1,6 @@
 // app/api/facturacion/pdf/[saleId]/route.tsx
 import { NextResponse } from "next/server";
-import { adminAuth, adminFirestore, adminStorage } from "@/lib/firebase-admin";
+import { supabaseAdmin } from "@/lib/supabase-admin";
 import React from "react";
 import {
   Document,
@@ -171,8 +171,8 @@ interface InvoicePDFProps {
 function InvoicePDF({ sale, clientData, isElectronica }: InvoicePDFProps) {
   const items: any[] = sale.items || [];
   const emptyRows = Math.max(0, 8 - items.length);
-  const pv = sale.invoiceNumber?.split("-")[0] || "0001";
-  const nro = sale.invoiceNumber?.split("-")[1] || sale.invoiceNumber || "00000000";
+  const pv = sale.invoice_number?.split("-")[0] || "0001";
+  const nro = sale.invoice_number?.split("-")[1] || sale.invoice_number || "00000000";
   const logoBase64 = getLogoBase64();
 
   return (
@@ -206,7 +206,7 @@ function InvoicePDF({ sale, clientData, isElectronica }: InvoicePDFProps) {
               <Text style={styles.invoiceInfo}>
                 {"Punto de Venta:  " + pv + "\n"}
                 {"Comp. Nro.:  " + nro + "\n"}
-                {"Fecha de Emision:  " + formatDate(sale.createdAt || new Date())}
+                {"Fecha de Emision:  " + formatDate(sale.created_at || new Date())}
               </Text>
             </View>
           </View>
@@ -234,27 +234,27 @@ function InvoicePDF({ sale, clientData, isElectronica }: InvoicePDFProps) {
             <View style={styles.gridCol}>
               <Text style={styles.text}>
                 <Text style={styles.bold}>{"CUIT: "}</Text>
-                {clientData.cuit || sale.clientCuit || "00-00000000-0"}
+                {clientData.cuit || sale.client_cuit || "00-00000000-0"}
               </Text>
               <Text style={styles.text}>
                 <Text style={styles.bold}>{"Cond. IVA: "}</Text>
                 {getTaxCategoryLabel(
-                  clientData.taxCategory || sale.clientTaxCategory,
+                  clientData.tax_category || sale.client_tax_category,
                 )}
               </Text>
               <Text style={styles.text}>
                 <Text style={styles.bold}>{"Cond. Vta.: "}</Text>
-                {getPaymentTypeLabel(sale.paymentType || "cash", (sale as any).paymentMethod)}
+                {getPaymentTypeLabel(sale.payment_type || "cash", sale.payment_method)}
               </Text>
             </View>
             <View style={styles.gridCol}>
               <Text style={styles.text}>
                 <Text style={styles.bold}>{"Cliente: "}</Text>
-                {sale.clientName || clientData.name || "Consumidor Final"}
+                {sale.client_name || clientData.name || "Consumidor Final"}
               </Text>
               <Text style={styles.text}>
                 <Text style={styles.bold}>{"Domicilio: "}</Text>
-                {clientData.address || sale.clientAddress || "-"}
+                {clientData.address || sale.client_address || "-"}
               </Text>
             </View>
           </View>
@@ -329,7 +329,7 @@ function InvoicePDF({ sale, clientData, isElectronica }: InvoicePDFProps) {
               <Text>{"Total: $"}</Text>
               <Text>{formatCurrency(sale.total || 0)}</Text>
             </View>
-            {sale.paymentType === "mixed" && (
+            {sale.payment_type === "mixed" && (
               <View
                 style={{
                   marginTop: 6,
@@ -340,13 +340,13 @@ function InvoicePDF({ sale, clientData, isElectronica }: InvoicePDFProps) {
                 <View style={styles.totalRow}>
                   <Text style={styles.textXs}>{"Efectivo:"}</Text>
                   <Text style={styles.textXs}>
-                    {formatCurrency(sale.cashAmount || 0)}
+                    {formatCurrency(sale.cash_amount || 0)}
                   </Text>
                 </View>
                 <View style={styles.totalRow}>
                   <Text style={styles.textXs}>{"A Cuenta:"}</Text>
                   <Text style={styles.textXs}>
-                    {formatCurrency(sale.creditAmount || 0)}
+                    {formatCurrency(sale.credit_amount || 0)}
                   </Text>
                 </View>
               </View>
@@ -360,12 +360,12 @@ function InvoicePDF({ sale, clientData, isElectronica }: InvoicePDFProps) {
             <View>
               <Text style={styles.text}>
                 <Text style={styles.bold}>{"CAE N°: "}</Text>
-                {sale.afipData?.cae || "N/A"}
+                {sale.afip_data?.cae || "N/A"}
               </Text>
               <Text style={[styles.text, { marginTop: 3 }]}>
                 <Text style={styles.bold}>{"CAE Vto.: "}</Text>
-                {sale.afipData?.caeVencimiento
-                  ? formatDate(sale.afipData.caeVencimiento)
+                {sale.afip_data?.caeVencimiento
+                  ? formatDate(sale.afip_data.caeVencimiento)
                   : "-"}
               </Text>
             </View>
@@ -405,7 +405,7 @@ export async function GET(
     const authHeader = request.headers.get("authorization");
     if (authHeader?.startsWith("Bearer ")) {
       try {
-        await adminAuth.verifyIdToken(authHeader.replace("Bearer ", ""));
+        await supabaseAdmin.auth.getUser(authHeader.replace("Bearer ", ""));
       } catch {
         // Auth falló, permitir en modo desarrollo
       }
@@ -413,48 +413,47 @@ export async function GET(
 
     const { saleId } = await context.params;
 
-    const bucket = adminStorage.bucket();
-    const filePath = `facturas/${saleId}.pdf`;
-    const file = bucket.file(filePath);
+    const storageBucket = "facturas";
+    const filePath = `${saleId}.pdf`;
 
+    // Check if PDF already exists in storage
     try {
-      const [exists] = await file.exists();
-      if (exists) {
-        const [url] = await file.getSignedUrl({
-          action: "read",
-          expires: Date.now() + 60 * 60 * 1000,
-        });
-        return NextResponse.redirect(url);
+      const { data: existingFile } = await supabaseAdmin.storage
+        .from(storageBucket)
+        .createSignedUrl(filePath, 3600);
+      if (existingFile?.signedUrl) {
+        return NextResponse.redirect(existingFile.signedUrl);
       }
     } catch {
       // No se pudo verificar Storage, generar nuevo PDF
     }
 
-    const saleSnapshot = await adminFirestore
-      .collection("ventas")
-      .doc(saleId)
-      .get();
-    if (!saleSnapshot.exists) {
+    const { data: sale, error: saleError } = await supabaseAdmin
+      .from("ventas")
+      .select("*")
+      .eq("id", saleId)
+      .single();
+
+    if (saleError || !sale) {
       return NextResponse.json(
         { error: "Venta no encontrada" },
         { status: 404 },
       );
     }
 
-    const sale = saleSnapshot.data() || {};
-
     let clientData: any = {};
-    if (sale.clientId) {
-      const clientSnapshot = await adminFirestore
-        .collection("clientes")
-        .doc(sale.clientId)
-        .get();
-      if (clientSnapshot.exists) {
-        clientData = clientSnapshot.data();
+    if (sale.client_id) {
+      const { data: clientRow } = await supabaseAdmin
+        .from("clientes")
+        .select("*")
+        .eq("id", sale.client_id)
+        .single();
+      if (clientRow) {
+        clientData = clientRow;
       }
     }
 
-    const isElectronica = !!sale.afipData?.cae;
+    const isElectronica = !!sale.afip_data?.cae;
 
     // renderToBuffer funciona server-side con Node.js
     const pdfBuffer = await renderToBuffer(
@@ -465,22 +464,27 @@ export async function GET(
       />,
     );
 
-    await file.save(pdfBuffer, {
-      metadata: {
+    // Upload to Supabase Storage
+    await supabaseAdmin.storage
+      .from(storageBucket)
+      .upload(filePath, pdfBuffer, {
         contentType: "application/pdf",
-        metadata: {
-          saleId,
-          invoiceNumber: sale.invoiceNumber || "",
-          generatedAt: new Date().toISOString(),
-        },
-      },
-    });
+        upsert: true,
+      });
 
-    const publicUrl = `https://storage.googleapis.com/${bucket.name}/${filePath}`;
-    await adminFirestore.collection("ventas").doc(saleId).update({
-      invoicePdfUrl: publicUrl,
-      invoicePdfGeneratedAt: new Date().toISOString(),
-    });
+    const { data: publicUrlData } = supabaseAdmin.storage
+      .from(storageBucket)
+      .getPublicUrl(filePath);
+
+    const publicUrl = publicUrlData?.publicUrl || "";
+
+    await supabaseAdmin
+      .from("ventas")
+      .update({
+        invoice_pdf_url: publicUrl,
+        invoice_pdf_generated_at: new Date().toISOString(),
+      })
+      .eq("id", saleId);
 
     // Convertir Buffer a Uint8Array para NextResponse
     const uint8Array = new Uint8Array(pdfBuffer);
@@ -488,7 +492,7 @@ export async function GET(
     return new NextResponse(uint8Array, {
       headers: {
         "Content-Type": "application/pdf",
-        "Content-Disposition": `inline; filename="factura-${sale.invoiceNumber || saleId}.pdf"`,
+        "Content-Disposition": `inline; filename="factura-${sale.invoice_number || saleId}.pdf"`,
       },
     });
   } catch (error: any) {
