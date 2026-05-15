@@ -8,6 +8,12 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { ProductModal } from "@/components/productos/product-modal";
 import { StockHistoryModal } from "@/components/productos/stock-history-modal";
 import { InventoryValueHistory } from "@/components/productos/inventory-value-history";
@@ -316,80 +322,15 @@ export default function ProductosPage() {
     }
   };
 
-  // --- Excel: Cargar lista de precios mayorista ---
-  const [cargandoLista, setCargandoLista] = useState(false);
-  const [progresoCarga, setProgresoCarga] = useState({ done: 0, total: 0 });
+  // --- Excel: Cargar lista de precios ---
+  const [cargarListaOpen, setCargarListaOpen] = useState(false);
 
-  const cargarListaPrecios = async (file: File) => {
-    setCargandoLista(true);
-    const toastId = "carga-lista";
-    toast.loading("Procesando lista de precios...", { id: toastId });
-    try {
-      const XLSX = await import("xlsx");
-      const buffer = await file.arrayBuffer();
-      const wb = XLSX.read(buffer, { type: "array" });
-      const ws = wb.Sheets[wb.SheetNames[0]];
-      const raw: unknown[][] = XLSX.utils.sheet_to_json(ws, { header: 1 }) as unknown[][];
-
-      const rows: ImportRow[] = [];
-      for (const row of raw) {
-        const rawCodigo = row[0];
-        if (rawCodigo == null) continue;
-        // Aceptar string o número — sin forzar longitud, el código va tal cual
-        const codigo = typeof rawCodigo === "number"
-          ? String(rawCodigo)
-          : typeof rawCodigo === "string" && /\S/.test(rawCodigo)
-            ? rawCodigo.trim()
-            : null;
-        if (!codigo || !/^\d/.test(codigo)) continue;
-        const descripcion = row[4];
-        const lista1 = row[9];
-        const stockPacks = row[11];
-        const unPack = row[15];
-        if (typeof descripcion !== "string" || !descripcion.trim()) continue;
-        if (typeof lista1 !== "number" || lista1 <= 0) continue;
-        if (typeof unPack !== "number" || unPack <= 0) continue;
-        const stockNum = typeof stockPacks === "number" ? stockPacks : 0;
-        rows.push({
-          codigo,
-          descripcion: descripcion.trim(),
-          stockUnidades: Math.round(stockNum * unPack),
-          unPack,
-          lista1,
-        });
-      }
-
-      if (rows.length === 0) throw new Error("No se encontraron filas válidas en el archivo");
-
-      console.log(`[Cargar Lista] ${rows.length} filas parseadas del Excel. Primeros 3 códigos:`, rows.slice(0, 3).map(r => r.codigo));
-
-      setProgresoCarga({ done: 0, total: rows.length });
-      const { procesados, noEncontrados } = await importarListaPrecios(rows, (done, total) => {
-        setProgresoCarga({ done, total });
-      });
-
-      console.log(`[Cargar Lista] Procesados: ${procesados}, No encontrados: ${noEncontrados.length}`, noEncontrados.slice(0, 10));
-
-      // Recargar productos y reconstruir habilitadosIds desde disabled
-      const data = await productsApi.getAll();
-      setProducts(data);
-      setHabilitadosIds(new Set(
-        data.filter((p) => !(p as any).disabled).map((p) => p.id)
-      ));
-
-      let msg = `${procesados} productos procesados`;
-      if (noEncontrados.length > 0) msg += ` · ${noEncontrados.length} sin coincidencia en mayorista`;
-      if (procesados === 0 && noEncontrados.length > 0) {
-        toast.error(`Ningún código del Excel coincide con mayorista. Primeros no encontrados: ${noEncontrados.slice(0, 5).join(', ')}`, { id: toastId, duration: 10000 });
-      } else {
-        toast.success(msg, { id: toastId, duration: 6000 });
-      }
-    } catch (error: any) {
-      toast.error(`Error: ${error.message}`, { id: toastId });
-    } finally {
-      setCargandoLista(false);
-      setProgresoCarga({ done: 0, total: 0 });
-    }
+  const onListaImportada = async () => {
+    const data = await productsApi.getAll();
+    setProducts(data);
+    setHabilitadosIds(new Set(
+      data.filter((p) => !(p as any).disabled).map((p) => p.id)
+    ));
   };
 
   const loadStockHistory = () => {
@@ -1020,25 +961,13 @@ export default function ProductosPage() {
                 <span className="hidden sm:inline">Importar Remito</span>
               </Button>
 
-              <input
-                id="lista-precios-upload"
-                type="file"
-                accept=".xls,.xlsx"
-                className="hidden"
-                onChange={(e) => {
-                  const file = e.target.files?.[0];
-                  if (file) cargarListaPrecios(file);
-                  e.target.value = "";
-                }}
-              />
               <Button
                 variant="outline"
                 size="sm"
-                disabled={cargandoLista}
-                className="gap-1 sm:gap-2 h-8 sm:h-9 px-2 sm:px-3 relative"
-                onClick={() => document.getElementById("lista-precios-upload")?.click()}
+                className="gap-1 sm:gap-2 h-8 sm:h-9 px-2 sm:px-3"
+                onClick={() => setCargarListaOpen(true)}
               >
-                <RefreshCw className={`h-3.5 w-3.5 sm:h-4 sm:w-4 ${cargandoLista ? "animate-spin" : ""}`} />
+                <RefreshCw className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
                 <span className="hidden sm:inline">Cargar Lista</span>
               </Button>
 
@@ -1331,26 +1260,6 @@ export default function ProductosPage() {
         </div>
       </div>
 
-      {/* Barra de progreso carga de lista */}
-      {cargandoLista && progresoCarga.total > 0 && (
-        <div className="mb-4 rounded-2xl border p-4 bg-card space-y-2">
-          <div className="flex items-center justify-between text-sm">
-            <span className="font-medium flex items-center gap-2">
-              <RefreshCw className="h-4 w-4 animate-spin text-teal-600" />
-              Cargando lista de precios...
-            </span>
-            <span className="tabular-nums text-muted-foreground">
-              {progresoCarga.done} / {progresoCarga.total}
-            </span>
-          </div>
-          <div className="w-full h-2 bg-muted rounded-full overflow-hidden">
-            <div
-              className="h-full bg-teal-500 rounded-full transition-all duration-200"
-              style={{ width: `${Math.round((progresoCarga.done / progresoCarga.total) * 100)}%` }}
-            />
-          </div>
-        </div>
-      )}
 
       {/* Barra de selección masiva - AHORA CON "Deshabilitar" */}
       {selectedProducts.length > 0 && (
@@ -1854,6 +1763,12 @@ export default function ProductosPage() {
         products={products.filter((p) => !(p as any).disabled)}
         onConfirm={handleRemitoConfirm}
       />
+
+      <CargarListaDialog
+        open={cargarListaOpen}
+        onOpenChange={setCargarListaOpen}
+        onImportado={onListaImportada}
+      />
     </MainLayout>
   );
 }
@@ -2164,5 +2079,405 @@ function PreciosVentaHabilitados() {
         </div>
       </div>
     </div>
+  );
+}
+
+// ─── Helpers para Excel ──────────────────────────────────────────────────────
+function colIndexToLetter(index: number): string {
+  let letter = "";
+  let n = index;
+  while (n >= 0) {
+    letter = String.fromCharCode(65 + (n % 26)) + letter;
+    n = Math.floor(n / 26) - 1;
+  }
+  return letter;
+}
+function cellToString(val: unknown): string {
+  if (val === null || val === undefined) return "";
+  return String(val).trim();
+}
+function cellToNumber(val: unknown): number {
+  if (val === null || val === undefined) return 0;
+  const n = Number(val);
+  return isNaN(n) ? 0 : n;
+}
+
+type ColumnLetter = string;
+interface ListaColumnMapping {
+  codigo: ColumnLetter;
+  descripcion: ColumnLetter;
+  precio: ColumnLetter;
+  stockPacks: ColumnLetter;
+  unPack: ColumnLetter;
+}
+interface ListaExcelColumn {
+  letter: string;
+  header: string;
+  preview: string[];
+}
+interface ListaParsedRow {
+  codigo: string;
+  descripcion: string;
+  lista1: number;
+  stockPacks: number;
+  unPack: number;
+  stockUnidades: number;
+}
+
+// ─── Diálogo Cargar Lista (productos) ────────────────────────────────────────
+function CargarListaDialog({
+  open,
+  onOpenChange,
+  onImportado,
+}: {
+  open: boolean;
+  onOpenChange: (v: boolean) => void;
+  onImportado: () => Promise<void>;
+}) {
+  const [step, setStep] = useState<"upload" | "mapping" | "preview">("upload");
+  const [columns, setColumns] = useState<ListaExcelColumn[]>([]);
+  const [rawRows, setRawRows] = useState<unknown[][]>([]);
+  const [headerRowIndex, setHeaderRowIndex] = useState(0);
+  const [mapping, setMapping] = useState<ListaColumnMapping>({
+    codigo: "A",
+    descripcion: "B",
+    precio: "C",
+    stockPacks: "D",
+    unPack: "E",
+  });
+  const [parsed, setParsed] = useState<ListaParsedRow[]>([]);
+  const [saving, setSaving] = useState(false);
+  const [progress, setProgress] = useState({ done: 0, total: 0 });
+  const fileRef = useRef<HTMLInputElement>(null);
+
+  const reset = () => {
+    setStep("upload");
+    setColumns([]);
+    setRawRows([]);
+    setParsed([]);
+    setSaving(false);
+    setProgress({ done: 0, total: 0 });
+    if (fileRef.current) fileRef.current.value = "";
+  };
+
+  const handleClose = (v: boolean) => {
+    if (!v) reset();
+    onOpenChange(v);
+  };
+
+  const handleFile = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = async (ev) => {
+      try {
+        const XLSX = await import("xlsx");
+        const data = new Uint8Array(ev.target!.result as ArrayBuffer);
+        const workbook = XLSX.read(data, { type: "array" });
+        const sheet = workbook.Sheets[workbook.SheetNames[0]];
+        const rows: unknown[][] = XLSX.utils.sheet_to_json(sheet, {
+          header: 1,
+          defval: "",
+        }) as unknown[][];
+
+        if (rows.length < 2) {
+          toast.error("El archivo no tiene suficientes filas");
+          return;
+        }
+
+        // Auto-detectar fila de encabezados
+        let detectedHeader = 0;
+        for (let ri = 0; ri < Math.min(rows.length, 10); ri++) {
+          const row = rows[ri] as unknown[];
+          const textCells = row.filter((cell) => {
+            const s = cellToString(cell);
+            return s.length > 0 && isNaN(Number(s));
+          });
+          if (textCells.length >= 3) {
+            detectedHeader = ri;
+            break;
+          }
+        }
+
+        const maxCols = Math.max(...rows.slice(detectedHeader, detectedHeader + 3).map((r) => (r as unknown[]).length));
+        const cols: ListaExcelColumn[] = [];
+        for (let i = 0; i < maxCols; i++) {
+          const letter = colIndexToLetter(i);
+          const header = cellToString((rows[detectedHeader] as unknown[])[i]);
+          const preview = rows
+            .slice(detectedHeader + 1, detectedHeader + 4)
+            .map((r) => cellToString((r as unknown[])[i]));
+          cols.push({ letter, header, preview });
+        }
+
+        // Auto-detectar mapeo desde headers
+        const autoMapping: Partial<ListaColumnMapping> = {};
+        for (const col of cols) {
+          const h = col.header.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+          if (!autoMapping.codigo && (h.includes("codigo") || h.includes("code") || h.includes("cod") || h === "id")) autoMapping.codigo = col.letter;
+          else if (!autoMapping.descripcion && (h.includes("descripcion") || h.includes("nombre") || h.includes("producto") || h.includes("articulo"))) autoMapping.descripcion = col.letter;
+          else if (!autoMapping.precio && (h.includes("precio") || h.includes("lista") || h.includes("p.u") || h.includes("costo"))) autoMapping.precio = col.letter;
+          else if (!autoMapping.stockPacks && (h.includes("stock") || h.includes("cant") || h.includes("bulto") || h.includes("pack"))) autoMapping.stockPacks = col.letter;
+          else if (!autoMapping.unPack && (h.includes("unidad") || h.includes("un.") || h.includes("x pack") || h.includes("un pack"))) autoMapping.unPack = col.letter;
+        }
+
+        setHeaderRowIndex(detectedHeader);
+        setColumns(cols);
+        setRawRows(rows);
+        setMapping((prev) => ({
+          codigo: autoMapping.codigo || prev.codigo,
+          descripcion: autoMapping.descripcion || prev.descripcion,
+          precio: autoMapping.precio || prev.precio,
+          stockPacks: autoMapping.stockPacks || prev.stockPacks,
+          unPack: autoMapping.unPack || prev.unPack,
+        }));
+        setStep("mapping");
+      } catch {
+        toast.error("Error al leer el archivo Excel");
+      }
+    };
+    reader.readAsArrayBuffer(file);
+  };
+
+  const letterToIndex = (letter: string) => {
+    let index = 0;
+    for (let i = 0; i < letter.length; i++) {
+      index = index * 26 + (letter.charCodeAt(i) - 64);
+    }
+    return index - 1;
+  };
+
+  const previewMapping = () => {
+    const rows = rawRows.slice(headerRowIndex + 1);
+    const result: ListaParsedRow[] = rows
+      .map((row) => {
+        const r = row as unknown[];
+        const codigo = cellToString(r[letterToIndex(mapping.codigo)]);
+        const descripcion = cellToString(r[letterToIndex(mapping.descripcion)]);
+        const lista1 = cellToNumber(r[letterToIndex(mapping.precio)]);
+        const stockPacks = cellToNumber(r[letterToIndex(mapping.stockPacks)]);
+        const unPack = cellToNumber(r[letterToIndex(mapping.unPack)]);
+        return {
+          codigo,
+          descripcion,
+          lista1,
+          stockPacks,
+          unPack: unPack || 1,
+          stockUnidades: Math.round(stockPacks * (unPack || 1)),
+        };
+      })
+      .filter((r) => {
+        if (!r.codigo && !r.descripcion && r.lista1 === 0) return false;
+        if (!r.codigo) return false;
+        if (!r.descripcion) return false;
+        return true;
+      });
+
+    if (result.length === 0) {
+      toast.error("No se encontraron filas válidas con el mapeo actual");
+      return;
+    }
+    console.log(`[Cargar Lista] ${rows.length} filas → ${result.length} válidas`);
+    setParsed(result);
+    setStep("preview");
+  };
+
+  const confirmar = async () => {
+    setSaving(true);
+    setProgress({ done: 0, total: parsed.length });
+    try {
+      const importRows: ImportRow[] = parsed.map((r) => ({
+        codigo: r.codigo,
+        descripcion: r.descripcion,
+        lista1: r.lista1,
+        stockUnidades: r.stockUnidades,
+        unPack: r.unPack,
+      }));
+
+      const { procesados, noEncontrados } = await importarListaPrecios(importRows, (done, total) =>
+        setProgress({ done, total })
+      );
+      await onImportado();
+
+      let msg = `${procesados} productos procesados`;
+      if (noEncontrados.length > 0) msg += ` · ${noEncontrados.length} sin coincidencia en mayorista`;
+      if (procesados === 0 && noEncontrados.length > 0) {
+        toast.error(`Ningún código coincide con mayorista. Primeros: ${noEncontrados.slice(0, 5).join(", ")}`, { duration: 10000 });
+      } else {
+        toast.success(msg, { duration: 6000 });
+      }
+      handleClose(false);
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Error al importar los productos");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const camposRequeridos: { key: keyof ListaColumnMapping; label: string; required?: boolean }[] = [
+    { key: "codigo", label: "Código", required: true },
+    { key: "descripcion", label: "Descripción", required: true },
+    { key: "precio", label: "Precio lista", required: true },
+    { key: "stockPacks", label: "Stock (packs/bultos)" },
+    { key: "unPack", label: "Unidades por pack" },
+  ];
+
+  return (
+    <Dialog open={open} onOpenChange={handleClose}>
+      <DialogContent className="w-[95vw] max-w-xl sm:max-w-2xl max-h-[90vh] overflow-y-auto p-4 sm:p-6">
+        <DialogHeader>
+          <DialogTitle>Cargar Lista de Precios</DialogTitle>
+        </DialogHeader>
+
+        {step === "upload" && (
+          <div className="space-y-4">
+            <p className="text-sm text-muted-foreground">
+              Subí un archivo Excel (.xls o .xlsx) con los productos. Se van a mapear contra los productos de mayorista.
+            </p>
+            <Input
+              ref={fileRef}
+              type="file"
+              accept=".xls,.xlsx"
+              onChange={handleFile}
+              className="rounded-xl"
+            />
+          </div>
+        )}
+
+        {step === "mapping" && (
+          <div className="space-y-4">
+            <p className="text-sm text-muted-foreground">
+              Verificá que las columnas estén bien asignadas.
+            </p>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              {camposRequeridos.map((campo) => (
+                <div key={campo.key} className="space-y-1">
+                  <label className="text-xs font-medium">
+                    {campo.label} {campo.required && <span className="text-red-500">*</span>}
+                  </label>
+                  <select
+                    className="w-full border rounded-xl px-2 py-1.5 text-sm bg-background"
+                    value={mapping[campo.key]}
+                    onChange={(e) => setMapping((prev) => ({ ...prev, [campo.key]: e.target.value }))}
+                  >
+                    {columns.map((col) => (
+                      <option key={col.letter} value={col.letter}>
+                        {col.letter} — {col.header || "(sin header)"} {col.preview[0] ? `(${col.preview[0]})` : ""}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              ))}
+            </div>
+
+            <div className="rounded-xl border overflow-hidden text-xs">
+              <p className="bg-muted/50 px-3 py-1.5 font-medium text-muted-foreground border-b">
+                Vista previa — fila encabezado + primeras 5 filas
+              </p>
+              <div className="overflow-x-auto">
+                <table className="w-full">
+                  <thead>
+                    <tr className="bg-teal-50/50 dark:bg-teal-950/20">
+                      <th className="px-2 py-1.5 text-left border-r whitespace-nowrap font-mono text-muted-foreground">#</th>
+                      {columns.slice(0, 8).map((col) => (
+                        <th key={col.letter} className="px-2 py-1.5 text-left border-r last:border-r-0 whitespace-nowrap">
+                          <span className="font-mono font-bold text-teal-600">{col.letter}</span>
+                          {col.header && <span className="block text-muted-foreground font-normal truncate max-w-[80px]">{col.header}</span>}
+                        </th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {rawRows.slice(headerRowIndex + 1, headerRowIndex + 6).map((row, ri) => (
+                      <tr key={ri} className="border-t hover:bg-muted/20">
+                        <td className="px-2 py-1 text-muted-foreground font-mono border-r">{ri + 1}</td>
+                        {(row as unknown[]).slice(0, 8).map((cell, ci) => (
+                          <td key={ci} className="px-2 py-1 border-r last:border-r-0 max-w-[90px] truncate">
+                            {cellToString(cell)}
+                          </td>
+                        ))}
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+
+            <div className="flex justify-between gap-2">
+              <Button variant="outline" size="sm" className="rounded-xl" onClick={reset}>Volver</Button>
+              <Button size="sm" className="rounded-xl" onClick={previewMapping}>Ver preview →</Button>
+            </div>
+          </div>
+        )}
+
+        {step === "preview" && (
+          <div className="space-y-4">
+            <div className="text-sm text-muted-foreground bg-muted/30 rounded-xl p-3">
+              Se van a procesar <strong>{parsed.length} productos</strong> contra mayorista.
+            </div>
+
+            <div className="rounded-xl border overflow-hidden">
+              <div className="overflow-x-auto max-h-52">
+                <table className="w-full text-xs">
+                  <thead className="bg-muted/50 sticky top-0">
+                    <tr>
+                      <th className="text-left px-2 py-2 font-semibold">#</th>
+                      <th className="text-left px-2 py-2 font-semibold">Código</th>
+                      <th className="text-left px-2 py-2 font-semibold">Descripción</th>
+                      <th className="text-right px-2 py-2 font-semibold">Precio</th>
+                      <th className="text-right px-2 py-2 font-semibold">Stock</th>
+                      <th className="text-right px-2 py-2 font-semibold">Un/Pack</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y">
+                    {parsed.slice(0, 200).map((row, i) => (
+                      <tr key={i} className="hover:bg-muted/20">
+                        <td className="px-2 py-1 font-mono text-muted-foreground">{i + 1}</td>
+                        <td className="px-2 py-1 font-mono text-muted-foreground whitespace-nowrap">{row.codigo}</td>
+                        <td className="px-2 py-1 max-w-[160px] truncate">{row.descripcion}</td>
+                        <td className="px-2 py-1 text-right text-teal-600 font-semibold whitespace-nowrap">
+                          {formatCurrency(row.lista1)}
+                        </td>
+                        <td className="px-2 py-1 text-right">{row.stockUnidades}</td>
+                        <td className="px-2 py-1 text-right">{row.unPack}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+              {parsed.length > 200 && (
+                <p className="text-xs text-muted-foreground px-3 py-1.5 border-t bg-muted/20">
+                  Mostrando 200 de {parsed.length} filas en la vista previa
+                </p>
+              )}
+            </div>
+
+            {saving && (
+              <div className="space-y-1">
+                <div className="h-2 bg-muted rounded-full overflow-hidden">
+                  <div
+                    className="h-full bg-teal-500 transition-all duration-300"
+                    style={{ width: `${progress.total > 0 ? (progress.done / progress.total) * 100 : 0}%` }}
+                  />
+                </div>
+                <p className="text-xs text-muted-foreground text-center">
+                  {progress.done} / {progress.total}
+                </p>
+              </div>
+            )}
+
+            <div className="flex justify-between gap-2">
+              <Button variant="outline" size="sm" className="rounded-xl" onClick={() => setStep("mapping")} disabled={saving}>
+                ← Volver
+              </Button>
+              <Button size="sm" className="rounded-xl" onClick={confirmar} disabled={saving}>
+                {saving ? "Importando..." : `Confirmar importación (${parsed.length})`}
+              </Button>
+            </div>
+          </div>
+        )}
+      </DialogContent>
+    </Dialog>
   );
 }
