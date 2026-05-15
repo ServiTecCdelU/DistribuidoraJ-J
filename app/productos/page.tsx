@@ -1020,6 +1020,17 @@ export default function ProductosPage() {
                 <span className="hidden sm:inline">Importar Remito</span>
               </Button>
 
+              <input
+                id="lista-precios-upload"
+                type="file"
+                accept=".xls,.xlsx"
+                className="hidden"
+                onChange={(e) => {
+                  const file = e.target.files?.[0];
+                  if (file) cargarListaPrecios(file);
+                  e.target.value = "";
+                }}
+              />
               <Button
                 variant="outline"
                 size="sm"
@@ -1029,17 +1040,6 @@ export default function ProductosPage() {
               >
                 <RefreshCw className={`h-3.5 w-3.5 sm:h-4 sm:w-4 ${cargandoLista ? "animate-spin" : ""}`} />
                 <span className="hidden sm:inline">Cargar Lista</span>
-                <input
-                  id="lista-precios-upload"
-                  type="file"
-                  accept=".xls,.xlsx"
-                  className="hidden"
-                  onChange={(e) => {
-                    const file = e.target.files?.[0];
-                    if (file) cargarListaPrecios(file);
-                    e.target.value = "";
-                  }}
-                />
               </Button>
 
               <Button
