@@ -281,7 +281,6 @@ export const saveMayoristaPrefs = async (
 
 export type ImportRow = {
   codigo: string
-  descripcion: string
   stockUnidades: number
   unPack: number
   lista1: number
@@ -298,9 +297,9 @@ export const importarListaPrecios = async (
   // Cargar todos los mayorista_productos para hacer el match por codigo
   const { data: mpRows } = await supabase
     .from('mayorista_productos')
-    .select('id, codigo, producto_id, rubro, categoria')
+    .select('id, codigo, producto_id, rubro, categoria, descripcion')
 
-  type MpEntry = { id: string; productoId?: string; rubro?: string; categoria?: string }
+  type MpEntry = { id: string; productoId?: string; rubro?: string; categoria?: string; descripcion?: string }
   const mpExact = new Map<string, MpEntry>()
   const mpStripped = new Map<string, MpEntry>()
   ;(mpRows ?? []).forEach((d) => {
@@ -311,6 +310,7 @@ export const importarListaPrecios = async (
       productoId: d.producto_id ?? undefined,
       rubro: d.rubro ?? undefined,
       categoria: d.categoria ?? undefined,
+      descripcion: d.descripcion ?? undefined,
     }
     mpExact.set(codigo, entry)
     const stripped = codigo.replace(/^0+/, '') || codigo
@@ -336,24 +336,24 @@ export const importarListaPrecios = async (
   for (let i = 0; i < prepared.length; i += BATCH_SIZE) {
     const chunk = prepared.slice(i, i + BATCH_SIZE)
 
-    // 1. Upsert mayorista_productos
+    // 1. Upsert mayorista_productos — habilitar y vincular
     const mpUpserts = chunk.map((row) => ({
       id: row.mp.id,
       precio_lista: row.lista1,
-      descripcion: row.descripcion,
       habilitado: true,
       producto_id: row.productoId,
     }))
     const { error: mpErr } = await supabase.from('mayorista_productos').upsert(mpUpserts, { onConflict: 'id' })
     if (mpErr) throw new Error(`Error mayorista_productos: ${mpErr.message}`)
 
-    // 2. Upsert productos
+    // 2. Upsert productos — descripción y rubro vienen de mayorista
     const prodUpserts = chunk.map((row) => {
+      const descripcion = row.mp.descripcion || row.codigo
       const precioVenta = Math.round(row.lista1 * (1 + GANANCIA / 100) * 100) / 100
       const isNew = !row.mp.productoId
       return {
         id: row.productoId,
-        name: row.descripcion,
+        name: descripcion,
         description: row.codigo,
         price: precioVenta,
         precio_venta: precioVenta,
