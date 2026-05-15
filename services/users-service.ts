@@ -61,6 +61,46 @@ export const ensureUserProfile = async (data: {
   const matchingEmployeeType = sellerRows?.[0]?.employee_type as EmployeeType | undefined
 
   const existing = await getUserProfile(data.id)
+
+  // Si no se encontró por ID/auth_uid, buscar por email (migración Firebase → Supabase)
+  if (!existing) {
+    const { data: byEmail } = await supabase
+      .from('usuarios')
+      .select('*')
+      .eq('email', data.email)
+      .maybeSingle()
+
+    if (byEmail) {
+      // Vincular el perfil existente con el nuevo auth_uid de Supabase
+      await supabase
+        .from('usuarios')
+        .update({ auth_uid: data.id })
+        .eq('id', byEmail.id)
+
+      const linked: User = {
+        id: byEmail.id,
+        email: byEmail.email,
+        name: byEmail.name,
+        role: byEmail.role as UserRole,
+        sellerId: byEmail.seller_id,
+        employeeType: byEmail.employee_type as EmployeeType | undefined,
+        isActive: byEmail.is_active ?? true,
+        createdAt: new Date(byEmail.created_at),
+      }
+
+      // Sincronizar seller si corresponde
+      if (matchingSeller && linked.role !== 'seller' && linked.role !== 'admin') {
+        await supabase
+          .from('usuarios')
+          .update({ role: 'seller', seller_id: matchingSeller, employee_type: matchingEmployeeType ?? null })
+          .eq('id', linked.id)
+        return { ...linked, role: 'seller' as UserRole, sellerId: matchingSeller, employeeType: matchingEmployeeType }
+      }
+
+      return linked
+    }
+  }
+
   if (existing) {
     // Si existe un perfil pero el rol no es seller/admin y ahora hay un vendedor vinculado
     if (matchingSeller && existing.role !== 'seller' && existing.role !== 'admin') {
