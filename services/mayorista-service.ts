@@ -336,7 +336,8 @@ export const importarListaPrecios = async (
       habilitado: true,
       producto_id: row.productoId,
     }))
-    await supabase.from('mayorista_productos').upsert(mpUpserts, { onConflict: 'id' })
+    const { error: mpErr } = await supabase.from('mayorista_productos').upsert(mpUpserts, { onConflict: 'id' })
+    if (mpErr) throw new Error(`Error mayorista_productos: ${mpErr.message}`)
 
     // 2. Upsert productos
     const prodUpserts = chunk.map((row) => {
@@ -355,7 +356,8 @@ export const importarListaPrecios = async (
         ...(isNew ? { image_url: '', category: row.mp.rubro || row.mp.categoria || 'Sin categoria' } : {}),
       }
     })
-    await supabase.from('productos').upsert(prodUpserts, { onConflict: 'id' })
+    const { error: prodErr } = await supabase.from('productos').upsert(prodUpserts, { onConflict: 'id' })
+    if (prodErr) throw new Error(`Error productos: ${prodErr.message}`)
 
     done += chunk.length
     onProgress?.(done + noEncontrados.length, rows.length)
