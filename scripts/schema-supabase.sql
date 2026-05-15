@@ -49,8 +49,12 @@ CREATE INDEX idx_productos_disabled ON productos(disabled);
 CREATE TABLE mayorista_productos (
   id TEXT PRIMARY KEY,
   codigo TEXT,
+  codigo_barras TEXT DEFAULT '',
   descripcion TEXT,
   precio_lista NUMERIC(12,2),
+  rubro TEXT DEFAULT '',
+  subrubro TEXT DEFAULT '',
+  categoria TEXT DEFAULT '',
   habilitado BOOLEAN DEFAULT false,
   producto_id TEXT REFERENCES productos(id),
   stock_local INTEGER DEFAULT 0,

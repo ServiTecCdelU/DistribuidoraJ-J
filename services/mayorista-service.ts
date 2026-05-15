@@ -89,9 +89,10 @@ export const upsertMayoristaProductos = async (
   // Upsert en batches
   for (let i = 0; i < rows.length; i += BATCH_SIZE) {
     const chunk = rows.slice(i, i + BATCH_SIZE)
-    await supabase
+    const { error } = await supabase
       .from('mayorista_productos')
       .upsert(chunk, { onConflict: 'id', ignoreDuplicates: false })
+    if (error) throw new Error(`Error al importar batch ${i}: ${error.message}`)
     onProgress?.(Math.min(i + BATCH_SIZE, rows.length), productos.length)
   }
 

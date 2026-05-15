@@ -852,8 +852,8 @@ function ExcelImportDialog({
         setProgress({ done, total })
       );
       await onImportado();
-    } catch {
-      toast.error("Error al importar los productos");
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Error al importar los productos");
     } finally {
       setSaving(false);
     }
