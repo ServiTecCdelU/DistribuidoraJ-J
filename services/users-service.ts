@@ -60,7 +60,7 @@ export const ensureUserProfile = async (data: {
   const matchingSeller = sellerRows?.[0]?.id
   const matchingEmployeeType = sellerRows?.[0]?.employee_type as EmployeeType | undefined
 
-  const existing = await getUserProfile(data.id)
+  let existing = await getUserProfile(data.id)
 
   // Si no se encontró por ID/auth_uid, buscar por email (migración Firebase → Supabase)
   if (!existing) {
@@ -68,16 +68,16 @@ export const ensureUserProfile = async (data: {
       .from('usuarios')
       .select('*')
       .eq('email', data.email)
-      .maybeSingle()
+      .order('created_at', { ascending: true })
+      .limit(1)
 
     if (byEmail) {
-      // Vincular el perfil existente con el nuevo auth_uid de Supabase
       await supabase
         .from('usuarios')
         .update({ auth_uid: data.id })
         .eq('id', byEmail.id)
 
-      const linked: User = {
+      existing = {
         id: byEmail.id,
         email: byEmail.email,
         name: byEmail.name,
@@ -87,17 +87,42 @@ export const ensureUserProfile = async (data: {
         isActive: byEmail.is_active ?? true,
         createdAt: new Date(byEmail.created_at),
       }
+    }
+  }
 
-      // Sincronizar seller si corresponde
-      if (matchingSeller && linked.role !== 'seller' && linked.role !== 'admin') {
-        await supabase
-          .from('usuarios')
-          .update({ role: 'seller', seller_id: matchingSeller, employee_type: matchingEmployeeType ?? null })
-          .eq('id', linked.id)
-        return { ...linked, role: 'seller' as UserRole, sellerId: matchingSeller, employeeType: matchingEmployeeType }
+  // Si el perfil encontrado es customer, verificar si hay otro registro con el mismo email
+  // que tenga un rol real (admin/seller) — puede pasar por duplicados de migración
+  if (existing && existing.role === 'customer') {
+    const { data: betterRows } = await supabase
+      .from('usuarios')
+      .select('*')
+      .eq('email', data.email)
+      .in('role', ['admin', 'seller'])
+      .limit(1)
+
+    const better = betterRows?.[0]
+    if (better) {
+      // Mover el auth_uid al perfil correcto y eliminar el duplicado customer
+      await supabase
+        .from('usuarios')
+        .update({ auth_uid: data.id })
+        .eq('id', better.id)
+      await supabase
+        .from('usuarios')
+        .delete()
+        .eq('id', existing.id)
+        .neq('id', better.id)
+
+      existing = {
+        id: better.id,
+        email: better.email,
+        name: better.name,
+        role: better.role as UserRole,
+        sellerId: better.seller_id,
+        employeeType: better.employee_type as EmployeeType | undefined,
+        isActive: better.is_active ?? true,
+        createdAt: new Date(better.created_at),
       }
-
-      return linked
     }
   }
 

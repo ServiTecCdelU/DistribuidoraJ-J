@@ -24,6 +24,8 @@ export default function HomePage() {
       } else {
         router.push('/comisiones')
       }
+    } else if (user.role === 'customer') {
+      router.push('/tienda')
     } else {
       router.push('/login')
     }

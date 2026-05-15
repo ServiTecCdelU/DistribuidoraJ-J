@@ -25,7 +25,7 @@ export function MainLayout({ children, title, description }: MainLayoutProps) {
 
   useEffect(() => {
     if (!loading && user?.role === 'customer') {
-      router.push('/')
+      router.push('/tienda')
     }
   }, [loading, user, router])
 
