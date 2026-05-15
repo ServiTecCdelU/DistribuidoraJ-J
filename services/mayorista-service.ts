@@ -83,7 +83,7 @@ export const upsertMayoristaProductos = async (
     codigo_barras: p.codigoBarras ?? '',
     rubro: p.rubro ?? '',
     subrubro: p.subrubro ?? '',
-    categoria: p.categoria,
+    categoria: p.categoria ?? '',
   }))
 
   // Upsert en batches
