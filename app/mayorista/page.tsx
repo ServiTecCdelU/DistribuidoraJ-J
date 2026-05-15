@@ -858,7 +858,7 @@ function ExcelImportDialog({
         if (!r.codigo && !r.nombre && r.precioUnitarioMayorista === 0) return false; // fila vacía
         if (!r.codigo) { console.log('[Mayorista] Fila descartada sin código:', r.nombre); return false; }
         if (!r.nombre) { console.log('[Mayorista] Fila descartada sin nombre:', r.codigo); return false; }
-        if (r.precioUnitarioMayorista <= 0) { console.log('[Mayorista] Fila descartada sin precio:', r.codigo, r.nombre); return false; }
+        if (r.precioUnitarioMayorista < 0) { console.log('[Mayorista] Fila descartada precio negativo:', r.codigo, r.nombre); return false; }
         return true;
       });
 
