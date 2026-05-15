@@ -336,17 +336,7 @@ export const importarListaPrecios = async (
   for (let i = 0; i < prepared.length; i += BATCH_SIZE) {
     const chunk = prepared.slice(i, i + BATCH_SIZE)
 
-    // 1. Upsert mayorista_productos — habilitar y vincular
-    const mpUpserts = chunk.map((row) => ({
-      id: row.mp.id,
-      precio_lista: row.lista1,
-      habilitado: true,
-      producto_id: row.productoId,
-    }))
-    const { error: mpErr } = await supabase.from('mayorista_productos').upsert(mpUpserts, { onConflict: 'id' })
-    if (mpErr) throw new Error(`Error mayorista_productos: ${mpErr.message}`)
-
-    // 2. Upsert productos — descripción y rubro vienen de mayorista
+    // 1. Upsert productos primero (mayorista tiene FK a productos)
     const prodUpserts = chunk.map((row) => {
       const descripcion = row.mp.descripcion || row.codigo
       const precioVenta = Math.round(row.lista1 * (1 + GANANCIA / 100) * 100) / 100
@@ -366,6 +356,16 @@ export const importarListaPrecios = async (
     })
     const { error: prodErr } = await supabase.from('productos').upsert(prodUpserts, { onConflict: 'id' })
     if (prodErr) throw new Error(`Error productos: ${prodErr.message}`)
+
+    // 2. Upsert mayorista_productos — habilitar y vincular
+    const mpUpserts = chunk.map((row) => ({
+      id: row.mp.id,
+      precio_lista: row.lista1,
+      habilitado: true,
+      producto_id: row.productoId,
+    }))
+    const { error: mpErr } = await supabase.from('mayorista_productos').upsert(mpUpserts, { onConflict: 'id' })
+    if (mpErr) throw new Error(`Error mayorista_productos: ${mpErr.message}`)
 
     done += chunk.length
     onProgress?.(done + noEncontrados.length, rows.length)
