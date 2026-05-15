@@ -361,10 +361,14 @@ export default function ProductosPage() {
 
       if (rows.length === 0) throw new Error("No se encontraron filas válidas en el archivo");
 
+      console.log(`[Cargar Lista] ${rows.length} filas parseadas del Excel. Primeros 3 códigos:`, rows.slice(0, 3).map(r => r.codigo));
+
       setProgresoCarga({ done: 0, total: rows.length });
       const { procesados, noEncontrados } = await importarListaPrecios(rows, (done, total) => {
         setProgresoCarga({ done, total });
       });
+
+      console.log(`[Cargar Lista] Procesados: ${procesados}, No encontrados: ${noEncontrados.length}`, noEncontrados.slice(0, 10));
 
       // Recargar productos y reconstruir habilitadosIds desde disabled
       const data = await productsApi.getAll();
@@ -375,7 +379,11 @@ export default function ProductosPage() {
 
       let msg = `${procesados} productos procesados`;
       if (noEncontrados.length > 0) msg += ` · ${noEncontrados.length} sin coincidencia en mayorista`;
-      toast.success(msg, { id: toastId, duration: 6000 });
+      if (procesados === 0 && noEncontrados.length > 0) {
+        toast.error(`Ningún código del Excel coincide con mayorista. Primeros no encontrados: ${noEncontrados.slice(0, 5).join(', ')}`, { id: toastId, duration: 10000 });
+      } else {
+        toast.success(msg, { id: toastId, duration: 6000 });
+      }
     } catch (error: any) {
       toast.error(`Error: ${error.message}`, { id: toastId });
     } finally {
