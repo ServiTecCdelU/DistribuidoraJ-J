@@ -1,0 +1,709 @@
+[
+  {
+    "cliente": "PANADERIA TIKI",
+    "vendedor": "SALDIVIA NICOLAS",
+    "deudaTotal": 1360321.68,
+    "ultimaFechaEmision": "2026-05-07",
+    "cantidadComprobantes": 5
+  },
+  {
+    "cliente": "BARRAL SANDRA****",
+    "vendedor": "SALDIVIA NICOLAS",
+    "deudaTotal": 1347098.25,
+    "ultimaFechaEmision": "2026-01-28",
+    "cantidadComprobantes": 6
+  },
+  {
+    "cliente": "FRIOTEKA GALARZA",
+    "vendedor": "SALDIVIA NICOLAS",
+    "deudaTotal": 834458.07,
+    "ultimaFechaEmision": "2026-04-23",
+    "cantidadComprobantes": 6
+  },
+  {
+    "cliente": "FRIOTEKA 9 DE JULIO",
+    "vendedor": "SALDIVIA NICOLAS",
+    "deudaTotal": 701516.7,
+    "ultimaFechaEmision": "2026-05-03",
+    "cantidadComprobantes": 4
+  },
+  {
+    "cliente": "MATHEY DORET FABRICIO",
+    "vendedor": "SALDIVIA NICOLAS",
+    "deudaTotal": 685118.45,
+    "ultimaFechaEmision": "2026-04-22",
+    "cantidadComprobantes": 5
+  },
+  {
+    "cliente": "FIAMBRERIA TAMARA",
+    "vendedor": "SALDIVIA NICOLAS",
+    "deudaTotal": 678251.23,
+    "ultimaFechaEmision": "2026-05-07",
+    "cantidadComprobantes": 8
+  },
+  {
+    "cliente": "KIOSCO ROSA",
+    "vendedor": "SALDIVIA NICOLAS",
+    "deudaTotal": 550300.57,
+    "ultimaFechaEmision": "2026-05-07",
+    "cantidadComprobantes": 5
+  },
+  {
+    "cliente": "BONNIN LORENA",
+    "vendedor": "SALDIVIA NICOLAS",
+    "deudaTotal": 546830.25,
+    "ultimaFechaEmision": "2026-05-06",
+    "cantidadComprobantes": 5
+  },
+  {
+    "cliente": "SAUCEDO CRISTIAN",
+    "vendedor": "SALDIVIA NICOLAS",
+    "deudaTotal": 515151.23,
+    "ultimaFechaEmision": "2026-04-10",
+    "cantidadComprobantes": 3
+  },
+  {
+    "cliente": "DESPENSA DANIMAR",
+    "vendedor": "SALDIVIA NICOLAS",
+    "deudaTotal": 483131.76,
+    "ultimaFechaEmision": "2026-05-06",
+    "cantidadComprobantes": 5
+  },
+  {
+    "cliente": "KIOSCO PARADA 12****",
+    "vendedor": "SALDIVIA NICOLAS",
+    "deudaTotal": 481348.01,
+    "ultimaFechaEmision": "2026-01-01",
+    "cantidadComprobantes": 1
+  },
+  {
+    "cliente": "GIMENA SANCHEZ",
+    "vendedor": "SALDIVIA NICOLAS",
+    "deudaTotal": 446030.77,
+    "ultimaFechaEmision": "2026-01-27",
+    "cantidadComprobantes": 7
+  },
+  {
+    "cliente": "DESPENSA GENERACION DE FE",
+    "vendedor": "SALDIVIA NICOLAS",
+    "deudaTotal": 386921.41,
+    "ultimaFechaEmision": "2026-04-21",
+    "cantidadComprobantes": 2
+  },
+  {
+    "cliente": "BARRAL LORENA",
+    "vendedor": "SALDIVIA NICOLAS",
+    "deudaTotal": 322232.66,
+    "ultimaFechaEmision": "2025-12-22",
+    "cantidadComprobantes": 1
+  },
+  {
+    "cliente": "CASTELLA RUBEN",
+    "vendedor": "SALDIVIA NICOLAS",
+    "deudaTotal": 300000,
+    "ultimaFechaEmision": "2026-01-27",
+    "cantidadComprobantes": 2
+  },
+  {
+    "cliente": "MILTON ***",
+    "vendedor": "SALDIVIA NICOLAS",
+    "deudaTotal": 298579,
+    "ultimaFechaEmision": "2026-04-22",
+    "cantidadComprobantes": 7
+  },
+  {
+    "cliente": "LIPORACE PABLO",
+    "vendedor": "SALDIVIA NICOLAS",
+    "deudaTotal": 280540.75,
+    "ultimaFechaEmision": "2026-04-20",
+    "cantidadComprobantes": 6
+  },
+  {
+    "cliente": "SCHEFFLER NADIA",
+    "vendedor": "SALDIVIA NICOLAS",
+    "deudaTotal": 276539.81,
+    "ultimaFechaEmision": "2026-03-08",
+    "cantidadComprobantes": 2
+  },
+  {
+    "cliente": "VILLALBA ROXANA",
+    "vendedor": "SALDIVIA NICOLAS",
+    "deudaTotal": 267764.78,
+    "ultimaFechaEmision": "2026-03-12",
+    "cantidadComprobantes": 6
+  },
+  {
+    "cliente": "KIOSCO TITO",
+    "vendedor": "SALDIVIA NICOLAS",
+    "deudaTotal": 267556.67,
+    "ultimaFechaEmision": "2026-03-30",
+    "cantidadComprobantes": 4
+  },
+  {
+    "cliente": "KIOSCO LAS TRES MARIAS",
+    "vendedor": "SALDIVIA NICOLAS",
+    "deudaTotal": 266560.89,
+    "ultimaFechaEmision": "2026-05-03",
+    "cantidadComprobantes": 6
+  },
+  {
+    "cliente": "KIOSCO TITA",
+    "vendedor": "SALDIVIA NICOLAS",
+    "deudaTotal": 244512.92,
+    "ultimaFechaEmision": "2026-05-07",
+    "cantidadComprobantes": 5
+  },
+  {
+    "cliente": "MOREL MAITENA****",
+    "vendedor": "SALDIVIA NICOLAS",
+    "deudaTotal": 234681.29,
+    "ultimaFechaEmision": "2025-12-13",
+    "cantidadComprobantes": 4
+  },
+  {
+    "cliente": "MIÑO YOLANDA****",
+    "vendedor": "SALDIVIA NICOLAS",
+    "deudaTotal": 196245.84,
+    "ultimaFechaEmision": "2026-03-01",
+    "cantidadComprobantes": 4
+  },
+  {
+    "cliente": "AUTOSERVICIO LA VIOLETA",
+    "vendedor": "SALDIVIA NICOLAS",
+    "deudaTotal": 179078.87,
+    "ultimaFechaEmision": "2026-05-03",
+    "cantidadComprobantes": 5
+  },
+  {
+    "cliente": "LA ESPUMA",
+    "vendedor": "SALDIVIA NICOLAS",
+    "deudaTotal": 160014.75,
+    "ultimaFechaEmision": "2026-05-03",
+    "cantidadComprobantes": 3
+  },
+  {
+    "cliente": "FUNDACION GALARZA",
+    "vendedor": "SALDIVIA NICOLAS",
+    "deudaTotal": 152461.71,
+    "ultimaFechaEmision": "2026-05-05",
+    "cantidadComprobantes": 2
+  },
+  {
+    "cliente": "KIOSCO 2.3",
+    "vendedor": "SALDIVIA NICOLAS",
+    "deudaTotal": 128033.1,
+    "ultimaFechaEmision": "2026-05-03",
+    "cantidadComprobantes": 2
+  },
+  {
+    "cliente": "BOGADO GABRIELA",
+    "vendedor": "SALDIVIA NICOLAS",
+    "deudaTotal": 105068.79,
+    "ultimaFechaEmision": "2025-11-30",
+    "cantidadComprobantes": 1
+  },
+  {
+    "cliente": "CL SHOP",
+    "vendedor": "SALDIVIA NICOLAS",
+    "deudaTotal": 96868.07,
+    "ultimaFechaEmision": "2026-05-06",
+    "cantidadComprobantes": 5
+  },
+  {
+    "cliente": "CACERES MARIA",
+    "vendedor": "SALDIVIA NICOLAS",
+    "deudaTotal": 87953.99,
+    "ultimaFechaEmision": "2026-04-29",
+    "cantidadComprobantes": 2
+  },
+  {
+    "cliente": "BENITEZ LORENA",
+    "vendedor": "SALDIVIA NICOLAS",
+    "deudaTotal": 42173.95,
+    "ultimaFechaEmision": "2026-03-05",
+    "cantidadComprobantes": 3
+  },
+  {
+    "cliente": "POPI PARRA",
+    "vendedor": "SALDIVIA NICOLAS",
+    "deudaTotal": 41149.99,
+    "ultimaFechaEmision": "2026-04-15",
+    "cantidadComprobantes": 2
+  },
+  {
+    "cliente": "SALVAREZZA VALERIA",
+    "vendedor": "SALDIVIA NICOLAS",
+    "deudaTotal": 27790.75,
+    "ultimaFechaEmision": "2026-04-27",
+    "cantidadComprobantes": 3
+  },
+  {
+    "cliente": "KIOSCO ARTS",
+    "vendedor": "SALDIVIA NICOLAS",
+    "deudaTotal": 15309.67,
+    "ultimaFechaEmision": "2026-02-25",
+    "cantidadComprobantes": 1
+  },
+  {
+    "cliente": "TALLAFER DANIEL",
+    "vendedor": "LUCAS BENITEZ",
+    "deudaTotal": 2181320.73,
+    "ultimaFechaEmision": "2026-05-03",
+    "cantidadComprobantes": 12
+  },
+  {
+    "cliente": "GUIDO SOFIA",
+    "vendedor": "LUCAS BENITEZ",
+    "deudaTotal": 1128812.57,
+    "ultimaFechaEmision": "2026-05-06",
+    "cantidadComprobantes": 11
+  },
+  {
+    "cliente": "KIOSCO WONKA",
+    "vendedor": "LUCAS BENITEZ",
+    "deudaTotal": 879869.16,
+    "ultimaFechaEmision": "2026-03-02",
+    "cantidadComprobantes": 7
+  },
+  {
+    "cliente": "ALVEZ SERRAN ELIDA",
+    "vendedor": "LUCAS BENITEZ",
+    "deudaTotal": 675204.23,
+    "ultimaFechaEmision": "2026-04-06",
+    "cantidadComprobantes": 5
+  },
+  {
+    "cliente": "ANDRE JUANA MARGARITA",
+    "vendedor": "LUCAS BENITEZ",
+    "deudaTotal": 566977.25,
+    "ultimaFechaEmision": "2026-05-06",
+    "cantidadComprobantes": 9
+  },
+  {
+    "cliente": "ORTIZ NADIA",
+    "vendedor": "LUCAS BENITEZ",
+    "deudaTotal": 521687.5,
+    "ultimaFechaEmision": "2026-04-26",
+    "cantidadComprobantes": 3
+  },
+  {
+    "cliente": "VILLANUEVA ROCIO",
+    "vendedor": "LUCAS BENITEZ",
+    "deudaTotal": 487291.02,
+    "ultimaFechaEmision": "2026-05-06",
+    "cantidadComprobantes": 3
+  },
+  {
+    "cliente": "ARROYO CRISTINA",
+    "vendedor": "LUCAS BENITEZ",
+    "deudaTotal": 474843.1,
+    "ultimaFechaEmision": "2026-04-29",
+    "cantidadComprobantes": 4
+  },
+  {
+    "cliente": "CABAÑA DIANA",
+    "vendedor": "LUCAS BENITEZ",
+    "deudaTotal": 369960.59,
+    "ultimaFechaEmision": "2026-05-05",
+    "cantidadComprobantes": 4
+  },
+  {
+    "cliente": "KIOSCO LA 10",
+    "vendedor": "LUCAS BENITEZ",
+    "deudaTotal": 343204.36,
+    "ultimaFechaEmision": "2026-03-08",
+    "cantidadComprobantes": 7
+  },
+  {
+    "cliente": "KIOSCO A LAS 9",
+    "vendedor": "LUCAS BENITEZ",
+    "deudaTotal": 235290.84,
+    "ultimaFechaEmision": "2026-04-28",
+    "cantidadComprobantes": 2
+  },
+  {
+    "cliente": "DESPENSA LAZARO",
+    "vendedor": "LUCAS BENITEZ",
+    "deudaTotal": 219733.7,
+    "ultimaFechaEmision": "2026-04-28",
+    "cantidadComprobantes": 1
+  },
+  {
+    "cliente": "ROH MARITA",
+    "vendedor": "LUCAS BENITEZ",
+    "deudaTotal": 214897.51,
+    "ultimaFechaEmision": "2026-04-08",
+    "cantidadComprobantes": 2
+  },
+  {
+    "cliente": "POLLERIA LA PAULINA",
+    "vendedor": "LUCAS BENITEZ",
+    "deudaTotal": 143642.56,
+    "ultimaFechaEmision": "2026-04-28",
+    "cantidadComprobantes": 2
+  },
+  {
+    "cliente": "TORRES GABRIELA",
+    "vendedor": "LUCAS BENITEZ",
+    "deudaTotal": 136215.39,
+    "ultimaFechaEmision": "2026-04-28",
+    "cantidadComprobantes": 5
+  },
+  {
+    "cliente": "LOCOS X EL PADDLE",
+    "vendedor": "LUCAS BENITEZ",
+    "deudaTotal": 64408.68,
+    "ultimaFechaEmision": "2026-04-21",
+    "cantidadComprobantes": 1
+  },
+  {
+    "cliente": "MAXIKIOSCO EL SANTITO 2",
+    "vendedor": "LUCAS BENITEZ",
+    "deudaTotal": 34624.34,
+    "ultimaFechaEmision": "2026-04-22",
+    "cantidadComprobantes": 2
+  },
+  {
+    "cliente": "EMILIANO GABET",
+    "vendedor": "GANGE ADRIAN",
+    "deudaTotal": 2443623.04,
+    "ultimaFechaEmision": "2026-02-10",
+    "cantidadComprobantes": 24
+  },
+  {
+    "cliente": "VERDULERIA SAN FRANCISCO2",
+    "vendedor": "GANGE ADRIAN",
+    "deudaTotal": 1500225.59,
+    "ultimaFechaEmision": "2026-05-07",
+    "cantidadComprobantes": 11
+  },
+  {
+    "cliente": "JUAREZ GUSTAVO",
+    "vendedor": "GANGE ADRIAN",
+    "deudaTotal": 1131013.79,
+    "ultimaFechaEmision": "2026-02-06",
+    "cantidadComprobantes": 8
+  },
+  {
+    "cliente": "RACHIT SERGIO",
+    "vendedor": "GANGE ADRIAN",
+    "deudaTotal": 792204.16,
+    "ultimaFechaEmision": "2026-05-05",
+    "cantidadComprobantes": 8
+  },
+  {
+    "cliente": "KIOSCO LO DE TOM",
+    "vendedor": "GANGE ADRIAN",
+    "deudaTotal": 714173.47,
+    "ultimaFechaEmision": "2026-01-18",
+    "cantidadComprobantes": 5
+  },
+  {
+    "cliente": "FERNANDEZ SOFIA",
+    "vendedor": "GANGE ADRIAN",
+    "deudaTotal": 697872.72,
+    "ultimaFechaEmision": "2026-05-06",
+    "cantidadComprobantes": 7
+  },
+  {
+    "cliente": "BURDETTA BENJAMIN",
+    "vendedor": "GANGE ADRIAN",
+    "deudaTotal": 644545.42,
+    "ultimaFechaEmision": "2026-05-06",
+    "cantidadComprobantes": 4
+  },
+  {
+    "cliente": "VILLAGRAN MAXIMILIANO",
+    "vendedor": "GANGE ADRIAN",
+    "deudaTotal": 613633.52,
+    "ultimaFechaEmision": "2026-05-07",
+    "cantidadComprobantes": 17
+  },
+  {
+    "cliente": "LEAL RAUL",
+    "vendedor": "GANGE ADRIAN",
+    "deudaTotal": 588535.34,
+    "ultimaFechaEmision": "2026-05-05",
+    "cantidadComprobantes": 6
+  },
+  {
+    "cliente": "DOÑA CHOLA",
+    "vendedor": "GANGE ADRIAN",
+    "deudaTotal": 504762.75,
+    "ultimaFechaEmision": "2026-04-29",
+    "cantidadComprobantes": 3
+  },
+  {
+    "cliente": "QUE JAMONES 2.0",
+    "vendedor": "GANGE ADRIAN",
+    "deudaTotal": 477092.62,
+    "ultimaFechaEmision": "2026-05-04",
+    "cantidadComprobantes": 5
+  },
+  {
+    "cliente": "GRANJA DOÑA CHOLA 2",
+    "vendedor": "GANGE ADRIAN",
+    "deudaTotal": 399041.36,
+    "ultimaFechaEmision": "2026-04-27",
+    "cantidadComprobantes": 5
+  },
+  {
+    "cliente": "SCHAUMAN GASTON",
+    "vendedor": "GANGE ADRIAN",
+    "deudaTotal": 350051.13,
+    "ultimaFechaEmision": "2026-05-03",
+    "cantidadComprobantes": 3
+  },
+  {
+    "cliente": "BEKENSTEIN ROBERTO",
+    "vendedor": "GANGE ADRIAN",
+    "deudaTotal": 344077.1,
+    "ultimaFechaEmision": "2026-04-22",
+    "cantidadComprobantes": 3
+  },
+  {
+    "cliente": "KARAI SRL",
+    "vendedor": "GANGE ADRIAN",
+    "deudaTotal": 310834.38,
+    "ultimaFechaEmision": "2026-04-19",
+    "cantidadComprobantes": 1
+  },
+  {
+    "cliente": "EL MERCADITO",
+    "vendedor": "GANGE ADRIAN",
+    "deudaTotal": 306435.95,
+    "ultimaFechaEmision": "2026-04-27",
+    "cantidadComprobantes": 3
+  },
+  {
+    "cliente": "ALEXANDER VENEZU",
+    "vendedor": "GANGE ADRIAN",
+    "deudaTotal": 296314.6,
+    "ultimaFechaEmision": "2026-04-06",
+    "cantidadComprobantes": 5
+  },
+  {
+    "cliente": "BUFFET UADER",
+    "vendedor": "GANGE ADRIAN",
+    "deudaTotal": 259398.2,
+    "ultimaFechaEmision": "2026-04-22",
+    "cantidadComprobantes": 3
+  },
+  {
+    "cliente": "PUNTO JUNK",
+    "vendedor": "GANGE ADRIAN",
+    "deudaTotal": 229762.81,
+    "ultimaFechaEmision": "2026-05-03",
+    "cantidadComprobantes": 3
+  },
+  {
+    "cliente": "ANDERSON GISELA",
+    "vendedor": "GANGE ADRIAN",
+    "deudaTotal": 226812.21,
+    "ultimaFechaEmision": "2026-04-09",
+    "cantidadComprobantes": 2
+  },
+  {
+    "cliente": "DESPENSA CASTELLA",
+    "vendedor": "GANGE ADRIAN",
+    "deudaTotal": 222496.32,
+    "ultimaFechaEmision": "2026-05-06",
+    "cantidadComprobantes": 5
+  },
+  {
+    "cliente": "AVALOS MARILYN",
+    "vendedor": "GANGE ADRIAN",
+    "deudaTotal": 215013.31,
+    "ultimaFechaEmision": "2026-04-19",
+    "cantidadComprobantes": 3
+  },
+  {
+    "cliente": "GARCIA LEONARDO",
+    "vendedor": "GANGE ADRIAN",
+    "deudaTotal": 214206.64,
+    "ultimaFechaEmision": "2025-12-02",
+    "cantidadComprobantes": 2
+  },
+  {
+    "cliente": "DESPENSA ROSA RETAMAR",
+    "vendedor": "GANGE ADRIAN",
+    "deudaTotal": 204863.18,
+    "ultimaFechaEmision": "2026-04-29",
+    "cantidadComprobantes": 4
+  },
+  {
+    "cliente": "VEREDA CESAR GASTON",
+    "vendedor": "GANGE ADRIAN",
+    "deudaTotal": 189406.05,
+    "ultimaFechaEmision": "2026-05-05",
+    "cantidadComprobantes": 2
+  },
+  {
+    "cliente": "TODO DEL CAMPO 2",
+    "vendedor": "GANGE ADRIAN",
+    "deudaTotal": 178721.58,
+    "ultimaFechaEmision": "2026-05-03",
+    "cantidadComprobantes": 1
+  },
+  {
+    "cliente": "PANZA VERDE (ISLA DEL PUERTO)",
+    "vendedor": "GANGE ADRIAN",
+    "deudaTotal": 168628.74,
+    "ultimaFechaEmision": "2026-05-03",
+    "cantidadComprobantes": 3
+  },
+  {
+    "cliente": "AVALOS ANAHI",
+    "vendedor": "GANGE ADRIAN",
+    "deudaTotal": 165532.03,
+    "ultimaFechaEmision": "2026-04-23",
+    "cantidadComprobantes": 2
+  },
+  {
+    "cliente": "FIAMBRERIA QUE SABORES",
+    "vendedor": "GANGE ADRIAN",
+    "deudaTotal": 164786.08,
+    "ultimaFechaEmision": "2026-05-05",
+    "cantidadComprobantes": 3
+  },
+  {
+    "cliente": "ZABALLO PAMELA",
+    "vendedor": "GANGE ADRIAN",
+    "deudaTotal": 160481.52,
+    "ultimaFechaEmision": "2026-04-22",
+    "cantidadComprobantes": 3
+  },
+  {
+    "cliente": "QUITTET MABEL",
+    "vendedor": "GANGE ADRIAN",
+    "deudaTotal": 137829.82,
+    "ultimaFechaEmision": "2026-05-05",
+    "cantidadComprobantes": 2
+  },
+  {
+    "cliente": "PETRONI NICOLAS",
+    "vendedor": "GANGE ADRIAN",
+    "deudaTotal": 133413.43,
+    "ultimaFechaEmision": "2026-04-14",
+    "cantidadComprobantes": 1
+  },
+  {
+    "cliente": "MONTAÑANA ALDO",
+    "vendedor": "GANGE ADRIAN",
+    "deudaTotal": 126119.31,
+    "ultimaFechaEmision": "2026-04-27",
+    "cantidadComprobantes": 2
+  },
+  {
+    "cliente": "OLIVERA MIRIAM",
+    "vendedor": "GANGE ADRIAN",
+    "deudaTotal": 122519.66,
+    "ultimaFechaEmision": "2026-04-10",
+    "cantidadComprobantes": 1
+  },
+  {
+    "cliente": "TRAVERSO VALERIA ***",
+    "vendedor": "GANGE ADRIAN",
+    "deudaTotal": 121523.75,
+    "ultimaFechaEmision": "2025-11-26",
+    "cantidadComprobantes": 1
+  },
+  {
+    "cliente": "LEAL RAUL 2",
+    "vendedor": "GANGE ADRIAN",
+    "deudaTotal": 120238.91,
+    "ultimaFechaEmision": "2026-05-05",
+    "cantidadComprobantes": 3
+  },
+  {
+    "cliente": "TODO LIMPIO",
+    "vendedor": "GANGE ADRIAN",
+    "deudaTotal": 119483.87,
+    "ultimaFechaEmision": "2026-05-05",
+    "cantidadComprobantes": 2
+  },
+  {
+    "cliente": "ROMERO GABRIELA",
+    "vendedor": "GANGE ADRIAN",
+    "deudaTotal": 118718.88,
+    "ultimaFechaEmision": "2026-04-28",
+    "cantidadComprobantes": 6
+  },
+  {
+    "cliente": "BUFFET ESCUELA JJ URQUIZA",
+    "vendedor": "GANGE ADRIAN",
+    "deudaTotal": 102248.94,
+    "ultimaFechaEmision": "2026-05-07",
+    "cantidadComprobantes": 3
+  },
+  {
+    "cliente": "POLLERIA DAVID",
+    "vendedor": "GANGE ADRIAN",
+    "deudaTotal": 98769.42,
+    "ultimaFechaEmision": "2026-04-12",
+    "cantidadComprobantes": 4
+  },
+  {
+    "cliente": "GONZALEZ DEBORA",
+    "vendedor": "GANGE ADRIAN",
+    "deudaTotal": 90613.28,
+    "ultimaFechaEmision": "2025-12-29",
+    "cantidadComprobantes": 2
+  },
+  {
+    "cliente": "MOREL MAITENA****",
+    "vendedor": "GANGE ADRIAN",
+    "deudaTotal": 88263.29,
+    "ultimaFechaEmision": "2025-11-24",
+    "cantidadComprobantes": 1
+  },
+  {
+    "cliente": "GOSSI MAIRA",
+    "vendedor": "GANGE ADRIAN",
+    "deudaTotal": 67126.48,
+    "ultimaFechaEmision": "2026-02-23",
+    "cantidadComprobantes": 3
+  },
+  {
+    "cliente": "PARODI MARIA JOSE",
+    "vendedor": "GANGE ADRIAN",
+    "deudaTotal": 65140.8,
+    "ultimaFechaEmision": "2026-04-28",
+    "cantidadComprobantes": 3
+  },
+  {
+    "cliente": "DOMINGUEZ MARIELA",
+    "vendedor": "GANGE ADRIAN",
+    "deudaTotal": 45704.65,
+    "ultimaFechaEmision": "2026-05-03",
+    "cantidadComprobantes": 3
+  },
+  {
+    "cliente": "SCHMITZ YESSICA",
+    "vendedor": "GANGE ADRIAN",
+    "deudaTotal": 43227.42,
+    "ultimaFechaEmision": "2026-04-05",
+    "cantidadComprobantes": 1
+  },
+  {
+    "cliente": "RIQUELME DANIEL",
+    "vendedor": "GANGE ADRIAN",
+    "deudaTotal": 32886.01,
+    "ultimaFechaEmision": "2026-03-27",
+    "cantidadComprobantes": 2
+  },
+  {
+    "cliente": "BOCHIO ESTEBAN",
+    "vendedor": "GANGE ADRIAN",
+    "deudaTotal": 25572.2,
+    "ultimaFechaEmision": "2026-05-03",
+    "cantidadComprobantes": 2
+  },
+  {
+    "cliente": "SANTINO SENA",
+    "vendedor": "GANGE ADRIAN",
+    "deudaTotal": 14822.55,
+    "ultimaFechaEmision": "2026-02-02",
+    "cantidadComprobantes": 2
+  }
+]
