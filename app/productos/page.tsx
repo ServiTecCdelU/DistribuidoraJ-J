@@ -2285,18 +2285,19 @@ function CargarListaDialog({
         unPack: r.lote,
       }));
 
+      console.log(`[Cargar Lista] Enviando ${importRows.length} filas a importarListaPrecios`);
+
       const { procesados, noEncontrados } = await importarListaPrecios(importRows, (done, total) =>
         setProgress({ done, total })
       );
+
+      console.log(`[Cargar Lista] Procesados: ${procesados}, No encontrados: ${noEncontrados.length}`, noEncontrados.slice(0, 10));
+
       await onImportado();
 
       let msg = `${procesados} productos procesados`;
       if (noEncontrados.length > 0) msg += ` · ${noEncontrados.length} sin coincidencia en mayorista`;
-      if (procesados === 0 && noEncontrados.length > 0) {
-        toast.error(`Ningún código coincide con mayorista. Primeros: ${noEncontrados.slice(0, 5).join(", ")}`, { duration: 10000 });
-      } else {
-        toast.success(msg, { duration: 6000 });
-      }
+      toast.success(msg, { duration: 10000 });
       handleClose(false);
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Error al importar los productos");
