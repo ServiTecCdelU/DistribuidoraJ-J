@@ -35,9 +35,7 @@ import {
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import type { UserRole, CartState, CartActions } from "@/hooks/useCart";
-import dynamic from "next/dynamic";
 
-const MapPinPickerLazy = dynamic(() => import("@/components/cart/map-pin-picker"), { ssr: false });
 
 interface UnifiedCartProps {
   role: UserRole;
@@ -509,9 +507,6 @@ export function UnifiedCart({ role, state, actions, onConfirmSale, allowDiscount
             onEditSavedAddress={actions.updateClientAddress}
             onDeleteSavedAddress={actions.deleteClientAddress}
             city={state.selectedCity}
-            lat={deliveryLat}
-            lng={deliveryLng}
-            onCoordsChange={actions.setDeliveryCoords}
           />
         )}
 
@@ -1049,7 +1044,7 @@ function ClientLookupSection({
 export function DeliveryAddressSection({
   deliveryAddress, clientAddressBook, legacyMainAddress, selectedSavedAddress, newAddress,
   onSelectType, onNewAddressChange, onSelectSavedAddress, onEditSavedAddress, onDeleteSavedAddress,
-  city, lat, lng, onCoordsChange,
+  city,
 }: {
   deliveryAddress: string;
   clientAddressBook: Array<{ city: string; address: string; lat?: number; lng?: number }>;
@@ -1062,43 +1057,9 @@ export function DeliveryAddressSection({
   onEditSavedAddress: (index: number, updated: { city: string; address: string; lat?: number; lng?: number }) => Promise<void>;
   onDeleteSavedAddress: (index: number) => Promise<void>;
   city: string;
-  lat: number | null;
-  lng: number | null;
-  onCoordsChange: (lat: number | null, lng: number | null) => void;
 }) {
   const [editingIndex, setEditingIndex] = useState<number | null>(null);
   const [editingValue, setEditingValue] = useState("");
-  const [geocoding, setGeocoding] = useState(false);
-
-  // Reverse geocoding: cuando se coloca un pin, buscar dirección con Nominatim
-  const handleCoordsChange = async (newLat: number | null, newLng: number | null) => {
-    onCoordsChange(newLat, newLng);
-    if (newLat == null || newLng == null) return;
-    // Solo auto-rellenar si el campo está vacío o es la coordenada anterior
-    setGeocoding(true);
-    try {
-      const res = await fetch(
-        `https://nominatim.openstreetmap.org/reverse?lat=${newLat}&lon=${newLng}&format=json&addressdetails=1`,
-        { headers: { "Accept-Language": "es" } }
-      );
-      if (res.ok) {
-        const data = await res.json();
-        const addr = data.address || {};
-        const parts = [
-          addr.road || addr.pedestrian || addr.footway,
-          addr.house_number,
-          addr.suburb || addr.neighbourhood,
-        ].filter(Boolean);
-        if (parts.length > 0) {
-          onNewAddressChange(parts.join(" "));
-        }
-      }
-    } catch {
-      // silencio si falla la geocodificación
-    } finally {
-      setGeocoding(false);
-    }
-  };
 
   // Filtrar libreta por ciudad seleccionada; si no hay ciudad, mostrar todas
   const filteredBook = city
@@ -1215,18 +1176,6 @@ export function DeliveryAddressSection({
             onChange={(e) => onNewAddressChange(e.target.value)}
             className="min-h-[60px] text-sm resize-none"
           />
-        )}
-        {city && <MapPinPickerLazy lat={lat} lng={lng} city={city} onCoordsChange={handleCoordsChange} />}
-        {geocoding && (
-          <p className="text-[10px] text-muted-foreground flex items-center gap-1">
-            Buscando dirección...
-          </p>
-        )}
-        {!geocoding && lat != null && lng != null && (
-          <p className="text-[10px] text-emerald-600 dark:text-emerald-400 flex items-center gap-1">
-            <MapPin className="h-3 w-3" />
-            Ubicacion marcada
-          </p>
         )}
       </div>
     </div>
