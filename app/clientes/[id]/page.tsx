@@ -16,10 +16,17 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog'
-import { clientsApi, paymentsApi } from '@/lib/api'
-import type { Client, Transaction } from '@/lib/types'
+import { clientsApi, paymentsApi, sellersApi } from '@/lib/api'
+import type { Client, Transaction, Seller } from '@/lib/types'
 import { formatCurrency, formatDate } from '@/lib/utils/format'
-import { DollarSign, Plus, Loader2 } from 'lucide-react'
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select'
+import { DollarSign, Plus, Loader2, UserCheck } from 'lucide-react'
 import { PageHeader } from '@/components/layout/page-header'
 
 export default function ClientDetailPage() {
@@ -32,9 +39,11 @@ export default function ClientDetailPage() {
   const [paymentAmount, setPaymentAmount] = useState('')
   const [paymentDescription, setPaymentDescription] = useState('')
   const [processingPayment, setProcessingPayment] = useState(false)
+  const [sellers, setSellers] = useState<Seller[]>([])
 
   useEffect(() => {
     loadData()
+    sellersApi.getAll().then((s) => setSellers(s.filter((x) => x.isActive))).catch(() => {})
   }, [params.id])
 
   const loadData = async () => {
@@ -200,6 +209,36 @@ export default function ClientDetailPage() {
           </CardContent>
         </Card>
       </div>
+
+      {/* Vendedor asignado */}
+      <Card className="mb-8">
+        <CardHeader className="pb-2">
+          <CardTitle className="text-sm font-medium text-muted-foreground flex items-center gap-2">
+            <UserCheck className="h-4 w-4" />
+            Vendedor asignado (cobranzas)
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          <Select
+            value={client.sellerId || 'none'}
+            onValueChange={async (value) => {
+              const sellerId = value === 'none' ? undefined : value
+              const updated = await clientsApi.update(client.id, { sellerId: sellerId || '' })
+              setClient({ ...client, sellerId: updated.sellerId })
+            }}
+          >
+            <SelectTrigger className="w-full max-w-xs">
+              <SelectValue placeholder="Sin asignar" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="none">Sin asignar</SelectItem>
+              {sellers.map((s) => (
+                <SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </CardContent>
+      </Card>
 
       {/* Transactions */}
       <Card>

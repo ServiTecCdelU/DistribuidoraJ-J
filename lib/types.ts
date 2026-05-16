@@ -50,6 +50,9 @@ export interface Client {
     | "no_responsable";
   creditLimit: number;
   currentBalance: number;
+  sellerId?: string;
+  sellerName?: string;
+  notes?: string;
   createdAt: Date;
 }
 
@@ -259,5 +262,25 @@ export interface SellerCommission {
   commissionAmount: number;
   isPaid: boolean;
   paidAt?: Date;
+  createdAt: Date;
+}
+
+export type ComprobanteStatus = "pending" | "approved" | "rejected";
+
+export interface ComprobantePago {
+  id: string;
+  clientId: string;
+  clientName?: string;
+  sellerId: string;
+  sellerName?: string;
+  amount: number;
+  notes?: string;
+  fileUrl: string;
+  fileName?: string;
+  status: ComprobanteStatus;
+  rejectionReason?: string;
+  reviewedAt?: Date;
+  reviewedBy?: string;
+  transactionId?: string;
   createdAt: Date;
 }

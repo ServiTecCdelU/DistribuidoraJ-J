@@ -17,6 +17,7 @@ function mapClient(d: Record<string, any>): Client {
     taxCategory: d.tax_category ?? 'consumidor_final',
     creditLimit: Number(d.credit_limit) || 0,
     currentBalance: Number(d.current_balance) || 0,
+    sellerId: d.seller_id ?? undefined,
     notes: d.notes ?? '',
     createdAt: new Date(d.created_at),
   }
@@ -81,6 +82,7 @@ export const updateClient = async (id: string, updates: Partial<Client>): Promis
   if (updates.address !== undefined) mapped.address = updates.address
   if (updates.addresses !== undefined) mapped.addresses = updates.addresses
   if (updates.notes !== undefined) mapped.notes = updates.notes
+  if (updates.sellerId !== undefined) mapped.seller_id = updates.sellerId || null
 
   await supabase.from('clientes').update(mapped).eq('id', id)
   const updated = await getClientById(id)

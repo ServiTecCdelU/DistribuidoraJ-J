@@ -82,6 +82,15 @@ import {
   saveTransferConfig,
 } from '@/services/transfer-config-service'
 import type { TransferConfig } from '@/services/transfer-config-service'
+import {
+  getClientsBySeller,
+  getDebtClients,
+  uploadComprobante,
+  getComprobantes,
+  getComprobantesBySeller,
+  approveComprobante,
+  rejectComprobante,
+} from '@/services/cobranzas-service'
 
 export const productsApi = {
   async getAll(): Promise<Product[]> {
@@ -340,3 +349,33 @@ export const transferApi = {
   saveConfig: saveTransferConfig,
 }
 export type { TransferConfig }
+
+export const cobranzasApi = {
+  async getClientsBySeller(sellerId: string) {
+    return getClientsBySeller(sellerId)
+  },
+  async getDebtClients(sellerId?: string) {
+    return getDebtClients(sellerId)
+  },
+  async uploadComprobante(data: {
+    clientId: string
+    sellerId: string
+    amount: number
+    notes?: string
+    file: File
+  }) {
+    return uploadComprobante(data)
+  },
+  async getComprobantes(filters?: { status?: string; sellerId?: string }) {
+    return getComprobantes(filters)
+  },
+  async getComprobantesBySeller(sellerId: string) {
+    return getComprobantesBySeller(sellerId)
+  },
+  async approveComprobante(id: string, reviewedBy: string) {
+    return approveComprobante(id, reviewedBy)
+  },
+  async rejectComprobante(id: string, reason: string, reviewedBy: string) {
+    return rejectComprobante(id, reason, reviewedBy)
+  },
+}
