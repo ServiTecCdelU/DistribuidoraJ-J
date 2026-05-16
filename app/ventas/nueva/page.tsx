@@ -17,6 +17,13 @@ import {
   DialogDescription,
 } from "@/components/ui/dialog";
 import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import {
   Search,
   Plus,
   ShoppingCart,
@@ -292,8 +299,8 @@ function NuevaVentaContent({
           stackOnMobile
         />
 
-        <div className="space-y-2">
-          <div className="relative">
+        <div className="flex gap-2">
+          <div className="relative flex-1">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
             <Input
               placeholder="Buscar productos..."
@@ -308,29 +315,17 @@ function NuevaVentaContent({
             )}
           </div>
           {rubros.length > 0 && (
-            <div className="flex gap-2 overflow-x-auto pb-1">
-              <button
-                onClick={() => handleRubroChange("todos")}
-                className={cn(
-                  "px-3 py-1.5 text-xs font-medium rounded-lg border whitespace-nowrap transition-colors",
-                  !rubroFiltro ? "bg-primary text-primary-foreground border-primary" : "border-border hover:border-primary/50 text-muted-foreground"
-                )}
-              >
-                Todos
-              </button>
-              {rubros.map((r) => (
-                <button
-                  key={r}
-                  onClick={() => handleRubroChange(r)}
-                  className={cn(
-                    "px-3 py-1.5 text-xs font-medium rounded-lg border whitespace-nowrap transition-colors",
-                    rubroFiltro === r ? "bg-primary text-primary-foreground border-primary" : "border-border hover:border-primary/50 text-muted-foreground"
-                  )}
-                >
-                  {r}
-                </button>
-              ))}
-            </div>
+            <Select value={rubroFiltro || "todos"} onValueChange={handleRubroChange}>
+              <SelectTrigger className="w-40 h-11 rounded-xl border-2">
+                <SelectValue placeholder="Rubro" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="todos">Todos los rubros</SelectItem>
+                {rubros.map((r) => (
+                  <SelectItem key={r} value={r}>{r}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
           )}
         </div>
 
@@ -446,8 +441,6 @@ const ProductListItem = memo(function ProductListItem({
   formatCurrency: (n: number) => string;
   disabled?: boolean;
 }) {
-  const esMayorista = product.stockLocal !== undefined;
-  const stockDisplay = esMayorista ? (product.stockLocal ?? 0) : product.stock;
   return (
     <tr
       className={cn(
@@ -461,27 +454,8 @@ const ProductListItem = memo(function ProductListItem({
       <td className="py-1.5 px-2 text-sm font-medium max-w-0 w-full">
         <span className="block truncate">{product.name}</span>
       </td>
-      <td className="py-1.5 px-2 text-xs text-muted-foreground text-right whitespace-nowrap">
-        {esMayorista ? (
-          <span className="flex flex-col items-end gap-0.5">
-            <span>L: {stockDisplay}</span>
-            {(product.unidadesPorBulto ?? 0) > 0 && (
-              <span className="text-[10px] text-muted-foreground/70">
-                {product.seDivideEn && product.seDivideEn > 1
-                  ? `${product.unidadesPorBulto}u ÷${product.seDivideEn}`
-                  : `lote ${product.unidadesPorBulto}u`}
-              </span>
-            )}
-          </span>
-        ) : (
-          `${stockDisplay} u`
-        )}
-      </td>
       <td className="py-1.5 px-2 text-xs font-semibold text-right whitespace-nowrap">
-        <span>{formatCurrency(product.price)}</span>
-        {esMayorista && product.seDivideEn && product.seDivideEn > 1 && (
-          <span className="block text-[10px] font-normal text-muted-foreground">/ lote</span>
-        )}
+        {formatCurrency(product.price)}
       </td>
       <td className="py-1.5 pl-2 pr-3 text-center w-8">
         {quantity > 0 && (
@@ -516,8 +490,7 @@ function ProductGrid({
           <tr className="bg-muted/50 text-xs text-muted-foreground">
             <th className="py-1.5 pl-3 pr-2 text-left font-medium w-20">Código</th>
             <th className="py-1.5 px-2 text-left font-medium">Nombre</th>
-            <th className="py-1.5 px-2 text-right font-medium w-20">Stock</th>
-            <th className="py-1.5 px-2 text-right font-medium w-28">Precio</th>
+            <th className="py-1.5 px-2 text-right font-medium w-24">Precio</th>
             <th className="py-1.5 pl-2 pr-3 w-8" />
           </tr>
         </thead>
