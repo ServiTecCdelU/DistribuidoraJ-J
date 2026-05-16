@@ -96,9 +96,9 @@ Siempre hacer commit y push al terminar cada tarea, sin esperar confirmacion del
 - Componentes de tienda en `components/tienda/` (hero-carousel, top-products).
 - Rate limiting en `lib/rate-limit.ts` (in-memory, se resetea en redeploy).
 - Middleware.ts agrega security headers a rutas protegidas.
-- Auditoria en `services/audit-service.ts` -> Firestore collection "auditoria".
-- Listas de precios en `services/price-list-service.ts` -> Firestore collection "listas_precios".
-- Caja diaria en Firestore collection "caja".
+- Auditoria en `services/audit-service.ts` -> tabla `auditoria`.
+- Listas de precios en `services/price-list-service.ts` -> tabla `listas_precios`.
+- Caja diaria en tabla `caja`.
 - `lib/api.ts` es la fachada sobre todos los services. Las pages deben importar desde `@/lib/api`, no directamente desde `services/`.
 
 ## Arquitectura General
@@ -107,8 +107,10 @@ Next.js 15 (App Router) desplegado en Vercel. Maneja ventas, pedidos, inventario
 
 ### Stack Tecnologico
 - **Frontend**: Next.js App Router, React 19, Tailwind CSS v4, shadcn/ui (Radix UI primitives)
-- **Database**: Firebase Firestore — collections: `ventas`, `clientes`, `productos`, `vendedores`, `pedidos`, `comisiones`, `usuarios`, `caja`, `auditoria`, `listas_precios`, `mayorista_productos`, `stock_movimientos`. Offline persistence habilitada con `persistentLocalCache` + `persistentMultipleTabManager` (`lib/firebase.ts`).
-- **Auth**: Firebase Authentication con acceso por roles (`admin`, `seller`, `customer`). El perfil se cachea en módulo + `sessionStorage`; llamar `invalidateAuthCache()` de `hooks/use-auth.ts` tras cambios de rol para evitar datos stale.
+- **Database**: Supabase PostgreSQL — tablas: `ventas`, `clientes`, `productos`, `vendedores`, `pedidos`, `comisiones`, `usuarios`, `caja`, `auditoria`, `listas_precios`, `mayorista_productos`, `stock_movimientos`, `transacciones`, `pedidos_mayorista`, `configuracion`. Schema completo en `PLAN_MIGRACION_SUPABASE.md`.
+- **Auth**: Supabase Auth con Google OAuth (flujo redirect). Roles: `admin`, `seller`, `customer`. El perfil se cachea en módulo + `sessionStorage`; llamar `invalidateAuthCache()` de `hooks/use-auth.ts` tras cambios de rol para evitar datos stale.
+- **Storage**: Supabase Storage — bucket `facturas` para PDFs de facturación.
+- **Supabase clients**: `lib/supabase.ts` (client-side, anon key), `lib/supabase-admin.ts` (server-side, service role key).
 - **PDF Generation**: `@react-pdf/renderer` client-side; `puppeteer-core` + `@sparticuz/chromium` server-side en `/api/generate-pdf`
 - **Facturacion**: `@afipsdk/afip.js` para AFIP (Facturas A/B/C, CAE)
 - **Notificaciones**: `sonner` para toasts
@@ -121,24 +123,29 @@ Next.js 15 (App Router) desplegado en Vercel. Maneja ventas, pedidos, inventario
 - `seller` con `employeeType === "transportista"` → `/pedidos`
 - `seller` con `employeeType === "vendedor"` o `"ambos"` → `/comisiones`
 
-### IDs legibles en Firestore
-`generateReadableId()` en `services/firestore-helpers.ts` genera IDs del tipo `prefix_slug_N` (ej: `usuario_juanperez_1`). Usuarios legacy tienen el Auth UID como doc ID — `getUserProfile` hace lookup dual (doc directo + query por `authUid`).
+### IDs legibles
+`generateReadableId()` en `services/supabase-helpers.ts` genera IDs del tipo `prefix_slug_N` (ej: `usuario_juanperez_1`). Usuarios legacy tienen el Auth UID como doc ID — `getUserProfile` hace lookup dual (por id + por `auth_uid`).
 
 ### Utilidades Compartidas
 - **`lib/utils/format.ts`** — formateo centralizado ARS (`formatCurrency`, `formatCurrencyDecimals`) y formatters de fecha/hora. Siempre importar desde aca; no crear instancias `Intl` inline.
-- **`services/firestore-helpers.ts`** — exporta `toDate(value)` que convierte Firestore `Timestamp`, `Date` o string a `Date`. Usar siempre al leer campos de fecha desde Firestore.
+- **`services/supabase-helpers.ts`** — exporta `toDate(value)` que convierte valores legacy (Timestamp, Date, string) a `Date`, `slugify()` y `generateReadableId()`.
 
 ### Mayorista
-`mayorista_productos` es una coleccion separada de `productos`. Al leer, se hace join con `productos` para traer `precioVenta`, `gananciaGlobal`, `stockLocal`, `unidadesPorBulto`, `seDivideEn`. Los movimientos de stock mayorista viven en `stock_movimientos`.
+`mayorista_productos` es una tabla separada de `productos` con FK `producto_id`. Se hace JOIN con `productos` para traer `precio_venta`, `ganancia_global`, `stock` (campo `stock` en productos), `unidades_por_bulto`, `se_divide_en`. Los movimientos de stock mayorista viven en `stock_movimientos`.
+
+### Ventas atómicas
+`processSale()` usa la función RPC `process_sale()` en PostgreSQL que ejecuta en una transacción ACID: inserta venta, descuenta stock, registra crédito del cliente y comisión del vendedor.
 
 ### Caveats Importantes
 - `next.config.mjs` tiene `typescript.ignoreBuildErrors: true` — errores TS no fallan el build
 - Algunos archivos usan `// @ts-nocheck` (ej: `hooks/useGenerarPdf.tsx`)
 - Tipo `Venta` duplicado: `app/ventas/types.ts` extiende `Sale` (usar en componentes de ventas), `hooks/useVentas.ts` define su version con `afipData` y campos base64. `components/ModalDetalleVenta.tsx` importa `Venta` desde `../types` (resuelve a `app/ventas/types.ts`).
+- Firebase fue eliminado completamente. No quedan dependencias ni archivos de Firebase en el proyecto.
 
 ### Variables de Entorno Requeridas
-- `NEXT_PUBLIC_FIREBASE_*` — Firebase client config
-- `FIREBASE_PROJECT_ID`, `FIREBASE_CLIENT_EMAIL`, `FIREBASE_PRIVATE_KEY` — Firebase Admin
+- `NEXT_PUBLIC_SUPABASE_URL` — URL del proyecto Supabase
+- `NEXT_PUBLIC_SUPABASE_ANON_KEY` — Anon key (client-side)
+- `SUPABASE_SERVICE_ROLE_KEY` — Service role key (server-side)
 - `BIT_INGENIERIA_CUIT`, `BIT_INGENIERIA_PTO_VTA`, `BIT_INGENIERIA_PRODUCTION` — Bit Ingeniería AFIP
 - `BIT_INGENIERIA_COMPANY_NAME`, `BIT_INGENIERIA_COMPANY_ADDRESS`, `BIT_INGENIERIA_COMPANY_CITY` — datos empresa
 - Credenciales Google Drive para backup de PDFs
