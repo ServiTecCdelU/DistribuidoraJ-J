@@ -81,6 +81,8 @@ export default function EmpleadosPage() {
   const [loadingCommissions, setLoadingCommissions] = useState(false)
   const [payingCommission, setPayingCommission] = useState<string | null>(null)
   const [payingAll, setPayingAll] = useState(false)
+  const [pagos, setPagos] = useState<any[]>([])
+  const [resetting, setResetting] = useState(false)
 
   // Form state
   const [formData, setFormData] = useState({
@@ -165,8 +167,12 @@ export default function EmpleadosPage() {
     setDetailModalOpen(true)
     setLoadingCommissions(true)
     try {
-      const data = await sellersApi.getCommissions(seller.id)
+      const [data, pagosData] = await Promise.all([
+        sellersApi.getCommissions(seller.id),
+        sellersApi.getPagosComisiones(seller.id),
+      ])
       setCommissions(data.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()))
+      setPagos(pagosData)
     } catch (error) {
       toast.error('Error al cargar comisiones')
     } finally {
@@ -258,6 +264,26 @@ export default function EmpleadosPage() {
       toast.error('Error al pagar comisiones')
     } finally {
       setPayingAll(false)
+    }
+  }
+
+  const handleResetCommissions = async () => {
+    if (!selectedSeller) return
+    setResetting(true)
+    try {
+      await sellersApi.resetCommissions(selectedSeller.id, selectedSeller.name)
+      const [updatedCommissions, pagosData] = await Promise.all([
+        sellersApi.getCommissions(selectedSeller.id),
+        sellersApi.getPagosComisiones(selectedSeller.id),
+      ])
+      setCommissions(updatedCommissions.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()))
+      setPagos(pagosData)
+      await loadSellers()
+      toast.success('Comisiones reseteadas y pago registrado')
+    } catch (error: any) {
+      toast.error(error?.message || 'Error al resetear comisiones')
+    } finally {
+      setResetting(false)
     }
   }
 
@@ -953,23 +979,48 @@ export default function EmpleadosPage() {
                 </div>
               </div>
 
+              {/* Historial de pagos realizados */}
+              {pagos.length > 0 && (
+                <div>
+                  <h4 className="font-semibold text-foreground mb-3">Historial de Pagos</h4>
+                  <div className="space-y-2 max-h-[200px] overflow-y-auto">
+                    {pagos.map((pago: any) => (
+                      <div key={pago.id} className="rounded-lg border p-3 bg-emerald-50/50 dark:bg-emerald-900/10 border-emerald-200 dark:border-emerald-800">
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center gap-2">
+                            <Banknote className="h-4 w-4 text-emerald-600" />
+                            <span className="font-semibold text-foreground">{formatCurrency(pago.monto)}</span>
+                          </div>
+                          <span className="text-xs text-muted-foreground">{formatDate(pago.createdAt)}</span>
+                        </div>
+                        <p className="text-xs text-muted-foreground mt-1">
+                          {pago.cantidadComisiones} comisiones pagadas
+                          {pago.nota && <> — {pago.nota}</>}
+                        </p>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
               {/* Commissions List */}
               <div>
                 <div className="flex items-center justify-between mb-3">
-                  <h4 className="font-semibold text-foreground">Historial de Comisiones</h4>
+                  <h4 className="font-semibold text-foreground">Comisiones Pendientes</h4>
                   {pendingCommissions.length > 0 && (
                     <Button
                       size="sm"
-                      onClick={handlePayAllCommissions}
-                      disabled={payingAll}
+                      variant="destructive"
+                      onClick={handleResetCommissions}
+                      disabled={resetting}
                       className="gap-2"
                     >
-                      {payingAll ? (
+                      {resetting ? (
                         <Loader2 className="h-4 w-4 animate-spin" />
                       ) : (
                         <Banknote className="h-4 w-4" />
                       )}
-                      Pagar Todas ({pendingCommissions.length})
+                      Pagar y Resetear ({formatCurrency(pendingTotal)})
                     </Button>
                   )}
                 </div>

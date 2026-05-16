@@ -149,3 +149,80 @@ export const payAllCommissions = async (sellerId: string): Promise<void> => {
     .eq('seller_id', sellerId)
     .eq('is_paid', false)
 }
+
+// ─── Reseteo de comisiones con registro de pago ──────────────────────────────
+
+export interface PagoComision {
+  id: string
+  sellerId: string
+  sellerName: string
+  monto: number
+  cantidadComisiones: number
+  createdAt: Date
+  nota?: string
+}
+
+function mapPago(d: Record<string, any>): PagoComision {
+  return {
+    id: d.id,
+    sellerId: d.seller_id,
+    sellerName: d.seller_name ?? '',
+    monto: Number(d.monto) || 0,
+    cantidadComisiones: Number(d.cantidad_comisiones) || 0,
+    createdAt: new Date(d.created_at),
+    nota: d.nota ?? undefined,
+  }
+}
+
+export const resetCommissions = async (sellerId: string, sellerName: string, nota?: string): Promise<PagoComision> => {
+  // 1. Obtener pendientes
+  const { data: pendientes } = await supabase
+    .from('comisiones')
+    .select('id, commission_amount')
+    .eq('seller_id', sellerId)
+    .eq('is_paid', false)
+
+  if (!pendientes || pendientes.length === 0) {
+    throw new Error('No hay comisiones pendientes para resetear')
+  }
+
+  const monto = pendientes.reduce((sum, c) => sum + (Number(c.commission_amount) || 0), 0)
+
+  // 2. Marcar todas como pagadas
+  await supabase
+    .from('comisiones')
+    .update({ is_paid: true, paid_at: new Date().toISOString() })
+    .eq('seller_id', sellerId)
+    .eq('is_paid', false)
+
+  // 3. Registrar el pago
+  const pagoId = `pago_${sellerId}_${Date.now()}`
+  const row = {
+    id: pagoId,
+    seller_id: sellerId,
+    seller_name: sellerName,
+    monto,
+    cantidad_comisiones: pendientes.length,
+    nota: nota || null,
+  }
+
+  const { data, error } = await supabase
+    .from('pagos_comisiones')
+    .insert(row)
+    .select()
+    .single()
+
+  if (error) throw error
+  return mapPago(data)
+}
+
+export const getPagosComisiones = async (sellerId: string): Promise<PagoComision[]> => {
+  const { data, error } = await supabase
+    .from('pagos_comisiones')
+    .select('*')
+    .eq('seller_id', sellerId)
+    .order('created_at', { ascending: false })
+
+  if (error) throw error
+  return (data ?? []).map(mapPago)
+}
