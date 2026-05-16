@@ -217,45 +217,42 @@ function VendedorDashboard({ userEmail, userName }: { userEmail: string; userNam
 
   return (
     <MainLayout title="Nueva Venta" description="">
-      {/* Botón carrito flotante en header */}
-      <div className="fixed top-2 right-4 z-50 lg:top-4 lg:right-8">
-        <Button
-          variant="outline"
-          size="sm"
-          className="gap-2 rounded-xl relative shadow-md bg-background"
-          onClick={() => setCartOpen(true)}
-        >
-          <ShoppingCart className="h-4 w-4" />
-          <span className="hidden sm:inline">Carrito</span>
-          {state.cart.length > 0 && (
-            <span className="absolute -top-1.5 -right-1.5 h-5 w-5 rounded-full bg-teal-600 text-white text-[11px] font-bold flex items-center justify-center ring-2 ring-background">
-              {state.cartCount}
-            </span>
-          )}
-        </Button>
-      </div>
-
-      {/* Buscador + filtro rubro */}
-      <div className="px-1 pb-2 space-y-2 sticky top-[57px] z-10 bg-background lg:top-0 lg:pt-2">
-        <div className="relative">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-muted-foreground" />
-          <Input
-            ref={searchRef}
-            placeholder="Buscar producto..."
-            value={searchQuery}
-            onChange={(e) => handleSearchChange(e.target.value)}
-            className="pl-10 pr-10 h-11 text-base rounded-2xl border-2 focus-visible:ring-2 focus-visible:ring-teal-500"
-          />
-          {searchQuery && (
-            <Button
-              variant="ghost"
-              size="icon"
-              className="absolute right-2 top-1/2 -translate-y-1/2 h-8 w-8"
-              onClick={() => { handleSearchChange(""); searchRef.current?.focus(); }}
-            >
-              <X className="h-4 w-4" />
-            </Button>
-          )}
+      {/* Buscador + filtro rubro + carrito */}
+      <div className="pb-2 space-y-2 sticky top-[57px] z-10 bg-background lg:top-0 lg:pt-2 px-1">
+        <div className="flex items-center gap-2">
+          <div className="relative flex-1">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-muted-foreground" />
+            <Input
+              ref={searchRef}
+              placeholder="Buscar producto..."
+              value={searchQuery}
+              onChange={(e) => handleSearchChange(e.target.value)}
+              className="pl-10 pr-10 h-11 text-base rounded-2xl border-2 focus-visible:ring-2 focus-visible:ring-teal-500"
+            />
+            {searchQuery && (
+              <Button
+                variant="ghost"
+                size="icon"
+                className="absolute right-2 top-1/2 -translate-y-1/2 h-8 w-8"
+                onClick={() => { handleSearchChange(""); searchRef.current?.focus(); }}
+              >
+                <X className="h-4 w-4" />
+              </Button>
+            )}
+          </div>
+          <Button
+            variant="outline"
+            size="icon"
+            className="h-11 w-11 rounded-2xl relative shrink-0 touch-manipulation"
+            onClick={() => setCartOpen(true)}
+          >
+            <ShoppingCart className="h-5 w-5" />
+            {state.cart.length > 0 && (
+              <span className="absolute -top-1.5 -right-1.5 h-5 w-5 rounded-full bg-teal-600 text-white text-[11px] font-bold flex items-center justify-center ring-2 ring-background">
+                {state.cartCount}
+              </span>
+            )}
+          </Button>
         </div>
         <div className="flex items-center gap-2">
           <Select value={rubroFiltro || "todos"} onValueChange={handleRubroChange}>
