@@ -198,7 +198,8 @@ export default function ProductosPage() {
         const disabled = data.filter((p) => (p as any).disabled);
         const enabled = data.filter((p) => !(p as any).disabled);
         console.log(`[Productos] Total: ${data.length}, Habilitados: ${enabled.length}, Deshabilitados: ${disabled.length}`);
-        if (disabled.length > 0) console.log(`[Productos] Deshabilitados:`, disabled.slice(0, 10).map(p => `${p.id} - ${p.name}`));
+        if (disabled.length > 0) console.log(`[Productos] Deshabilitados:`, disabled.map(p => `${p.id} - ${p.name}`));
+        console.log(`[Productos] Habilitados:`, enabled.map(p => `${p.id} - ${p.name}`));
         const ids = new Set(enabled.map((p) => p.id));
         setHabilitadosIds(ids);
       } catch (error) {
