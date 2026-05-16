@@ -6,6 +6,7 @@ import { useAuth } from "@/hooks/use-auth";
 import { useCart } from "@/hooks/useCart";
 import type { UserRole } from "@/hooks/useCart";
 import { UnifiedCart } from "@/components/cart/UnifiedCart";
+import { MainLayout } from "@/components/layout/main-layout";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
@@ -30,16 +31,13 @@ import {
   Plus,
   Minus,
   X,
-  LogOut,
   Loader2,
   Package,
-  Warehouse,
   ChevronLeft,
   ChevronRight,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { formatCurrency } from "@/lib/utils/format";
-import { signOut } from "@/services/auth-service";
 import { searchProductosParaVenta, getRubrosHabilitados } from "@/services/mayorista-service";
 import type { Product, CartItem } from "@/lib/types";
 
@@ -218,43 +216,27 @@ function VendedorDashboard({ userEmail, userName }: { userEmail: string; userNam
   }
 
   return (
-    <div className="min-h-screen bg-background flex flex-col">
-      {/* Header */}
-      <header className="border-b bg-card px-4 py-3 flex items-center justify-between gap-3 sticky top-0 z-20">
-        <div className="flex items-center gap-2 min-w-0">
-          <Warehouse className="h-5 w-5 text-teal-600 shrink-0" />
-          <span className="font-semibold text-sm truncate">{userName}</span>
-        </div>
-
-        <div className="flex items-center gap-2">
-          <Button
-            variant="outline"
-            size="sm"
-            className="gap-2 rounded-xl relative"
-            onClick={() => setCartOpen(true)}
-          >
-            <ShoppingCart className="h-4 w-4" />
-            <span className="hidden sm:inline">Carrito</span>
-            {state.cart.length > 0 && (
-              <span className="absolute -top-1.5 -right-1.5 h-5 w-5 rounded-full bg-teal-600 text-white text-[11px] font-bold flex items-center justify-center ring-2 ring-background">
-                {state.cartCount}
-              </span>
-            )}
-          </Button>
-          <Button
-            variant="ghost"
-            size="icon"
-            className="h-8 w-8 text-muted-foreground"
-            onClick={async () => { await signOut(); router.push("/login"); }}
-            title="Cerrar sesión"
-          >
-            <LogOut className="h-4 w-4" />
-          </Button>
-        </div>
-      </header>
+    <MainLayout title="Nueva Venta" description="">
+      {/* Botón carrito flotante en header */}
+      <div className="fixed top-2 right-4 z-50 lg:top-4 lg:right-8">
+        <Button
+          variant="outline"
+          size="sm"
+          className="gap-2 rounded-xl relative shadow-md bg-background"
+          onClick={() => setCartOpen(true)}
+        >
+          <ShoppingCart className="h-4 w-4" />
+          <span className="hidden sm:inline">Carrito</span>
+          {state.cart.length > 0 && (
+            <span className="absolute -top-1.5 -right-1.5 h-5 w-5 rounded-full bg-teal-600 text-white text-[11px] font-bold flex items-center justify-center ring-2 ring-background">
+              {state.cartCount}
+            </span>
+          )}
+        </Button>
+      </div>
 
       {/* Buscador + filtro rubro */}
-      <div className="px-3 pt-3 pb-2 space-y-2 sticky top-[57px] z-10 bg-background">
+      <div className="px-1 pb-2 space-y-2 sticky top-[57px] z-10 bg-background lg:top-0 lg:pt-2">
         <div className="relative">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-muted-foreground" />
           <Input
@@ -294,7 +276,7 @@ function VendedorDashboard({ userEmail, userName }: { userEmail: string; userNam
       </div>
 
       {/* Lista de productos (mobile-first) */}
-      <div className="flex-1 px-3 pb-24">
+      <div className="flex-1 px-1 pb-24">
         {productsLoading ? (
           <div className="space-y-2 mt-2">
             {[...Array(6)].map((_, i) => (
@@ -445,7 +427,7 @@ function VendedorDashboard({ userEmail, userName }: { userEmail: string; userNam
         </DialogContent>
       </Dialog>
 
-    </div>
+    </MainLayout>
   );
 }
 
