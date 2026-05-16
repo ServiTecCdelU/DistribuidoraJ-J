@@ -35,8 +35,6 @@ import {
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import type { UserRole, CartState, CartActions } from "@/hooks/useCart";
-import { CITIES } from "@/lib/types";
-import type { City } from "@/lib/types";
 import dynamic from "next/dynamic";
 
 const MapPinPickerLazy = dynamic(() => import("@/components/cart/map-pin-picker"), { ssr: false });
@@ -67,7 +65,6 @@ export function UnifiedCart({ role, state, actions, onConfirmSale, allowDiscount
     if (role === "admin") {
       if ((paymentType === "credit" || paymentType === "mixed") && !selectedClientData) missing.push("Seleccioná un cliente para pago a cuenta");
       if (deliveryMethod === "delivery") {
-        if (!state.selectedCity) missing.push("Seleccioná una ciudad");
         if (deliveryAddress === "saved" && selectedClientData && !state.selectedSavedAddress?.address && !selectedClientData.address) missing.push("El cliente no tiene dirección guardada");
         if (deliveryAddress === "new" && !newAddress.trim()) missing.push("Ingresá una dirección de entrega");
       }
@@ -79,14 +76,12 @@ export function UnifiedCart({ role, state, actions, onConfirmSale, allowDiscount
         }
       }
     } else if (role === "seller") {
-      if (deliveryMethod === "delivery" && !state.selectedCity) missing.push("Seleccioná una ciudad");
       if (deliveryMethod === "delivery" && deliveryAddress === "new" && !newAddress.trim()) missing.push("Ingresá una dirección de entrega");
     } else {
       // Public user
       if (!clientName.trim()) missing.push("Ingresá tu nombre");
       if (!clientEmail) missing.push("Ingresá tu email");
       if (!clientPhone) missing.push("Ingresá tu teléfono");
-      if (deliveryMethod === "delivery" && !state.selectedCity) missing.push("Seleccioná una ciudad");
       if (deliveryMethod === "delivery" && deliveryAddress === "new" && !newAddress.trim()) missing.push("Ingresá una dirección de entrega");
     }
     return missing;
@@ -493,30 +488,13 @@ export function UnifiedCart({ role, state, actions, onConfirmSale, allowDiscount
                 "h-auto py-2 flex-col gap-1 text-xs font-medium transition-all",
                 deliveryMethod === "delivery" && "bg-primary hover:bg-primary/90 shadow-md",
               )}
-              onClick={() => actions.setDeliveryMethod("delivery")}
+              onClick={() => { actions.setDeliveryMethod("delivery"); actions.setSelectedCity("Concepcion del Uruguay"); }}
             >
               <Truck className="h-4 w-4" />
               A domicilio
             </Button>
           </div>
         </div>
-
-        {deliveryMethod === "delivery" && (
-          <div className="space-y-2">
-            <Label className="text-xs font-medium text-foreground">Ciudad <span className="text-destructive">*</span></Label>
-            <Select value={state.selectedCity || "none"} onValueChange={(v) => actions.setSelectedCity(v === "none" ? "" : v as City)}>
-              <SelectTrigger className="h-9 text-sm">
-                <SelectValue placeholder="Seleccionar ciudad" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="none" className="text-sm">Seleccionar ciudad</SelectItem>
-                {CITIES.map((city) => (
-                  <SelectItem key={city} value={city} className="text-sm">{city}</SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-        )}
 
         {deliveryMethod === "delivery" && (
           <DeliveryAddressSection
