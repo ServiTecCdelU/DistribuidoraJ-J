@@ -32,7 +32,7 @@ export const getClientsBySeller = async (sellerId: string): Promise<Client[]> =>
 export const getDebtClients = async (sellerId?: string): Promise<(Client & { sellerName?: string })[]> => {
   let query = supabase
     .from('clientes')
-    .select('*, vendedores(name)')
+    .select('*')
     .gt('current_balance', 0)
     .order('current_balance', { ascending: false })
 
@@ -41,6 +41,19 @@ export const getDebtClients = async (sellerId?: string): Promise<(Client & { sel
   }
 
   const { data } = await query
+
+  // Obtener nombres de vendedores si hay seller_ids
+  const sellerIds = [...new Set((data ?? []).map((d: any) => d.seller_id).filter(Boolean))]
+  let sellerMap: Record<string, string> = {}
+  if (sellerIds.length > 0) {
+    const { data: sellers } = await supabase
+      .from('vendedores')
+      .select('id, name')
+      .in('id', sellerIds)
+    for (const s of sellers ?? []) {
+      sellerMap[s.id] = s.name
+    }
+  }
 
   return (data ?? []).map((d: any) => ({
     id: d.id,
@@ -54,7 +67,7 @@ export const getDebtClients = async (sellerId?: string): Promise<(Client & { sel
     creditLimit: Number(d.credit_limit) || 0,
     currentBalance: Number(d.current_balance) || 0,
     sellerId: d.seller_id ?? undefined,
-    sellerName: d.vendedores?.name ?? undefined,
+    sellerName: d.seller_id ? (sellerMap[d.seller_id] || undefined) : undefined,
     notes: d.notes ?? '',
     createdAt: new Date(d.created_at),
   }))
@@ -131,31 +144,41 @@ export const getComprobantes = async (filters?: {
   status?: string
   sellerId?: string
 }): Promise<ComprobantePago[]> => {
-  let query = supabase
-    .from('comprobantes_pago')
-    .select('*, clientes(name), vendedores(name)')
-    .order('created_at', { ascending: false })
+  try {
+    let query = supabase
+      .from('comprobantes_pago')
+      .select('*, clientes(name), vendedores(name)')
+      .order('created_at', { ascending: false })
 
-  if (filters?.status) {
-    query = query.eq('status', filters.status)
-  }
-  if (filters?.sellerId) {
-    query = query.eq('seller_id', filters.sellerId)
-  }
+    if (filters?.status) {
+      query = query.eq('status', filters.status)
+    }
+    if (filters?.sellerId) {
+      query = query.eq('seller_id', filters.sellerId)
+    }
 
-  const { data } = await query
-  return (data ?? []).map(mapComprobante)
+    const { data, error } = await query
+    if (error) return []
+    return (data ?? []).map(mapComprobante)
+  } catch {
+    return []
+  }
 }
 
 // Comprobantes de un vendedor
 export const getComprobantesBySeller = async (sellerId: string): Promise<ComprobantePago[]> => {
-  const { data } = await supabase
-    .from('comprobantes_pago')
-    .select('*, clientes(name), vendedores(name)')
-    .eq('seller_id', sellerId)
-    .order('created_at', { ascending: false })
+  try {
+    const { data, error } = await supabase
+      .from('comprobantes_pago')
+      .select('*, clientes(name), vendedores(name)')
+      .eq('seller_id', sellerId)
+      .order('created_at', { ascending: false })
 
-  return (data ?? []).map(mapComprobante)
+    if (error) return []
+    return (data ?? []).map(mapComprobante)
+  } catch {
+    return []
+  }
 }
 
 // Admin aprueba comprobante → registra pago
