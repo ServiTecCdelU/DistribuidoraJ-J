@@ -254,15 +254,15 @@ function VendedorDashboard({ userEmail, userName }: { userEmail: string; userNam
       </header>
 
       {/* Buscador + filtro rubro */}
-      <div className="px-4 pt-4 pb-2 space-y-2">
+      <div className="px-3 pt-3 pb-2 space-y-2 sticky top-[57px] z-10 bg-background">
         <div className="relative">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-muted-foreground" />
           <Input
             ref={searchRef}
-            placeholder="Buscar producto... (nombre, código)"
+            placeholder="Buscar producto..."
             value={searchQuery}
             onChange={(e) => handleSearchChange(e.target.value)}
-            className="pl-10 pr-10 h-12 text-base rounded-2xl border-2 focus-visible:ring-2 focus-visible:ring-teal-500"
+            className="pl-10 pr-10 h-11 text-base rounded-2xl border-2 focus-visible:ring-2 focus-visible:ring-teal-500"
           />
           {searchQuery && (
             <Button
@@ -288,17 +288,17 @@ function VendedorDashboard({ userEmail, userName }: { userEmail: string; userNam
             </SelectContent>
           </Select>
           <span className="text-xs text-muted-foreground whitespace-nowrap">
-            {totalProductos} productos
+            {totalProductos} prod.
           </span>
         </div>
       </div>
 
-      {/* Tabla de productos */}
-      <div className="flex-1 px-4 pb-6">
+      {/* Lista de productos (mobile-first) */}
+      <div className="flex-1 px-3 pb-24">
         {productsLoading ? (
           <div className="space-y-2 mt-2">
-            {[...Array(8)].map((_, i) => (
-              <Skeleton key={i} className="h-11 rounded-xl" />
+            {[...Array(6)].map((_, i) => (
+              <Skeleton key={i} className="h-16 rounded-xl" />
             ))}
           </div>
         ) : ventaProducts.length === 0 ? (
@@ -310,105 +310,92 @@ function VendedorDashboard({ userEmail, userName }: { userEmail: string; userNam
           </div>
         ) : (
           <>
-            <div className="rounded-2xl border overflow-hidden mt-2">
-              <div className="overflow-x-auto">
-                <table className="w-full text-sm">
-                  <thead className="bg-muted/50 border-b">
-                    <tr>
-                      <th className="text-left px-3 py-2.5 font-semibold text-muted-foreground">Código</th>
-                      <th className="text-left px-3 py-2.5 font-semibold text-muted-foreground">Descripción</th>
-                      <th className="text-left px-3 py-2.5 font-semibold text-muted-foreground hidden sm:table-cell">Rubro</th>
-                      <th className="text-right px-3 py-2.5 font-semibold text-muted-foreground whitespace-nowrap">Precio</th>
-                      <th className="text-center px-3 py-2.5 font-semibold text-muted-foreground">Cant.</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y">
-                    {ventaProducts.map((product) => {
-                      const qty = cartMap.get(product.id) ?? 0;
-                      return (
-                        <tr
-                          key={product.id}
-                          className={cn(
-                            "hover:bg-muted/20 transition-colors",
-                            qty > 0 && "bg-teal-50/40 dark:bg-teal-950/20",
-                          )}
+            <div className="space-y-1.5 mt-2">
+              {ventaProducts.map((product) => {
+                const qty = cartMap.get(product.id) ?? 0;
+                return (
+                  <div
+                    key={product.id}
+                    className={cn(
+                      "flex items-center gap-3 px-3 py-3 rounded-xl border transition-colors",
+                      qty > 0 ? "bg-teal-50/60 border-teal-200 dark:bg-teal-950/20 dark:border-teal-800" : "bg-card border-border",
+                    )}
+                  >
+                    {/* Info producto */}
+                    <div className="flex-1 min-w-0">
+                      <p className="font-medium text-sm leading-tight truncate">{product.name}</p>
+                      <div className="flex items-center gap-2 mt-0.5">
+                        <span className="font-mono text-[11px] text-muted-foreground">{product.description || "—"}</span>
+                        <span className="text-[11px] text-muted-foreground">·</span>
+                        <span className="text-[11px] text-muted-foreground truncate">{product.category}</span>
+                      </div>
+                    </div>
+
+                    {/* Precio */}
+                    <div className="text-right shrink-0">
+                      <p className="font-bold text-sm text-teal-600">{formatCurrency(product.price)}</p>
+                      {(product as any).seDivideEn && (product as any).seDivideEn > 1 && (
+                        <p className="text-[10px] text-muted-foreground">/ lote</p>
+                      )}
+                    </div>
+
+                    {/* Controles cantidad */}
+                    <div className="shrink-0">
+                      {qty === 0 ? (
+                        <button
+                          onClick={() => actions.addToCart(product)}
+                          className="h-10 w-10 rounded-xl bg-teal-600 active:bg-teal-700 text-white flex items-center justify-center transition-colors touch-manipulation"
                         >
-                          <td className="px-3 py-2.5 font-mono text-xs text-muted-foreground whitespace-nowrap">
-                            {product.description || "—"}
-                          </td>
-                          <td className="px-3 py-2.5 font-medium max-w-[200px] truncate">
-                            {product.name}
-                          </td>
-                          <td className="px-3 py-2.5 text-xs text-muted-foreground hidden sm:table-cell whitespace-nowrap">
-                            {product.category}
-                          </td>
-                          <td className="px-3 py-2.5 text-right font-semibold text-teal-600 whitespace-nowrap">
-                            <span>{formatCurrency(product.price)}</span>
-                            {(product as any).seDivideEn && (product as any).seDivideEn > 1 && (
-                              <span className="block text-[10px] font-normal text-muted-foreground">/ lote</span>
-                            )}
-                          </td>
-                          <td className="px-3 py-2.5">
-                            {qty === 0 ? (
-                              <div className="flex justify-center">
-                                <button
-                                  onClick={() => actions.addToCart(product)}
-                                  className="h-8 w-8 rounded-lg bg-teal-600 hover:bg-teal-700 text-white flex items-center justify-center transition-colors"
-                                >
-                                  <Plus className="h-4 w-4" />
-                                </button>
-                              </div>
-                            ) : (
-                              <div className="flex items-center justify-center gap-1">
-                                <button
-                                  onClick={() => actions.removeFromCart(product.id)}
-                                  className="h-7 w-7 rounded-lg border border-border hover:bg-muted flex items-center justify-center transition-colors"
-                                >
-                                  <Minus className="h-3.5 w-3.5" />
-                                </button>
-                                <span className="w-6 text-center text-sm font-bold text-teal-600">
-                                  {qty}
-                                </span>
-                                <button
-                                  onClick={() => actions.addToCart(product)}
-                                  className="h-7 w-7 rounded-lg border border-teal-500 bg-teal-50 hover:bg-teal-100 text-teal-700 flex items-center justify-center transition-colors"
-                                >
-                                  <Plus className="h-3.5 w-3.5" />
-                                </button>
-                              </div>
-                            )}
-                          </td>
-                        </tr>
-                      );
-                    })}
-                  </tbody>
-                </table>
-              </div>
+                          <Plus className="h-5 w-5" />
+                        </button>
+                      ) : (
+                        <div className="flex items-center gap-1.5">
+                          <button
+                            onClick={() => actions.removeFromCart(product.id)}
+                            className="h-9 w-9 rounded-xl border-2 border-border active:bg-muted flex items-center justify-center transition-colors touch-manipulation"
+                          >
+                            <Minus className="h-4 w-4" />
+                          </button>
+                          <span className="w-7 text-center text-sm font-bold text-teal-600">
+                            {qty}
+                          </span>
+                          <button
+                            onClick={() => actions.addToCart(product)}
+                            className="h-9 w-9 rounded-xl border-2 border-teal-500 bg-teal-50 active:bg-teal-100 text-teal-700 flex items-center justify-center transition-colors touch-manipulation"
+                          >
+                            <Plus className="h-4 w-4" />
+                          </button>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
             </div>
 
             {/* Paginación */}
             {totalPages > 1 && (
-              <div className="flex items-center justify-center gap-2 mt-4">
+              <div className="flex items-center justify-center gap-3 mt-4">
                 <Button
                   variant="outline"
                   size="sm"
-                  className="rounded-xl"
+                  className="rounded-xl h-10 w-10 p-0 touch-manipulation"
                   disabled={currentPage <= 1}
                   onClick={() => handlePageChange(currentPage - 1)}
                 >
-                  <ChevronLeft className="h-4 w-4" />
+                  <ChevronLeft className="h-5 w-5" />
                 </Button>
-                <span className="text-sm text-muted-foreground">
+                <span className="text-sm text-muted-foreground font-medium">
                   {currentPage} / {totalPages}
                 </span>
                 <Button
                   variant="outline"
                   size="sm"
-                  className="rounded-xl"
+                  className="rounded-xl h-10 w-10 p-0 touch-manipulation"
                   disabled={currentPage >= totalPages}
                   onClick={() => handlePageChange(currentPage + 1)}
                 >
-                  <ChevronRight className="h-4 w-4" />
+                  <ChevronRight className="h-5 w-5" />
                 </Button>
               </div>
             )}
