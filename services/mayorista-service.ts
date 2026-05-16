@@ -295,6 +295,7 @@ export const saveMayoristaPrefs = async (
 
 export type ImportRow = {
   codigo: string
+  descripcion?: string
   stockUnidades: number
   unPack: number
   lista1: number
@@ -303,7 +304,7 @@ export type ImportRow = {
 export const importarListaPrecios = async (
   rows: ImportRow[],
   onProgress?: (done: number, total: number) => void
-): Promise<{ procesados: number; noEncontrados: string[] }> => {
+): Promise<{ procesados: number; sinMayorista: number }> => {
   const GANANCIA = 30
 
   onProgress?.(0, rows.length)
@@ -341,19 +342,24 @@ export const importarListaPrecios = async (
     if (!mpStripped.has(stripped)) mpStripped.set(stripped, entry)
   })
 
-  type PreparedRow = ImportRow & { mp: MpEntry; productoId: string }
+  type PreparedRow = ImportRow & { mp: MpEntry | null; productoId: string }
   const prepared: PreparedRow[] = []
-  const noEncontrados: string[] = []
+  let sinMayorista = 0
 
   for (const row of rows) {
     const mp = mpExact.get(row.codigo)
       || mpStripped.get(row.codigo.replace(/^0+/, '') || row.codigo)
-    if (!mp) {
-      noEncontrados.push(row.codigo)
-      continue
+    if (mp) {
+      prepared.push({ ...row, mp, productoId: mp.productoId || `prod_${mp.id}` })
+    } else {
+      // Sin match en mayorista — crear producto igual
+      sinMayorista++
+      const prodId = `prod_mp_${row.codigo.replace(/[^a-zA-Z0-9]/g, '_')}`
+      prepared.push({ ...row, mp: null, productoId: prodId })
     }
-    prepared.push({ ...row, mp, productoId: mp.productoId || `prod_${mp.id}` })
   }
+
+  console.log(`[importarListaPrecios] ${prepared.length} total, ${sinMayorista} sin mayorista`)
 
   // Procesar en batches
   let done = 0
@@ -362,9 +368,9 @@ export const importarListaPrecios = async (
 
     // 1. Upsert productos primero (mayorista tiene FK a productos)
     const prodUpserts = chunk.map((row) => {
-      const descripcion = row.mp.descripcion || row.codigo
+      const descripcion = row.mp?.descripcion || row.descripcion || row.codigo
       const precioVenta = Math.round(row.lista1 * (1 + GANANCIA / 100) * 100) / 100
-      const isNew = !row.mp.productoId
+      const isNew = !row.mp?.productoId
       return {
         id: row.productoId,
         name: descripcion,
@@ -375,28 +381,31 @@ export const importarListaPrecios = async (
         stock: row.stockUnidades,
         unidades_por_bulto: row.unPack,
         disabled: false,
-        ...(isNew ? { image_url: '', category: row.mp.rubro || row.mp.categoria || 'Sin categoria' } : {}),
+        ...(isNew ? { image_url: '', category: row.mp?.rubro || row.mp?.categoria || 'Sin categoria' } : {}),
       }
     })
     const { error: prodErr } = await supabase.from('productos').upsert(prodUpserts, { onConflict: 'id' })
     if (prodErr) throw new Error(`Error productos: ${prodErr.message}`)
 
-    // 2. Upsert mayorista_productos — habilitar y vincular
-    const mpUpserts = chunk.map((row) => ({
-      id: row.mp.id,
-      precio_lista: row.lista1,
-      habilitado: true,
-      producto_id: row.productoId,
-    }))
-    const { error: mpErr } = await supabase.from('mayorista_productos').upsert(mpUpserts, { onConflict: 'id' })
-    if (mpErr) throw new Error(`Error mayorista_productos: ${mpErr.message}`)
+    // 2. Upsert mayorista_productos — solo los que tienen match
+    const conMayorista = chunk.filter((row) => row.mp !== null)
+    if (conMayorista.length > 0) {
+      const mpUpserts = conMayorista.map((row) => ({
+        id: row.mp!.id,
+        precio_lista: row.lista1,
+        habilitado: true,
+        producto_id: row.productoId,
+      }))
+      const { error: mpErr } = await supabase.from('mayorista_productos').upsert(mpUpserts, { onConflict: 'id' })
+      if (mpErr) throw new Error(`Error mayorista_productos: ${mpErr.message}`)
+    }
 
     done += chunk.length
-    onProgress?.(done + noEncontrados.length, rows.length)
+    onProgress?.(done, rows.length)
   }
 
   onProgress?.(rows.length, rows.length)
   invalidateProductsCache()
 
-  return { procesados: prepared.length, noEncontrados }
+  return { procesados: prepared.length, sinMayorista }
 }

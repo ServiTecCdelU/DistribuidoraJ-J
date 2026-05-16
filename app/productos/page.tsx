@@ -2105,6 +2105,7 @@ function cellToNumber(val: unknown): number {
 type ColumnLetter = string;
 interface ListaColumnMapping {
   codigo: ColumnLetter;
+  descripcion: ColumnLetter;
   precio: ColumnLetter;
   stockPacks: ColumnLetter;
   lote: ColumnLetter;
@@ -2116,6 +2117,7 @@ interface ListaExcelColumn {
 }
 interface ListaParsedRow {
   codigo: string;
+  descripcion: string;
   lista1: number;
   stockPacks: number;
   lote: number;
@@ -2138,9 +2140,10 @@ function CargarListaDialog({
   const [headerRowIndex, setHeaderRowIndex] = useState(0);
   const [mapping, setMapping] = useState<ListaColumnMapping>({
     codigo: "A",
-    precio: "B",
-    stockPacks: "C",
-    lote: "D",
+    descripcion: "B",
+    precio: "C",
+    stockPacks: "D",
+    lote: "E",
   });
   const [parsed, setParsed] = useState<ListaParsedRow[]>([]);
   const [saving, setSaving] = useState(false);
@@ -2212,6 +2215,7 @@ function CargarListaDialog({
         for (const col of cols) {
           const h = col.header.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
           if (!autoMapping.codigo && (h.includes("codigo") || h.includes("code") || h.includes("cod") || h === "id")) autoMapping.codigo = col.letter;
+          else if (!autoMapping.descripcion && (h.includes("descripcion") || h.includes("nombre") || h.includes("producto") || h.includes("articulo"))) autoMapping.descripcion = col.letter;
           else if (!autoMapping.precio && (h.includes("precio") || h.includes("lista") || h.includes("p.u") || h.includes("costo"))) autoMapping.precio = col.letter;
           else if (!autoMapping.stockPacks && (h.includes("stock") || h.includes("cant") || h.includes("bulto") || h.includes("pack"))) autoMapping.stockPacks = col.letter;
           else if (!autoMapping.lote && (h.includes("lote") || h.includes("unidad") || h.includes("un.") || h.includes("x pack") || h.includes("un pack"))) autoMapping.lote = col.letter;
@@ -2222,6 +2226,7 @@ function CargarListaDialog({
         setRawRows(rows);
         setMapping((prev) => ({
           codigo: autoMapping.codigo || prev.codigo,
+          descripcion: autoMapping.descripcion || prev.descripcion,
           precio: autoMapping.precio || prev.precio,
           stockPacks: autoMapping.stockPacks || prev.stockPacks,
           lote: autoMapping.lote || prev.lote,
@@ -2248,11 +2253,13 @@ function CargarListaDialog({
       .map((row) => {
         const r = row as unknown[];
         const codigo = cellToString(r[letterToIndex(mapping.codigo)]);
+        const descripcion = cellToString(r[letterToIndex(mapping.descripcion)]);
         const lista1 = cellToNumber(r[letterToIndex(mapping.precio)]);
         const stockPacks = cellToNumber(r[letterToIndex(mapping.stockPacks)]);
         const lote = cellToNumber(r[letterToIndex(mapping.lote)]);
         return {
           codigo,
+          descripcion,
           lista1,
           stockPacks,
           lote: lote || 1,
@@ -2280,6 +2287,7 @@ function CargarListaDialog({
     try {
       const importRows: ImportRow[] = parsed.map((r) => ({
         codigo: r.codigo,
+        descripcion: r.descripcion || undefined,
         lista1: r.lista1,
         stockUnidades: r.stockUnidades,
         unPack: r.lote,
@@ -2287,16 +2295,16 @@ function CargarListaDialog({
 
       console.log(`[Cargar Lista] Enviando ${importRows.length} filas a importarListaPrecios`);
 
-      const { procesados, noEncontrados } = await importarListaPrecios(importRows, (done, total) =>
+      const { procesados, sinMayorista } = await importarListaPrecios(importRows, (done, total) =>
         setProgress({ done, total })
       );
 
-      console.log(`[Cargar Lista] Procesados: ${procesados}, No encontrados: ${noEncontrados.length}`, noEncontrados.slice(0, 10));
+      console.log(`[Cargar Lista] Procesados: ${procesados}, Sin mayorista: ${sinMayorista}`);
 
       await onImportado();
 
       let msg = `${procesados} productos procesados`;
-      if (noEncontrados.length > 0) msg += ` · ${noEncontrados.length} sin coincidencia en mayorista`;
+      if (sinMayorista > 0) msg += ` · ${sinMayorista} creados sin vínculo mayorista`;
       toast.success(msg, { duration: 10000 });
       handleClose(false);
     } catch (err) {
@@ -2308,6 +2316,7 @@ function CargarListaDialog({
 
   const camposRequeridos: { key: keyof ListaColumnMapping; label: string; required?: boolean }[] = [
     { key: "codigo", label: "Código", required: true },
+    { key: "descripcion", label: "Descripción (opcional)" },
     { key: "precio", label: "Precio", required: true },
     { key: "stockPacks", label: "Stock (bultos/packs)", required: true },
     { key: "lote", label: "Lote (unidades por bulto)", required: true },
@@ -2415,6 +2424,7 @@ function CargarListaDialog({
                     <tr>
                       <th className="text-left px-2 py-2 font-semibold">#</th>
                       <th className="text-left px-2 py-2 font-semibold">Código</th>
+                      <th className="text-left px-2 py-2 font-semibold">Descripción</th>
                       <th className="text-right px-2 py-2 font-semibold">Precio</th>
                       <th className="text-right px-2 py-2 font-semibold">Stock</th>
                       <th className="text-right px-2 py-2 font-semibold">Lote</th>
@@ -2426,6 +2436,7 @@ function CargarListaDialog({
                       <tr key={i} className="hover:bg-muted/20">
                         <td className="px-2 py-1 font-mono text-muted-foreground">{i + 1}</td>
                         <td className="px-2 py-1 font-mono text-muted-foreground whitespace-nowrap">{row.codigo}</td>
+                        <td className="px-2 py-1 max-w-[140px] truncate">{row.descripcion || "—"}</td>
                         <td className="px-2 py-1 text-right text-teal-600 font-semibold whitespace-nowrap">
                           {formatCurrency(row.lista1)}
                         </td>
