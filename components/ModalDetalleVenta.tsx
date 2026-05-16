@@ -38,6 +38,7 @@ interface ModalDetalleVentaProps {
   etiquetaPago: (tipo: string, metodo?: string) => string;
   claseBadgePago: (tipo: string) => string;
   resolverTelefono?: (venta: Venta) => Promise<string>;
+  isAdmin?: boolean;
 }
 
 export function ModalDetalleVenta({
@@ -50,6 +51,7 @@ export function ModalDetalleVenta({
   etiquetaPago,
   claseBadgePago,
   resolverTelefono,
+  isAdmin = true,
 }: ModalDetalleVentaProps) {
   const [generando, setGenerando] = useState<"boleta" | "remito" | null>(null);
   const [downloading, setDownloading] = useState<"invoice" | "remito" | null>(null);
@@ -158,9 +160,10 @@ export function ModalDetalleVenta({
             </div>
           </div>
 
-          {/* Documentos — 2 boxes */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-            {/* Boleta */}
+          {/* Documentos */}
+          <div className={`grid grid-cols-1 ${isAdmin ? "sm:grid-cols-2" : ""} gap-3`}>
+            {/* Boleta — solo admin */}
+            {isAdmin && (
             <div className={`p-4 rounded-xl border ${venta.invoiceEmitted ? "bg-emerald-50/50 border-emerald-200" : "bg-amber-50/50 border-amber-200"}`}>
               <div className="flex items-center gap-2 mb-2">
                 <FileText className={`h-4 w-4 ${venta.invoiceEmitted ? "text-emerald-600" : "text-amber-600"}`} />
@@ -208,8 +211,10 @@ export function ModalDetalleVenta({
                 </Button>
               )}
             </div>
+            )}
 
             {/* Remito */}
+            {(isAdmin || venta.remitoNumber) && (
             <div className={`p-4 rounded-xl border ${venta.remitoNumber ? "bg-blue-50/50 border-blue-200" : "bg-muted/50 border-border"}`}>
               <div className="flex items-center gap-2 mb-2">
                 <Truck className={`h-4 w-4 ${venta.remitoNumber ? "text-blue-600" : "text-muted-foreground"}`} />
@@ -233,7 +238,7 @@ export function ModalDetalleVenta({
                     WhatsApp
                   </Button>
                 </div>
-              ) : (
+              ) : isAdmin ? (
                 <Button variant="outline" size="sm" className="w-full gap-1.5 text-xs mt-3"
                   onClick={() => handleGenerar("remito")} disabled={generando !== null}>
                   {generando === "remito" ? (
@@ -248,8 +253,9 @@ export function ModalDetalleVenta({
                     </>
                   )}
                 </Button>
-              )}
+              ) : null}
             </div>
+            )}
           </div>
 
           {/* Productos */}

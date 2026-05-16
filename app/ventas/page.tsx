@@ -96,9 +96,11 @@ function VentasInner() {
         etiquetaPago={etiquetaPago}
         claseBadgePago={claseBadgePago}
         resolverTelefono={resolverTelefono}
+        isAdmin={user?.role === "admin"}
       />
 
-      {/* ModalEmitirDocumento se mantiene para el botón de la lista */}
+      {/* ModalEmitirDocumento — solo admin */}
+      {user?.role === "admin" && (
       <ModalEmitirDocumento
         abierto={modalEmitirAbierto}
         venta={ventaParaEmitir}
@@ -109,6 +111,7 @@ function VentasInner() {
         onCambiarTipo={setTipoDocumento}
         formatearMoneda={formatearMoneda}
       />
+      )}
     </>
   );
 }

@@ -310,6 +310,7 @@ export function ListaVentas({
                 </SelectContent>
               </Select>
 
+              {isAdmin && (
               <Select value={invoiceFilter} onValueChange={(v) => onCambiarFiltros({ invoiceFilter: v as any })}>
                 <SelectTrigger className="h-10 w-[130px]"><SelectValue placeholder="Boletas" /></SelectTrigger>
                 <SelectContent>
@@ -318,6 +319,7 @@ export function ListaVentas({
                   <SelectItem value="pending">Pendientes</SelectItem>
                 </SelectContent>
               </Select>
+              )}
 
               <Select value={remitoFilter} onValueChange={(v) => onCambiarFiltros({ remitoFilter: v } as any)}>
                 <SelectTrigger className="h-10 w-[130px]"><SelectValue placeholder="Remitos" /></SelectTrigger>
@@ -433,34 +435,24 @@ export function ListaVentas({
             </div>
 
             {ventasPaginadas.map((venta, index) => (
-              <div key={venta.id} className="group flex flex-col md:grid md:grid-cols-12 gap-2 md:gap-4 p-4 hover:bg-muted/30 transition-colors">
-                {/* Mobile row */}
-                <div className="flex md:hidden items-start justify-between w-full">
-                  <div className="flex items-center gap-3">
-                    <div className="h-10 w-10 rounded-full bg-primary/10 flex items-center justify-center">
-                      <Receipt className="h-5 w-5 text-primary" />
+              <div key={venta.id} className="group flex flex-col md:grid md:grid-cols-12 gap-2 md:gap-4 p-3 md:p-4 hover:bg-muted/30 transition-colors">
+                {/* Mobile row — compacto */}
+                <div className="flex md:hidden items-center justify-between w-full gap-2" onClick={() => onVerDetalle(venta)}>
+                  <div className="flex items-center gap-2 min-w-0">
+                    <div className="h-8 w-8 rounded-full bg-primary/10 flex items-center justify-center shrink-0">
+                      <Receipt className="h-4 w-4 text-primary" />
                     </div>
-                    <div>
-                      <p className="font-semibold text-foreground">{venta.saleNumber || `Venta ${ventas.length - index}`}</p>
-                      <p className="text-xs text-muted-foreground">{venta.clientName || "Venta directa"}</p>
+                    <div className="min-w-0">
+                      <p className="font-medium text-sm text-foreground truncate">{venta.clientName || "Venta directa"}</p>
+                      <p className="text-[11px] text-muted-foreground">{fmtDate(venta.createdAt)} · {venta.saleNumber || `#${ventas.length - index}`}</p>
                     </div>
                   </div>
-                  <div className="text-right">
-                    <p className="font-bold text-foreground">{fmt(venta.total)}</p>
-                    <Badge variant="outline" className={`text-[10px] mt-1 ${payBadgeCls(venta.paymentType)}`}>
+                  <div className="text-right shrink-0">
+                    <p className="font-bold text-sm text-foreground">{fmt(venta.total)}</p>
+                    <Badge variant="outline" className={`text-[10px] ${payBadgeCls(venta.paymentType)}`}>
                       {payLabel(venta.paymentType, (venta as any).paymentMethod)}
                     </Badge>
                   </div>
-                </div>
-                <div className="flex md:hidden items-center justify-between w-full mt-2 pt-2 border-t border-border/50">
-                  <div className="flex items-center gap-1 text-xs text-muted-foreground">
-                    <Calendar className="h-3 w-3" />
-                    {fmtDate(venta.createdAt)}
-                  </div>
-                  <Button variant="ghost" size="sm" className="h-8 text-blue-600" onClick={() => onVerDetalle(venta)}>
-                    <Eye className="h-4 w-4 mr-1" />
-                    Ver detalles
-                  </Button>
                 </div>
 
                 {/* Desktop */}
@@ -580,7 +572,8 @@ export function ListaVentas({
               </div>
             </FilterSection>
 
-            {/* Boletas */}
+            {/* Boletas — solo admin */}
+            {isAdmin && (
             <FilterSection icon={<Receipt className="h-4 w-4" />} label="Boletas">
               <div className="grid grid-cols-3 gap-2">
                 {[["all","Todas"],["emitted","Emitidas"],["pending","Pendientes"]].map(([v, l]) => (
@@ -588,6 +581,7 @@ export function ListaVentas({
                 ))}
               </div>
             </FilterSection>
+            )}
 
             {/* Remitos */}
             <FilterSection icon={<Truck className="h-4 w-4" />} label="Remitos">
