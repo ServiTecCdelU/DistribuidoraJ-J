@@ -691,7 +691,7 @@ export default function ProductosPage() {
 
   const filteredProducts = useMemo(() => {
     return products.filter((product) => {
-      if (!habilitadosIds.has(product.id)) return false;
+      // Mostrar todos los productos (habilitados y deshabilitados)
       const matchesSearch =
         (product.name ?? "").toLowerCase().includes(searchQuery.toLowerCase()) ||
         (product.category ?? "").toLowerCase().includes(searchQuery.toLowerCase()) ||
