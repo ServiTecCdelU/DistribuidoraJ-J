@@ -26,6 +26,7 @@ import {
   LogOut,
   Loader2,
   Package,
+  Warehouse,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { formatCurrency } from "@/lib/utils/format";
