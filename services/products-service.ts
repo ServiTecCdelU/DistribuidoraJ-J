@@ -48,6 +48,59 @@ export const getProducts = async (_forceRefresh = false): Promise<Product[]> => 
   return all.map(mapRow)
 }
 
+export interface ProductSearchParams {
+  search?: string
+  category?: string
+  stockFilter?: 'all' | 'available' | 'low' | 'out'
+  page?: number
+  pageSize?: number
+}
+
+export interface ProductSearchResult {
+  data: Product[]
+  total: number
+  page: number
+  pageSize: number
+  totalPages: number
+}
+
+export const searchProducts = async (params: ProductSearchParams): Promise<ProductSearchResult> => {
+  const { search, category, stockFilter, page = 1, pageSize = 10 } = params
+  const from = (page - 1) * pageSize
+  const to = from + pageSize - 1
+
+  let query = supabase
+    .from('productos')
+    .select('*', { count: 'exact' })
+    .order('created_at', { ascending: false })
+
+  if (search) {
+    query = query.or(`name.ilike.%${search}%,description.ilike.%${search}%,category.ilike.%${search}%,codigo.ilike.%${search}%`)
+  }
+  if (category && category !== 'all') {
+    query = query.eq('category', category)
+  }
+  if (stockFilter && stockFilter !== 'all') {
+    if (stockFilter === 'available') query = query.gt('stock', 0)
+    else if (stockFilter === 'low') query = query.gt('stock', 0).lt('stock', 10)
+    else if (stockFilter === 'out') query = query.eq('stock', 0)
+  }
+
+  query = query.range(from, to)
+
+  const { data, error, count } = await query
+  if (error) throw error
+
+  const total = count ?? 0
+  return {
+    data: (data ?? []).map(mapRow),
+    total,
+    page,
+    pageSize,
+    totalPages: Math.ceil(total / pageSize),
+  }
+}
+
 export const getProductById = async (id: string): Promise<Product | undefined> => {
   const { data } = await supabase
     .from('productos')

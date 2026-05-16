@@ -31,6 +31,74 @@ export const invalidateMayoristaCache = () => {
   // No-op con Supabase
 }
 
+export interface MayoristaSearchParams {
+  search?: string
+  rubro?: string
+  subrubro?: string
+  estado?: 'todos' | 'habilitados' | 'deshabilitados'
+  page?: number
+  pageSize?: number
+}
+
+export interface MayoristaSearchResult {
+  data: MayoristaProducto[]
+  total: number
+  page: number
+  pageSize: number
+  totalPages: number
+}
+
+export const searchMayoristaProductos = async (params: MayoristaSearchParams): Promise<MayoristaSearchResult> => {
+  const { search, rubro, subrubro, estado, page = 1, pageSize = 10 } = params
+  const from = (page - 1) * pageSize
+  const to = from + pageSize - 1
+
+  let query = supabase
+    .from('mayorista_productos')
+    .select('*', { count: 'exact' })
+    .order('descripcion', { ascending: true })
+
+  if (search) {
+    query = query.or(`descripcion.ilike.%${search}%,codigo.ilike.%${search}%,codigo_barras.ilike.%${search}%`)
+  }
+  if (rubro && rubro !== 'todos') {
+    query = query.eq('rubro', rubro)
+  }
+  if (subrubro && subrubro !== 'todos') {
+    query = query.ilike('subrubro', `${subrubro}%`)
+  }
+  if (estado === 'habilitados') {
+    query = query.eq('habilitado', true)
+  } else if (estado === 'deshabilitados') {
+    query = query.eq('habilitado', false)
+  }
+
+  query = query.range(from, to)
+
+  const { data, error, count } = await query
+  if (error) throw error
+
+  const total = count ?? 0
+  return {
+    data: (data ?? []).map(mapDoc),
+    total,
+    page,
+    pageSize,
+    totalPages: Math.ceil(total / pageSize),
+  }
+}
+
+export const getMayoristaRubros = async (): Promise<string[]> => {
+  const { data, error } = await supabase
+    .from('mayorista_productos')
+    .select('rubro')
+    .not('rubro', 'is', null)
+    .not('rubro', 'eq', '')
+  if (error) throw error
+  const set = new Set((data ?? []).map((d: any) => d.rubro as string))
+  return Array.from(set).sort()
+}
+
 export const getMayoristaProductos = async (_forceRefresh = false, includeJoin = true): Promise<MayoristaProducto[]> => {
   const all: any[] = []
   const PAGE = 1000

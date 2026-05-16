@@ -5,8 +5,10 @@ import {
   getProductById,
   getProducts,
   getProductsPaginated,
+  searchProducts,
   updateProduct,
 } from '@/services/products-service'
+import type { ProductSearchParams, ProductSearchResult } from '@/services/products-service'
 import {
   createClient,
   deleteClient,
@@ -81,6 +83,9 @@ import type { TransferConfig } from '@/services/transfer-config-service'
 export const productsApi = {
   async getAll(): Promise<Product[]> {
     return getProducts()
+  },
+  async search(params: ProductSearchParams): Promise<ProductSearchResult> {
+    return searchProducts(params)
   },
   async getPaginated(pageSize?: number, lastDoc?: any) {
     return getProductsPaginated(pageSize, lastDoc)

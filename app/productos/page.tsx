@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useMemo, useRef } from "react";
+import { useEffect, useState, useMemo, useRef, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import { MainLayout } from "@/components/layout/main-layout";
 import { PageHeader } from "@/components/layout/page-header";
@@ -182,56 +182,46 @@ export default function ProductosPage() {
     useState<Product | null>(null);
   const [showInventoryHistory, setShowInventoryHistory] = useState(false);
 
-  // Paginación
+  // Paginación server-side
   const [currentPage, setCurrentPage] = useState(1);
   const [pageSize, setPageSize] = useState(10);
+  const [totalProducts, setTotalProducts] = useState(0);
+  const [totalPages, setTotalPages] = useState(1);
 
-  useEffect(() => {
-    let mounted = true;
-    const doLoad = async () => {
-      try {
-        // Solo cargar productos — filtrar por !disabled en vez de cargar mayorista
-        const data = await productsApi.getAll();
-        if (!mounted) return;
-        setProducts(data);
-        // habilitadosIds se construye directo de productos (disabled === false)
-        const disabled = data.filter((p) => (p as any).disabled);
-        const enabled = data.filter((p) => !(p as any).disabled);
-        console.log(`[Productos] Total: ${data.length}, Habilitados: ${enabled.length}, Deshabilitados: ${disabled.length}`);
-        if (disabled.length > 0) console.log(`[Productos] Deshabilitados:`, disabled.map(p => `${p.id} - ${p.name}`));
-        console.log(`[Productos] Habilitados:`, enabled.map(p => `${p.id} - ${p.name}`));
-        const ids = new Set(enabled.map((p) => p.id));
-        setHabilitadosIds(ids);
-      } catch (error) {
-        if (!mounted) return;
-        toast.error("Error al cargar productos");
-      } finally {
-        if (!mounted) return;
-        setLoading(false);
-      }
-    };
-    doLoad();
-    loadStockHistory();
-    loadInventoryHistory();
-    return () => { mounted = false; };
-  }, []);
-
-  useEffect(() => {
-    if (products.length > 0 && !loading) {
-      saveInventorySnapshot();
-    }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [products.length, loading]);
-
-  const loadProducts = async () => {
+  const fetchProducts = useCallback(async (page: number, search: string, category: string, stock: string) => {
+    setLoading(true);
     try {
-      const data = await productsApi.getAll();
-      setProducts(data);
-    } catch (error) {
-      toast.error("Error al recargar productos");
+      const result = await productsApi.search({
+        search: search || undefined,
+        category: category !== 'all' ? category : undefined,
+        stockFilter: stock as any,
+        page,
+        pageSize,
+      });
+      setProducts(result.data);
+      setTotalProducts(result.total);
+      setTotalPages(result.totalPages);
+      const ids = new Set(result.data.filter((p) => !(p as any).disabled).map((p) => p.id));
+      setHabilitadosIds(ids);
+    } catch {
+      toast.error("Error al cargar productos");
     } finally {
       setLoading(false);
     }
+  }, [pageSize]);
+
+  useEffect(() => {
+    fetchProducts(currentPage, searchQuery, categoryFilter, stockFilter);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [currentPage, searchQuery, categoryFilter, stockFilter, pageSize]);
+
+  useEffect(() => {
+    loadStockHistory();
+    loadInventoryHistory();
+  }, []);
+
+  const loadProducts = async () => {
+    fetchProducts(currentPage, searchQuery, categoryFilter, stockFilter);
   };
 
   // --- CSV: Descargar planilla ---
@@ -329,11 +319,8 @@ export default function ProductosPage() {
   const [cargarListaOpen, setCargarListaOpen] = useState(false);
 
   const onListaImportada = async () => {
-    const data = await productsApi.getAll();
-    setProducts(data);
-    setHabilitadosIds(new Set(
-      data.filter((p) => !(p as any).disabled).map((p) => p.id)
-    ));
+    fetchProducts(1, searchQuery, categoryFilter, stockFilter);
+    setCurrentPage(1);
   };
 
   const loadStockHistory = () => {
@@ -515,8 +502,7 @@ export default function ProductosPage() {
     }
 
     // Recargar productos
-    const refreshed = await productsApi.getAll();
-    setProducts(refreshed);
+    await fetchProducts(currentPage, searchQuery, categoryFilter, stockFilter);
   };
 
   const handleEdit = (product: Product) => {
@@ -689,17 +675,9 @@ export default function ProductosPage() {
     setShowStockHistory(true);
   };
 
+  // Filtros client-side que no están en server (precio, marca, sinTacc)
   const filteredProducts = useMemo(() => {
     return products.filter((product) => {
-      // Mostrar todos los productos (habilitados y deshabilitados)
-      const matchesSearch =
-        (product.name ?? "").toLowerCase().includes(searchQuery.toLowerCase()) ||
-        (product.category ?? "").toLowerCase().includes(searchQuery.toLowerCase()) ||
-        (product.description ?? "").toLowerCase().includes(searchQuery.toLowerCase());
-
-      const matchesCategory =
-        categoryFilter === "all" || product.category === categoryFilter;
-
       let matchesPrice = true;
       switch (priceFilter) {
         case "0-2800":
@@ -724,71 +702,25 @@ export default function ProductosPage() {
         (sinTaccFilter === "sin-tacc" && (product as any).sinTacc === true) ||
         (sinTaccFilter === "con-tacc" && (product as any).sinTacc !== true);
 
-      let matchesStock = true;
-      switch (stockFilter) {
-        case "available":
-          matchesStock = product.stock > 0;
-          break;
-        case "low":
-          matchesStock = product.stock > 0 && product.stock < 10;
-          break;
-        case "out":
-          matchesStock = product.stock === 0;
-          break;
-      }
-
-      return (
-        matchesSearch &&
-        matchesCategory &&
-        matchesPrice &&
-        matchesBase &&
-        matchesSinTacc &&
-        matchesStock
-      );
+      return matchesPrice && matchesBase && matchesSinTacc;
     });
-  }, [
-    products,
-    searchQuery,
-    categoryFilter,
-    priceFilter,
-    marcaFilter,
-    sinTaccFilter,
-    stockFilter,
-    habilitadosIds,
-  ]);
+  }, [products, priceFilter, marcaFilter, sinTaccFilter]);
 
   const stats = useMemo(() => {
-    const totalProducts = filteredProducts.length;
-    const totalInventoryValue = filteredProducts.reduce(
-      (sum, p) => sum + p.price * p.stock,
-      0,
-    );
-    const lowStockCount = filteredProducts.filter(
-      (p) => p.stock > 0 && p.stock < 10,
-    ).length;
-    const outOfStockCount = filteredProducts.filter(
-      (p) => p.stock === 0,
-    ).length;
-
     return {
       totalProducts,
-      totalInventoryValue,
-      lowStockCount,
-      outOfStockCount,
+      totalInventoryValue: filteredProducts.reduce((sum, p) => sum + p.price * p.stock, 0),
+      lowStockCount: filteredProducts.filter((p) => p.stock > 0 && p.stock < 10).length,
+      outOfStockCount: filteredProducts.filter((p) => p.stock === 0).length,
     };
-  }, [filteredProducts]);
+  }, [filteredProducts, totalProducts]);
 
   // Reset page when filters change
   useEffect(() => {
     setCurrentPage(1);
-  }, [searchQuery, categoryFilter, priceFilter, marcaFilter, stockFilter, sinTaccFilter, habilitadosIds]);
+  }, [searchQuery, categoryFilter, priceFilter, marcaFilter, stockFilter, sinTaccFilter]);
 
-  const paginatedProducts = useMemo(() => {
-    const start = (currentPage - 1) * pageSize;
-    return filteredProducts.slice(start, start + pageSize);
-  }, [filteredProducts, currentPage, pageSize]);
-
-  const totalPages = Math.ceil(filteredProducts.length / pageSize);
+  const paginatedProducts = filteredProducts;
 
   // Listas dinámicas para el modal (unión de defaults + valores reales en productos)
   const availableCategories = useMemo(() => {
@@ -1676,9 +1608,9 @@ export default function ProductosPage() {
               </div>
               <div className="flex items-center gap-2">
                 <span className="text-xs text-muted-foreground">
-                  {Math.min((currentPage - 1) * pageSize + 1, filteredProducts.length)}–
-                  {Math.min(currentPage * pageSize, filteredProducts.length)} de{" "}
-                  {filteredProducts.length}
+                  {Math.min((currentPage - 1) * pageSize + 1, totalProducts)}–
+                  {Math.min(currentPage * pageSize, totalProducts)} de{" "}
+                  {totalProducts}
                 </span>
                 <button
                   onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}

@@ -42,14 +42,16 @@ import {
 import * as XLSX from "xlsx";
 import type { MayoristaProducto, MayoristaPrefs } from "@/lib/types";
 import {
-  getMayoristaProductos,
   upsertMayoristaProductos,
   habilitarProducto,
   deshabilitarProducto,
   getMayoristaPrefs,
   saveMayoristaPrefs,
   invalidateMayoristaCache,
+  searchMayoristaProductos,
+  getMayoristaRubros,
 } from "@/services/mayorista-service";
+import type { MayoristaSearchParams } from "@/services/mayorista-service";
 import { formatCurrency } from "@/lib/utils/format";
 import { useAuth } from "@/hooks/use-auth";
 
@@ -113,19 +115,27 @@ function getSubrubros(subrubro: string): [string, string, string] {
 export default function MayoristaPage() {
   const { user } = useAuth();
   const [productos, setProductos] = useState<MayoristaProducto[]>([]);
+  const [totalProductos, setTotalProductos] = useState(0);
+  const [totalPages, setTotalPages] = useState(1);
+  const [currentPage, setCurrentPage] = useState(1);
   const [loading, setLoading] = useState(true);
+  const [searchParams, setSearchParams] = useState<MayoristaSearchParams>({ page: 1, pageSize: 10 });
   const [prefs, setPrefs] = useState<MayoristaPrefs>({
     showCodigoBarras: true,
     showRubro: true,
     showSubrubro: true,
   });
   const [prefsLoaded, setPrefsLoaded] = useState(false);
+  const [rubros, setRubros] = useState<string[]>([]);
 
-  const cargar = useCallback(async (forceRefresh = false) => {
+  const cargar = useCallback(async (params: MayoristaSearchParams) => {
+    setLoading(true);
     try {
-      // skipJoin: la tabla solo muestra datos de mayorista, no necesita join con productos
-      const data = await getMayoristaProductos(forceRefresh, false);
-      setProductos(data);
+      const result = await searchMayoristaProductos(params);
+      setProductos(result.data);
+      setTotalProductos(result.total);
+      setTotalPages(result.totalPages);
+      setCurrentPage(result.page);
     } catch {
       toast.error("Error al cargar productos del mayorista");
     } finally {
@@ -134,8 +144,12 @@ export default function MayoristaPage() {
   }, []);
 
   useEffect(() => {
-    cargar();
-  }, [cargar]);
+    cargar(searchParams);
+  }, [searchParams, cargar]);
+
+  useEffect(() => {
+    getMayoristaRubros().then(setRubros).catch(() => {});
+  }, []);
 
   useEffect(() => {
     if (!user) return;
@@ -214,10 +228,15 @@ export default function MayoristaPage() {
 
         <ListaPrecios
           productos={productos}
+          totalProductos={totalProductos}
+          totalPages={totalPages}
+          currentPage={currentPage}
           loading={loading}
           prefs={prefs}
-          onReload={() => { invalidateMayoristaCache(); cargar(true); }}
-          onProductosImportados={(nuevos) => setProductos(nuevos)}
+          rubros={rubros}
+          onSearchChange={(params) => setSearchParams(params)}
+          onReload={() => { invalidateMayoristaCache(); cargar(searchParams); }}
+          onProductosImportados={() => cargar(searchParams)}
           onHabilitarChange={(id, changes) =>
             setProductos((prev) =>
               prev.map((p) => (p.id === id ? { ...p, ...changes } : p))
@@ -232,74 +251,80 @@ export default function MayoristaPage() {
 // ─── Tab 1: Lista de precios ──────────────────────────────────────────────────
 function ListaPrecios({
   productos,
+  totalProductos,
+  totalPages,
+  currentPage,
   loading,
   prefs,
+  rubros: rubrosFromParent,
+  onSearchChange,
   onReload,
   onProductosImportados,
   onHabilitarChange,
 }: {
   productos: MayoristaProducto[];
+  totalProductos: number;
+  totalPages: number;
+  currentPage: number;
   loading: boolean;
   prefs: MayoristaPrefs;
+  rubros: string[];
+  onSearchChange: (params: MayoristaSearchParams) => void;
   onReload: () => void;
-  onProductosImportados: (nuevos: MayoristaProducto[]) => void;
+  onProductosImportados: () => void;
   onHabilitarChange: (id: string, changes: Partial<MayoristaProducto>) => void;
 }) {
-  const PAGE_SIZE = 100;
   const [search, setSearch] = useState("");
   const [rubroFiltro, setRubroFiltro] = useState("todos");
   const [subrubroFiltro, setSubrubroFiltro] = useState("todos");
   const [estadoFiltro, setEstadoFiltro] = useState<"todos" | "habilitados" | "deshabilitados">("todos");
-  const [currentPage, setCurrentPage] = useState(1);
   const [importOpen, setImportOpen] = useState(false);
   const [habilitarTarget, setHabilitarTarget] = useState<MayoristaProducto | null>(null);
+  const debounceRef = useRef<NodeJS.Timeout | null>(null);
 
-  // Reset página cuando cambian filtros
-  useEffect(() => {
-    setCurrentPage(1);
-  }, [search, rubroFiltro, subrubroFiltro, estadoFiltro]);
+  const rubros = useMemo(() => ["todos", ...rubrosFromParent], [rubrosFromParent]);
 
-  const rubros = useMemo(() => {
-    const set = new Set(productos.map((p) => p.rubro).filter(Boolean));
-    return ["todos", ...Array.from(set as Set<string>).sort()];
-  }, [productos]);
-
-  const subrubros = useMemo(() => {
-    const set = new Set<string>();
-    productos.forEach((p) => {
-      if (!p.subrubro) return;
-      if (rubroFiltro !== "todos" && p.rubro !== rubroFiltro) return;
-      const [s1] = getSubrubros(p.subrubro);
-      if (s1) set.add(s1);
+  // Emitir cambios de búsqueda con debounce
+  const emitSearch = useCallback((s: string, rubro: string, subrubro: string, estado: string, page: number) => {
+    onSearchChange({
+      search: s || undefined,
+      rubro: rubro !== "todos" ? rubro : undefined,
+      subrubro: subrubro !== "todos" ? subrubro : undefined,
+      estado: estado as any,
+      page,
+      pageSize: 10,
     });
-    return ["todos", ...Array.from(set).sort()];
-  }, [productos, rubroFiltro]);
+  }, [onSearchChange]);
 
-  const filtrados = useMemo(() => {
-    const q = search.toLowerCase();
-    return productos.filter((p) => {
-      const matchSearch =
-        !q ||
-        p.nombre.toLowerCase().includes(q) ||
-        p.codigo.toLowerCase().includes(q) ||
-        (p.codigoBarras ?? "").includes(q);
-      const matchRubro = rubroFiltro === "todos" || p.rubro === rubroFiltro;
-      const matchSub =
-        subrubroFiltro === "todos" ||
-        (p.subrubro ? getSubrubros(p.subrubro)[0] === subrubroFiltro : false);
-      const matchEstado =
-        estadoFiltro === "todos" ||
-        (estadoFiltro === "habilitados" ? p.habilitado : !p.habilitado);
-      return matchSearch && matchRubro && matchSub && matchEstado;
-    });
-  }, [productos, search, rubroFiltro, subrubroFiltro, estadoFiltro]);
+  const handleSearchInput = (value: string) => {
+    setSearch(value);
+    if (debounceRef.current) clearTimeout(debounceRef.current);
+    debounceRef.current = setTimeout(() => {
+      emitSearch(value, rubroFiltro, subrubroFiltro, estadoFiltro, 1);
+    }, 300);
+  };
 
-  // Con filtros activos: mostrar todos los resultados sin paginar
-  const hayFiltros = search || rubroFiltro !== "todos" || subrubroFiltro !== "todos" || estadoFiltro !== "todos";
-  const totalPages = hayFiltros ? 1 : Math.ceil(filtrados.length / PAGE_SIZE);
-  const filasPagina = hayFiltros
-    ? filtrados
-    : filtrados.slice((currentPage - 1) * PAGE_SIZE, currentPage * PAGE_SIZE);
+  const handleRubroChange = (v: string) => {
+    setRubroFiltro(v);
+    setSubrubroFiltro("todos");
+    emitSearch(search, v, "todos", estadoFiltro, 1);
+  };
+
+  const handleSubrubroChange = (v: string) => {
+    setSubrubroFiltro(v);
+    emitSearch(search, rubroFiltro, v, estadoFiltro, 1);
+  };
+
+  const handleEstadoChange = (v: string) => {
+    setEstadoFiltro(v as typeof estadoFiltro);
+    emitSearch(search, rubroFiltro, subrubroFiltro, v, 1);
+  };
+
+  const handlePageChange = (page: number) => {
+    emitSearch(search, rubroFiltro, subrubroFiltro, estadoFiltro, page);
+  };
+
+  const filasPagina = productos;
 
 
 
@@ -312,7 +337,7 @@ function ListaPrecios({
           <Input
             placeholder="Buscar por nombre, código o cód. barras..."
             value={search}
-            onChange={(e) => setSearch(e.target.value)}
+            onChange={(e) => handleSearchInput(e.target.value)}
             className="pl-10 rounded-xl"
           />
           {search && (
@@ -320,13 +345,13 @@ function ListaPrecios({
               variant="ghost"
               size="icon"
               className="absolute right-2 top-1/2 -translate-y-1/2 h-6 w-6"
-              onClick={() => setSearch("")}
+              onClick={() => { setSearch(""); emitSearch("", rubroFiltro, subrubroFiltro, estadoFiltro, 1); }}
             >
               <X className="h-3.5 w-3.5" />
             </Button>
           )}
         </div>
-        <Select value={rubroFiltro} onValueChange={(v) => { setRubroFiltro(v); setSubrubroFiltro("todos"); }}>
+        <Select value={rubroFiltro} onValueChange={handleRubroChange}>
           <SelectTrigger className="w-full sm:w-48 rounded-xl">
             <SelectValue placeholder="Rubro" />
           </SelectTrigger>
@@ -338,19 +363,15 @@ function ListaPrecios({
             ))}
           </SelectContent>
         </Select>
-        <Select value={subrubroFiltro} onValueChange={setSubrubroFiltro}>
+        <Select value={subrubroFiltro} onValueChange={handleSubrubroChange}>
           <SelectTrigger className="w-full sm:w-48 rounded-xl">
             <SelectValue placeholder="Subrubro" />
           </SelectTrigger>
           <SelectContent>
-            {subrubros.map((s) => (
-              <SelectItem key={s} value={s}>
-                {s === "todos" ? "Todos los subrubros" : s}
-              </SelectItem>
-            ))}
+            <SelectItem value="todos">Todos los subrubros</SelectItem>
           </SelectContent>
         </Select>
-        <Select value={estadoFiltro} onValueChange={(v) => setEstadoFiltro(v as typeof estadoFiltro)}>
+        <Select value={estadoFiltro} onValueChange={handleEstadoChange}>
           <SelectTrigger className="w-full sm:w-44 rounded-xl">
             <SelectValue placeholder="Estado" />
           </SelectTrigger>
@@ -499,23 +520,16 @@ function ListaPrecios({
           </div>
           <div className="px-4 py-2 bg-muted/30 border-t flex flex-wrap items-center justify-between gap-2">
             <span className="text-xs text-muted-foreground">
-              {hayFiltros
-                ? `${filtrados.length} resultados`
-                : `${filtrados.length} productos · página ${currentPage} de ${totalPages}`}
-              {productos.filter((p) => p.habilitado).length > 0 && (
-                <span className="ml-3 text-teal-600 font-medium">
-                  · {productos.filter((p) => p.habilitado).length} habilitados
-                </span>
-              )}
+              {totalProductos} productos · página {currentPage} de {totalPages}
             </span>
-            {!hayFiltros && totalPages > 1 && (
+            {totalPages > 1 && (
               <div className="flex items-center gap-1">
                 <Button
                   variant="outline"
                   size="sm"
                   className="h-7 rounded-lg text-xs"
                   disabled={currentPage === 1}
-                  onClick={() => setCurrentPage((p) => p - 1)}
+                  onClick={() => handlePageChange(currentPage - 1)}
                 >
                   ← Anterior
                 </Button>
@@ -527,7 +541,7 @@ function ListaPrecios({
                   size="sm"
                   className="h-7 rounded-lg text-xs"
                   disabled={currentPage === totalPages}
-                  onClick={() => setCurrentPage((p) => p + 1)}
+                  onClick={() => handlePageChange(currentPage + 1)}
                 >
                   Siguiente →
                 </Button>
@@ -542,11 +556,9 @@ function ListaPrecios({
         open={importOpen}
         onOpenChange={setImportOpen}
         onImportado={async () => {
-          // La caché ya fue invalidada por upsertMayoristaProductos
-          const actualizados = await getMayoristaProductos(true);
-          onProductosImportados(actualizados);
+          onProductosImportados();
           setImportOpen(false);
-          toast.success(`${actualizados.length} productos importados`);
+          toast.success("Productos importados correctamente");
         }}
       />
 
