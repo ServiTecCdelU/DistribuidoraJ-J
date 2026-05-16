@@ -405,7 +405,7 @@ function ListaPrecios({
             <Skeleton key={i} className="h-12 rounded-xl" />
           ))}
         </div>
-      ) : filtrados.length === 0 ? (
+      ) : filasPagina.length === 0 ? (
         <div className="text-center py-16">
           <FileSpreadsheet className="h-12 w-12 text-muted-foreground/30 mx-auto mb-3" />
           <p className="text-sm text-muted-foreground">
