@@ -158,7 +158,7 @@ export interface NewClientForm {
   address: string;
 }
 
-export function useCart(role: UserRole, userEmail?: string) {
+export function useCart(role: UserRole, userEmail?: string, externalProducts?: Product[]) {
   // Data
   const [products, setProducts] = useState<Product[]>([]);
   const [clients, setClients] = useState<Client[]>([]);
@@ -274,17 +274,22 @@ export function useCart(role: UserRole, userEmail?: string) {
         setProducts(data.products || []);
         setClients([]);
         setSellers([]);
+      } else if (externalProducts) {
+        // Productos manejados externamente (paginación server-side)
+        const [clientsData, sellersData] = await Promise.all([
+          clientsApi.getAll(),
+          sellersApi.getAll(),
+        ]);
+        setClients(clientsData);
+        setSellers(sellersData.filter((s) => s.isActive));
       } else {
-        // Admin/seller: cargar desde mayorista_productos
+        // Admin/seller: cargar desde mayorista_productos (legacy)
         const [mayoristaData, clientsData, sellersData] = await Promise.all([
           getMayoristaProductos(),
           clientsApi.getAll(),
           sellersApi.getAll(),
         ]);
-        // Convertir MayoristaProducto a Product (solo habilitados, stock=9999 para no restringir pedidos)
         const productsData = mayoristaData.filter((p) => p.habilitado).map((p) => {
-          // Precio de lote: precioVenta (precio del bulto entero) × seDivideEn / unidadesPorBulto
-          // Ej: bulto $36.000, 30 unidades, se divide en 10 → $36.000 × 10 / 30 = $12.000/lote
           const precioLote =
             p.unidadesPorBulto && p.seDivideEn && p.unidadesPorBulto > 0
               ? Math.round(p.precioVenta * p.seDivideEn / p.unidadesPorBulto * 100) / 100
@@ -309,16 +314,22 @@ export function useCart(role: UserRole, userEmail?: string) {
         setSellers(sellersData.filter((s) => s.isActive));
       }
     } catch (error) {
-
       toast.error("Error al cargar los datos");
     } finally {
       setLoading(false);
     }
-  }, [role]);
+  }, [role, externalProducts]);
 
   useEffect(() => {
     loadData();
   }, [loadData]);
+
+  // Sync external products
+  useEffect(() => {
+    if (externalProducts) {
+      setProducts(externalProducts);
+    }
+  }, [externalProducts]);
 
   // Seller match for seller role
   useEffect(() => {

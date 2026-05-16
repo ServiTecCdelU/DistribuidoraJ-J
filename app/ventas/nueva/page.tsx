@@ -1,7 +1,7 @@
 // app/ventas/nueva/page.tsx
 "use client";
 
-import { useState, useMemo, memo, useEffect, Suspense } from "react";
+import { useState, useMemo, memo, useEffect, useCallback, useRef, Suspense } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { MainLayout } from "@/components/layout/main-layout";
 import { PageHeader } from "@/components/layout/page-header";
@@ -28,14 +28,16 @@ import {
   Package,
   X,
   Eye,
-  EyeOff,
+  ChevronLeft,
+  ChevronRight,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { Switch } from "@/components/ui/switch";
 import { useCart } from "@/hooks/useCart";
 import type { UserRole } from "@/hooks/useCart";
 import { UnifiedCart } from "@/components/cart/UnifiedCart";
 import { useAuth } from "@/hooks/use-auth";
+import { searchProductosParaVenta, getRubrosHabilitados } from "@/services/mayorista-service";
+import type { Product, CartItem } from "@/lib/types";
 
 // ─── Wrapper: espera auth antes de montar el carrito ──────────────────────────
 function NuevaVentaInner() {
@@ -81,10 +83,86 @@ function NuevaVentaContent({
 }) {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const { state, actions } = useCart(cartRole, userEmail);
 
+  // Búsqueda server-side de productos
+  const [ventaProducts, setVentaProducts] = useState<Product[]>([]);
+  const [productsLoading, setProductsLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState("");
-  const [showDisabled, setShowDisabled] = useState(false);
+  const [rubroFiltro, setRubroFiltro] = useState("");
+  const [rubros, setRubros] = useState<string[]>([]);
+  const [currentPage, setCurrentPage] = useState(1);
+  const [totalPages, setTotalPages] = useState(1);
+  const [totalProductos, setTotalProductos] = useState(0);
+  const debounceRef = useRef<NodeJS.Timeout | null>(null);
+
+  const fetchProducts = useCallback(async (search: string, rubro: string, page: number) => {
+    setProductsLoading(true);
+    try {
+      const result = await searchProductosParaVenta({
+        search: search || undefined,
+        rubro: rubro || undefined,
+        page,
+        pageSize: 10,
+      });
+      const mapped: Product[] = result.data.map((p) => {
+        const precioLote =
+          p.unidadesPorBulto && p.seDivideEn && p.unidadesPorBulto > 0
+            ? Math.round(p.precioVenta * p.seDivideEn / p.unidadesPorBulto * 100) / 100
+            : p.precioVenta;
+        return {
+          id: p.id,
+          name: p.nombre,
+          description: p.codigo,
+          price: precioLote,
+          stock: 9999,
+          stockLocal: p.stockLocal,
+          unidadesPorBulto: p.unidadesPorBulto,
+          seDivideEn: p.seDivideEn,
+          codigo: p.codigo,
+          imageUrl: "",
+          category: p.rubro || p.categoria,
+          createdAt: new Date(),
+        } as any;
+      });
+      setVentaProducts(mapped);
+      setTotalPages(result.totalPages);
+      setTotalProductos(result.total);
+      setCurrentPage(result.page);
+    } catch {
+      // silently fail, products stay empty
+    } finally {
+      setProductsLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    fetchProducts("", "", 1);
+    getRubrosHabilitados().then(setRubros).catch(() => {});
+  }, [fetchProducts]);
+
+  const handleSearchChange = (value: string) => {
+    setSearchQuery(value);
+    if (debounceRef.current) clearTimeout(debounceRef.current);
+    debounceRef.current = setTimeout(() => {
+      setCurrentPage(1);
+      fetchProducts(value, rubroFiltro, 1);
+    }, 300);
+  };
+
+  const handleRubroChange = (value: string) => {
+    const rubro = value === "todos" ? "" : value;
+    setRubroFiltro(rubro);
+    setCurrentPage(1);
+    fetchProducts(searchQuery, rubro, 1);
+  };
+
+  const handlePageChange = (page: number) => {
+    setCurrentPage(page);
+    fetchProducts(searchQuery, rubroFiltro, page);
+  };
+
+  const { state, actions } = useCart(cartRole, userEmail, ventaProducts);
+
   const [cartDialogOpen, setCartDialogOpen] = useState(false);
 
   // Abrir carrito automáticamente si viene desde tienda (?openCart=true)
@@ -94,26 +172,8 @@ function NuevaVentaContent({
     }
   }, [searchParams, state.cart.length]);
 
-  const { enabledProducts, disabledProducts } = useMemo(() => {
-    const query = searchQuery.toLowerCase();
-    const enabled: typeof state.products = [];
-    const disabled: typeof state.products = [];
-    for (const product of state.products) {
-      const matchesSearch =
-        !query ||
-        product.name.toLowerCase().includes(query) ||
-        product.category.toLowerCase().includes(query);
-      if (!matchesSearch) continue;
-      if ((product as any).disabled) {
-        if (showDisabled) disabled.push(product);
-      } else {
-        enabled.push(product);
-      }
-    }
-    return { enabledProducts: enabled, disabledProducts: disabled };
-  }, [state.products, searchQuery, showDisabled]);
-
-  const filteredProducts = enabledProducts.length + disabledProducts.length > 0;
+  const enabledProducts = ventaProducts;
+  const filteredProducts = ventaProducts.length > 0;
 
   const handleConfirmSale = async () => {
     setCartDialogOpen(false);
@@ -230,33 +290,51 @@ function NuevaVentaContent({
               : "Registra una venta en mostrador"
           }
           stackOnMobile
-          actions={
-            <div className="flex items-center gap-2">
-              <div className="flex items-center gap-2 px-3 py-1.5 rounded-lg border border-border bg-card">
-                <EyeOff className="h-3.5 w-3.5 text-muted-foreground" />
-                <span className="text-xs font-medium text-muted-foreground">Deshabilitados</span>
-                <Switch checked={showDisabled} onCheckedChange={setShowDisabled} className="scale-75" />
-              </div>
-            </div>
-          }
         />
 
-        <div className="relative">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-          <Input
-            placeholder="Buscar productos..."
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            className="pl-10 pr-10 h-11 text-sm rounded-xl border-2 focus-visible:ring-2"
-          />
-          {searchQuery && (
-            <Button variant="ghost" size="icon" className="absolute right-2 top-1/2 -translate-y-1/2 h-7 w-7" onClick={() => setSearchQuery("")}>
-              <X className="h-3.5 w-3.5" />
-            </Button>
+        <div className="space-y-2">
+          <div className="relative">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+            <Input
+              placeholder="Buscar productos..."
+              value={searchQuery}
+              onChange={(e) => handleSearchChange(e.target.value)}
+              className="pl-10 pr-10 h-11 text-sm rounded-xl border-2 focus-visible:ring-2"
+            />
+            {searchQuery && (
+              <Button variant="ghost" size="icon" className="absolute right-2 top-1/2 -translate-y-1/2 h-7 w-7" onClick={() => { setSearchQuery(""); fetchProducts("", rubroFiltro, 1); }}>
+                <X className="h-3.5 w-3.5" />
+              </Button>
+            )}
+          </div>
+          {rubros.length > 0 && (
+            <div className="flex gap-2 overflow-x-auto pb-1">
+              <button
+                onClick={() => handleRubroChange("todos")}
+                className={cn(
+                  "px-3 py-1.5 text-xs font-medium rounded-lg border whitespace-nowrap transition-colors",
+                  !rubroFiltro ? "bg-primary text-primary-foreground border-primary" : "border-border hover:border-primary/50 text-muted-foreground"
+                )}
+              >
+                Todos
+              </button>
+              {rubros.map((r) => (
+                <button
+                  key={r}
+                  onClick={() => handleRubroChange(r)}
+                  className={cn(
+                    "px-3 py-1.5 text-xs font-medium rounded-lg border whitespace-nowrap transition-colors",
+                    rubroFiltro === r ? "bg-primary text-primary-foreground border-primary" : "border-border hover:border-primary/50 text-muted-foreground"
+                  )}
+                >
+                  {r}
+                </button>
+              ))}
+            </div>
           )}
         </div>
 
-        {state.loading ? (
+        {productsLoading ? (
           <div className="space-y-1">
             {[...Array(10)].map((_, i) => (
               <Skeleton key={i} className="h-10 rounded-lg" />
@@ -273,25 +351,33 @@ function NuevaVentaContent({
             </p>
           </div>
         ) : (
-          <div className="space-y-6">
-            {enabledProducts.length > 0 && (
-              <div>
-                <h3 className="text-sm font-semibold text-foreground mb-3 flex items-center gap-2">
-                  <div className="h-1 flex-1 bg-gradient-to-r from-primary/20 to-transparent rounded" />
-                  <span>Habilitados</span>
-                  <div className="h-1 flex-1 bg-gradient-to-l from-primary/20 to-transparent rounded" />
-                </h3>
-                <ProductGrid products={enabledProducts} cart={state.cart} addToCart={actions.addToCart} formatCurrency={actions.formatCurrency} />
-              </div>
-            )}
-            {showDisabled && disabledProducts.length > 0 && (
-              <div>
-                <h3 className="text-sm font-semibold text-muted-foreground mb-3 flex items-center gap-2">
-                  <div className="h-1 flex-1 bg-gradient-to-r from-muted-foreground/20 to-transparent rounded" />
-                  <span>Deshabilitados</span>
-                  <div className="h-1 flex-1 bg-gradient-to-l from-muted-foreground/20 to-transparent rounded" />
-                </h3>
-                <ProductGrid products={disabledProducts} cart={state.cart} addToCart={actions.addToCart} formatCurrency={actions.formatCurrency} disabled />
+          <div className="space-y-3">
+            <ProductGrid products={enabledProducts} cart={state.cart} addToCart={actions.addToCart} formatCurrency={actions.formatCurrency} />
+            {/* Paginación */}
+            {totalPages > 1 && (
+              <div className="flex items-center justify-between pt-2">
+                <span className="text-xs text-muted-foreground">
+                  {totalProductos} productos
+                </span>
+                <div className="flex items-center gap-1">
+                  <button
+                    onClick={() => handlePageChange(currentPage - 1)}
+                    disabled={currentPage === 1}
+                    className="h-8 w-8 flex items-center justify-center rounded-lg border border-border hover:border-primary/50 disabled:opacity-40 transition-colors"
+                  >
+                    <ChevronLeft className="h-4 w-4" />
+                  </button>
+                  <span className="text-xs font-medium px-2 tabular-nums">
+                    {currentPage}/{totalPages}
+                  </span>
+                  <button
+                    onClick={() => handlePageChange(currentPage + 1)}
+                    disabled={currentPage >= totalPages}
+                    className="h-8 w-8 flex items-center justify-center rounded-lg border border-border hover:border-primary/50 disabled:opacity-40 transition-colors"
+                  >
+                    <ChevronRight className="h-4 w-4" />
+                  </button>
+                </div>
               </div>
             )}
           </div>
@@ -348,9 +434,6 @@ function NuevaVentaContent({
     </MainLayout>
   );
 }
-
-// ─── Sub-componentes de productos ─────────────────────────────────────────────
-import type { Product, CartItem } from "@/lib/types";
 
 // ─── Sub-componentes de productos ─────────────────────────────────────────────
 

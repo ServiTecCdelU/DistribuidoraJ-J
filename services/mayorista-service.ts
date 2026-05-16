@@ -99,6 +99,109 @@ export const getMayoristaRubros = async (): Promise<string[]> => {
   return Array.from(set).sort()
 }
 
+export const getRubrosHabilitados = async (): Promise<string[]> => {
+  const { data, error } = await supabase
+    .from('mayorista_productos')
+    .select('rubro')
+    .eq('habilitado', true)
+    .not('rubro', 'is', null)
+    .not('rubro', 'eq', '')
+  if (error) throw error
+  const set = new Set((data ?? []).map((d: any) => d.rubro as string))
+  return Array.from(set).sort()
+}
+
+export interface VentaProductSearchParams {
+  search?: string
+  rubro?: string
+  page?: number
+  pageSize?: number
+}
+
+export interface VentaProductSearchResult {
+  data: Array<{
+    id: string
+    nombre: string
+    codigo: string
+    precioUnitarioMayorista: number
+    rubro: string
+    categoria: string
+    productoId: string
+    unidadesPorBulto?: number
+    seDivideEn?: number
+    precioVenta: number
+    stockLocal: number
+  }>
+  total: number
+  page: number
+  pageSize: number
+  totalPages: number
+}
+
+export const searchProductosParaVenta = async (params: VentaProductSearchParams): Promise<VentaProductSearchResult> => {
+  const { search, rubro, page = 1, pageSize = 10 } = params
+  const from = (page - 1) * pageSize
+  const to = from + pageSize - 1
+
+  let query = supabase
+    .from('mayorista_productos')
+    .select('id, codigo, descripcion, precio_lista, rubro, categoria, producto_id, habilitado', { count: 'exact' })
+    .eq('habilitado', true)
+    .order('descripcion', { ascending: true })
+
+  if (search) {
+    query = query.or(`descripcion.ilike.%${search}%,codigo.ilike.%${search}%`)
+  }
+  if (rubro) {
+    query = query.eq('rubro', rubro)
+  }
+
+  query = query.range(from, to)
+
+  const { data, error, count } = await query
+  if (error) throw error
+
+  const total = count ?? 0
+  const mpRows = data ?? []
+
+  // Join con productos para obtener precio_venta, stock, unidades_por_bulto, se_divide_en
+  const prodIds = mpRows.map((r: any) => r.producto_id).filter(Boolean)
+  const productosMap = new Map<string, Record<string, any>>()
+  if (prodIds.length > 0) {
+    const { data: prodRows } = await supabase
+      .from('productos')
+      .select('id, precio_venta, price, stock, unidades_por_bulto, se_divide_en')
+      .in('id', prodIds)
+    ;(prodRows ?? []).forEach((p: any) => productosMap.set(p.id, p))
+  }
+
+  const results = mpRows.map((mp: any) => {
+    const prod = productosMap.get(mp.producto_id)
+    const precioVenta = prod ? (Number(prod.precio_venta) || Number(prod.price) || 0) : 0
+    return {
+      id: mp.id,
+      nombre: mp.descripcion ?? '',
+      codigo: mp.codigo ?? '',
+      precioUnitarioMayorista: Number(mp.precio_lista) || 0,
+      rubro: mp.rubro ?? '',
+      categoria: mp.categoria ?? '',
+      productoId: mp.producto_id ?? '',
+      unidadesPorBulto: prod?.unidades_por_bulto ?? undefined,
+      seDivideEn: prod?.se_divide_en ? Number(prod.se_divide_en) : undefined,
+      precioVenta,
+      stockLocal: prod?.stock ?? 0,
+    }
+  })
+
+  return {
+    data: results,
+    total,
+    page,
+    pageSize,
+    totalPages: Math.ceil(total / pageSize),
+  }
+}
+
 export const getMayoristaProductos = async (_forceRefresh = false, includeJoin = true): Promise<MayoristaProducto[]> => {
   const all: any[] = []
   const PAGE = 1000
