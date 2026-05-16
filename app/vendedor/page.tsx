@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useMemo, useRef, useEffect, Suspense } from "react";
+import { useState, useMemo, useRef, useEffect, useCallback, Suspense } from "react";
 import { useRouter } from "next/navigation";
 import { useAuth } from "@/hooks/use-auth";
 import { useCart } from "@/hooks/useCart";
@@ -18,6 +18,13 @@ import {
   DialogDescription,
 } from "@/components/ui/dialog";
 import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import {
   Search,
   ShoppingCart,
   Plus,
@@ -27,10 +34,13 @@ import {
   Loader2,
   Package,
   Warehouse,
+  ChevronLeft,
+  ChevronRight,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { formatCurrency } from "@/lib/utils/format";
 import { signOut } from "@/services/auth-service";
+import { searchProductosParaVenta, getRubrosHabilitados } from "@/services/mayorista-service";
 import type { Product, CartItem } from "@/lib/types";
 
 // ─── Wrapper de auth ──────────────────────────────────────────────────────────
@@ -76,28 +86,88 @@ export default function VendedorPage() {
 // ─── Dashboard principal ──────────────────────────────────────────────────────
 function VendedorDashboard({ userEmail, userName }: { userEmail: string; userName: string }) {
   const router = useRouter();
-  const { state, actions } = useCart("seller", userEmail);
 
-  const [search, setSearch] = useState("");
-  const [cartOpen, setCartOpen] = useState(false);
+  // Búsqueda server-side de productos
+  const [ventaProducts, setVentaProducts] = useState<Product[]>([]);
+  const [productsLoading, setProductsLoading] = useState(true);
+  const [searchQuery, setSearchQuery] = useState("");
+  const [rubroFiltro, setRubroFiltro] = useState("");
+  const [rubros, setRubros] = useState<string[]>([]);
+  const [currentPage, setCurrentPage] = useState(1);
+  const [totalPages, setTotalPages] = useState(1);
+  const [totalProductos, setTotalProductos] = useState(0);
+  const debounceRef = useRef<NodeJS.Timeout | null>(null);
   const searchRef = useRef<HTMLInputElement>(null);
 
-  // Auto-focus al montar
-  useEffect(() => {
-    searchRef.current?.focus();
+  const [cartOpen, setCartOpen] = useState(false);
+
+  const fetchProducts = useCallback(async (search: string, rubro: string, page: number) => {
+    setProductsLoading(true);
+    try {
+      const result = await searchProductosParaVenta({
+        search: search || undefined,
+        rubro: rubro || undefined,
+        page,
+        pageSize: 10,
+      });
+      const mapped: Product[] = result.data.map((p: any) => {
+        const precioLote =
+          p.unidadesPorBulto && p.seDivideEn && p.unidadesPorBulto > 0
+            ? Math.round(p.precioVenta * p.seDivideEn / p.unidadesPorBulto * 100) / 100
+            : p.precioVenta;
+        return {
+          id: p.id,
+          name: p.nombre,
+          description: p.codigo,
+          price: precioLote,
+          stock: 9999,
+          stockLocal: p.stockLocal,
+          unidadesPorBulto: p.unidadesPorBulto,
+          seDivideEn: p.seDivideEn,
+          codigo: p.codigo,
+          imageUrl: "",
+          category: p.rubro || p.categoria,
+          createdAt: new Date(),
+        } as any;
+      });
+      setVentaProducts(mapped);
+      setTotalPages(result.totalPages);
+      setTotalProductos(result.total);
+      setCurrentPage(result.page);
+    } catch {
+      // silently fail
+    } finally {
+      setProductsLoading(false);
+    }
   }, []);
 
-  // Filtro de productos
-  const filtered = useMemo(() => {
-    const q = search.trim().toLowerCase();
-    if (!q) return state.products;
-    return state.products.filter(
-      (p) =>
-        p.name.toLowerCase().includes(q) ||
-        (p.description ?? "").toLowerCase().includes(q) ||
-        p.category.toLowerCase().includes(q)
-    );
-  }, [state.products, search]);
+  useEffect(() => {
+    fetchProducts("", "", 1);
+    getRubrosHabilitados().then(setRubros).catch(() => {});
+  }, [fetchProducts]);
+
+  const handleSearchChange = (value: string) => {
+    setSearchQuery(value);
+    if (debounceRef.current) clearTimeout(debounceRef.current);
+    debounceRef.current = setTimeout(() => {
+      setCurrentPage(1);
+      fetchProducts(value, rubroFiltro, 1);
+    }, 300);
+  };
+
+  const handleRubroChange = (value: string) => {
+    const rubro = value === "todos" ? "" : value;
+    setRubroFiltro(rubro);
+    setCurrentPage(1);
+    fetchProducts(searchQuery, rubro, 1);
+  };
+
+  const handlePageChange = (page: number) => {
+    setCurrentPage(page);
+    fetchProducts(searchQuery, rubroFiltro, page);
+  };
+
+  const { state, actions } = useCart("seller", userEmail, ventaProducts);
 
   // Mapa rápido de cantidades en carrito
   const cartMap = useMemo(() => {
@@ -109,7 +179,7 @@ function VendedorDashboard({ userEmail, userName }: { userEmail: string; userNam
   const handleConfirm = async () => {
     setCartOpen(false);
     const hayPendiente = state.cart.some(
-      (item) => item.quantity > (item.product.stockLocal ?? 0)
+      (item) => item.quantity > ((item.product as any).stockLocal ?? 0)
     );
     const modo = hayPendiente ? "esperar" : "disponible";
     const result = await actions.processSale(modo);
@@ -131,7 +201,7 @@ function VendedorDashboard({ userEmail, userName }: { userEmail: string; userNam
         <div className="relative">
           <div className="absolute inset-0 bg-emerald-500/20 rounded-full animate-ping" />
           <div className="relative h-20 w-20 rounded-full bg-gradient-to-br from-emerald-400 to-emerald-600 flex items-center justify-center shadow-lg">
-            <CheckCircle2 className="h-10 w-10 text-white" />
+            <Package className="h-10 w-10 text-white" />
           </div>
         </div>
         <div className="text-center">
@@ -183,136 +253,166 @@ function VendedorDashboard({ userEmail, userName }: { userEmail: string; userNam
         </div>
       </header>
 
-      {/* Buscador */}
-      <div className="px-4 pt-4 pb-2">
+      {/* Buscador + filtro rubro */}
+      <div className="px-4 pt-4 pb-2 space-y-2">
         <div className="relative">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-muted-foreground" />
           <Input
             ref={searchRef}
-            placeholder="Buscar producto... (nombre, código, categoría)"
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
+            placeholder="Buscar producto... (nombre, código)"
+            value={searchQuery}
+            onChange={(e) => handleSearchChange(e.target.value)}
             className="pl-10 pr-10 h-12 text-base rounded-2xl border-2 focus-visible:ring-2 focus-visible:ring-teal-500"
           />
-          {search && (
+          {searchQuery && (
             <Button
               variant="ghost"
               size="icon"
               className="absolute right-2 top-1/2 -translate-y-1/2 h-8 w-8"
-              onClick={() => { setSearch(""); searchRef.current?.focus(); }}
+              onClick={() => { handleSearchChange(""); searchRef.current?.focus(); }}
             >
               <X className="h-4 w-4" />
             </Button>
           )}
         </div>
-        {search && (
-          <p className="text-xs text-muted-foreground mt-1.5 px-1">
-            {filtered.length} resultado{filtered.length !== 1 ? "s" : ""}
-          </p>
-        )}
+        <div className="flex items-center gap-2">
+          <Select value={rubroFiltro || "todos"} onValueChange={handleRubroChange}>
+            <SelectTrigger className="h-9 rounded-xl text-sm flex-1">
+              <SelectValue placeholder="Todos los rubros" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="todos">Todos los rubros</SelectItem>
+              {rubros.map((r) => (
+                <SelectItem key={r} value={r}>{r}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          <span className="text-xs text-muted-foreground whitespace-nowrap">
+            {totalProductos} productos
+          </span>
+        </div>
       </div>
 
       {/* Tabla de productos */}
       <div className="flex-1 px-4 pb-6">
-        {state.loading ? (
+        {productsLoading ? (
           <div className="space-y-2 mt-2">
             {[...Array(8)].map((_, i) => (
               <Skeleton key={i} className="h-11 rounded-xl" />
             ))}
           </div>
-        ) : filtered.length === 0 ? (
+        ) : ventaProducts.length === 0 ? (
           <div className="text-center py-16">
             <Package className="h-12 w-12 text-muted-foreground/30 mx-auto mb-3" />
             <p className="text-sm text-muted-foreground">
-              {search ? `Sin resultados para "${search}"` : "No hay productos disponibles"}
+              {searchQuery ? `Sin resultados para "${searchQuery}"` : "No hay productos disponibles"}
             </p>
           </div>
         ) : (
-          <div className="rounded-2xl border overflow-hidden mt-2">
-            <div className="overflow-x-auto">
-              <table className="w-full text-sm">
-                <thead className="bg-muted/50 border-b">
-                  <tr>
-                    <th className="text-left px-3 py-2.5 font-semibold text-muted-foreground">Código</th>
-                    <th className="text-left px-3 py-2.5 font-semibold text-muted-foreground">Descripción</th>
-                    <th className="text-left px-3 py-2.5 font-semibold text-muted-foreground hidden sm:table-cell">Categoría</th>
-                    <th className="text-right px-3 py-2.5 font-semibold text-muted-foreground whitespace-nowrap">Precio</th>
-                    <th className="text-right px-3 py-2.5 font-semibold text-muted-foreground hidden sm:table-cell">Stock</th>
-                    <th className="text-center px-3 py-2.5 font-semibold text-muted-foreground">Cant.</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y">
-                  {filtered.map((product) => {
-                    const qty = cartMap.get(product.id) ?? 0;
-                    const stock = product.stockLocal ?? product.stock;
-                    return (
-                      <tr
-                        key={product.id}
-                        className={cn(
-                          "hover:bg-muted/20 transition-colors",
-                          qty > 0 && "bg-teal-50/40 dark:bg-teal-950/20",
-                        )}
-                      >
-                        <td className="px-3 py-2.5 font-mono text-xs text-muted-foreground whitespace-nowrap">
-                          {product.description || "—"}
-                        </td>
-                        <td className="px-3 py-2.5 font-medium max-w-[200px] truncate">
-                          {product.name}
-                        </td>
-                        <td className="px-3 py-2.5 text-xs text-muted-foreground hidden sm:table-cell whitespace-nowrap">
-                          {product.category}
-                        </td>
-                        <td className="px-3 py-2.5 text-right font-semibold text-teal-600 whitespace-nowrap">
-                          <span>{formatCurrency(product.price)}</span>
-                          {product.seDivideEn && product.seDivideEn > 1 && (
-                            <span className="block text-[10px] font-normal text-muted-foreground">/ lote</span>
+          <>
+            <div className="rounded-2xl border overflow-hidden mt-2">
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm">
+                  <thead className="bg-muted/50 border-b">
+                    <tr>
+                      <th className="text-left px-3 py-2.5 font-semibold text-muted-foreground">Código</th>
+                      <th className="text-left px-3 py-2.5 font-semibold text-muted-foreground">Descripción</th>
+                      <th className="text-left px-3 py-2.5 font-semibold text-muted-foreground hidden sm:table-cell">Rubro</th>
+                      <th className="text-right px-3 py-2.5 font-semibold text-muted-foreground whitespace-nowrap">Precio</th>
+                      <th className="text-center px-3 py-2.5 font-semibold text-muted-foreground">Cant.</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y">
+                    {ventaProducts.map((product) => {
+                      const qty = cartMap.get(product.id) ?? 0;
+                      return (
+                        <tr
+                          key={product.id}
+                          className={cn(
+                            "hover:bg-muted/20 transition-colors",
+                            qty > 0 && "bg-teal-50/40 dark:bg-teal-950/20",
                           )}
-                        </td>
-                        <td className="px-3 py-2.5 text-right hidden sm:table-cell">
-                          <span className={cn(
-                            "text-xs font-medium",
-                            stock === 0 ? "text-amber-600" : "text-muted-foreground"
-                          )}>
-                            {stock}
-                          </span>
-                        </td>
-                        <td className="px-3 py-2.5">
-                          {qty === 0 ? (
-                            <div className="flex justify-center">
-                              <button
-                                onClick={() => actions.addToCart(product)}
-                                className="h-8 w-8 rounded-lg bg-teal-600 hover:bg-teal-700 text-white flex items-center justify-center transition-colors"
-                              >
-                                <Plus className="h-4 w-4" />
-                              </button>
-                            </div>
-                          ) : (
-                            <div className="flex items-center justify-center gap-1">
-                              <button
-                                onClick={() => actions.removeFromCart(product.id)}
-                                className="h-7 w-7 rounded-lg border border-border hover:bg-muted flex items-center justify-center transition-colors"
-                              >
-                                <Minus className="h-3.5 w-3.5" />
-                              </button>
-                              <span className="w-6 text-center text-sm font-bold text-teal-600">
-                                {qty}
-                              </span>
-                              <button
-                                onClick={() => actions.addToCart(product)}
-                                className="h-7 w-7 rounded-lg border border-teal-500 bg-teal-50 hover:bg-teal-100 text-teal-700 flex items-center justify-center transition-colors"
-                              >
-                                <Plus className="h-3.5 w-3.5" />
-                              </button>
-                            </div>
-                          )}
-                        </td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
+                        >
+                          <td className="px-3 py-2.5 font-mono text-xs text-muted-foreground whitespace-nowrap">
+                            {product.description || "—"}
+                          </td>
+                          <td className="px-3 py-2.5 font-medium max-w-[200px] truncate">
+                            {product.name}
+                          </td>
+                          <td className="px-3 py-2.5 text-xs text-muted-foreground hidden sm:table-cell whitespace-nowrap">
+                            {product.category}
+                          </td>
+                          <td className="px-3 py-2.5 text-right font-semibold text-teal-600 whitespace-nowrap">
+                            <span>{formatCurrency(product.price)}</span>
+                            {(product as any).seDivideEn && (product as any).seDivideEn > 1 && (
+                              <span className="block text-[10px] font-normal text-muted-foreground">/ lote</span>
+                            )}
+                          </td>
+                          <td className="px-3 py-2.5">
+                            {qty === 0 ? (
+                              <div className="flex justify-center">
+                                <button
+                                  onClick={() => actions.addToCart(product)}
+                                  className="h-8 w-8 rounded-lg bg-teal-600 hover:bg-teal-700 text-white flex items-center justify-center transition-colors"
+                                >
+                                  <Plus className="h-4 w-4" />
+                                </button>
+                              </div>
+                            ) : (
+                              <div className="flex items-center justify-center gap-1">
+                                <button
+                                  onClick={() => actions.removeFromCart(product.id)}
+                                  className="h-7 w-7 rounded-lg border border-border hover:bg-muted flex items-center justify-center transition-colors"
+                                >
+                                  <Minus className="h-3.5 w-3.5" />
+                                </button>
+                                <span className="w-6 text-center text-sm font-bold text-teal-600">
+                                  {qty}
+                                </span>
+                                <button
+                                  onClick={() => actions.addToCart(product)}
+                                  className="h-7 w-7 rounded-lg border border-teal-500 bg-teal-50 hover:bg-teal-100 text-teal-700 flex items-center justify-center transition-colors"
+                                >
+                                  <Plus className="h-3.5 w-3.5" />
+                                </button>
+                              </div>
+                            )}
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
             </div>
-          </div>
+
+            {/* Paginación */}
+            {totalPages > 1 && (
+              <div className="flex items-center justify-center gap-2 mt-4">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="rounded-xl"
+                  disabled={currentPage <= 1}
+                  onClick={() => handlePageChange(currentPage - 1)}
+                >
+                  <ChevronLeft className="h-4 w-4" />
+                </Button>
+                <span className="text-sm text-muted-foreground">
+                  {currentPage} / {totalPages}
+                </span>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="rounded-xl"
+                  disabled={currentPage >= totalPages}
+                  onClick={() => handlePageChange(currentPage + 1)}
+                >
+                  <ChevronRight className="h-4 w-4" />
+                </Button>
+              </div>
+            )}
+          </>
         )}
       </div>
 
