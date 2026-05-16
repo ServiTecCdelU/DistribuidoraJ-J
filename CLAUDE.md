@@ -133,6 +133,13 @@ Next.js 15 (App Router) desplegado en Vercel. Maneja ventas, pedidos, inventario
 ### Mayorista
 `mayorista_productos` es una tabla separada de `productos` con FK `producto_id`. Se hace JOIN con `productos` para traer `precio_venta`, `ganancia_global`, `stock` (campo `stock` en productos), `unidades_por_bulto`, `se_divide_en`. Los movimientos de stock mayorista viven en `stock_movimientos`.
 
+### Carga de productos desde Excel
+- **`lista productos.xlsx`** — lista de 2013 productos habilitados. Columnas: código, nombre, precio_lista, stock (bultos), lote (unidades por bulto). Stock en BD = bultos × lote.
+- **`listado mayorista.xlsx`** — listado completo mayorista (~7400 productos). Columnas: código de barras, código, descripción, precio consumidor final, rubro, subrubro. Se usa para cruzar rubros por código.
+- El campo `category` en `productos` corresponde al rubro del listado mayorista.
+- IDs en BD: `mayorista_productos.id` = `mp_{codigo}`, `productos.id` = `prod_mp_{codigo}`.
+- Scripts de carga en `scripts/habilitar-desde-excel.js`.
+
 ### Ventas atómicas
 `processSale()` usa la función RPC `process_sale()` en PostgreSQL que ejecuta en una transacción ACID: inserta venta, descuenta stock, registra crédito del cliente y comisión del vendedor.
 
