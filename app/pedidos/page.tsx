@@ -274,8 +274,46 @@ export default function PedidosPage() {
         })
         .filter(item => item.quantity > 0);
 
+      // Registrar roturas: descontar stock + registrar pérdida en transacciones
+      const roturasAdj = adjustments.filter(a => a.type === "rotura");
+      if (roturasAdj.length > 0) {
+        const { registrarMovimiento } = await import("@/services/stock-service");
+        const { supabase } = await import("@/lib/supabase");
+        for (const r of roturasAdj) {
+          await registrarMovimiento({
+            productoId: r.productId,
+            tipo: "rotura",
+            cantidad: -r.quantity,
+            referencia: `Rotura pedido #${selectedOrder.id} — ${r.productName}`,
+          });
+        }
+        const totalPerdida = roturasAdj.reduce((acc, r) => acc + r.unitPrice * r.quantity, 0);
+        const productosRotos = roturasAdj.map(r => `${r.productName} x${r.quantity}`).join(", ");
+        await supabase.from("transacciones").insert({
+          id: `perdida_${selectedOrder.id}_${Date.now()}`,
+          type: "expense",
+          amount: totalPerdida,
+          description: `Rotura en pedido #${selectedOrder.id}: ${productosRotos}`,
+          date: new Date().toISOString(),
+        });
+      }
+
+      // Si no quedan items para vender (todo rotura), solo completar el pedido sin venta
       if (adjustedItems.length === 0) {
-        throw new Error("No quedan productos para vender");
+        const updated = await ordersApi.completeOrder(selectedOrder.id, "");
+        setOrders((prev) =>
+          prev.map((o) => (o.id === selectedOrder.id ? updated : o)),
+        );
+
+        toast.success("Pedido cerrado — roturas registradas como pérdida");
+        setActiveModal(null);
+        setSelectedOrder(null);
+        setPaymentType("cash");
+        setPaymentMethod("efectivo");
+        setCashAmount("");
+        setSelectedClientId("");
+        setProcessingPayment(false);
+        return;
       }
 
       // Calcular total con items ajustados
@@ -289,7 +327,6 @@ export default function PedidosPage() {
         ? Math.max(0, itemsTotal - ((selectedOrder as any).discountType === "percent" ? (itemsTotal * disc) / 100 : disc))
         : itemsTotal;
 
-      // ✅ Siempre usar el clientId del pedido, sin importar el método de pago
       const resolvedClientId = selectedClientId || selectedOrder.clientId;
       const client = clients.find((c) => c.id === resolvedClientId);
 
@@ -355,33 +392,6 @@ export default function PedidosPage() {
       setOrders((prev) =>
         prev.map((o) => (o.id === selectedOrder.id ? updated : o)),
       );
-
-      // Registrar roturas: descontar stock + registrar pérdida en transacciones
-      const roturasAdj = adjustments.filter(a => a.type === "rotura");
-      if (roturasAdj.length > 0) {
-        const { registrarMovimiento } = await import("@/services/stock-service");
-        const { supabase } = await import("@/lib/supabase");
-        for (const r of roturasAdj) {
-          // Descontar stock (el producto salió del depósito pero se rompió)
-          await registrarMovimiento({
-            productoId: r.productId,
-            tipo: "rotura",
-            cantidad: -r.quantity,
-            referencia: `Rotura pedido #${selectedOrder.id} — ${r.productName}`,
-          });
-        }
-        // Registrar pérdida total en transacciones
-        const totalPerdida = roturasAdj.reduce((acc, r) => acc + r.unitPrice * r.quantity, 0);
-        const productosRotos = roturasAdj.map(r => `${r.productName} x${r.quantity}`).join(", ");
-        await supabase.from("transacciones").insert({
-          id: `perdida_${selectedOrder.id}_${Date.now()}`,
-          type: "expense",
-          amount: totalPerdida,
-          description: `Rotura en pedido #${selectedOrder.id}: ${productosRotos}`,
-          date: new Date().toISOString(),
-          sale_id: sale.id,
-        });
-      }
 
       // Boleta — deshabilitado temporalmente
       // if (selectedOrder.invoiceNumber && selectedOrder.invoicePdfBase64) {

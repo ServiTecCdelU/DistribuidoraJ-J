@@ -172,7 +172,10 @@ export function PaymentModal({
   });
 
   const isValid = () => {
-    if (total <= 0) return false;
+    // Si todo es rotura, permitir confirmar para registrar la pérdida
+    const soloRoturas = adjustmentsList.length > 0 && adjustmentsList.every(a => a.type === "rotura");
+    if (total <= 0 && !soloRoturas) return false;
+    if (total <= 0 && soloRoturas) return true;
     if (paymentType === "cash") return true;
     if ((paymentType === "credit" || paymentType === "split") && !selectedClientId && !order.clientId) return false;
     if (paymentType === "split") return cashAmountNum > 0 && cashAmountNum < total;
