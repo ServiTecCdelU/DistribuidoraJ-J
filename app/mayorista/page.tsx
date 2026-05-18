@@ -50,8 +50,9 @@ import {
   invalidateMayoristaCache,
   searchMayoristaProductos,
   getMayoristaRubros,
+  actualizarPreciosMayorista,
 } from "@/services/mayorista-service";
-import type { MayoristaSearchParams } from "@/services/mayorista-service";
+import type { MayoristaSearchParams, PriceUpdateRow } from "@/services/mayorista-service";
 import { formatCurrency } from "@/lib/utils/format";
 import { useAuth } from "@/hooks/use-auth";
 
@@ -279,6 +280,7 @@ function ListaPrecios({
   const [subrubroFiltro, setSubrubroFiltro] = useState("todos");
   const [estadoFiltro, setEstadoFiltro] = useState<"todos" | "habilitados" | "deshabilitados">("todos");
   const [importOpen, setImportOpen] = useState(false);
+  const [priceUpdateOpen, setPriceUpdateOpen] = useState(false);
   const [habilitarTarget, setHabilitarTarget] = useState<MayoristaProducto | null>(null);
   const debounceRef = useRef<NodeJS.Timeout | null>(null);
 
@@ -391,10 +393,18 @@ function ListaPrecios({
         </Button>
         <Button
           className="rounded-xl gap-2 shrink-0"
-          onClick={() => setImportOpen(true)}
+          onClick={() => setPriceUpdateOpen(true)}
         >
           <Upload className="h-4 w-4" />
-          Importar Excel
+          Actualizar Precios
+        </Button>
+        <Button
+          variant="outline"
+          className="rounded-xl gap-2 shrink-0"
+          onClick={() => setImportOpen(true)}
+        >
+          <FileSpreadsheet className="h-4 w-4" />
+          Importar Productos
         </Button>
       </div>
 
@@ -551,7 +561,17 @@ function ListaPrecios({
         </div>
       )}
 
-      {/* Modal de importación */}
+      {/* Modal actualización de precios */}
+      <PriceUpdateDialog
+        open={priceUpdateOpen}
+        onOpenChange={setPriceUpdateOpen}
+        onActualizado={async () => {
+          onProductosImportados();
+          setPriceUpdateOpen(false);
+        }}
+      />
+
+      {/* Modal de importación de productos nuevos */}
       <ExcelImportDialog
         open={importOpen}
         onOpenChange={setImportOpen}
@@ -716,6 +736,279 @@ function HabilitarModal({
             Habilitar
           </Button>
         </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+// ─── Dialog de actualización de precios ──────────────────────────────────────
+
+type PriceMapping = { codigo: string; precio: string };
+
+function PriceUpdateDialog({
+  open,
+  onOpenChange,
+  onActualizado,
+}: {
+  open: boolean;
+  onOpenChange: (v: boolean) => void;
+  onActualizado: () => Promise<void>;
+}) {
+  const fileRef = useRef<HTMLInputElement>(null);
+  const [step, setStep] = useState<"upload" | "mapping" | "preview">("upload");
+  const [columns, setColumns] = useState<ExcelColumn[]>([]);
+  const [rawRows, setRawRows] = useState<unknown[][]>([]);
+  const [mapping, setMapping] = useState<PriceMapping>({ codigo: "A", precio: "B" });
+  const [headerRowIndex, setHeaderRowIndex] = useState(0);
+  const [parsed, setParsed] = useState<PriceUpdateRow[]>([]);
+  const [saving, setSaving] = useState(false);
+  const [progress, setProgress] = useState({ done: 0, total: 0 });
+  const [result, setResult] = useState<{ actualizados: number; sinMatch: number; preciosVentaActualizados: number } | null>(null);
+
+  const reset = () => {
+    setStep("upload");
+    setColumns([]);
+    setRawRows([]);
+    setHeaderRowIndex(0);
+    setParsed([]);
+    setSaving(false);
+    setProgress({ done: 0, total: 0 });
+    setResult(null);
+    if (fileRef.current) fileRef.current.value = "";
+  };
+
+  const handleClose = (v: boolean) => {
+    if (!v) reset();
+    onOpenChange(v);
+  };
+
+  const handleFile = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = (ev) => {
+      try {
+        const data = new Uint8Array(ev.target!.result as ArrayBuffer);
+        const workbook = XLSX.read(data, { type: "array" });
+        const sheet = workbook.Sheets[workbook.SheetNames[0]];
+        const rows: unknown[][] = XLSX.utils.sheet_to_json(sheet, { header: 1, defval: "" }) as unknown[][];
+
+        if (rows.length < 2) { toast.error("El archivo no tiene suficientes filas"); return; }
+
+        let detectedHeader = 0;
+        for (let ri = 0; ri < Math.min(rows.length, 6); ri++) {
+          const row = rows[ri] as unknown[];
+          const textCells = row.filter((cell) => {
+            const s = cellToString(cell);
+            return s.length > 0 && isNaN(Number(s));
+          });
+          if (textCells.length >= 2) { detectedHeader = ri; break; }
+        }
+
+        const maxCols = Math.max(...rows.slice(detectedHeader, detectedHeader + 3).map((r) => (r as unknown[]).length));
+        const cols: ExcelColumn[] = [];
+        for (let i = 0; i < maxCols; i++) {
+          const letter = colIndexToLetter(i);
+          const header = cellToString((rows[detectedHeader] as unknown[])[i]);
+          const preview = rows.slice(detectedHeader + 1, detectedHeader + 4).map((r) => cellToString((r as unknown[])[i]));
+          cols.push({ letter, header, preview });
+        }
+
+        // Auto-detectar mapeo
+        const autoMapping: Partial<PriceMapping> = {};
+        for (const col of cols) {
+          const h = col.header.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+          if (!autoMapping.codigo && (h.includes("codigo") || h.includes("code") || h.includes("cod") || h === "id")) autoMapping.codigo = col.letter;
+          else if (!autoMapping.precio && (h.includes("precio") || h.includes("lista") || h.includes("p.u") || h.includes("costo"))) autoMapping.precio = col.letter;
+        }
+
+        setHeaderRowIndex(detectedHeader);
+        setColumns(cols);
+        setRawRows(rows);
+        setMapping({ codigo: autoMapping.codigo || "A", precio: autoMapping.precio || "D" });
+        setStep("mapping");
+      } catch {
+        toast.error("Error al leer el archivo Excel");
+      }
+    };
+    reader.readAsArrayBuffer(file);
+  };
+
+  const letterToIndex = (letter: string) => {
+    let index = 0;
+    for (let i = 0; i < letter.length; i++) index = index * 26 + (letter.charCodeAt(i) - 64);
+    return index - 1;
+  };
+
+  const previewMapping = () => {
+    const rows = rawRows.slice(headerRowIndex + 1);
+    const result: PriceUpdateRow[] = rows
+      .map((row) => {
+        const r = row as unknown[];
+        return {
+          codigo: cellToString(r[letterToIndex(mapping.codigo)]),
+          precio: cellToNumber(r[letterToIndex(mapping.precio)]),
+        };
+      })
+      .filter((r) => r.codigo && r.precio > 0);
+
+    if (result.length === 0) { toast.error("No se encontraron filas válidas con código y precio"); return; }
+    setParsed(result);
+    setStep("preview");
+  };
+
+  const confirmar = async () => {
+    setSaving(true);
+    setProgress({ done: 0, total: parsed.length });
+    try {
+      const res = await actualizarPreciosMayorista(parsed, (done, total) => setProgress({ done, total }));
+      setResult(res);
+      await onActualizado();
+      toast.success(`${res.actualizados} precios actualizados, ${res.preciosVentaActualizados} precios de venta recalculados`);
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Error al actualizar precios");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const campos: { key: keyof PriceMapping; label: string }[] = [
+    { key: "codigo", label: "Código del producto" },
+    { key: "precio", label: "Precio mayorista" },
+  ];
+
+  return (
+    <Dialog open={open} onOpenChange={handleClose}>
+      <DialogContent className="w-[95vw] max-w-xl max-h-[90vh] overflow-y-auto p-4 sm:p-6">
+        <DialogHeader>
+          <DialogTitle className="flex items-center gap-2">
+            <Upload className="h-5 w-5 text-teal-600" />
+            Actualizar precios
+          </DialogTitle>
+          <DialogDescription>
+            {step === "upload" && "Subí el Excel del mayorista para actualizar los precios."}
+            {step === "mapping" && "Indicá qué columna tiene el código y cuál el precio."}
+            {step === "preview" && (result ? "Actualización completada." : "Revisá los datos antes de confirmar.")}
+          </DialogDescription>
+        </DialogHeader>
+
+        {/* Steps indicator */}
+        <div className="flex items-center gap-2 text-xs text-muted-foreground">
+          <span className={step === "upload" ? "font-bold text-foreground" : ""}>1. Archivo</span>
+          <ArrowRight className="h-3 w-3" />
+          <span className={step === "mapping" ? "font-bold text-foreground" : ""}>2. Columnas</span>
+          <ArrowRight className="h-3 w-3" />
+          <span className={step === "preview" ? "font-bold text-foreground" : ""}>3. Confirmar</span>
+        </div>
+
+        {step === "upload" && (
+          <label className="flex flex-col items-center justify-center p-8 border-2 border-dashed rounded-2xl cursor-pointer hover:border-teal-400 hover:bg-teal-50/30 transition-all">
+            <Upload className="h-10 w-10 text-muted-foreground/40 mb-2" />
+            <p className="text-sm text-muted-foreground">
+              Hacé clic para seleccionar un archivo .xlsx
+            </p>
+            <p className="text-xs text-muted-foreground/60 mt-1">Solo necesita código y precio</p>
+            <input
+              ref={fileRef}
+              type="file"
+              className="hidden"
+              accept=".xlsx,.xls"
+              onChange={handleFile}
+            />
+          </label>
+        )}
+
+        {step === "mapping" && (
+          <div className="space-y-4">
+            {campos.map(({ key, label }) => (
+              <div key={key} className="space-y-1">
+                <Label className="text-xs font-medium">{label}</Label>
+                <Select value={mapping[key]} onValueChange={(v) => setMapping((p) => ({ ...p, [key]: v }))}>
+                  <SelectTrigger className="h-9"><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    {columns.map((col) => (
+                      <SelectItem key={col.letter} value={col.letter}>
+                        <span className="font-mono text-xs mr-2">{col.letter}</span>
+                        {col.header || "(sin encabezado)"}{" "}
+                        <span className="text-muted-foreground text-xs">— {col.preview[0]}</span>
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            ))}
+            <DialogFooter>
+              <Button variant="outline" onClick={() => setStep("upload")}>Volver</Button>
+              <Button onClick={previewMapping} className="gap-2"><ArrowRight className="h-4 w-4" /> Vista previa</Button>
+            </DialogFooter>
+          </div>
+        )}
+
+        {step === "preview" && !result && (
+          <div className="space-y-4">
+            <div className="rounded-xl border overflow-hidden max-h-60 overflow-y-auto">
+              <table className="w-full text-xs">
+                <thead className="bg-muted/50 sticky top-0">
+                  <tr>
+                    <th className="text-left px-3 py-2 font-medium">Código</th>
+                    <th className="text-right px-3 py-2 font-medium">Precio</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y">
+                  {parsed.slice(0, 50).map((row, i) => (
+                    <tr key={i}>
+                      <td className="px-3 py-1.5 font-mono">{row.codigo}</td>
+                      <td className="px-3 py-1.5 text-right">{formatCurrency(row.precio)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+            {parsed.length > 50 && (
+              <p className="text-xs text-muted-foreground text-center">Mostrando 50 de {parsed.length} filas</p>
+            )}
+            <p className="text-sm">
+              Se van a buscar <strong>{parsed.length}</strong> códigos y actualizar sus precios.
+            </p>
+            {saving && (
+              <div className="space-y-1">
+                <div className="h-2 rounded-full bg-muted overflow-hidden">
+                  <div className="h-full bg-teal-500 transition-all" style={{ width: `${progress.total > 0 ? (progress.done / progress.total) * 100 : 0}%` }} />
+                </div>
+                <p className="text-xs text-muted-foreground text-center">{progress.done} / {progress.total}</p>
+              </div>
+            )}
+            <DialogFooter>
+              <Button variant="outline" onClick={() => setStep("mapping")} disabled={saving}>Volver</Button>
+              <Button onClick={confirmar} disabled={saving} className="gap-2">
+                {saving ? <RefreshCw className="h-4 w-4 animate-spin" /> : <Check className="h-4 w-4" />}
+                {saving ? "Actualizando..." : "Actualizar precios"}
+              </Button>
+            </DialogFooter>
+          </div>
+        )}
+
+        {step === "preview" && result && (
+          <div className="space-y-4">
+            <div className="grid grid-cols-3 gap-3">
+              <div className="p-3 rounded-xl bg-teal-50 border border-teal-200 text-center">
+                <p className="text-2xl font-bold text-teal-700">{result.actualizados}</p>
+                <p className="text-[10px] text-teal-600 font-medium">Precios mayorista</p>
+              </div>
+              <div className="p-3 rounded-xl bg-blue-50 border border-blue-200 text-center">
+                <p className="text-2xl font-bold text-blue-700">{result.preciosVentaActualizados}</p>
+                <p className="text-[10px] text-blue-600 font-medium">Precios venta</p>
+              </div>
+              <div className="p-3 rounded-xl bg-amber-50 border border-amber-200 text-center">
+                <p className="text-2xl font-bold text-amber-700">{result.sinMatch}</p>
+                <p className="text-[10px] text-amber-600 font-medium">Sin match</p>
+              </div>
+            </div>
+            <DialogFooter>
+              <Button onClick={() => handleClose(false)}>Cerrar</Button>
+            </DialogFooter>
+          </div>
+        )}
       </DialogContent>
     </Dialog>
   );

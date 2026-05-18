@@ -462,6 +462,136 @@ export const saveMayoristaPrefs = async (
     .upsert({ key: `${userId}_mayorista_prefs`, value: prefs }, { onConflict: 'key' })
 }
 
+// ─── Actualización diaria de precios desde Excel del mayorista ────────────────
+
+export interface PriceUpdateRow {
+  codigo: string
+  precio: number
+}
+
+export interface PriceUpdateResult {
+  actualizados: number
+  sinMatch: number
+  preciosVentaActualizados: number
+}
+
+/**
+ * Recibe filas con código + precio del Excel mayorista.
+ * Busca por código en mayorista_productos, actualiza precio_lista.
+ * Para los habilitados, recalcula precio_venta en productos usando la ganancia existente.
+ */
+export const actualizarPreciosMayorista = async (
+  rows: PriceUpdateRow[],
+  onProgress?: (done: number, total: number) => void
+): Promise<PriceUpdateResult> => {
+  onProgress?.(0, rows.length)
+
+  // Cargar todos los mayorista_productos para match por código
+  const mpRows: any[] = []
+  let mpFrom = 0
+  while (true) {
+    const { data, error } = await supabase
+      .from('mayorista_productos')
+      .select('id, codigo, producto_id, habilitado, precio_lista')
+      .range(mpFrom, mpFrom + 999)
+    if (error) throw error
+    if (!data || data.length === 0) break
+    mpRows.push(...data)
+    if (data.length < 1000) break
+    mpFrom += 1000
+  }
+
+  // Mapas de búsqueda por código exacto y sin ceros iniciales
+  const mpExact = new Map<string, any>()
+  const mpStripped = new Map<string, any>()
+  for (const d of mpRows) {
+    const codigo = d.codigo ?? ''
+    if (!codigo) continue
+    mpExact.set(codigo, d)
+    const stripped = codigo.replace(/^0+/, '') || codigo
+    if (!mpStripped.has(stripped)) mpStripped.set(stripped, d)
+  }
+
+  // Cargar ganancias de productos habilitados para recalcular precio venta
+  const habilitadosIds = mpRows
+    .filter((m: any) => m.habilitado && m.producto_id)
+    .map((m: any) => m.producto_id)
+  const gananciaMap = new Map<string, number>()
+  if (habilitadosIds.length > 0) {
+    for (let i = 0; i < habilitadosIds.length; i += 500) {
+      const chunk = habilitadosIds.slice(i, i + 500)
+      const { data: prodRows } = await supabase
+        .from('productos')
+        .select('id, ganancia_global')
+        .in('id', chunk)
+      ;(prodRows ?? []).forEach((p: any) => {
+        const g = Number(p.ganancia_global)
+        if (!isNaN(g) && g > 0) gananciaMap.set(p.id, g)
+      })
+    }
+  }
+
+  let actualizados = 0
+  let sinMatch = 0
+  let preciosVentaActualizados = 0
+
+  // Preparar updates
+  const mpUpdates: Array<{ id: string; precio_lista: number }> = []
+  const prodUpdates: Array<{ id: string; price: number; precio_venta: number }> = []
+
+  for (const row of rows) {
+    const mp = mpExact.get(row.codigo) || mpStripped.get(row.codigo.replace(/^0+/, '') || row.codigo)
+    if (!mp) {
+      sinMatch++
+      continue
+    }
+
+    // Actualizar precio_lista en mayorista_productos
+    mpUpdates.push({ id: mp.id, precio_lista: row.precio })
+    actualizados++
+
+    // Si está habilitado y tiene producto, recalcular precio venta
+    if (mp.habilitado && mp.producto_id) {
+      const ganancia = gananciaMap.get(mp.producto_id)
+      if (ganancia != null) {
+        const precioVenta = Math.round(row.precio * (1 + ganancia / 100) * 100) / 100
+        prodUpdates.push({ id: mp.producto_id, price: precioVenta, precio_venta: precioVenta })
+        preciosVentaActualizados++
+      }
+    }
+  }
+
+  // Ejecutar updates en batches
+  let done = 0
+  const totalOps = mpUpdates.length + prodUpdates.length
+
+  for (let i = 0; i < mpUpdates.length; i += BATCH_SIZE) {
+    const chunk = mpUpdates.slice(i, i + BATCH_SIZE)
+    // Supabase no soporta batch update por ID distinto, usar upsert
+    const { error } = await supabase
+      .from('mayorista_productos')
+      .upsert(chunk, { onConflict: 'id', ignoreDuplicates: false })
+    if (error) throw new Error(`Error actualizando precios mayorista: ${error.message}`)
+    done += chunk.length
+    onProgress?.(done, totalOps)
+  }
+
+  for (let i = 0; i < prodUpdates.length; i += BATCH_SIZE) {
+    const chunk = prodUpdates.slice(i, i + BATCH_SIZE)
+    const { error } = await supabase
+      .from('productos')
+      .upsert(chunk, { onConflict: 'id', ignoreDuplicates: false })
+    if (error) throw new Error(`Error actualizando precios venta: ${error.message}`)
+    done += chunk.length
+    onProgress?.(done, totalOps)
+  }
+
+  onProgress?.(totalOps, totalOps)
+  invalidateProductsCache()
+
+  return { actualizados, sinMatch, preciosVentaActualizados }
+}
+
 // ─── Importacion masiva desde lista de precios Excel ─────────────────────────
 
 export type ImportRow = {
