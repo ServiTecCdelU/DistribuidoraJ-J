@@ -38,6 +38,8 @@ import {
   PackagePlus,
   PackageX,
   Settings2,
+  Pencil,
+  Save,
 } from "lucide-react";
 import * as XLSX from "xlsx";
 import type { MayoristaProducto, MayoristaPrefs } from "@/lib/types";
@@ -51,8 +53,9 @@ import {
   searchMayoristaProductos,
   getMayoristaRubros,
   actualizarPreciosMayorista,
+  editarProductoMayorista,
 } from "@/services/mayorista-service";
-import type { MayoristaSearchParams, PriceUpdateRow } from "@/services/mayorista-service";
+import type { MayoristaSearchParams, PriceUpdateRow, EditarProductoData } from "@/services/mayorista-service";
 import { formatCurrency } from "@/lib/utils/format";
 import { useAuth } from "@/hooks/use-auth";
 
@@ -282,6 +285,7 @@ function ListaPrecios({
   const [importOpen, setImportOpen] = useState(false);
   const [priceUpdateOpen, setPriceUpdateOpen] = useState(false);
   const [habilitarTarget, setHabilitarTarget] = useState<MayoristaProducto | null>(null);
+  const [editarTarget, setEditarTarget] = useState<MayoristaProducto | null>(null);
   const debounceRef = useRef<NodeJS.Timeout | null>(null);
 
   const rubros = useMemo(() => ["todos", ...rubrosFromParent], [rubrosFromParent]);
@@ -493,23 +497,33 @@ function ListaPrecios({
                       )}
                       <td className="px-3 py-2.5 text-center">
                         {p.habilitado ? (
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            className="h-7 text-xs rounded-lg text-destructive border-destructive/30 hover:bg-destructive/10 gap-1"
-                            onClick={async () => {
-                              try {
-                                await deshabilitarProducto(p);
-                                onHabilitarChange(p.id, { habilitado: false });
-                                toast.success("Producto deshabilitado");
-                              } catch {
-                                toast.error("Error al deshabilitar");
-                              }
-                            }}
-                          >
-                            <PackageX className="h-3 w-3" />
-                            Deshabilitar
-                          </Button>
+                          <div className="flex items-center justify-center gap-1">
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              className="h-7 text-xs rounded-lg text-teal-600 border-teal-600/30 hover:bg-teal-50 dark:hover:bg-teal-950/30 gap-1"
+                              onClick={() => setEditarTarget(p)}
+                            >
+                              <Pencil className="h-3 w-3" />
+                              Editar
+                            </Button>
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              className="h-7 text-xs rounded-lg text-destructive border-destructive/30 hover:bg-destructive/10 gap-1"
+                              onClick={async () => {
+                                try {
+                                  await deshabilitarProducto(p);
+                                  onHabilitarChange(p.id, { habilitado: false });
+                                  toast.success("Producto deshabilitado");
+                                } catch {
+                                  toast.error("Error al deshabilitar");
+                                }
+                              }}
+                            >
+                              <PackageX className="h-3 w-3" />
+                            </Button>
+                          </div>
                         ) : (
                           <Button
                             variant="outline"
@@ -593,7 +607,225 @@ function ListaPrecios({
           }}
         />
       )}
+
+      {/* Modal editar producto */}
+      {editarTarget && (
+        <EditarProductoModal
+          producto={editarTarget}
+          onClose={() => setEditarTarget(null)}
+          onSave={(changes) => {
+            onHabilitarChange(editarTarget.id, changes);
+            setEditarTarget(null);
+            onReload();
+          }}
+        />
+      )}
     </div>
+  );
+}
+
+// ─── Modal para editar un producto ───────────────────────────────────────────
+function EditarProductoModal({
+  producto,
+  onClose,
+  onSave,
+}: {
+  producto: MayoristaProducto;
+  onClose: () => void;
+  onSave: (changes: Partial<MayoristaProducto>) => void;
+}) {
+  const [nombre, setNombre] = useState(producto.nombre);
+  const [precioLista, setPrecioLista] = useState(String(producto.precioUnitarioMayorista));
+  const [gananciaPorc, setGananciaPorc] = useState(
+    producto.gananciaGlobal != null ? String(producto.gananciaGlobal) : "30"
+  );
+  const [stock, setStock] = useState(String(producto.stockLocal ?? 0));
+  const [unidadesPorBulto, setUnidadesPorBulto] = useState(
+    producto.unidadesPorBulto ? String(producto.unidadesPorBulto) : ""
+  );
+  const [seDivideEn, setSeDivideEn] = useState(
+    producto.seDivideEn ? String(producto.seDivideEn) : ""
+  );
+  const [rubro, setRubro] = useState(producto.rubro || "");
+  const [saving, setSaving] = useState(false);
+
+  const precioListaNum = parseFloat(precioLista) || 0;
+  const gananciaNum = parseFloat(gananciaPorc);
+  const precioVentaCalc =
+    !isNaN(gananciaNum) && gananciaNum >= 0 && precioListaNum > 0
+      ? Math.round(precioListaNum * (1 + gananciaNum / 100) * 100) / 100
+      : producto.precioVenta;
+
+  const handleGuardar = async () => {
+    setSaving(true);
+    try {
+      const data: EditarProductoData = {};
+      if (nombre !== producto.nombre) data.nombre = nombre;
+      if (precioListaNum !== producto.precioUnitarioMayorista) data.precioLista = precioListaNum;
+      if (!isNaN(gananciaNum) && gananciaNum !== producto.gananciaGlobal) data.gananciaGlobal = gananciaNum;
+      if (precioVentaCalc !== producto.precioVenta) data.precioVenta = precioVentaCalc;
+      const stockNum = parseInt(stock);
+      if (!isNaN(stockNum) && stockNum !== producto.stockLocal) data.stock = stockNum;
+      const loteNum = parseInt(unidadesPorBulto);
+      if (!isNaN(loteNum) && loteNum > 0 && loteNum !== producto.unidadesPorBulto) data.unidadesPorBulto = loteNum;
+      const divNum = parseInt(seDivideEn);
+      if (!isNaN(divNum) && divNum > 0 && divNum !== producto.seDivideEn) data.seDivideEn = divNum;
+      if (rubro !== (producto.rubro || "")) {
+        data.rubro = rubro;
+        data.categoria = rubro;
+      }
+
+      if (Object.keys(data).length === 0) {
+        toast.info("No hay cambios para guardar");
+        onClose();
+        return;
+      }
+
+      await editarProductoMayorista(producto, data);
+      toast.success("Producto actualizado");
+      onSave({
+        nombre: data.nombre ?? producto.nombre,
+        precioUnitarioMayorista: data.precioLista ?? producto.precioUnitarioMayorista,
+        precioVenta: data.precioVenta ?? producto.precioVenta,
+        gananciaGlobal: data.gananciaGlobal ?? producto.gananciaGlobal,
+        stockLocal: data.stock ?? producto.stockLocal,
+        unidadesPorBulto: data.unidadesPorBulto ?? producto.unidadesPorBulto,
+        seDivideEn: data.seDivideEn ?? producto.seDivideEn,
+        rubro: data.rubro ?? producto.rubro,
+      });
+    } catch {
+      toast.error("Error al guardar los cambios");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <Dialog open onOpenChange={(v) => { if (!v) onClose(); }}>
+      <DialogContent className="sm:max-w-lg max-h-[90vh] overflow-y-auto">
+        <DialogHeader>
+          <DialogTitle className="flex items-center gap-2">
+            <Pencil className="h-5 w-5 text-teal-600" />
+            Editar producto
+          </DialogTitle>
+          <DialogDescription className="font-mono text-xs">
+            {producto.codigo} {producto.codigoBarras ? `· ${producto.codigoBarras}` : ""}
+          </DialogDescription>
+        </DialogHeader>
+
+        <div className="space-y-4">
+          {/* Descripción */}
+          <div className="space-y-1.5">
+            <Label htmlFor="edit-nombre" className="text-sm">Descripción</Label>
+            <Input
+              id="edit-nombre"
+              value={nombre}
+              onChange={(e) => setNombre(e.target.value)}
+              className="rounded-xl"
+            />
+          </div>
+
+          {/* Precios */}
+          <div className="rounded-xl border bg-muted/20 p-3 space-y-3">
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-1.5">
+                <Label htmlFor="edit-precio-lista" className="text-xs text-muted-foreground">Precio lista (mayorista)</Label>
+                <Input
+                  id="edit-precio-lista"
+                  type="number"
+                  min="0"
+                  step="0.01"
+                  value={precioLista}
+                  onChange={(e) => setPrecioLista(e.target.value)}
+                  className="rounded-lg h-9 text-sm"
+                />
+              </div>
+              <div className="space-y-1.5">
+                <Label htmlFor="edit-ganancia" className="text-xs text-muted-foreground">% Ganancia</Label>
+                <Input
+                  id="edit-ganancia"
+                  type="number"
+                  min="0"
+                  step="0.5"
+                  value={gananciaPorc}
+                  onChange={(e) => setGananciaPorc(e.target.value)}
+                  className="rounded-lg h-9 text-sm"
+                />
+              </div>
+            </div>
+            <div className="flex items-center justify-between text-sm border-t pt-2">
+              <span className="text-muted-foreground">Precio de venta:</span>
+              <span className={`font-bold tabular-nums text-base ${precioVentaCalc > 0 ? "text-teal-600" : "text-muted-foreground"}`}>
+                {precioVentaCalc > 0 ? formatCurrency(precioVentaCalc) : "—"}
+              </span>
+            </div>
+          </div>
+
+          {/* Stock y lote */}
+          <div className="grid grid-cols-3 gap-3">
+            <div className="space-y-1.5">
+              <Label htmlFor="edit-stock" className="text-xs text-muted-foreground">Stock (unidades)</Label>
+              <Input
+                id="edit-stock"
+                type="number"
+                min="0"
+                value={stock}
+                onChange={(e) => setStock(e.target.value)}
+                className="rounded-xl h-9 text-sm"
+              />
+            </div>
+            <div className="space-y-1.5">
+              <Label htmlFor="edit-lote" className="text-xs text-muted-foreground">Uds. por bulto</Label>
+              <Input
+                id="edit-lote"
+                type="number"
+                min="1"
+                value={unidadesPorBulto}
+                onChange={(e) => setUnidadesPorBulto(e.target.value)}
+                className="rounded-xl h-9 text-sm"
+              />
+            </div>
+            <div className="space-y-1.5">
+              <Label htmlFor="edit-divide" className="text-xs text-muted-foreground">Se divide en</Label>
+              <Input
+                id="edit-divide"
+                type="number"
+                min="1"
+                value={seDivideEn}
+                onChange={(e) => setSeDivideEn(e.target.value)}
+                className="rounded-xl h-9 text-sm"
+              />
+            </div>
+          </div>
+
+          {/* Rubro */}
+          <div className="space-y-1.5">
+            <Label htmlFor="edit-rubro" className="text-xs text-muted-foreground">Rubro / Categoría</Label>
+            <Input
+              id="edit-rubro"
+              value={rubro}
+              onChange={(e) => setRubro(e.target.value)}
+              className="rounded-xl"
+              placeholder="Ej: BEBIDAS"
+            />
+          </div>
+        </div>
+
+        <DialogFooter>
+          <Button variant="outline" onClick={onClose} disabled={saving}>
+            Cancelar
+          </Button>
+          <Button onClick={handleGuardar} disabled={saving} className="gap-2">
+            {saving ? (
+              <RefreshCw className="h-4 w-4 animate-spin" />
+            ) : (
+              <Save className="h-4 w-4" />
+            )}
+            Guardar
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   );
 }
 

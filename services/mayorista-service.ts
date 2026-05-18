@@ -429,6 +429,61 @@ export const sincronizarHabilitadoEnMayorista = async (productoId: string, habil
     .eq('producto_id', productoId)
 }
 
+// ─── Editar producto mayorista ────────────────────────────────────────────────
+
+export interface EditarProductoData {
+  nombre?: string
+  precioLista?: number
+  gananciaGlobal?: number
+  precioVenta?: number
+  stock?: number
+  unidadesPorBulto?: number
+  seDivideEn?: number
+  rubro?: string
+  categoria?: string
+}
+
+export const editarProductoMayorista = async (
+  mp: MayoristaProducto,
+  data: EditarProductoData
+): Promise<void> => {
+  // Actualizar campos en mayorista_productos
+  const mpUpdate: Record<string, any> = {}
+  if (data.nombre != null) mpUpdate.descripcion = data.nombre
+  if (data.precioLista != null) mpUpdate.precio_lista = data.precioLista
+  if (data.rubro != null) mpUpdate.rubro = data.rubro
+
+  if (Object.keys(mpUpdate).length > 0) {
+    await supabase.from('mayorista_productos').update(mpUpdate).eq('id', mp.id)
+  }
+
+  // Actualizar campos en productos (solo si está habilitado y tiene productoId)
+  const productoId = mp.productoId
+  if (productoId) {
+    const prodUpdate: Record<string, any> = {}
+    if (data.nombre != null) prodUpdate.name = data.nombre
+    if (data.precioVenta != null) {
+      prodUpdate.price = data.precioVenta
+      prodUpdate.precio_venta = data.precioVenta
+    }
+    if (data.gananciaGlobal != null) prodUpdate.ganancia_global = data.gananciaGlobal
+    if (data.stock != null) prodUpdate.stock = data.stock
+    if (data.unidadesPorBulto != null) prodUpdate.unidades_por_bulto = data.unidadesPorBulto
+    if (data.seDivideEn != null) prodUpdate.se_divide_en = data.seDivideEn
+    if (data.categoria != null) prodUpdate.category = data.categoria
+
+    if (Object.keys(prodUpdate).length > 0) {
+      await supabase.from('productos').update(prodUpdate).eq('id', productoId)
+    }
+  }
+
+  invalidateMayoristaCache()
+  invalidateProductsCache()
+  if (typeof window !== 'undefined') {
+    try { window.dispatchEvent(new CustomEvent('mayorista:updated', { detail: { mpId: mp.id } })) } catch { /* noop */ }
+  }
+}
+
 // ─── Preferencias de columnas (por usuario) ───────────────────────────────────
 
 const PREFS_DEFAULTS: MayoristaPrefs = {
