@@ -10,7 +10,7 @@ import { Input } from "@/components/ui/input";
 import { ClientModal } from "@/components/clientes/client-modal";
 import { ordersApi, salesApi, clientsApi, paymentsApi, sellersApi, productsApi } from "@/lib/api";
 import type { Order, OrderStatus, Client, Seller } from "@/lib/types";
-import { Package, Search, User, Filter, X, Loader2, Navigation, ClipboardList, ShoppingCart, Warehouse, Clock, CheckCircle2, FileSpreadsheet } from "lucide-react";
+import { Package, Search, User, Filter, X, Loader2, Navigation, ClipboardList, ShoppingCart, FileSpreadsheet } from "lucide-react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { toast } from "sonner";
 import { useAuth } from "@/hooks/use-auth";
@@ -88,7 +88,6 @@ export default function PedidosPage() {
   const [processingPayment, setProcessingPayment] = useState(false);
 
   const [routeModalOpen, setRouteModalOpen] = useState(false);
-  const [stockOptionsOpen, setStockOptionsOpen] = useState(false);
   const [generandoExcel, setGenerandoExcel] = useState(false);
 
   // Selección masiva
@@ -335,7 +334,7 @@ export default function PedidosPage() {
         setActiveModal(null);
         setDetailOrder(null);
         setSelectedOrder(order);
-        setStockOptionsOpen(true);
+        setActiveModal("payment");
       }
       return;
     }
@@ -665,15 +664,6 @@ export default function PedidosPage() {
     }
   }, [orders]);
 
-  const handleStockChoice = useCallback((modo: "esperar" | "disponible") => {
-    setStockOptionsOpen(false);
-    if (modo === "disponible") {
-      setActiveModal("payment");
-    } else {
-      // "esperar" — cerrar sin completar, el pedido queda en su estado actual
-      setSelectedOrder(null);
-    }
-  }, []);
 
   const clearFilters = useCallback(() => {
     setFilterStatus("all");
@@ -1207,53 +1197,6 @@ export default function PedidosPage() {
 
       </div>
 
-      {/* Dialog: Esperar todo / Vender con lo que hay */}
-      <Dialog open={stockOptionsOpen} onOpenChange={(v) => {
-        if (!v) { setStockOptionsOpen(false); setSelectedOrder(null); }
-      }}>
-        <DialogContent className="max-w-md">
-          <DialogHeader>
-            <DialogTitle className="flex items-center gap-2">
-              <Warehouse className="h-5 w-5 text-teal-600" />
-              Completar pedido
-            </DialogTitle>
-          </DialogHeader>
-          <div className="space-y-3">
-            {selectedOrder && (
-              <div className="rounded-xl border divide-y text-sm">
-                {selectedOrder.items.map((item) => (
-                  <div key={item.productId} className="flex items-center justify-between px-3 py-2 gap-2">
-                    <span className="flex-1 truncate font-medium text-xs">{item.name}</span>
-                    <span className="text-xs text-muted-foreground shrink-0">x{item.quantity}</span>
-                  </div>
-                ))}
-              </div>
-            )}
-            <div className="grid grid-cols-2 gap-3 pt-1">
-              <button
-                onClick={() => handleStockChoice("esperar")}
-                className="flex flex-col items-center gap-2 p-4 rounded-2xl border-2 border-amber-300 bg-amber-50/50 hover:bg-amber-50 transition-colors text-left"
-              >
-                <Clock className="h-6 w-6 text-amber-600" />
-                <div>
-                  <p className="font-semibold text-sm text-amber-800">Esperar todo</p>
-                  <p className="text-xs text-amber-700/70 mt-0.5">Queda pendiente hasta que llegue el stock</p>
-                </div>
-              </button>
-              <button
-                onClick={() => handleStockChoice("disponible")}
-                className="flex flex-col items-center gap-2 p-4 rounded-2xl border-2 border-teal-300 bg-teal-50/50 hover:bg-teal-50 transition-colors text-left"
-              >
-                <CheckCircle2 className="h-6 w-6 text-teal-600" />
-                <div>
-                  <p className="font-semibold text-sm text-teal-800">Vender con lo que hay</p>
-                  <p className="text-xs text-teal-700/70 mt-0.5">Confirma con stock local, el resto se cancela</p>
-                </div>
-              </button>
-            </div>
-          </div>
-        </DialogContent>
-      </Dialog>
     </MainLayout>
   );
 }
