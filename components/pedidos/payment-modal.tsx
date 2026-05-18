@@ -1,7 +1,7 @@
 //components/pedidos/payment-modal.tsx
 "use client";
 
-import React from "react";
+import React, { useState, useMemo, useEffect } from "react";
 import {
   Dialog,
   DialogContent,
@@ -21,7 +21,7 @@ import {
 } from "@/components/ui/select";
 import { formatPrice } from "@/lib/utils/format";
 import type { Order, Client } from "@/lib/types";
-import { Banknote, CreditCard, UserPlus, Loader2, Wallet, ArrowLeftRight } from "lucide-react";
+import { Banknote, CreditCard, UserPlus, Loader2, Wallet, ArrowLeftRight, AlertTriangle, PackageX, ChevronDown, ChevronUp } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 const generateOrderNumber = (createdAt: Date | string, index: number) => {
@@ -33,12 +33,14 @@ const generateOrderNumber = (createdAt: Date | string, index: number) => {
   return `${year}${month}${day}-${orderNum}`;
 };
 
+const calculateItemTotal = (item: { price: number; quantity: number; itemDiscount?: number }) => {
+  const base = item.price * item.quantity;
+  const dto = item.itemDiscount ? (base * item.itemDiscount) / 100 : 0;
+  return base - dto;
+};
+
 const calculateOrderTotal = (order: Order) => {
-  const itemsTotal = order.items.reduce((acc, item) => {
-    const base = item.price * item.quantity;
-    const dto = item.itemDiscount ? (base * item.itemDiscount) / 100 : 0;
-    return acc + base - dto;
-  }, 0);
+  const itemsTotal = order.items.reduce((acc, item) => acc + calculateItemTotal(item), 0);
   const disc = (order as any).discount ?? 0;
   if (disc > 0) {
     const discAmt = (order as any).discountType === "percent"
@@ -48,6 +50,12 @@ const calculateOrderTotal = (order: Order) => {
   }
   return itemsTotal;
 };
+
+export interface ItemAdjustment {
+  productId: string;
+  type: "rotura" | "faltante";
+  quantity: number;
+}
 
 interface PaymentModalProps {
   isOpen: boolean;
@@ -64,7 +72,7 @@ interface PaymentModalProps {
   setPaymentMethod: (value: "efectivo" | "transferencia") => void;
   cashAmount: string;
   setCashAmount: (value: string) => void;
-  onComplete: () => void;
+  onComplete: (adjustments: ItemAdjustment[]) => void;
   processing: boolean;
   onNewClient: () => void;
 }
@@ -88,11 +96,65 @@ export function PaymentModal({
   processing,
   onNewClient,
 }: PaymentModalProps) {
+  const [adjustments, setAdjustments] = useState<Record<string, { rotura: number; faltante: boolean }>>({});
+  const [adjustOpen, setAdjustOpen] = useState(false);
+
+  // Reset adjustments when order changes
+  useEffect(() => {
+    setAdjustments({});
+    setAdjustOpen(false);
+  }, [order?.id]);
+
   if (!order) return null;
 
-  const total = calculateOrderTotal(order);
+  const toggleFaltante = (productId: string) => {
+    setAdjustments(prev => {
+      const current = prev[productId] || { rotura: 0, faltante: false };
+      return { ...prev, [productId]: { ...current, faltante: !current.faltante } };
+    });
+  };
+
+  const setRotura = (productId: string, qty: number, maxQty: number) => {
+    setAdjustments(prev => {
+      const current = prev[productId] || { rotura: 0, faltante: false };
+      const clamped = Math.max(0, Math.min(qty, maxQty));
+      return { ...prev, [productId]: { ...current, rotura: clamped } };
+    });
+  };
+
+  // Calculate adjusted total
+  const adjustmentsList = useMemo(() => {
+    const list: ItemAdjustment[] = [];
+    for (const [productId, adj] of Object.entries(adjustments)) {
+      if (adj.faltante) {
+        const item = order.items.find(i => i.productId === productId);
+        if (item) list.push({ productId, type: "faltante", quantity: item.quantity });
+      }
+      if (adj.rotura > 0) {
+        list.push({ productId, type: "rotura", quantity: adj.rotura });
+      }
+    }
+    return list;
+  }, [adjustments, order.items]);
+
+  const adjustmentDeduction = useMemo(() => {
+    let deduction = 0;
+    for (const adj of adjustmentsList) {
+      const item = order.items.find(i => i.productId === adj.productId);
+      if (!item) continue;
+      const unitPrice = item.price;
+      const unitDiscount = item.itemDiscount ? (unitPrice * item.itemDiscount) / 100 : 0;
+      const effectiveUnit = unitPrice - unitDiscount;
+      deduction += effectiveUnit * adj.quantity;
+    }
+    return deduction;
+  }, [adjustmentsList, order.items]);
+
+  const originalTotal = calculateOrderTotal(order);
+  const total = Math.max(0, originalTotal - adjustmentDeduction);
   const cashAmountNum = Number(cashAmount || 0);
   const remainingAmount = Math.max(total - cashAmountNum, 0);
+  const hasAdjustments = adjustmentsList.length > 0;
 
   const filteredClients = clients.filter((client) => {
     const query = clientSearch.trim().toLowerCase();
@@ -104,10 +166,11 @@ export function PaymentModal({
   });
 
   const isValid = () => {
+    if (total <= 0) return false;
     if (paymentType === "cash") return true;
     if (
       (paymentType === "credit" || paymentType === "split") &&
-      !selectedClientId
+      !selectedClientId && !order.clientId
     )
       return false;
     if (paymentType === "split") {
@@ -116,6 +179,11 @@ export function PaymentModal({
     return true;
   };
 
+  const activeItemCount = order.items.filter(i => {
+    const adj = adjustments[i.productId];
+    return !(adj?.faltante);
+  }).length;
+
   return (
     <Dialog open={isOpen} onOpenChange={(open) => !open && onClose()}>
       <DialogContent className="sm:max-w-md max-h-[90vh] overflow-y-auto">
@@ -123,123 +191,90 @@ export function PaymentModal({
           <DialogTitle className="text-xl">Completar Pedido</DialogTitle>
         </DialogHeader>
 
-        <div className="py-4 space-y-5">
-          <div className="p-4 bg-gradient-to-br from-gray-50 to-gray-100 rounded-xl border border-gray-200">
-            <p className="text-xs text-gray-500 uppercase font-semibold mb-1">
-              Pedido
-            </p>
-            <p className="font-mono text-sm text-gray-700 mb-2">
-              #{generateOrderNumber(order.createdAt, 0)}
-            </p>
-            <p className="font-semibold text-gray-900 text-lg">
-              {order.clientName || "Venta directa"}
-            </p>
+        <div className="py-3 space-y-4">
+          {/* Info del pedido */}
+          <div className="p-3 bg-gradient-to-br from-gray-50 to-gray-100 rounded-xl border border-gray-200">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-[10px] text-gray-500 uppercase font-semibold">Pedido</p>
+                <p className="font-mono text-xs text-gray-700">
+                  #{generateOrderNumber(order.createdAt, 0)}
+                </p>
+              </div>
+              <p className="font-semibold text-gray-900">
+                {order.clientName || "Venta directa"}
+              </p>
+            </div>
           </div>
 
+          {/* Tipo de pago — 3 columnas compactas */}
           <RadioGroup
             value={paymentType}
-            onValueChange={(v) =>
-              setPaymentType(v as "cash" | "credit" | "split")
-            }
-            className="space-y-3"
+            onValueChange={(v) => setPaymentType(v as "cash" | "credit" | "split")}
+            className="grid grid-cols-3 gap-2"
           >
             <label
-              className={`flex items-center gap-4 p-4 rounded-xl border-2 cursor-pointer transition-all ${
+              className={cn(
+                "flex flex-col items-center gap-1.5 p-3 rounded-xl border-2 cursor-pointer transition-all text-center",
                 paymentType === "cash"
                   ? "border-green-500 bg-green-50/50"
                   : "border-gray-200 hover:border-gray-300 bg-white"
-              }`}
-            >
-              <RadioGroupItem value="cash" id="cash" className="sr-only" />
-              <div
-                className={`h-12 w-12 rounded-xl flex items-center justify-center flex-shrink-0 ${
-                  paymentType === "cash" ? "bg-green-100" : "bg-gray-100"
-                }`}
-              >
-                <Banknote
-                  className={`h-6 w-6 ${paymentType === "cash" ? "text-green-600" : "text-gray-500"}`}
-                />
-              </div>
-              <div className="flex-1">
-                <p
-                  className={`font-semibold ${paymentType === "cash" ? "text-green-900" : "text-gray-900"}`}
-                >
-                  Efectivo
-                </p>
-                <p className="text-sm text-gray-500">
-                  Se registra en caja inmediatamente
-                </p>
-              </div>
-              {paymentType === "cash" && (
-                <div className="w-2 h-2 rounded-full bg-green-500" />
               )}
+            >
+              <RadioGroupItem value="cash" className="sr-only" />
+              <div className={cn(
+                "h-9 w-9 rounded-lg flex items-center justify-center",
+                paymentType === "cash" ? "bg-green-100" : "bg-gray-100"
+              )}>
+                <Banknote className={cn("h-4 w-4", paymentType === "cash" ? "text-green-600" : "text-gray-500")} />
+              </div>
+              <span className={cn("text-xs font-semibold", paymentType === "cash" ? "text-green-900" : "text-gray-700")}>
+                Efectivo
+              </span>
             </label>
 
             <label
-              className={`flex items-center gap-4 p-4 rounded-xl border-2 cursor-pointer transition-all ${
+              className={cn(
+                "flex flex-col items-center gap-1.5 p-3 rounded-xl border-2 cursor-pointer transition-all text-center",
                 paymentType === "credit"
                   ? "border-blue-500 bg-blue-50/50"
                   : "border-gray-200 hover:border-gray-300 bg-white"
-              }`}
-            >
-              <RadioGroupItem value="credit" id="credit" className="sr-only" />
-              <div
-                className={`h-12 w-12 rounded-xl flex items-center justify-center flex-shrink-0 ${
-                  paymentType === "credit" ? "bg-blue-100" : "bg-gray-100"
-                }`}
-              >
-                <CreditCard
-                  className={`h-6 w-6 ${paymentType === "credit" ? "text-blue-600" : "text-gray-500"}`}
-                />
-              </div>
-              <div className="flex-1">
-                <p
-                  className={`font-semibold ${paymentType === "credit" ? "text-blue-900" : "text-gray-900"}`}
-                >
-                  Cuenta Corriente
-                </p>
-                <p className="text-sm text-gray-500">
-                  Se suma al saldo del cliente
-                </p>
-              </div>
-              {paymentType === "credit" && (
-                <div className="w-2 h-2 rounded-full bg-blue-500" />
               )}
+            >
+              <RadioGroupItem value="credit" className="sr-only" />
+              <div className={cn(
+                "h-9 w-9 rounded-lg flex items-center justify-center",
+                paymentType === "credit" ? "bg-blue-100" : "bg-gray-100"
+              )}>
+                <CreditCard className={cn("h-4 w-4", paymentType === "credit" ? "text-blue-600" : "text-gray-500")} />
+              </div>
+              <span className={cn("text-xs font-semibold", paymentType === "credit" ? "text-blue-900" : "text-gray-700")}>
+                Cta. Cte.
+              </span>
             </label>
 
             <label
-              className={`flex items-center gap-4 p-4 rounded-xl border-2 cursor-pointer transition-all ${
+              className={cn(
+                "flex flex-col items-center gap-1.5 p-3 rounded-xl border-2 cursor-pointer transition-all text-center",
                 paymentType === "split"
                   ? "border-amber-500 bg-amber-50/50"
                   : "border-gray-200 hover:border-gray-300 bg-white"
-              }`}
-            >
-              <RadioGroupItem value="split" id="split" className="sr-only" />
-              <div
-                className={`h-12 w-12 rounded-xl flex items-center justify-center flex-shrink-0 ${
-                  paymentType === "split" ? "bg-amber-100" : "bg-gray-100"
-                }`}
-              >
-                <Wallet
-                  className={`h-6 w-6 ${paymentType === "split" ? "text-amber-600" : "text-gray-500"}`}
-                />
-              </div>
-              <div className="flex-1">
-                <p
-                  className={`font-semibold ${paymentType === "split" ? "text-amber-900" : "text-gray-900"}`}
-                >
-                  Pago Parcial
-                </p>
-                <p className="text-sm text-gray-500">
-                  Parte en efectivo, resto a cuenta
-                </p>
-              </div>
-              {paymentType === "split" && (
-                <div className="w-2 h-2 rounded-full bg-amber-500" />
               )}
+            >
+              <RadioGroupItem value="split" className="sr-only" />
+              <div className={cn(
+                "h-9 w-9 rounded-lg flex items-center justify-center",
+                paymentType === "split" ? "bg-amber-100" : "bg-gray-100"
+              )}>
+                <Wallet className={cn("h-4 w-4", paymentType === "split" ? "text-amber-600" : "text-gray-500")} />
+              </div>
+              <span className={cn("text-xs font-semibold", paymentType === "split" ? "text-amber-900" : "text-gray-700")}>
+                Parcial
+              </span>
             </label>
           </RadioGroup>
 
+          {/* Efectivo / Transferencia toggle */}
           {(paymentType === "cash" || paymentType === "split") && (
             <div className="grid grid-cols-2 gap-2">
               <Button
@@ -261,14 +296,14 @@ export function PaymentModal({
             </div>
           )}
 
+          {/* Cliente para cta cte / split */}
           {(paymentType === "credit" || paymentType === "split") && (
-            <div className="space-y-3 p-4 bg-gray-50 rounded-xl border border-gray-200">
+            <div className="space-y-3 p-3 bg-gray-50 rounded-xl border border-gray-200">
               <Label className="text-sm font-semibold flex items-center gap-2">
                 <CreditCard className="h-4 w-4" />
                 Cliente
               </Label>
               {order.clientId ? (
-                // Cliente ya conocido desde el pedido — solo mostrar nombre
                 <div className="flex items-center gap-2 px-3 py-2 rounded-lg bg-blue-50 border border-blue-200">
                   <CreditCard className="h-4 w-4 text-blue-500 shrink-0" />
                   <span className="text-sm font-medium text-blue-900">
@@ -276,7 +311,6 @@ export function PaymentModal({
                   </span>
                 </div>
               ) : (
-                // Sin cliente en el pedido — permitir buscar
                 <>
                   <Input
                     placeholder="Buscar por DNI o nombre..."
@@ -308,7 +342,7 @@ export function PaymentModal({
                   </div>
                   {!selectedClientId && (
                     <p className="text-xs text-amber-600 flex items-center gap-1">
-                      ⚠️ Seleccioná un cliente para continuar
+                      Selecciona un cliente para continuar
                     </p>
                   )}
                 </>
@@ -316,18 +350,14 @@ export function PaymentModal({
             </div>
           )}
 
+          {/* Split amount */}
           {paymentType === "split" && (
-            <div className="space-y-3 p-4 bg-amber-50 rounded-xl border border-amber-200">
-              <Label
-                htmlFor="cashAmount"
-                className="text-sm font-semibold text-amber-900"
-              >
+            <div className="space-y-3 p-3 bg-amber-50 rounded-xl border border-amber-200">
+              <Label htmlFor="cashAmount" className="text-sm font-semibold text-amber-900">
                 Monto en efectivo
               </Label>
               <div className="relative">
-                <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500 font-semibold">
-                  $
-                </span>
+                <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500 font-semibold">$</span>
                 <Input
                   id="cashAmount"
                   type="number"
@@ -341,31 +371,127 @@ export function PaymentModal({
               </div>
               <div className="flex justify-between text-sm">
                 <span className="text-amber-700">Efectivo:</span>
-                <span className="font-semibold text-amber-900">
-                  {formatPrice(cashAmountNum)}
-                </span>
+                <span className="font-semibold text-amber-900">{formatPrice(cashAmountNum)}</span>
               </div>
               <div className="flex justify-between text-sm">
                 <span className="text-amber-700">A cuenta:</span>
-                <span className="font-semibold text-amber-900">
-                  {formatPrice(remainingAmount)}
-                </span>
+                <span className="font-semibold text-amber-900">{formatPrice(remainingAmount)}</span>
               </div>
             </div>
           )}
 
-          <div className="p-5 bg-gradient-to-br from-gray-900 to-gray-800 rounded-xl text-white">
-            <div className="flex justify-between items-center mb-2">
-              <span className="text-gray-300">Total del pedido</span>
-              <span className="text-3xl font-bold">{formatPrice(total)}</span>
+          {/* Ajustes: Roturas y Faltantes */}
+          <div className="rounded-xl border border-gray-200 overflow-hidden">
+            <button
+              type="button"
+              onClick={() => setAdjustOpen(!adjustOpen)}
+              className="w-full flex items-center justify-between px-4 py-3 bg-gray-50 hover:bg-gray-100 transition-colors"
+            >
+              <span className="text-sm font-semibold text-gray-700 flex items-center gap-2">
+                <AlertTriangle className="h-4 w-4 text-orange-500" />
+                Roturas / Faltantes
+                {hasAdjustments && (
+                  <span className="text-[10px] bg-orange-100 text-orange-700 px-1.5 py-0.5 rounded-full font-bold">
+                    {adjustmentsList.length}
+                  </span>
+                )}
+              </span>
+              {adjustOpen ? <ChevronUp className="h-4 w-4 text-gray-400" /> : <ChevronDown className="h-4 w-4 text-gray-400" />}
+            </button>
+
+            {adjustOpen && (
+              <div className="divide-y max-h-52 overflow-y-auto">
+                {order.items.map((item) => {
+                  const adj = adjustments[item.productId] || { rotura: 0, faltante: false };
+                  const isFaltante = adj.faltante;
+
+                  return (
+                    <div
+                      key={item.productId}
+                      className={cn(
+                        "px-4 py-2.5 flex items-center gap-2",
+                        isFaltante && "bg-red-50/50"
+                      )}
+                    >
+                      <div className="flex-1 min-w-0">
+                        <p className={cn(
+                          "text-xs font-medium truncate",
+                          isFaltante ? "text-red-400 line-through" : "text-gray-900"
+                        )}>
+                          {item.name}
+                        </p>
+                        <p className="text-[10px] text-gray-500">
+                          x{item.quantity} &middot; {formatPrice(item.price)}
+                        </p>
+                      </div>
+
+                      {/* Rotura: input cantidad */}
+                      {!isFaltante && (
+                        <div className="flex items-center gap-1">
+                          <label className="text-[10px] text-orange-600 font-medium whitespace-nowrap">Roto:</label>
+                          <Input
+                            type="number"
+                            min={0}
+                            max={item.quantity}
+                            value={adj.rotura || ""}
+                            onChange={(e) => setRotura(item.productId, Number(e.target.value), item.quantity)}
+                            placeholder="0"
+                            className="w-14 h-7 text-xs text-center px-1"
+                          />
+                        </div>
+                      )}
+
+                      {/* Faltante toggle */}
+                      <button
+                        type="button"
+                        onClick={() => toggleFaltante(item.productId)}
+                        className={cn(
+                          "flex items-center gap-1 px-2 py-1 rounded-lg text-[10px] font-semibold transition-all shrink-0",
+                          isFaltante
+                            ? "bg-red-100 text-red-700 border border-red-300"
+                            : "bg-gray-100 text-gray-500 hover:bg-red-50 hover:text-red-600 border border-gray-200"
+                        )}
+                      >
+                        <PackageX className="h-3 w-3" />
+                        Faltante
+                      </button>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+
+          {/* Total */}
+          <div className="p-4 bg-gradient-to-br from-gray-900 to-gray-800 rounded-xl text-white">
+            {hasAdjustments && (
+              <div className="flex justify-between items-center mb-1 text-sm">
+                <span className="text-gray-400">Subtotal</span>
+                <span className="text-gray-400 line-through">{formatPrice(originalTotal)}</span>
+              </div>
+            )}
+            {hasAdjustments && (
+              <div className="flex justify-between items-center mb-2 text-sm">
+                <span className="text-orange-400">Descuento ajustes</span>
+                <span className="text-orange-400">-{formatPrice(adjustmentDeduction)}</span>
+              </div>
+            )}
+            <div className="flex justify-between items-center">
+              <span className="text-gray-300">Total</span>
+              <span className="text-2xl font-bold">{formatPrice(total)}</span>
             </div>
-            <p className="text-xs text-gray-400">
-              {order.items.reduce((acc, item) => acc + item.quantity, 0)} unidades
-              {order.items.length > 0 && ` · ${order.items.length} ${order.items.length === 1 ? "producto" : "productos"}`}
+            <p className="text-xs text-gray-400 mt-1">
+              {activeItemCount} {activeItemCount === 1 ? "producto" : "productos"}
+              {" "}&middot;{" "}
+              {order.items.filter(i => !adjustments[i.productId]?.faltante).reduce((acc, item) => {
+                const roto = adjustments[item.productId]?.rotura || 0;
+                return acc + item.quantity - roto;
+              }, 0)} unidades
             </p>
           </div>
 
-          <div className="flex gap-3 pt-2">
+          {/* Botones */}
+          <div className="flex gap-3 pt-1">
             <Button
               variant="outline"
               className="flex-1 h-11"
@@ -376,7 +502,7 @@ export function PaymentModal({
             </Button>
             <Button
               className="flex-1 h-11 font-semibold"
-              onClick={onComplete}
+              onClick={() => onComplete(adjustmentsList)}
               disabled={processing || !isValid()}
             >
               {processing ? (

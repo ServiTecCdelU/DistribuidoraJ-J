@@ -19,7 +19,7 @@ import { supabase } from "@/lib/supabase";
 import { OrdersFilters } from "@/components/pedidos/orders-filters";
 import { OrderCard } from "@/components/pedidos/order-card";
 import { OrderDetailModal } from "@/components/pedidos/order-detail-modal";
-import { PaymentModal } from "@/components/pedidos/payment-modal";
+import { PaymentModal, type ItemAdjustment } from "@/components/pedidos/payment-modal";
 import { SuccessModal } from "@/components/pedidos/success-modal";
 import { RouteMapModal } from "@/components/pedidos/route-map-modal";
 import { statusConfig, statusFlow } from "@/lib/order-constants";
@@ -350,12 +350,37 @@ export default function PedidosPage() {
     }
   }, [orders, detailOrder]);
 
-  const handleCompleteOrder = useCallback(async () => {
+  const handleCompleteOrder = useCallback(async (adjustments: ItemAdjustment[] = []) => {
     if (!selectedOrder) return;
     setProcessingPayment(true);
 
     try {
-      const total = calculateOrderTotal(selectedOrder);
+      // Aplicar ajustes (roturas y faltantes) a los items
+      const faltantes = new Set(adjustments.filter(a => a.type === "faltante").map(a => a.productId));
+      const roturas = new Map(adjustments.filter(a => a.type === "rotura").map(a => [a.productId, a.quantity]));
+
+      const adjustedItems = selectedOrder.items
+        .filter(item => !faltantes.has(item.productId))
+        .map(item => {
+          const roturaQty = roturas.get(item.productId) || 0;
+          return { ...item, quantity: item.quantity - roturaQty };
+        })
+        .filter(item => item.quantity > 0);
+
+      if (adjustedItems.length === 0) {
+        throw new Error("No quedan productos para vender");
+      }
+
+      // Calcular total con items ajustados
+      const itemsTotal = adjustedItems.reduce((acc, item) => {
+        const base = item.price * item.quantity;
+        const dto = item.itemDiscount ? (base * item.itemDiscount) / 100 : 0;
+        return acc + base - dto;
+      }, 0);
+      const disc = (selectedOrder as any).discount ?? 0;
+      const total = disc > 0
+        ? Math.max(0, itemsTotal - ((selectedOrder as any).discountType === "percent" ? (itemsTotal * disc) / 100 : disc))
+        : itemsTotal;
 
       // ✅ Siempre usar el clientId del pedido, sin importar el método de pago
       const resolvedClientId = selectedClientId || selectedOrder.clientId;
@@ -380,13 +405,12 @@ export default function PedidosPage() {
       }
 
       const sale = await salesApi.processSale({
-        // ✅ clientId y clientName siempre se pasan, sin importar el método de pago
         clientId: resolvedClientId,
         clientName: client?.name || selectedOrder.clientName,
         clientPhone: client?.phone,
-        sellerId: selectedOrder.sellerId, // ✅ agregar esta línea
-        sellerName: selectedOrder.sellerName, // ✅ agregar esta línea
-        items: selectedOrder.items.map((item) => ({
+        sellerId: selectedOrder.sellerId,
+        sellerName: selectedOrder.sellerName,
+        items: adjustedItems.map((item) => ({
           product: {
             id: item.productId,
             name: item.name,
