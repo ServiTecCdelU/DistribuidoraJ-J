@@ -72,31 +72,9 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { RecepcionMercaderia } from "@/components/productos/RecepcionMercaderia";
 
 // Tipos para los filtros
-type PriceFilter = "all" | "0-2800" | "2801-3000" | "3001-3200" | "3201+";
-type MarcaFilter =
-  | "all"
-  | "MIO"
-  | "YO HELADERIAS"
-  | "TARGET"
-  | "CARCARAÑA"
-  | "FRIAR"
-  | "MC CAIN"
-  | "RESTAURANT"
-  | "SIMPLOT"
-  | "Sin identificar";
+type PriceFilter = "all" | "0-5000" | "5001-10000" | "10001-20000" | "20001+";
 type StockFilter = "all" | "available" | "low" | "out";
-type CategoryFilter =
-  | "all"
-  | "Congelado embutido"
-  | "Congelado cárnico"
-  | "Congelado papa"
-  | "Congelado verdura"
-  | "Congelado rebozado"
-  | "Bebida"
-  | "Lácteo"
-  | "Conserva"
-  | "Snack";
-type SinTaccFilter = "all" | "sin-tacc" | "con-tacc";
+type CategoryFilter = string;
 type ViewMode = "grid" | "list";
 
 // Tipos para historiales
@@ -162,9 +140,7 @@ export default function ProductosPage() {
   const [viewMode, setViewMode] = useState<ViewMode>("list");
   const [categoryFilter, setCategoryFilter] = useState<CategoryFilter>("all");
   const [priceFilter, setPriceFilter] = useState<PriceFilter>("all");
-  const [marcaFilter, setMarcaFilter] = useState<MarcaFilter>("all");
   const [stockFilter, setStockFilter] = useState<StockFilter>("all");
-  const [sinTaccFilter, setSinTaccFilter] = useState<SinTaccFilter>("all");
   const [habilitadosIds, setHabilitadosIds] = useState<Set<string>>(new Set());
   const [selectedProducts, setSelectedProducts] = useState<string[]>([]);
   const [showFilters, setShowFilters] = useState(false);
@@ -675,36 +651,27 @@ export default function ProductosPage() {
     setShowStockHistory(true);
   };
 
-  // Filtros client-side que no están en server (precio, marca, sinTacc)
+  // Filtros client-side que no están en server (precio)
   const filteredProducts = useMemo(() => {
     return products.filter((product) => {
       let matchesPrice = true;
       switch (priceFilter) {
-        case "0-2800":
-          matchesPrice = product.price <= 2800;
+        case "0-5000":
+          matchesPrice = product.price <= 5000;
           break;
-        case "2801-3000":
-          matchesPrice = product.price > 2800 && product.price <= 3000;
+        case "5001-10000":
+          matchesPrice = product.price > 5000 && product.price <= 10000;
           break;
-        case "3001-3200":
-          matchesPrice = product.price > 3000 && product.price <= 3200;
+        case "10001-20000":
+          matchesPrice = product.price > 10000 && product.price <= 20000;
           break;
-        case "3201+":
-          matchesPrice = product.price > 3200;
+        case "20001+":
+          matchesPrice = product.price > 20000;
           break;
       }
-
-      const matchesBase =
-        marcaFilter === "all" || (product as any).marca === marcaFilter;
-
-      const matchesSinTacc =
-        sinTaccFilter === "all" ||
-        (sinTaccFilter === "sin-tacc" && (product as any).sinTacc === true) ||
-        (sinTaccFilter === "con-tacc" && (product as any).sinTacc !== true);
-
-      return matchesPrice && matchesBase && matchesSinTacc;
+      return matchesPrice;
     });
-  }, [products, priceFilter, marcaFilter, sinTaccFilter]);
+  }, [products, priceFilter]);
 
   const stats = useMemo(() => {
     return {
@@ -718,7 +685,7 @@ export default function ProductosPage() {
   // Reset page when filters change
   useEffect(() => {
     setCurrentPage(1);
-  }, [searchQuery, categoryFilter, priceFilter, marcaFilter, stockFilter, sinTaccFilter]);
+  }, [searchQuery, categoryFilter, priceFilter, stockFilter]);
 
   const paginatedProducts = filteredProducts;
 
@@ -727,24 +694,16 @@ export default function ProductosPage() {
     return products.map((p) => p.category).filter(Boolean);
   }, [products]);
 
-  const availableMarcas = useMemo(() => {
-    return products.map((p) => (p as any).marca).filter(Boolean);
-  }, [products]);
-
   const activeFilterCount = [
     categoryFilter !== "all",
     priceFilter !== "all",
-    marcaFilter !== "all",
     stockFilter !== "all",
-    sinTaccFilter !== "all",
   ].filter(Boolean).length;
 
   const clearFilters = () => {
     setCategoryFilter("all");
     setPriceFilter("all");
-    setMarcaFilter("all");
     setStockFilter("all");
-    setSinTaccFilter("all");
     setSearchInput("");
     setSearchQuery("");
   };
@@ -1015,11 +974,11 @@ export default function ProductosPage() {
             </div>
           </div>
 
-          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-2 sm:gap-3">
-            {/* Categoría */}
+          <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 sm:gap-3">
+            {/* Rubro / Categoría */}
             <div className="space-y-1">
               <label className="text-xs font-medium text-muted-foreground">
-                Categoría
+                Rubro
               </label>
               <Select
                 value={categoryFilter}
@@ -1029,33 +988,10 @@ export default function ProductosPage() {
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="all">Todas</SelectItem>
+                  <SelectItem value="all">Todos</SelectItem>
                   {[...new Set(availableCategories)].sort().map((cat) => (
                     <SelectItem key={cat} value={cat}>
                       {cat}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-
-            {/* Marca */}
-            <div className="space-y-1">
-              <label className="text-xs font-medium text-muted-foreground">
-                Marca
-              </label>
-              <Select
-                value={marcaFilter}
-                onValueChange={(v) => setMarcaFilter(v as MarcaFilter)}
-              >
-                <SelectTrigger className="h-9 text-xs">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">Todas</SelectItem>
-                  {[...new Set(availableMarcas)].sort().map((marca) => (
-                    <SelectItem key={marca} value={marca}>
-                      {marca}
                     </SelectItem>
                   ))}
                 </SelectContent>
@@ -1076,30 +1012,10 @@ export default function ProductosPage() {
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="all">Todos</SelectItem>
-                  <SelectItem value="0-2800">Hasta $2.800</SelectItem>
-                  <SelectItem value="2801-3000">$2.800 – $3.000</SelectItem>
-                  <SelectItem value="3001-3200">$3.000 – $3.200</SelectItem>
-                  <SelectItem value="3201+">Más de $3.200</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-
-            {/* Sin TACC */}
-            <div className="space-y-1">
-              <label className="text-xs font-medium text-muted-foreground">
-                Contenido
-              </label>
-              <Select
-                value={sinTaccFilter}
-                onValueChange={(v) => setSinTaccFilter(v as SinTaccFilter)}
-              >
-                <SelectTrigger className="h-9 text-xs">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">Todos</SelectItem>
-                  <SelectItem value="sin-tacc">Sin TACC</SelectItem>
-                  <SelectItem value="con-tacc">Con TACC</SelectItem>
+                  <SelectItem value="0-5000">Hasta $5.000</SelectItem>
+                  <SelectItem value="5001-10000">$5.000 – $10.000</SelectItem>
+                  <SelectItem value="10001-20000">$10.000 – $20.000</SelectItem>
+                  <SelectItem value="20001+">Más de $20.000</SelectItem>
                 </SelectContent>
               </Select>
             </div>
@@ -1651,7 +1567,6 @@ export default function ProductosPage() {
         product={editingProduct}
         onSave={handleSave}
         availableCategories={availableCategories}
-        availableMarcas={availableMarcas}
       />
 
       <StockHistoryModal
