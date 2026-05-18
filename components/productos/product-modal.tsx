@@ -219,7 +219,9 @@ export function ProductModal({
   const isEditing = !!product;
   const isMayorista = !!product?.id?.startsWith("prod_");
   const loteNum = parseInt(lote) || 0;
-  const isValid = formData.name.trim() && formData.category && formData.price > 0;
+  const isValid = isMayorista && isEditing
+    ? formData.name.trim() && formData.price > 0
+    : formData.name.trim() && formData.category && formData.price > 0;
 
   const displayImage = imagePreview || DEFAULT_IMAGE;
 
@@ -241,7 +243,101 @@ export function ProductModal({
         </DialogHeader>
 
         <form onSubmit={handleSubmit} className="px-6 py-4 space-y-5">
-          {/* Nombre + Descripción — siempre visible */}
+          {/* Mayorista: solo descripción, rubro, precio y lote */}
+          {isEditing && isMayorista ? (
+            <div className="space-y-4">
+              <div className="space-y-2">
+                <Label htmlFor="name" className="text-sm font-medium">Descripción</Label>
+                <Input
+                  id="name"
+                  value={formData.name}
+                  onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+                  className="h-10"
+                  autoFocus
+                />
+              </div>
+
+              <div className="space-y-2">
+                <Label className="text-sm font-medium">Rubro</Label>
+                <Select
+                  value={formData.category}
+                  onValueChange={(val) => {
+                    if (val === "__new_category__") {
+                      setShowNewCategoryInput(true);
+                    } else {
+                      setFormData({ ...formData, category: val });
+                      setShowNewCategoryInput(false);
+                    }
+                  }}
+                >
+                  <SelectTrigger className="h-10">
+                    <SelectValue placeholder="Seleccioná..." />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {categories.map((cat) => (
+                      <SelectItem key={cat} value={cat}>{cat}</SelectItem>
+                    ))}
+                    <SelectItem value="__new_category__" className="text-primary font-medium">
+                      <span className="flex items-center gap-1.5">
+                        <Plus className="h-3.5 w-3.5" />
+                        Nuevo rubro
+                      </span>
+                    </SelectItem>
+                  </SelectContent>
+                </Select>
+                {showNewCategoryInput && (
+                  <div className="flex gap-1.5">
+                    <Input
+                      value={newCategoryInput}
+                      onChange={(e) => setNewCategoryInput(e.target.value)}
+                      placeholder="Nuevo rubro..."
+                      className="h-9 text-sm"
+                      autoFocus
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter") { e.preventDefault(); addNewCategory(); }
+                        if (e.key === "Escape") { setShowNewCategoryInput(false); setNewCategoryInput(""); }
+                      }}
+                    />
+                    <Button type="button" size="sm" className="h-9 px-2.5" onClick={addNewCategory} disabled={!newCategoryInput.trim()}>OK</Button>
+                    <Button type="button" variant="ghost" size="icon" className="h-9 w-9" onClick={() => { setShowNewCategoryInput(false); setNewCategoryInput(""); }}>
+                      <X className="h-4 w-4" />
+                    </Button>
+                  </div>
+                )}
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label htmlFor="price-may" className="text-sm font-medium">Precio (ARS)</Label>
+                  <div className="relative">
+                    <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground font-medium">$</span>
+                    <Input
+                      id="price-may"
+                      type="number"
+                      min="0"
+                      step="100"
+                      value={formData.price || ""}
+                      onChange={(e) => setFormData({ ...formData, price: Number(e.target.value) })}
+                      className="pl-7 h-10"
+                      placeholder="0"
+                    />
+                  </div>
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="lote-may" className="text-sm font-medium">Unidades por bulto</Label>
+                  <Input
+                    id="lote-may"
+                    type="number"
+                    min="1"
+                    placeholder="Ej: 12"
+                    value={lote}
+                    onChange={(e) => setLote(e.target.value)}
+                    className="h-10"
+                  />
+                </div>
+              </div>
+            </div>
+          ) : (
             <>
               {/* Nombre + Descripción */}
               <div className="space-y-4">
@@ -560,26 +656,6 @@ export function ProductModal({
                 )}
               </div>
 
-              {/* Unidades por bulto (solo mayorista) */}
-              {isMayorista && (
-                <>
-                  <Separator />
-                  <div className="space-y-2">
-                    <Label htmlFor="lote-edit" className="text-sm font-medium">Unidades por bulto</Label>
-                    <Input
-                      id="lote-edit"
-                      type="number"
-                      min="1"
-                      placeholder="Ej: 12"
-                      value={lote}
-                      onChange={(e) => setLote(e.target.value)}
-                      className="h-10"
-                    />
-                    <p className="text-xs text-muted-foreground">Cuántas unidades entran en el bulto</p>
-                  </div>
-                </>
-              )}
-
               <Separator />
 
               {/* Imagen compacta */}
@@ -658,6 +734,7 @@ export function ProductModal({
                 />
               </div>
             </>
+          )}
 
           {/* Footer */}
           <div className="flex justify-end gap-3 pt-2 border-t border-border/50">
