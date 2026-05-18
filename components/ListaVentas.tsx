@@ -310,16 +310,7 @@ export function ListaVentas({
                 </SelectContent>
               </Select>
 
-              {isAdmin && (
-              <Select value={invoiceFilter} onValueChange={(v) => onCambiarFiltros({ invoiceFilter: v as any })}>
-                <SelectTrigger className="h-10 w-[130px]"><SelectValue placeholder="Boletas" /></SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">Boletas</SelectItem>
-                  <SelectItem value="emitted">Emitidas</SelectItem>
-                  <SelectItem value="pending">Pendientes</SelectItem>
-                </SelectContent>
-              </Select>
-              )}
+              {/* Filtro boletas — deshabilitado temporalmente */}
 
               <Select value={remitoFilter} onValueChange={(v) => onCambiarFiltros({ remitoFilter: v } as any)}>
                 <SelectTrigger className="h-10 w-[130px]"><SelectValue placeholder="Remitos" /></SelectTrigger>
@@ -400,7 +391,7 @@ export function ListaVentas({
               {sellerId && <FilterChip label={sellers.find(s => s.id === sellerId)?.name || "Vendedor"} onRemove={() => onCambiarFiltros({ sellerId: "" })} />}
               {city && <FilterChip label={city} onRemove={() => onCambiarFiltros({ city: "" })} />}
               {paymentFilter !== "all" && <FilterChip label={payLabel(paymentFilter)} onRemove={() => onCambiarFiltros({ paymentFilter: "all" })} />}
-              {invoiceFilter !== "all" && <FilterChip label={invoiceFilter === "emitted" ? "Boletas emitidas" : "Boletas pendientes"} onRemove={() => onCambiarFiltros({ invoiceFilter: "all" })} />}
+              {/* Chip boletas — deshabilitado temporalmente */}
               {remitoFilter !== "all" && <FilterChip label={remitoFilter === "emitted" ? "Remitos emitidos" : "Remitos pendientes"} onRemove={() => onCambiarFiltros({ remitoFilter: "all" } as any)} />}
               {discountFilter !== "all" && <FilterChip label={discountFilter === "with" ? "Con descuento" : "Sin descuento"} onRemove={() => onCambiarFiltros({ discountFilter: "all" } as any)} />}
               {deliveryFilter !== "all" && <FilterChip label={deliveryFilter === "delivery" ? "A domicilio" : "Retira en local"} onRemove={() => onCambiarFiltros({ deliveryFilter: "all" } as any)} />}
@@ -572,16 +563,7 @@ export function ListaVentas({
               </div>
             </FilterSection>
 
-            {/* Boletas — solo admin */}
-            {isAdmin && (
-            <FilterSection icon={<Receipt className="h-4 w-4" />} label="Boletas">
-              <div className="grid grid-cols-3 gap-2">
-                {[["all","Todas"],["emitted","Emitidas"],["pending","Pendientes"]].map(([v, l]) => (
-                  <OptionBtn key={v} active={(tmpFiltros as any).invoiceFilter === v} onClick={() => setTmpFiltros(f => ({ ...f, invoiceFilter: v as any }))}>{l}</OptionBtn>
-                ))}
-              </div>
-            </FilterSection>
-            )}
+            {/* Boletas — deshabilitado temporalmente */}
 
             {/* Remitos */}
             <FilterSection icon={<Truck className="h-4 w-4" />} label="Remitos">

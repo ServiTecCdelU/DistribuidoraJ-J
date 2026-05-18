@@ -161,9 +161,9 @@ export function ModalDetalleVenta({
           </div>
 
           {/* Documentos */}
-          <div className={`grid grid-cols-1 ${isAdmin ? "sm:grid-cols-2" : ""} gap-3`}>
-            {/* Boleta — solo admin */}
-            {isAdmin && (
+          <div className="grid grid-cols-1 gap-3">
+            {/* Boleta — deshabilitado temporalmente */}
+            {/* {isAdmin && (
             <div className={`p-4 rounded-xl border ${venta.invoiceEmitted ? "bg-emerald-50/50 border-emerald-200" : "bg-amber-50/50 border-amber-200"}`}>
               <div className="flex items-center gap-2 mb-2">
                 <FileText className={`h-4 w-4 ${venta.invoiceEmitted ? "text-emerald-600" : "text-amber-600"}`} />
@@ -211,7 +211,7 @@ export function ModalDetalleVenta({
                 </Button>
               )}
             </div>
-            )}
+            )} */}
 
             {/* Remito */}
             {(isAdmin || venta.remitoNumber) && (

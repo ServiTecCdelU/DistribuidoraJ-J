@@ -264,10 +264,8 @@ function NuevaVentaContent({
                 </div>
 
                 <div className="space-y-3">
-                  <div className="grid grid-cols-2 gap-2.5">
-                    <Button variant="outline" className="h-10 text-sm gap-2" onClick={() => router.push(`/ventas?saleId=${state.lastSaleId}`)}>
-                      <FileText className="h-4 w-4" /> Boleta
-                    </Button>
+                  <div className="grid grid-cols-1 gap-2.5">
+                    {/* Boleta — deshabilitado temporalmente */}
                     <Button variant="outline" className="h-10 text-sm gap-2" onClick={() => router.push(`/ventas?saleId=${state.lastSaleId}`)}>
                       <Receipt className="h-4 w-4" /> Remito
                     </Button>

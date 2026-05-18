@@ -186,106 +186,8 @@ export default function PedidosPage() {
     }
   }, [detailOrder]);
 
-  const handleGenerateInvoice = useCallback(async (order: Order) => {
-    // Si ya tiene PDF guardado, solo descargar
-    if (order.invoicePdfBase64 && order.invoiceNumber) {
-      const link = document.createElement("a");
-      link.href = `data:application/pdf;base64,${order.invoicePdfBase64}`;
-      link.download = `boleta-${order.invoiceNumber}.pdf`;
-      link.click();
-      return;
-    }
-
-    setGeneratingDoc(true);
-    try {
-      // Si el pedido ya fue procesado como venta, emitir sobre la venta (tiene
-      // total, paymentMethod, etc.). Si no, emitir directo sobre el pedido —
-      // el helper calcula el total desde los items.
-      const { getAuthToken } = await import("@/services/auth-service");
-      const token = await getAuthToken();
-      if (!token) throw new Error("Usuario no autenticado");
-
-      // Resolver datos del cliente
-      let clientData: any = {
-        name: order.clientName || "Consumidor Final",
-        taxCategory: "consumidor_final",
-      };
-      if (order.clientId) {
-        try {
-          const clientDoc = clients.find((c) => c.id === order.clientId);
-          if (clientDoc) {
-            clientData = {
-              name: clientDoc.name || order.clientName,
-              phone: clientDoc.phone || "",
-              cuit: clientDoc.cuit || "",
-              address: clientDoc.address || "",
-              taxCategory: clientDoc.taxCategory || "consumidor_final",
-            };
-          }
-        } catch {}
-      }
-
-      // 1. Emitir en AFIP sobre la VENTA asociada (no sobre el pedido) —
-      // la venta ya tiene total, paymentMethod y todo lo necesario.
-      const afipResponse = await fetch("/api/ventas/emitir", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${token}`,
-        },
-        body: JSON.stringify({
-          saleId: order.saleId || order.id,
-          client: clientData,
-          emitirAfip: true,
-          collection: order.saleId ? "ventas" : "pedidos",
-        }),
-      });
-
-      if (!afipResponse.ok) {
-        const errorText = await afipResponse.text().catch(() => "Error desconocido");
-        throw new Error(`Error en AFIP (${afipResponse.status}): ${errorText.substring(0, 200)}`);
-      }
-
-      const { invoiceNumber, afipData } = await afipResponse.json();
-
-      // 2. Generar PDF con datos AFIP — misma función que ventas
-      const total = calculateOrderTotal(order);
-      const ventaData = {
-        id: order.id,
-        clientName: clientData.name,
-        clientCuit: clientData.cuit,
-        clientAddress: clientData.address,
-        clientTaxCategory: clientData.taxCategory,
-        items: order.items.map((i) => ({ name: i.name, quantity: i.quantity, price: i.price, ...(i.itemDiscount ? { itemDiscount: i.itemDiscount } : {}) })),
-        total,
-        paymentType: "cash" as const,
-        createdAt: order.createdAt,
-        deliveryAddress: order.address,
-        invoiceNumber,
-      };
-      const { generarPdfCliente } = await import("@/hooks/useGenerarPdf");
-      const pdfBase64 = await generarPdfCliente(ventaData, "boleta", afipData);
-
-      // 3. Guardar PDF y datos AFIP en el pedido
-      const updatedOrder = await ordersApi.saveBoletaToOrder(order.id, invoiceNumber, pdfBase64, {
-        invoiceEmitted: true,
-        afipData,
-        invoiceStatus: "emitted",
-      });
-      setOrders((prev) => prev.map((o) => (o.id === order.id ? updatedOrder : o)));
-      if (detailOrder?.id === order.id) setDetailOrder(updatedOrder);
-
-      // 4. Descargar automáticamente
-      const link = document.createElement("a");
-      link.href = `data:application/pdf;base64,${pdfBase64}`;
-      link.download = `boleta-${invoiceNumber}.pdf`;
-      link.click();
-    } catch (error: any) {
-      toast.error(`Error al generar la boleta: ${error.message}`);
-    } finally {
-      setGeneratingDoc(false);
-    }
-  }, [detailOrder, clients]);
+  // handleGenerateInvoice — deshabilitado temporalmente
+  const handleGenerateInvoice = useCallback(async (_order: Order) => {}, []);
 
   const handleAssignTransportista = useCallback(async (orderId: string, transportistaId: string, transportistaName: string) => {
     try {
@@ -449,16 +351,16 @@ export default function PedidosPage() {
         prev.map((o) => (o.id === selectedOrder.id ? updated : o)),
       );
 
-      // Si el pedido ya tenía boleta generada, transferirla a la venta nueva
-      if (selectedOrder.invoiceNumber && selectedOrder.invoicePdfBase64) {
-        const orderAny = selectedOrder as any;
-        await salesApi.saveBoletaToSale(
-          sale.id,
-          selectedOrder.invoiceNumber,
-          selectedOrder.invoicePdfBase64,
-          orderAny.afipData ? { afipData: orderAny.afipData } : undefined,
-        );
-      }
+      // Boleta — deshabilitado temporalmente
+      // if (selectedOrder.invoiceNumber && selectedOrder.invoicePdfBase64) {
+      //   const orderAny = selectedOrder as any;
+      //   await salesApi.saveBoletaToSale(
+      //     sale.id,
+      //     selectedOrder.invoiceNumber,
+      //     selectedOrder.invoicePdfBase64,
+      //     orderAny.afipData ? { afipData: orderAny.afipData } : undefined,
+      //   );
+      // }
 
       // Si el pedido ya tenía remito generado, transferirlo a la venta nueva
       if (selectedOrder.remitoNumber && selectedOrder.remitoPdfBase64) {

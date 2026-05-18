@@ -467,39 +467,8 @@ export function OrderDetailModal({
           )}
 
           {/* ── Documentos — 2 boxes (mismo UX que ventas) ── */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-2 border-t border-gray-100">
-            {/* Boleta */}
-            <div className={`p-4 rounded-xl border ${hasInvoice ? "bg-emerald-50/50 border-emerald-200" : "bg-muted/50 border-border"}`}>
-              <div className="flex items-center gap-2 mb-2">
-                <FileText className={`h-4 w-4 ${hasInvoice ? "text-emerald-600" : "text-muted-foreground"}`} />
-                <span className="text-xs font-medium text-muted-foreground">Boleta</span>
-                {hasInvoice && <CheckCircle className="h-3.5 w-3.5 text-emerald-500 ml-auto" />}
-              </div>
-              <p className={`font-semibold text-sm ${hasInvoice ? "text-emerald-700" : "text-muted-foreground"}`}>
-                {hasInvoice ? order.invoiceNumber : "Sin boleta"}
-              </p>
-
-              {hasInvoice ? (
-                <div className="flex gap-2 mt-3">
-                  <Button variant="outline" size="sm" className="flex-1 gap-1 text-xs"
-                    disabled={downloading === "invoice"} onClick={() => handleDescargar("invoice")}>
-                    {downloading === "invoice" ? <Loader2 className="h-3 w-3 animate-spin" /> : <Download className="h-3 w-3" />}
-                    PDF
-                  </Button>
-                  <Button size="sm" className="flex-1 gap-1 text-xs bg-green-500 hover:bg-green-600 text-white"
-                    onClick={() => handleWhatsapp("invoice")}>
-                    <Send className="h-3 w-3" />
-                    WhatsApp
-                  </Button>
-                </div>
-              ) : (
-                <Button variant="outline" size="sm" className="w-full gap-1.5 text-xs mt-3"
-                  onClick={handleGenerarFactura} disabled={generando || !onGenerateInvoice}>
-                  {generando ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <FileText className="h-3.5 w-3.5" />}
-                  Generar Factura
-                </Button>
-              )}
-            </div>
+          <div className="grid grid-cols-1 gap-3 pt-2 border-t border-gray-100">
+            {/* Boleta — deshabilitado temporalmente */}
 
             {/* Remito */}
             <div className={`p-4 rounded-xl border ${hasRemito ? "bg-blue-50/50 border-blue-200" : "bg-muted/50 border-border"}`}>
