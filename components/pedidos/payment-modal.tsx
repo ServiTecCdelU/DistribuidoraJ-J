@@ -105,6 +105,36 @@ export function PaymentModal({
     setAdjustOpen(false);
   }, [order?.id]);
 
+  // Calculate adjusted total
+  const adjustmentsList = useMemo(() => {
+    if (!order) return [];
+    const list: ItemAdjustment[] = [];
+    for (const [productId, adj] of Object.entries(adjustments)) {
+      if (adj.faltante) {
+        const item = order.items.find(i => i.productId === productId);
+        if (item) list.push({ productId, type: "faltante", quantity: item.quantity });
+      }
+      if (adj.rotura > 0) {
+        list.push({ productId, type: "rotura", quantity: adj.rotura });
+      }
+    }
+    return list;
+  }, [adjustments, order]);
+
+  const adjustmentDeduction = useMemo(() => {
+    if (!order) return 0;
+    let deduction = 0;
+    for (const adj of adjustmentsList) {
+      const item = order.items.find(i => i.productId === adj.productId);
+      if (!item) continue;
+      const unitPrice = item.price;
+      const unitDiscount = item.itemDiscount ? (unitPrice * item.itemDiscount) / 100 : 0;
+      const effectiveUnit = unitPrice - unitDiscount;
+      deduction += effectiveUnit * adj.quantity;
+    }
+    return deduction;
+  }, [adjustmentsList, order]);
+
   if (!order) return null;
 
   const toggleFaltante = (productId: string) => {
@@ -121,34 +151,6 @@ export function PaymentModal({
       return { ...prev, [productId]: { ...current, rotura: clamped } };
     });
   };
-
-  // Calculate adjusted total
-  const adjustmentsList = useMemo(() => {
-    const list: ItemAdjustment[] = [];
-    for (const [productId, adj] of Object.entries(adjustments)) {
-      if (adj.faltante) {
-        const item = order.items.find(i => i.productId === productId);
-        if (item) list.push({ productId, type: "faltante", quantity: item.quantity });
-      }
-      if (adj.rotura > 0) {
-        list.push({ productId, type: "rotura", quantity: adj.rotura });
-      }
-    }
-    return list;
-  }, [adjustments, order.items]);
-
-  const adjustmentDeduction = useMemo(() => {
-    let deduction = 0;
-    for (const adj of adjustmentsList) {
-      const item = order.items.find(i => i.productId === adj.productId);
-      if (!item) continue;
-      const unitPrice = item.price;
-      const unitDiscount = item.itemDiscount ? (unitPrice * item.itemDiscount) / 100 : 0;
-      const effectiveUnit = unitPrice - unitDiscount;
-      deduction += effectiveUnit * adj.quantity;
-    }
-    return deduction;
-  }, [adjustmentsList, order.items]);
 
   const originalTotal = calculateOrderTotal(order);
   const total = Math.max(0, originalTotal - adjustmentDeduction);
