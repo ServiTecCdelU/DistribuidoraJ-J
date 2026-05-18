@@ -263,6 +263,26 @@ export function useCart(role: UserRole, userEmail?: string, externalProducts?: P
     [sellers, selectedSeller],
   );
 
+  // Auto-seleccionar primera dirección guardada al elegir cliente
+  useEffect(() => {
+    if (!selectedClientData) {
+      setSelectedSavedAddress(null);
+      return;
+    }
+    // Si tiene addresses[], seleccionar la primera
+    if (selectedClientData.addresses && selectedClientData.addresses.length > 0) {
+      const first = selectedClientData.addresses[0];
+      setSelectedSavedAddress(first);
+      setDeliveryAddress("saved");
+      if (first.lat != null) setDeliveryLat(first.lat);
+      if (first.lng != null) setDeliveryLng(first.lng);
+    } else if (selectedClientData.address) {
+      // Fallback: address legacy
+      setSelectedSavedAddress({ address: selectedClientData.address });
+      setDeliveryAddress("saved");
+    }
+  }, [selectedClientData?.id]);
+
   // --- Load data ---
   const loadData = useCallback(async () => {
     try {
