@@ -219,9 +219,7 @@ export function ProductModal({
   const isEditing = !!product;
   const isMayorista = !!product?.id?.startsWith("prod_");
   const loteNum = parseInt(lote) || 0;
-  const isValid = isMayorista && isEditing
-    ? loteNum > 0
-    : formData.name.trim() && formData.category && formData.price > 0;
+  const isValid = formData.name.trim() && formData.category && formData.price > 0;
 
   const displayImage = imagePreview || DEFAULT_IMAGE;
 
@@ -243,23 +241,7 @@ export function ProductModal({
         </DialogHeader>
 
         <form onSubmit={handleSubmit} className="px-6 py-4 space-y-5">
-          {/* Para productos mayorista en edición: solo el bulto */}
-          {isEditing && isMayorista ? (
-            <div className="space-y-1.5">
-              <Label htmlFor="lote-edit" className="text-xs text-muted-foreground">Unidades por bulto</Label>
-              <Input
-                id="lote-edit"
-                type="number"
-                min="1"
-                placeholder="Ej: 12"
-                value={lote}
-                onChange={(e) => setLote(e.target.value)}
-                className="h-10"
-                autoFocus
-              />
-              <p className="text-xs text-muted-foreground">Cuántas unidades entran en el bulto</p>
-            </div>
-          ) : (
+          {/* Nombre + Descripción — siempre visible */}
             <>
               {/* Nombre + Descripción */}
               <div className="space-y-4">
@@ -578,6 +560,26 @@ export function ProductModal({
                 )}
               </div>
 
+              {/* Unidades por bulto (solo mayorista) */}
+              {isMayorista && (
+                <>
+                  <Separator />
+                  <div className="space-y-2">
+                    <Label htmlFor="lote-edit" className="text-sm font-medium">Unidades por bulto</Label>
+                    <Input
+                      id="lote-edit"
+                      type="number"
+                      min="1"
+                      placeholder="Ej: 12"
+                      value={lote}
+                      onChange={(e) => setLote(e.target.value)}
+                      className="h-10"
+                    />
+                    <p className="text-xs text-muted-foreground">Cuántas unidades entran en el bulto</p>
+                  </div>
+                </>
+              )}
+
               <Separator />
 
               {/* Imagen compacta */}
@@ -656,7 +658,6 @@ export function ProductModal({
                 />
               </div>
             </>
-          )}
 
           {/* Footer */}
           <div className="flex justify-end gap-3 pt-2 border-t border-border/50">
