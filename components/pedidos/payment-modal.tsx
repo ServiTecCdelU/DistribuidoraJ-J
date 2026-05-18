@@ -188,7 +188,7 @@ export function PaymentModal({
 
   return (
     <Dialog open={isOpen} onOpenChange={(open) => !open && onClose()}>
-      <DialogContent className="sm:max-w-md max-h-[90vh] overflow-y-auto">
+      <DialogContent className="sm:max-w-lg max-h-[90vh] overflow-y-auto overflow-x-hidden">
         <DialogHeader>
           <DialogTitle className="text-xl">Completar Pedido</DialogTitle>
         </DialogHeader>
@@ -411,52 +411,53 @@ export function PaymentModal({
                     <div
                       key={item.productId}
                       className={cn(
-                        "px-4 py-2.5 flex items-center gap-2",
+                        "px-3 py-2 space-y-1.5",
                         isFaltante && "bg-red-50/50"
                       )}
                     >
-                      <div className="flex-1 min-w-0">
+                      {/* Nombre + cantidad */}
+                      <div className="flex items-center justify-between gap-2">
                         <p className={cn(
-                          "text-xs font-medium truncate",
+                          "text-xs font-medium truncate flex-1",
                           isFaltante ? "text-red-400 line-through" : "text-gray-900"
                         )}>
                           {item.name}
                         </p>
-                        <p className="text-[10px] text-gray-500">
-                          x{item.quantity} &middot; {formatPrice(item.price)}
-                        </p>
+                        <span className="text-[10px] text-gray-500 shrink-0">
+                          x{item.quantity} · {formatPrice(item.price)}
+                        </span>
                       </div>
 
-                      {/* Rotura: input cantidad */}
-                      {!isFaltante && (
-                        <div className="flex items-center gap-1">
-                          <label className="text-[10px] text-orange-600 font-medium whitespace-nowrap">Roto:</label>
-                          <Input
-                            type="number"
-                            min={0}
-                            max={item.quantity}
-                            value={adj.rotura || ""}
-                            onChange={(e) => setRotura(item.productId, Number(e.target.value), item.quantity)}
-                            placeholder="0"
-                            className="w-14 h-7 text-xs text-center px-1"
-                          />
-                        </div>
-                      )}
-
-                      {/* Faltante toggle */}
-                      <button
-                        type="button"
-                        onClick={() => toggleFaltante(item.productId)}
-                        className={cn(
-                          "flex items-center gap-1 px-2 py-1 rounded-lg text-[10px] font-semibold transition-all shrink-0",
-                          isFaltante
-                            ? "bg-red-100 text-red-700 border border-red-300"
-                            : "bg-gray-100 text-gray-500 hover:bg-red-50 hover:text-red-600 border border-gray-200"
+                      {/* Controles */}
+                      <div className="flex items-center justify-end gap-2">
+                        {!isFaltante && (
+                          <div className="flex items-center gap-1">
+                            <span className="text-[10px] text-orange-600 font-medium">Roto:</span>
+                            <Input
+                              type="number"
+                              min={0}
+                              max={item.quantity}
+                              value={adj.rotura || ""}
+                              onChange={(e) => setRotura(item.productId, Number(e.target.value), item.quantity)}
+                              placeholder="0"
+                              className="w-12 h-6 text-xs text-center px-1"
+                            />
+                          </div>
                         )}
-                      >
-                        <PackageX className="h-3 w-3" />
-                        Faltante
-                      </button>
+                        <button
+                          type="button"
+                          onClick={() => toggleFaltante(item.productId)}
+                          className={cn(
+                            "flex items-center gap-1 px-2 py-1 rounded-lg text-[10px] font-semibold transition-all shrink-0",
+                            isFaltante
+                              ? "bg-red-100 text-red-700 border border-red-300"
+                              : "bg-gray-100 text-gray-500 hover:bg-red-50 hover:text-red-600 border border-gray-200"
+                          )}
+                        >
+                          <PackageX className="h-3 w-3" />
+                          Faltante
+                        </button>
+                      </div>
                     </div>
                   );
                 })}
