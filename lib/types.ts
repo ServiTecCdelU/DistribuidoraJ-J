@@ -232,7 +232,7 @@ export interface MayoristaPrefs {
 export interface StockMovimiento {
   id: string;
   productoId: string;
-  tipo: "apertura_bulto" | "venta" | "ajuste";
+  tipo: "apertura_bulto" | "venta" | "ajuste" | "rotura";
   cantidad: number;
   referencia?: string;
   fecha: Date;
