@@ -27,17 +27,16 @@ import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 
 interface ParsedItem {
+  codigo: string;
   rawName: string;
-  quantity: number;
-  lineIndex: number;
+  bultos: number;
+  cantidad: number;
 }
 
 interface MatchedItem {
   parsedItem: ParsedItem;
   matchedProduct: Product | null;
-  /** Cantidad editable */
   quantity: number;
-  /** Acción: sumar al stock existente o reemplazar */
   action: "add" | "set";
 }
 
@@ -48,46 +47,146 @@ interface RemitoImportModalProps {
   onConfirm: (updates: { productId: string; newStock: number; productName: string }[]) => Promise<void>;
 }
 
-// Normaliza texto para comparación fuzzy
-function normalize(text: string): string {
-  return text
-    .toLowerCase()
-    .normalize("NFD")
-    .replace(/[\u0300-\u036f]/g, "")
-    .replace(/[^a-z0-9\s]/g, " ")
-    .replace(/\s+/g, " ")
-    .trim();
-}
+// Parsea el texto OCR del remito y extrae items
+// Formato: Codigo Dep Articulo Bultos Cantidad Precio Subtotal
+// Ejemplo: 0101920 01 HARINA PIZZA X 1KG PUREZA 2.00 20.000 1243.5143 24876.28
+function parseRemitoText(text: string): ParsedItem[] {
+  const items: ParsedItem[] = [];
+  const lines = text.split("\n");
 
-// Score de similitud simple entre dos strings normalizados
-function similarityScore(a: string, b: string): number {
-  const wordsA = normalize(a).split(" ").filter(Boolean);
-  const wordsB = normalize(b).split(" ").filter(Boolean);
-  if (wordsA.length === 0 || wordsB.length === 0) return 0;
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i].trim();
+    if (!line) continue;
 
-  let matches = 0;
-  for (const wa of wordsA) {
-    if (wa.length < 3) continue;
-    if (wordsB.some((wb) => wb.includes(wa) || wa.includes(wb))) matches++;
-  }
-  return matches / Math.max(wordsA.length, wordsB.length);
-}
+    // Buscar líneas que empiecen con un código de 5-8 dígitos
+    const match = line.match(/^(\d{5,8})\s+/);
+    if (!match) continue;
 
-// Busca el mejor producto que matchea con el nombre del remito
-function findBestMatch(rawName: string, products: Product[]): Product | null {
-  let bestScore = 0;
-  let bestProduct: Product | null = null;
+    const codigo = match[1];
 
-  for (const product of products) {
-    const score = similarityScore(rawName, product.name);
-    if (score > bestScore) {
-      bestScore = score;
-      bestProduct = product;
+    // Extraer el resto de la línea después del código
+    const rest = line.slice(match[0].length);
+
+    // Saltar "01" (depósito) si está presente
+    const restNoDep = rest.replace(/^0[1-9]\s+/, "");
+
+    // Buscar números decimales en la línea (bultos, cantidad, precio, subtotal)
+    // Formato típico: "HARINA PIZZA X 1KG PUREZA 2.00 20.000 1243.5143 24876.28"
+    // Los números al final son: bultos, cantidad, precio_unitario, subtotal
+    // Pero OCR puede leer con variaciones: 2.001 (bultos con basura), etc.
+
+    // Estrategia: extraer todos los tokens numéricos con punto decimal al final de la línea
+    const tokens = restNoDep.split(/\s+/);
+    const numericTokens: { value: number; raw: string; idx: number }[] = [];
+    const nameTokens: string[] = [];
+
+    for (let j = 0; j < tokens.length; j++) {
+      const t = tokens[j];
+      // Limpiar caracteres de OCR basura (letras sueltas pegadas a números)
+      const cleaned = t.replace(/[^0-9.,]/g, "");
+      // Es un token numérico si tiene al menos 1 dígito y está mayormente compuesto por dígitos/puntos/comas
+      const digitRatio = (cleaned.match(/\d/g) || []).length / Math.max(t.length, 1);
+      const num = parseFloat(cleaned.replace(/,/g, ""));
+
+      if (digitRatio > 0.6 && !isNaN(num) && num >= 0) {
+        numericTokens.push({ value: num, raw: t, idx: j });
+      } else if (t.length > 0) {
+        nameTokens.push(t);
+      }
     }
+
+    // Necesitamos al menos 2 números (bultos + cantidad) para considerar esta línea
+    if (numericTokens.length < 2) {
+      // Puede ser que el artículo continúe en la siguiente línea, agregar al nombre
+      continue;
+    }
+
+    // Los primeros números son bultos y cantidad
+    const bultos = numericTokens[0].value;
+    const cantidad = numericTokens[1].value;
+    const rawName = nameTokens.join(" ").trim();
+
+    // Filtrar headers y líneas no-producto
+    const nameLower = rawName.toLowerCase();
+    if (
+      nameLower.includes("codigo") ||
+      nameLower.includes("articulo") ||
+      nameLower.includes("cantidad") ||
+      nameLower.includes("precio") ||
+      nameLower.includes("subtotal") ||
+      nameLower.includes("deposito") ||
+      nameLower.includes("bultos") ||
+      rawName.length < 3
+    ) {
+      continue;
+    }
+
+    // Validar que la cantidad tenga sentido (> 0 y < 100000)
+    if (cantidad <= 0 || cantidad > 100000) continue;
+
+    items.push({ codigo, rawName, bultos, cantidad });
   }
 
-  // Umbral mínimo de similitud
-  return bestScore >= 0.35 ? bestProduct : null;
+  return items;
+}
+
+// Busca producto por código
+function findByCode(codigo: string, products: Product[]): Product | null {
+  // Los productos tienen codigo (del mayorista) en el campo codigo
+  // El ID de producto mayorista es "prod_mp_{codigo}"
+  for (const p of products) {
+    if (p.codigo === codigo) return p;
+    // También intentar sin ceros a la izquierda
+    if (p.codigo && p.codigo.replace(/^0+/, "") === codigo.replace(/^0+/, "")) return p;
+  }
+  return null;
+}
+
+// Renderiza PDF a imagen usando pdfjs-dist
+async function pdfToImages(file: File): Promise<HTMLCanvasElement[]> {
+  const pdfjsLib = await import("pdfjs-dist");
+  pdfjsLib.GlobalWorkerOptions.workerSrc = new URL(
+    "pdfjs-dist/build/pdf.worker.mjs",
+    import.meta.url
+  ).toString();
+
+  const arrayBuffer = await file.arrayBuffer();
+  const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
+  const canvases: HTMLCanvasElement[] = [];
+
+  for (let i = 1; i <= pdf.numPages; i++) {
+    const page = await pdf.getPage(i);
+    // Escala alta para mejor OCR
+    const scale = 2.5;
+    const viewport = page.getViewport({ scale });
+    const canvas = document.createElement("canvas");
+    canvas.width = viewport.width;
+    canvas.height = viewport.height;
+    const ctx = canvas.getContext("2d")!;
+    await page.render({ canvasContext: ctx, viewport }).promise;
+    canvases.push(canvas);
+  }
+
+  return canvases;
+}
+
+// OCR con tesseract.js
+async function ocrCanvases(
+  canvases: HTMLCanvasElement[],
+  onProgress?: (msg: string) => void
+): Promise<string> {
+  const Tesseract = await import("tesseract.js");
+  const texts: string[] = [];
+
+  for (let i = 0; i < canvases.length; i++) {
+    onProgress?.(`Leyendo página ${i + 1} de ${canvases.length}...`);
+    const result = await Tesseract.recognize(canvases[i], "spa", {
+      logger: () => {},
+    });
+    texts.push(result.data.text);
+  }
+
+  return texts.join("\n");
 }
 
 export function RemitoImportModal({
@@ -100,6 +199,7 @@ export function RemitoImportModal({
   const [dragging, setDragging] = useState(false);
   const [parsing, setParsing] = useState(false);
   const [confirming, setConfirming] = useState(false);
+  const [progressMsg, setProgressMsg] = useState("");
   const [fileName, setFileName] = useState("");
   const [items, setItems] = useState<MatchedItem[]>([]);
   const [showUnmatched, setShowUnmatched] = useState(true);
@@ -111,6 +211,7 @@ export function RemitoImportModal({
     setItems([]);
     setParsing(false);
     setConfirming(false);
+    setProgressMsg("");
   };
 
   const handleClose = () => {
@@ -119,55 +220,52 @@ export function RemitoImportModal({
   };
 
   const processFile = async (file: File) => {
-    if (!file.name.endsWith(".pdf")) {
+    if (!file.name.toLowerCase().endsWith(".pdf")) {
       toast.error("Solo se aceptan archivos PDF");
       return;
     }
 
     setFileName(file.name);
     setParsing(true);
+    setProgressMsg("Convirtiendo PDF a imagen...");
 
     try {
-      const formData = new FormData();
-      formData.append("file", file);
+      // 1. PDF → canvas
+      const canvases = await pdfToImages(file);
 
-      const res = await fetch("/api/parse-remito", {
-        method: "POST",
-        body: formData,
-      });
+      // 2. OCR
+      const text = await ocrCanvases(canvases, setProgressMsg);
 
-      const data = await res.json();
+      setProgressMsg("Analizando texto...");
 
-      if (!res.ok || !data.success) {
-        toast.error(data.error || "Error al procesar el PDF");
-        setParsing(false);
-        return;
-      }
-
-      const parsedItems: ParsedItem[] = data.items;
+      // 3. Parsear texto OCR
+      const parsedItems = parseRemitoText(text);
 
       if (parsedItems.length === 0) {
         toast.warning(
           "No se encontraron productos en el PDF. Verificá que sea un remito del proveedor."
         );
         setParsing(false);
+        setProgressMsg("");
         return;
       }
 
-      // Matchear con productos de la DB
+      // 4. Matchear por código contra productos de la BD
       const matched: MatchedItem[] = parsedItems.map((item) => ({
         parsedItem: item,
-        matchedProduct: findBestMatch(item.rawName, products),
-        quantity: item.quantity,
+        matchedProduct: findByCode(item.codigo, products),
+        quantity: item.cantidad,
         action: "add" as const,
       }));
 
       setItems(matched);
       setStep("review");
     } catch (err) {
-      toast.error("Error de conexión al procesar el PDF");
+      console.error("Error procesando remito:", err);
+      toast.error("Error al procesar el PDF. Intentá de nuevo.");
     } finally {
       setParsing(false);
+      setProgressMsg("");
     }
   };
 
@@ -262,7 +360,7 @@ export function RemitoImportModal({
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <FileText className="h-5 w-5 text-primary" />
-            Importar Remito del Proveedor
+            Importar Remito Proveedor
           </DialogTitle>
         </DialogHeader>
 
@@ -272,7 +370,10 @@ export function RemitoImportModal({
             {parsing ? (
               <div className="flex flex-col items-center gap-3 text-muted-foreground">
                 <Loader2 className="h-10 w-10 animate-spin text-primary" />
-                <p className="text-sm">Procesando {fileName}...</p>
+                <p className="text-sm font-medium">{progressMsg || `Procesando ${fileName}...`}</p>
+                <p className="text-xs text-muted-foreground">
+                  El OCR puede tardar unos segundos por página
+                </p>
               </div>
             ) : (
               <>
@@ -353,13 +454,13 @@ export function RemitoImportModal({
                     <div className="flex items-start justify-between gap-2">
                       <div className="flex-1 min-w-0">
                         <p className="text-xs text-muted-foreground truncate">
-                          Remito: {item.parsedItem.rawName}
+                          Remito: [{item.parsedItem.codigo}] {item.parsedItem.rawName}
                         </p>
                         <p className="font-medium text-sm truncate">
                           {item.matchedProduct!.name}
                         </p>
                         <p className="text-xs text-muted-foreground">
-                          Stock actual: {item.matchedProduct!.stock} unidades
+                          Stock actual: {item.matchedProduct!.stock} · Bultos: {item.parsedItem.bultos}
                         </p>
                       </div>
                       <button
@@ -371,7 +472,7 @@ export function RemitoImportModal({
                     </div>
 
                     <div className="flex items-center gap-2 flex-wrap">
-                      {/* Selector acción */}
+                      {/* Selector accion */}
                       <div className="flex rounded-lg border border-border overflow-hidden text-xs">
                         <button
                           onClick={() => updateAction(index, "add")}
@@ -413,7 +514,7 @@ export function RemitoImportModal({
 
                       {/* Preview del resultado */}
                       <div className="ml-auto text-xs text-muted-foreground">
-                        →{" "}
+                        {" "}
                         <span className="font-semibold text-foreground">
                           {item.action === "add"
                             ? item.matchedProduct!.stock + item.quantity
@@ -474,10 +575,10 @@ export function RemitoImportModal({
                             <Package className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
                             <div className="flex-1 min-w-0">
                               <p className="text-xs font-medium truncate">
-                                {item.parsedItem.rawName}
+                                [{item.parsedItem.codigo}] {item.parsedItem.rawName}
                               </p>
                               <p className="text-xs text-muted-foreground">
-                                Cantidad: {item.parsedItem.quantity}
+                                Cantidad: {item.parsedItem.cantidad} · Bultos: {item.parsedItem.bultos}
                               </p>
                             </div>
                             {/* Asignar producto manualmente */}
