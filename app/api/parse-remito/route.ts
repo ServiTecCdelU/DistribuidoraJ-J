@@ -125,9 +125,10 @@ export async function POST(request: NextRequest) {
       rawLines: textLines.slice(0, 100),
     });
   } catch (error) {
-    console.error("Error parsing remito PDF:", error);
+    const msg = error instanceof Error ? error.message : String(error);
+    console.error("Error parsing remito PDF:", msg, error);
     return NextResponse.json(
-      { error: "Error al procesar el PDF" },
+      { error: `Error al procesar el PDF: ${msg}` },
       { status: 500 }
     );
   }

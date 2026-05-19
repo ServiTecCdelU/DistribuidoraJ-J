@@ -144,7 +144,15 @@ export function RemitoImportModal({
         body: formData,
       });
 
-      const data = await res.json();
+      let data;
+      try {
+        data = await res.json();
+      } catch {
+        console.error("parse-remito respondió con status", res.status, "y no devolvió JSON");
+        toast.error("Error del servidor al procesar el PDF");
+        setParsing(false);
+        return;
+      }
 
       if (!res.ok || !data.success) {
         toast.error(data.error || "Error al procesar el PDF");
