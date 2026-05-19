@@ -30,6 +30,7 @@ interface ParsedItem {
   rawName: string;
   quantity: number;
   lineIndex: number;
+  codigo?: string;
 }
 
 interface MatchedItem {
@@ -73,8 +74,15 @@ function similarityScore(a: string, b: string): number {
   return matches / Math.max(wordsA.length, wordsB.length);
 }
 
-// Busca el mejor producto que matchea con el nombre del remito
-function findBestMatch(rawName: string, products: Product[]): Product | null {
+// Busca por código primero, luego por nombre fuzzy
+function findBestMatch(rawName: string, products: Product[], codigo?: string): Product | null {
+  // Prioridad 1: match exacto por código
+  if (codigo) {
+    const byCode = products.find((p) => p.codigo === codigo);
+    if (byCode) return byCode;
+  }
+
+  // Prioridad 2: fuzzy match por nombre
   let bestScore = 0;
   let bestProduct: Product | null = null;
 
@@ -154,10 +162,10 @@ export function RemitoImportModal({
         return;
       }
 
-      // Matchear con productos de la DB
+      // Matchear con productos de la DB (prioriza código, luego nombre)
       const matched: MatchedItem[] = parsedItems.map((item) => ({
         parsedItem: item,
-        matchedProduct: findBestMatch(item.rawName, products),
+        matchedProduct: findBestMatch(item.rawName, products, item.codigo),
         quantity: item.quantity,
         action: "add" as const,
       }));
@@ -353,7 +361,7 @@ export function RemitoImportModal({
                     <div className="flex items-start justify-between gap-2">
                       <div className="flex-1 min-w-0">
                         <p className="text-xs text-muted-foreground truncate">
-                          Remito: {item.parsedItem.rawName}
+                          {item.parsedItem.codigo ? `Cód: ${item.parsedItem.codigo} — ` : ""}Remito: {item.parsedItem.rawName}
                         </p>
                         <p className="font-medium text-sm truncate">
                           {item.matchedProduct!.name}

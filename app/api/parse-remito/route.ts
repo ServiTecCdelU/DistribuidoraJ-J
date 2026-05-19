@@ -5,6 +5,7 @@ interface ParsedItem {
   rawName: string;
   quantity: number;
   lineIndex: number;
+  codigo?: string;
 }
 
 // Extrae texto de streams PDF usando pako para descomprimir FlateDecode
@@ -123,7 +124,7 @@ function parseRemitoLines(lines: string[]): ParsedItem[] {
   });
 
   // Filtrar líneas que parecen ser de productos (tienen palabras Y números)
-  for (const { line, words, numbers } of linePatterns) {
+  for (const { line, tokens, words, numbers } of linePatterns) {
     if (words.length >= 1 && numbers.length >= 1) {
       // La primera cantidad suele ser la cantidad pedida/entregada
       // Filtrar headers obvios
@@ -153,8 +154,18 @@ function parseRemitoLines(lines: string[]): ParsedItem[] {
       const rawName = words.join(" ").trim();
       const quantity = numbers[0].value;
 
+      // Detectar código: primer token numérico (antes de la descripción) que no sea la cantidad
+      // Patrón típico remito: CODIGO  DESCRIPCION  CANTIDAD  PRECIO  TOTAL
+      let codigo: string | undefined;
+      const firstToken = tokens[0]?.trim();
+      if (firstToken && /^\d{2,}$/.test(firstToken) && numbers.length >= 2) {
+        // El primer token es un número de 2+ dígitos y hay al menos 2 números en la línea
+        // → probablemente es el código del producto
+        codigo = firstToken;
+      }
+
       if (rawName.length >= 3) {
-        items.push({ rawName, quantity, lineIndex: items.length });
+        items.push({ rawName, quantity, lineIndex: items.length, codigo });
       }
     }
   }
