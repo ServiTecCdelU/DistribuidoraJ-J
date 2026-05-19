@@ -1,84 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
-import pako from "pako";
+// @ts-ignore
+import pdf from "pdf-parse/lib/pdf-parse.js";
 
 interface ParsedItem {
   rawName: string;
   quantity: number;
   lineIndex: number;
   codigo?: string;
-}
-
-// Extrae texto de streams PDF usando pako para descomprimir FlateDecode
-function extractTextFromPdfBuffer(buffer: Buffer): string[] {
-  const binary = buffer.toString("binary");
-  const lines: string[] = [];
-
-  // Encontrar todos los streams en el PDF
-  const streamRegex = /stream\r?\n([\s\S]*?)\r?\nendstream/g;
-  let match;
-
-  while ((match = streamRegex.exec(binary)) !== null) {
-    const streamData = match[1];
-    let textContent = "";
-
-    // Intentar descomprimir con FlateDecode (pako inflate)
-    try {
-      const streamBytes = new Uint8Array(
-        Buffer.from(streamData, "binary")
-      );
-      const decompressed = pako.inflate(streamBytes, { to: "string" });
-      textContent = decompressed;
-    } catch {
-      // Stream sin comprimir o encoding diferente
-      textContent = streamData;
-    }
-
-    // Extraer texto con operadores Tj y TJ del content stream PDF
-    const extractedParts: string[] = [];
-
-    // Operador Tj: (texto) Tj
-    const tjRegex = /\(([^)]*)\)\s*Tj/g;
-    let tjMatch;
-    while ((tjMatch = tjRegex.exec(textContent)) !== null) {
-      const text = tjMatch[1]
-        .replace(/\\n/g, " ")
-        .replace(/\\r/g, " ")
-        .replace(/\\\(/g, "(")
-        .replace(/\\\)/g, ")")
-        .replace(/\\\\/g, "\\")
-        .trim();
-      if (text) extractedParts.push(text);
-    }
-
-    // Operador TJ: [(texto) ajuste (texto)] TJ
-    const tjArrayRegex = /\[([^\]]*)\]\s*TJ/g;
-    let tjArrayMatch;
-    while ((tjArrayMatch = tjArrayRegex.exec(textContent)) !== null) {
-      const parts = tjArrayMatch[1].match(/\(([^)]*)\)/g) || [];
-      const combined = parts
-        .map((p) => p.slice(1, -1).replace(/\\\(/g, "(").replace(/\\\)/g, ")"))
-        .join("")
-        .trim();
-      if (combined) extractedParts.push(combined);
-    }
-
-    if (extractedParts.length > 0) {
-      lines.push(...extractedParts);
-    }
-  }
-
-  return lines;
-}
-
-// Normaliza texto para comparación
-function normalizeText(text: string): string {
-  return text
-    .toLowerCase()
-    .normalize("NFD")
-    .replace(/[\u0300-\u036f]/g, "") // quitar tildes
-    .replace(/[^a-z0-9\s]/g, " ")
-    .replace(/\s+/g, " ")
-    .trim();
 }
 
 // Detecta si un token es un número de cantidad válido
@@ -90,23 +18,11 @@ function parseQuantity(token: string): number | null {
 }
 
 // Intenta parsear líneas de texto en items de remito
-// Formato típico remito proveedor: descripción + cantidad (y posiblemente precio)
+// Formato típico remito proveedor: CODIGO  DESCRIPCION  CANTIDAD  PRECIO  TOTAL
 function parseRemitoLines(lines: string[]): ParsedItem[] {
   const items: ParsedItem[] = [];
-  const joined = lines.join(" | ");
 
-  // Estrategia 1: buscar líneas que tengan nombre + número
-  // Agrupar tokens y buscar patrones como "Producto X   24   $3000   $72000"
-  const allText = lines
-    .filter((l) => l.length > 1)
-    .map((l) => l.trim())
-    .join("\n");
-
-  const textLines = allText.split(/\n|\|/).map((l) => l.trim()).filter(Boolean);
-
-  // Buscar líneas con patrón: texto seguido de número (cantidad)
-  // En remitos argentinos típicos: "CREMA BATMAN  24  3.500  84.000"
-  const linePatterns = textLines.map((line) => {
+  const linePatterns = lines.map((line) => {
     const tokens = line.split(/\s+/);
     const numbers: { index: number; value: number }[] = [];
     const words: string[] = [];
@@ -195,13 +111,18 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "El archivo no es un PDF válido" }, { status: 400 });
     }
 
-    const textLines = extractTextFromPdfBuffer(buffer);
+    const pdfData = await pdf(buffer);
+    const textLines = pdfData.text
+      .split("\n")
+      .map((l: string) => l.trim())
+      .filter((l: string) => l.length > 0);
+
     const parsedItems = parseRemitoLines(textLines);
 
     return NextResponse.json({
       success: true,
       items: parsedItems,
-      rawLines: textLines.slice(0, 100), // para debug si se necesita
+      rawLines: textLines.slice(0, 100),
     });
   } catch (error) {
     console.error("Error parsing remito PDF:", error);
