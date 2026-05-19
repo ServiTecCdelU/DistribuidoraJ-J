@@ -1,6 +1,8 @@
 # CLAUDE.md
 
-Este archivo guia a Claude Code cuando trabaja con este repositorio. **Siempre responder en español.**
+This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+
+**Siempre responder en español.**
 
 NOMBRE DE LA DISTRIBUIDORA: Distribuidora Patricia
 ## Commands
@@ -95,7 +97,7 @@ Siempre hacer commit y push al terminar cada tarea, sin esperar confirmacion del
 - AFIP billing unificado en `lib/facturacion-helper.ts`.
 - Componentes de tienda en `components/tienda/` (hero-carousel, top-products).
 - Rate limiting en `lib/rate-limit.ts` (in-memory, se resetea en redeploy).
-- Middleware.ts agrega security headers a rutas protegidas.
+- ~~Middleware.ts~~ fue removido — no existe actualmente en el repo.
 - Auditoria en `services/audit-service.ts` -> tabla `auditoria`.
 - Listas de precios en `services/price-list-service.ts` -> tabla `listas_precios`.
 - Caja diaria en tabla `caja`.
@@ -103,10 +105,13 @@ Siempre hacer commit y push al terminar cada tarea, sin esperar confirmacion del
 
 ## Arquitectura General
 
-Next.js 15 (App Router) desplegado en Vercel. Maneja ventas, pedidos, inventario, clientes, vendedores, comisiones y facturacion electronica AFIP.
+Next.js 16 (App Router) desplegado en Vercel. Maneja ventas, pedidos, inventario, clientes, vendedores, comisiones y facturacion electronica AFIP.
 
 ### Stack Tecnologico
-- **Frontend**: Next.js App Router, React 19, Tailwind CSS v4, shadcn/ui (Radix UI primitives)
+- **Frontend**: Next.js 16 App Router, React 19, Tailwind CSS v4, shadcn/ui (Radix UI primitives)
+- **Forms**: `react-hook-form` + `zod` para validación
+- **Charts**: `recharts` para gráficos
+- **Maps**: `leaflet` + `react-leaflet` para mapas (pedidos, ubicaciones)
 - **Database**: Supabase PostgreSQL — tablas: `ventas`, `clientes`, `productos`, `vendedores`, `pedidos`, `comisiones`, `usuarios`, `caja`, `auditoria`, `listas_precios`, `mayorista_productos`, `stock_movimientos`, `transacciones`, `pedidos_mayorista`, `configuracion`. Schema completo en `PLAN_MIGRACION_SUPABASE.md`.
 - **Auth**: Supabase Auth con Google OAuth (flujo redirect). Roles: `admin`, `seller`, `customer`. El perfil se cachea en módulo + `sessionStorage`; llamar `invalidateAuthCache()` de `hooks/use-auth.ts` tras cambios de rol para evitar datos stale.
 - **Storage**: Supabase Storage — bucket `facturas` para PDFs de facturación.
@@ -143,11 +148,14 @@ Next.js 15 (App Router) desplegado en Vercel. Maneja ventas, pedidos, inventario
 ### Ventas atómicas
 `processSale()` usa la función RPC `process_sale()` en PostgreSQL que ejecuta en una transacción ACID: inserta venta, descuenta stock, registra crédito del cliente y comisión del vendedor.
 
+### API Routes
+Rutas públicas (no requieren auth) en `app/api/public/` — clientes, productos, pedidos, mas-vendidos, vendedores. Rutas protegidas: facturación (`/api/facturacion/`), ventas (`/api/ventas/emitir`), AFIP (`/api/afip/`), PDF (`/api/generate-pdf`), importación (`/api/import-productos`), remitos (`/api/remitos`, `/api/parse-remito`), Drive (`/api/drive`).
+
 ### Caveats Importantes
-- `next.config.mjs` tiene `typescript.ignoreBuildErrors: true` — errores TS no fallan el build
+- `next.config.mjs` tiene `typescript.ignoreBuildErrors: true` e `images.unoptimized: true`
 - Algunos archivos usan `// @ts-nocheck` (ej: `hooks/useGenerarPdf.tsx`)
 - Tipo `Venta` duplicado: `app/ventas/types.ts` extiende `Sale` (usar en componentes de ventas), `hooks/useVentas.ts` define su version con `afipData` y campos base64. `components/ModalDetalleVenta.tsx` importa `Venta` desde `../types` (resuelve a `app/ventas/types.ts`).
-- Firebase fue eliminado completamente. No quedan dependencias ni archivos de Firebase en el proyecto.
+- Firebase fue eliminado del código pero `firebase` y `firebase-admin` siguen en `package.json` como dependencias sin usar.
 
 ### Variables de Entorno Requeridas
 - `NEXT_PUBLIC_SUPABASE_URL` — URL del proyecto Supabase
