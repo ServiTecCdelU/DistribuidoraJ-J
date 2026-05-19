@@ -1,149 +1,202 @@
 import { NextRequest, NextResponse } from "next/server";
+import pako from "pako";
 
 interface ParsedItem {
   rawName: string;
   quantity: number;
   lineIndex: number;
-  codigo?: string;
 }
 
-// Parsea líneas del remito del proveedor
-// Formato: CODIGO DEP ARTICULO BULTOS CANTIDAD PRECIO SUBTOTAL
+// Extrae texto de streams PDF usando pako para descomprimir FlateDecode
+function extractTextFromPdfBuffer(buffer: Buffer): string[] {
+  const binary = buffer.toString("binary");
+  const lines: string[] = [];
+
+  // Encontrar todos los streams en el PDF
+  const streamRegex = /stream\r?\n([\s\S]*?)\r?\nendstream/g;
+  let match;
+
+  while ((match = streamRegex.exec(binary)) !== null) {
+    const streamData = match[1];
+    let textContent = "";
+
+    // Intentar descomprimir con FlateDecode (pako inflate)
+    try {
+      const streamBytes = new Uint8Array(
+        Buffer.from(streamData, "binary")
+      );
+      const decompressed = pako.inflate(streamBytes, { to: "string" });
+      textContent = decompressed;
+    } catch {
+      // Stream sin comprimir o encoding diferente
+      textContent = streamData;
+    }
+
+    // Extraer texto con operadores Tj y TJ del content stream PDF
+    const extractedParts: string[] = [];
+
+    // Operador Tj: (texto) Tj
+    const tjRegex = /\(([^)]*)\)\s*Tj/g;
+    let tjMatch;
+    while ((tjMatch = tjRegex.exec(textContent)) !== null) {
+      const text = tjMatch[1]
+        .replace(/\\n/g, " ")
+        .replace(/\\r/g, " ")
+        .replace(/\\\(/g, "(")
+        .replace(/\\\)/g, ")")
+        .replace(/\\\\/g, "\\")
+        .trim();
+      if (text) extractedParts.push(text);
+    }
+
+    // Operador TJ: [(texto) ajuste (texto)] TJ
+    const tjArrayRegex = /\[([^\]]*)\]\s*TJ/g;
+    let tjArrayMatch;
+    while ((tjArrayMatch = tjArrayRegex.exec(textContent)) !== null) {
+      const parts = tjArrayMatch[1].match(/\(([^)]*)\)/g) || [];
+      const combined = parts
+        .map((p) => p.slice(1, -1).replace(/\\\(/g, "(").replace(/\\\)/g, ")"))
+        .join("")
+        .trim();
+      if (combined) extractedParts.push(combined);
+    }
+
+    if (extractedParts.length > 0) {
+      lines.push(...extractedParts);
+    }
+  }
+
+  return lines;
+}
+
+// Normaliza texto para comparación
+function normalizeText(text: string): string {
+  return text
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "") // quitar tildes
+    .replace(/[^a-z0-9\s]/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+// Detecta si un token es un número de cantidad válido
+function parseQuantity(token: string): number | null {
+  const cleaned = token.replace(/[.,]/g, "").trim();
+  const num = parseInt(cleaned, 10);
+  if (!isNaN(num) && num > 0 && num < 10000) return num;
+  return null;
+}
+
+// Intenta parsear líneas de texto en items de remito
+// Formato típico remito proveedor: descripción + cantidad (y posiblemente precio)
 function parseRemitoLines(lines: string[]): ParsedItem[] {
   const items: ParsedItem[] = [];
+  const joined = lines.join(" | ");
 
-  // Regex: línea que empieza con código de 7 dígitos
-  const codigoRegex = /^(0\d{6})\s/;
+  // Estrategia 1: buscar líneas que tengan nombre + número
+  // Agrupar tokens y buscar patrones como "Producto X   24   $3000   $72000"
+  const allText = lines
+    .filter((l) => l.length > 1)
+    .map((l) => l.trim())
+    .join("\n");
 
-  for (let i = 0; i < lines.length; i++) {
-    const line = lines[i].trim();
-    const match = line.match(codigoRegex);
-    if (!match) continue;
+  const textLines = allText.split(/\n|\|/).map((l) => l.trim()).filter(Boolean);
 
-    const codigo = match[1];
+  // Buscar líneas con patrón: texto seguido de número (cantidad)
+  // En remitos argentinos típicos: "CREMA BATMAN  24  3.500  84.000"
+  const linePatterns = textLines.map((line) => {
+    const tokens = line.split(/\s+/);
+    const numbers: { index: number; value: number }[] = [];
+    const words: string[] = [];
 
-    // Extraer el resto después del código
-    const rest = line.slice(match[0].length).trim();
-
-    // Buscar depósito (01, 02, etc.) al inicio — puede estar pegado al texto o separado
-    const depMatch = rest.match(/^(?:O[lI1]|0[1-9])\s+/i);
-    const afterDep = depMatch ? rest.slice(depMatch[0].length).trim() : rest;
-
-    // Buscar patrón: BULTOS(N.00) seguido de CANTIDAD(N.000) en la línea
-    // Bultos: 1-2 dígitos con .00 o ,00 (puede tener basura OCR pegada)
-    // Cantidad: número entero con .000 o ,000
-    const bultoCantRegex = /(\d{1,2})[.,](\d{2})\d?\s*\S{0,3}\s+(\d{1,4})[.,](000\d?|00)\b/;
-    const bcMatch = afterDep.match(bultoCantRegex);
-
-    if (!bcMatch) continue;
-
-    const quantity = parseInt(bcMatch[3], 10);
-    if (quantity <= 0 || quantity > 5000) continue;
-
-    // El nombre es todo lo anterior al match de bultos/cantidad
-    const nameEndIdx = afterDep.indexOf(bcMatch[0]);
-    let rawName = afterDep.slice(0, nameEndIdx).trim();
-
-    // Si la siguiente línea no empieza con código, puede ser continuación del nombre
-    if (i + 1 < lines.length && !codigoRegex.test(lines[i + 1].trim())) {
-      const nextLine = lines[i + 1].trim();
-      // Solo agregar si parece texto (no números puros, no headers)
-      if (nextLine.length > 1 && !/^\d+[.,]/.test(nextLine) && !nextLine.startsWith("SE RUEGA") && !nextLine.startsWith("Transporte")) {
-        rawName += " " + nextLine;
+    for (let i = 0; i < tokens.length; i++) {
+      const q = parseQuantity(tokens[i]);
+      if (q !== null && !tokens[i].includes("$")) {
+        numbers.push({ index: i, value: q });
+      } else if (isNaN(Number(tokens[i].replace(/[.,]/g, "")))) {
+        words.push(tokens[i]);
       }
     }
 
-    // Limpiar nombre
-    rawName = rawName
-      .replace(/[|]/g, "")
-      .replace(/\s+/g, " ")
-      .trim();
+    return { line, tokens, numbers, words };
+  });
 
-    if (rawName.length < 3) continue;
+  // Filtrar líneas que parecen ser de productos (tienen palabras Y números)
+  for (const { line, words, numbers } of linePatterns) {
+    if (words.length >= 1 && numbers.length >= 1) {
+      // La primera cantidad suele ser la cantidad pedida/entregada
+      // Filtrar headers obvios
+      const wordsJoined = words.join(" ").toLowerCase();
+      if (
+        wordsJoined.includes("cantidad") ||
+        wordsJoined.includes("descrip") ||
+        wordsJoined.includes("precio") ||
+        wordsJoined.includes("total") ||
+        wordsJoined.includes("subtotal") ||
+        wordsJoined.includes("importe") ||
+        wordsJoined.includes("unidad") ||
+        wordsJoined.includes("codigo") ||
+        wordsJoined.includes("cod.") ||
+        wordsJoined.includes("remito") ||
+        wordsJoined.includes("factura") ||
+        wordsJoined.includes("fecha") ||
+        wordsJoined.includes("cliente") ||
+        wordsJoined.includes("cuit") ||
+        wordsJoined.includes("domicilio") ||
+        wordsJoined.includes("iva") ||
+        words.length === 0
+      ) {
+        continue;
+      }
 
-    items.push({
-      rawName,
-      quantity,
-      lineIndex: items.length,
-      codigo,
-    });
+      const rawName = words.join(" ").trim();
+      const quantity = numbers[0].value;
+
+      if (rawName.length >= 3) {
+        items.push({ rawName, quantity, lineIndex: items.length });
+      }
+    }
   }
 
   return items;
 }
 
-// Extrae imagen JPEG embebida en un PDF (para PDFs escaneados)
-function extractJpegFromPdf(buffer: Buffer): Buffer | null {
-  let jpegStart = -1;
-  for (let i = 0; i < buffer.length - 2; i++) {
-    if (buffer[i] === 0xff && buffer[i + 1] === 0xd8 && buffer[i + 2] === 0xff) {
-      jpegStart = i;
-      break;
-    }
-  }
-  if (jpegStart === -1) return null;
-
-  let jpegEnd = -1;
-  for (let i = buffer.length - 2; i > jpegStart; i--) {
-    if (buffer[i] === 0xff && buffer[i + 1] === 0xd9) {
-      jpegEnd = i + 2;
-      break;
-    }
-  }
-  if (jpegEnd === -1) return null;
-
-  return buffer.slice(jpegStart, jpegEnd);
-}
-
-export const maxDuration = 60;
-
 export async function POST(request: NextRequest) {
   try {
     const formData = await request.formData();
-
-    // Si viene texto OCR del cliente, parsear directamente
-    const ocrText = formData.get("ocrText") as string | null;
-    if (ocrText) {
-      const textLines = ocrText
-        .split("\n")
-        .map((l: string) => l.trim())
-        .filter((l: string) => l.length > 0);
-      const parsedItems = parseRemitoLines(textLines);
-      return NextResponse.json({
-        success: true,
-        items: parsedItems,
-        rawLines: textLines.slice(0, 100),
-      });
-    }
-
-    // Si viene un PDF, extraer la imagen para OCR en el cliente
     const file = formData.get("file") as File | null;
 
     if (!file) {
       return NextResponse.json({ error: "No se recibió archivo" }, { status: 400 });
     }
 
+    if (file.type !== "application/pdf" && !file.name.endsWith(".pdf")) {
+      return NextResponse.json({ error: "El archivo debe ser un PDF" }, { status: 400 });
+    }
+
     const arrayBuffer = await file.arrayBuffer();
     const buffer = Buffer.from(arrayBuffer);
 
-    const jpeg = extractJpegFromPdf(buffer);
-    if (!jpeg) {
-      return NextResponse.json({
-        error: "No se pudo extraer la imagen del PDF. Verificá que sea un remito escaneado.",
-      }, { status: 400 });
+    // Verificar firma PDF
+    const header = buffer.slice(0, 5).toString("ascii");
+    if (!header.startsWith("%PDF")) {
+      return NextResponse.json({ error: "El archivo no es un PDF válido" }, { status: 400 });
     }
+
+    const textLines = extractTextFromPdfBuffer(buffer);
+    const parsedItems = parseRemitoLines(textLines);
 
     return NextResponse.json({
       success: true,
-      needsOcr: true,
-      imageBase64: jpeg.toString("base64"),
+      items: parsedItems,
+      rawLines: textLines.slice(0, 100), // para debug si se necesita
     });
   } catch (error) {
-    const msg = error instanceof Error ? error.message : String(error);
-    console.error("Error parsing remito PDF:", msg, error);
+    console.error("Error parsing remito PDF:", error);
     return NextResponse.json(
-      { error: `Error al procesar el PDF: ${msg}` },
-      { status: 500 },
+      { error: "Error al procesar el PDF" },
+      { status: 500 }
     );
   }
 }

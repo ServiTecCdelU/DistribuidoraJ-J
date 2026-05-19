@@ -30,7 +30,6 @@ interface ParsedItem {
   rawName: string;
   quantity: number;
   lineIndex: number;
-  codigo?: string;
 }
 
 interface MatchedItem {
@@ -74,15 +73,8 @@ function similarityScore(a: string, b: string): number {
   return matches / Math.max(wordsA.length, wordsB.length);
 }
 
-// Busca por código primero, luego por nombre fuzzy
-function findBestMatch(rawName: string, products: Product[], codigo?: string): Product | null {
-  // Prioridad 1: match exacto por código
-  if (codigo) {
-    const byCode = products.find((p) => p.codigo === codigo);
-    if (byCode) return byCode;
-  }
-
-  // Prioridad 2: fuzzy match por nombre
+// Busca el mejor producto que matchea con el nombre del remito
+function findBestMatch(rawName: string, products: Product[]): Product | null {
   let bestScore = 0;
   let bestProduct: Product | null = null;
 
@@ -139,54 +131,17 @@ export function RemitoImportModal({
       const formData = new FormData();
       formData.append("file", file);
 
-      let res = await fetch("/api/parse-remito", {
+      const res = await fetch("/api/parse-remito", {
         method: "POST",
         body: formData,
       });
 
-      let data;
-      try {
-        data = await res.json();
-      } catch {
-        console.error("parse-remito respondió con status", res.status, "y no devolvió JSON");
-        toast.error("Error del servidor al procesar el PDF");
-        setParsing(false);
-        return;
-      }
+      const data = await res.json();
 
       if (!res.ok || !data.success) {
         toast.error(data.error || "Error al procesar el PDF");
         setParsing(false);
         return;
-      }
-
-      // Si el PDF es escaneado, hacer OCR en el browser
-      if (data.needsOcr && data.imageBase64) {
-        toast.info("PDF escaneado detectado, procesando con OCR...");
-        const Tesseract = await import("tesseract.js");
-        const imgBytes = Uint8Array.from(atob(data.imageBase64), (c) => c.charCodeAt(0));
-        const blob = new Blob([imgBytes], { type: "image/jpeg" });
-        const { data: ocrData } = await Tesseract.recognize(blob, "spa");
-
-        // Enviar texto OCR al servidor para parsear
-        const ocrForm = new FormData();
-        ocrForm.append("ocrText", ocrData.text);
-        res = await fetch("/api/parse-remito", {
-          method: "POST",
-          body: ocrForm,
-        });
-        try {
-          data = await res.json();
-        } catch {
-          toast.error("Error al parsear el texto del remito");
-          setParsing(false);
-          return;
-        }
-        if (!res.ok || !data.success) {
-          toast.error(data.error || "Error al procesar el remito");
-          setParsing(false);
-          return;
-        }
       }
 
       const parsedItems: ParsedItem[] = data.items;
@@ -199,10 +154,10 @@ export function RemitoImportModal({
         return;
       }
 
-      // Matchear con productos de la DB (prioriza código, luego nombre)
+      // Matchear con productos de la DB
       const matched: MatchedItem[] = parsedItems.map((item) => ({
         parsedItem: item,
-        matchedProduct: findBestMatch(item.rawName, products, item.codigo),
+        matchedProduct: findBestMatch(item.rawName, products),
         quantity: item.quantity,
         action: "add" as const,
       }));
@@ -210,8 +165,7 @@ export function RemitoImportModal({
       setItems(matched);
       setStep("review");
     } catch (err) {
-      console.error("Error procesando remito:", err);
-      toast.error("Error al procesar el PDF");
+      toast.error("Error de conexión al procesar el PDF");
     } finally {
       setParsing(false);
     }
@@ -399,7 +353,7 @@ export function RemitoImportModal({
                     <div className="flex items-start justify-between gap-2">
                       <div className="flex-1 min-w-0">
                         <p className="text-xs text-muted-foreground truncate">
-                          {item.parsedItem.codigo ? `Cód: ${item.parsedItem.codigo} — ` : ""}Remito: {item.parsedItem.rawName}
+                          Remito: {item.parsedItem.rawName}
                         </p>
                         <p className="font-medium text-sm truncate">
                           {item.matchedProduct!.name}
