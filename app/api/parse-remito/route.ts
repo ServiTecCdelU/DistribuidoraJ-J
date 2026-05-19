@@ -1,7 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 // @ts-ignore
 import pdf from "pdf-parse/lib/pdf-parse.js";
-import Tesseract from "tesseract.js";
 
 interface ParsedItem {
   rawName: string;
@@ -107,6 +106,22 @@ export const maxDuration = 60;
 export async function POST(request: NextRequest) {
   try {
     const formData = await request.formData();
+
+    // Si viene texto OCR del cliente, parsear directamente
+    const ocrText = formData.get("ocrText") as string | null;
+    if (ocrText) {
+      const textLines = ocrText
+        .split("\n")
+        .map((l: string) => l.trim())
+        .filter((l: string) => l.length > 0);
+      const parsedItems = parseRemitoLines(textLines);
+      return NextResponse.json({
+        success: true,
+        items: parsedItems,
+        rawLines: textLines.slice(0, 100),
+      });
+    }
+
     const file = formData.get("file") as File | null;
 
     if (!file) {
@@ -133,7 +148,7 @@ export async function POST(request: NextRequest) {
       .map((l: string) => l.trim())
       .filter((l: string) => l.length > 0);
 
-    // Si no hay texto, es un PDF escaneado → OCR
+    // Si no hay texto, es un PDF escaneado → devolver la imagen para OCR en el cliente
     if (textLines.length <= 1) {
       const jpeg = extractJpegFromPdf(buffer);
       if (!jpeg) {
@@ -142,11 +157,11 @@ export async function POST(request: NextRequest) {
         }, { status: 400 });
       }
 
-      const { data } = await Tesseract.recognize(jpeg, "spa");
-      textLines = data.text
-        .split("\n")
-        .map((l: string) => l.trim())
-        .filter((l: string) => l.length > 0);
+      return NextResponse.json({
+        success: true,
+        needsOcr: true,
+        imageBase64: jpeg.toString("base64"),
+      });
     }
 
     const parsedItems = parseRemitoLines(textLines);

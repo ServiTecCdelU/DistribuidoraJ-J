@@ -139,7 +139,7 @@ export function RemitoImportModal({
       const formData = new FormData();
       formData.append("file", file);
 
-      const res = await fetch("/api/parse-remito", {
+      let res = await fetch("/api/parse-remito", {
         method: "POST",
         body: formData,
       });
@@ -158,6 +158,35 @@ export function RemitoImportModal({
         toast.error(data.error || "Error al procesar el PDF");
         setParsing(false);
         return;
+      }
+
+      // Si el PDF es escaneado, hacer OCR en el browser
+      if (data.needsOcr && data.imageBase64) {
+        toast.info("PDF escaneado detectado, procesando con OCR...");
+        const Tesseract = await import("tesseract.js");
+        const imgBytes = Uint8Array.from(atob(data.imageBase64), (c) => c.charCodeAt(0));
+        const blob = new Blob([imgBytes], { type: "image/jpeg" });
+        const { data: ocrData } = await Tesseract.recognize(blob, "spa");
+
+        // Enviar texto OCR al servidor para parsear
+        const ocrForm = new FormData();
+        ocrForm.append("ocrText", ocrData.text);
+        res = await fetch("/api/parse-remito", {
+          method: "POST",
+          body: ocrForm,
+        });
+        try {
+          data = await res.json();
+        } catch {
+          toast.error("Error al parsear el texto del remito");
+          setParsing(false);
+          return;
+        }
+        if (!res.ok || !data.success) {
+          toast.error(data.error || "Error al procesar el remito");
+          setParsing(false);
+          return;
+        }
       }
 
       const parsedItems: ParsedItem[] = data.items;
@@ -181,7 +210,8 @@ export function RemitoImportModal({
       setItems(matched);
       setStep("review");
     } catch (err) {
-      toast.error("Error de conexión al procesar el PDF");
+      console.error("Error procesando remito:", err);
+      toast.error("Error al procesar el PDF");
     } finally {
       setParsing(false);
     }
