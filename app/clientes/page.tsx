@@ -528,164 +528,53 @@ export default function ClientesPage() {
                 </div>
               </div>
 
-              {/* Mobile Cards */}
-              <div className="md:hidden space-y-3 pb-24">
+              {/* Mobile List */}
+              <div className="md:hidden border border-border rounded-2xl overflow-hidden bg-card shadow-sm divide-y divide-border pb-24">
                 {pagedClients.map((client) => {
                   const debt = getDebtIndicator(client.currentBalance || 0, client.creditLimit || 0)
                   const DebtIcon = debt.icon
-const usagePercent = (client.creditLimit || 0) > 0
-? Math.min(((client.currentBalance || 0) / (client.creditLimit || 1)) * 100, 100)
-                    : 0
-
                   return (
-                    <Card key={client.id} className="overflow-hidden border-border/60 shadow-sm active:scale-[0.99] transition-transform">
-                      <CardContent className="p-0">
-                        {/* Card Header */}
-                        <div className="p-4 border-b border-border/50 bg-muted/30">
-                          <div className="flex items-start justify-between gap-3">
-                            <div className="flex items-center gap-3 min-w-0 flex-1">
-                              <div className="h-11 w-11 rounded-full bg-primary/10 flex items-center justify-center shrink-0">
-                                <span className="text-lg font-semibold text-primary">
-                                  {client.name.charAt(0).toUpperCase()}
-                                </span>
-                              </div>
-                              <div className="min-w-0 flex-1">
-                                <div className="flex items-center gap-2">
-                                  <h3 className="font-semibold text-foreground truncate text-base">{client.name}</h3>
-                                  {client.notes && (
-                                    <StickyNote className="h-3.5 w-3.5 text-amber-500 shrink-0" />
-                                  )}
-                                </div>
-                                <p className="text-sm text-muted-foreground font-mono">{client.cuit || 'Sin CUIT'}</p>
-                              </div>
-                            </div>
-                            <DropdownMenu>
-                              <DropdownMenuTrigger asChild>
-                                <Button variant="ghost" size="icon" className="h-9 w-9 shrink-0 -mr-2">
-                                  <MoreVertical className="h-5 w-5" />
-                                </Button>
-                              </DropdownMenuTrigger>
-                              <DropdownMenuContent align="end" className="w-48">
-                                <DropdownMenuItem onClick={() => handleViewDetail(client)} className="flex items-center gap-2">
-                                  <Eye className="h-4 w-4" />
-                                  Ver detalle
-                                </DropdownMenuItem>
-                                <DropdownMenuItem onClick={() => handleEdit(client)} className="flex items-center gap-2">
-                                  <Pencil className="h-4 w-4" />
-                                  Editar cliente
-                                </DropdownMenuItem>
-                              </DropdownMenuContent>
-                            </DropdownMenu>
-                          </div>
-                          <div className="mt-3">
-                            <span className={`inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium ${getCategoryColor(client.taxCategory)}`}>
-                              <Building2 className="h-3 w-3 mr-1" />
-                              {formatTaxCategory(client.taxCategory)}
-                            </span>
-                          </div>
+                    <div
+                      key={client.id}
+                      className="flex items-center gap-3 px-4 py-3 active:bg-muted/50 transition-colors"
+                      onClick={() => handleViewDetail(client)}
+                    >
+                      <div className="h-9 w-9 rounded-full bg-primary/10 flex items-center justify-center shrink-0">
+                        <span className="text-sm font-semibold text-primary">
+                          {client.name.charAt(0).toUpperCase()}
+                        </span>
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-1.5">
+                          <p className="font-medium text-sm text-foreground truncate">{client.name}</p>
+                          {client.notes && <StickyNote className="h-3 w-3 text-amber-500 shrink-0" />}
                         </div>
-
-                        {/* Card Body */}
-                        <div className="p-4 space-y-4">
-                          {/* Contact Info */}
-                          {(client.phone || client.email || client.address) && (
-                            <div className="flex flex-col gap-2 text-sm">
-                              {client.phone && (
-                                <a 
-                                  href={`tel:${client.phone}`} 
-                                  className="flex items-center gap-2.5 text-muted-foreground hover:text-primary transition-colors"
-                                >
-                                  <div className="h-7 w-7 rounded-full bg-muted flex items-center justify-center">
-                                    <Phone className="h-3.5 w-3.5" />
-                                  </div>
-                                  {client.phone}
-                                </a>
-                              )}
-                              {client.email && (
-                                <a 
-                                  href={`mailto:${client.email}`} 
-                                  className="flex items-center gap-2.5 text-muted-foreground hover:text-primary transition-colors"
-                                >
-                                  <div className="h-7 w-7 rounded-full bg-muted flex items-center justify-center">
-                                    <Mail className="h-3.5 w-3.5" />
-                                  </div>
-                                  <span className="truncate">{client.email}</span>
-                                </a>
-                              )}
-                              {client.address && (
-                                <div className="flex items-center gap-2.5 text-muted-foreground">
-                                  <div className="h-7 w-7 rounded-full bg-muted flex items-center justify-center">
-                                    <MapPin className="h-3.5 w-3.5" />
-                                  </div>
-                                  <span className="truncate">{client.address}</span>
-                                </div>
-                              )}
-                            </div>
-                          )}
-
-                          {/* Credit Info */}
-                          <div className={`rounded-xl p-4 ${debt.bgColor} border ${debt.borderColor}`}>
-                            <div className="flex items-center justify-between mb-3">
-                              <div>
-                                <p className="text-xs text-muted-foreground font-medium uppercase tracking-wide">Saldo Deuda</p>
-                                <div className={`flex items-center gap-2 ${debt.color}`}>
-                                  <DebtIcon className="h-5 w-5" />
-                                  <p className="font-bold text-2xl">
-                                    {formatCurrency(client.currentBalance || 0)}
-                                  </p>
-                                </div>
-                              </div>
-                              <div className="text-right">
-                                <p className="text-xs text-muted-foreground font-medium uppercase tracking-wide">Limite</p>
-                                <p className="font-semibold text-lg text-foreground">
-                                  {formatCurrency(client.creditLimit || 0)}
-                                </p>
-                              </div>
-                            </div>
-                            
-                            {/* Progress Bar */}
-                            {(client.creditLimit || 0) > 0 && (
-                              <div className="space-y-1.5">
-                                <div className="h-2 bg-background/50 rounded-full overflow-hidden">
-                                  <div
-                                    className={`h-full rounded-full transition-all duration-500 ${
-                                      client.currentBalance === 0
-                                        ? 'bg-emerald-500'
-                                        : usagePercent < 50
-                                        ? 'bg-amber-500'
-                                        : 'bg-red-500'
-                                    }`}
-                                    style={{ width: `${usagePercent}%` }}
-                                  />
-                                </div>
-                                <p className="text-xs text-muted-foreground text-right">
-                                  {Math.round(usagePercent)}% del limite utilizado
-                                </p>
-                              </div>
-                            )}
-                          </div>
-
-                          {/* Quick Actions */}
-                          <div className="flex gap-2 pt-1">
-                            <Button 
-                              variant="outline" 
-                              className="flex-1 h-10 bg-transparent"
-                              onClick={() => handleEdit(client)}
-                            >
-                              <Pencil className="h-4 w-4 mr-2" />
-                              Editar
-                            </Button>
-                            <Button 
-                              className="flex-1 h-10"
-                              onClick={() => handleViewDetail(client)}
-                            >
-                              <Eye className="h-4 w-4 mr-2" />
-                              Ver Detalle
-                            </Button>
-                          </div>
+                        <p className="text-xs text-muted-foreground font-mono">{client.id}</p>
+                      </div>
+                      <div className="flex items-center gap-1 shrink-0">
+                        <div className={`flex items-center gap-1 ${debt.color}`}>
+                          <DebtIcon className="h-3.5 w-3.5" />
+                          <span className="text-sm font-semibold">{formatCurrency(client.currentBalance || 0)}</span>
                         </div>
-                      </CardContent>
-                    </Card>
+                        <DropdownMenu>
+                          <DropdownMenuTrigger asChild>
+                            <Button variant="ghost" size="icon" className="h-8 w-8 shrink-0" onClick={(e) => e.stopPropagation()}>
+                              <MoreVertical className="h-4 w-4" />
+                            </Button>
+                          </DropdownMenuTrigger>
+                          <DropdownMenuContent align="end" className="w-48">
+                            <DropdownMenuItem onClick={() => handleViewDetail(client)} className="flex items-center gap-2">
+                              <Eye className="h-4 w-4" />
+                              Ver detalle
+                            </DropdownMenuItem>
+                            <DropdownMenuItem onClick={() => handleEdit(client)} className="flex items-center gap-2">
+                              <Pencil className="h-4 w-4" />
+                              Editar cliente
+                            </DropdownMenuItem>
+                          </DropdownMenuContent>
+                        </DropdownMenu>
+                      </div>
+                    </div>
                   )
                 })}
               </div>
