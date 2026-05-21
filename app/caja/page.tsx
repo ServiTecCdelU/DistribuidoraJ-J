@@ -364,6 +364,7 @@ export default function CajaPage() {
         const today = new Date();
         today.setHours(0, 0, 0, 0);
 
+        // Buscar caja de hoy
         const { data: registers } = await supabase
           .from("caja")
           .select("*")
@@ -373,15 +374,33 @@ export default function CajaPage() {
 
         if (!mounted) return;
 
-        if (registers && registers.length > 0) {
-          setCurrentRegister(mapRegister(registers[0]));
+        let activeRegister = registers && registers.length > 0 ? registers[0] : null;
+
+        // Si no hay caja de hoy, buscar la última caja abierta sin cerrar
+        if (!activeRegister) {
+          const { data: openRegisters } = await supabase
+            .from("caja")
+            .select("*")
+            .eq("status", "open")
+            .order("opened_at", { ascending: false })
+            .limit(1);
+          if (openRegisters && openRegisters.length > 0) {
+            activeRegister = openRegisters[0];
+          }
         }
 
+        if (activeRegister) {
+          setCurrentRegister(mapRegister(activeRegister));
+        }
+
+        // Cargar ventas desde la fecha de apertura de la caja activa
         const salesData = await salesApi.getAll();
         if (!mounted) return;
+        const cajaDate = activeRegister ? new Date(activeRegister.opened_at) : today;
+        cajaDate.setHours(0, 0, 0, 0);
         const todaySales = salesData.filter((sale) => {
           const dt = new Date(sale.createdAt);
-          return dt >= today;
+          return dt >= cajaDate;
         });
         setSales(todaySales);
       } catch {
@@ -408,14 +427,30 @@ export default function CajaPage() {
         .order("opened_at", { ascending: false })
         .limit(1);
 
-      if (registers && registers.length > 0) {
-        setCurrentRegister(mapRegister(registers[0]));
+      let activeRegister = registers && registers.length > 0 ? registers[0] : null;
+
+      if (!activeRegister) {
+        const { data: openRegisters } = await supabase
+          .from("caja")
+          .select("*")
+          .eq("status", "open")
+          .order("opened_at", { ascending: false })
+          .limit(1);
+        if (openRegisters && openRegisters.length > 0) {
+          activeRegister = openRegisters[0];
+        }
+      }
+
+      if (activeRegister) {
+        setCurrentRegister(mapRegister(activeRegister));
       }
 
       const salesData = await salesApi.getAll();
+      const cajaDate = activeRegister ? new Date(activeRegister.opened_at) : today;
+      cajaDate.setHours(0, 0, 0, 0);
       const todaySales = salesData.filter((sale) => {
         const d = new Date(sale.createdAt);
-        return d >= today;
+        return d >= cajaDate;
       });
       setSales(todaySales);
     } catch {
