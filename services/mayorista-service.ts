@@ -242,8 +242,8 @@ export const getMayoristaProductos = async (_forceRefresh = false, includeJoin =
         const pd = productosMap.get(p.productoId)
         if (!pd) continue
         p.precioVenta = Number(pd.precio_venta) || Number(pd.price) || 0
-        p.gananciaGlobal = pd.ganancia_global ? Number(pd.ganancia_global) : undefined
-        p.gananciaIndividual = pd.ganancia_individual ?? false
+        p.gananciaGlobal = pd.ganancia_global != null ? Number(pd.ganancia_global) : undefined
+        p.gananciaIndividual = !!pd.ganancia_individual
         p.stockLocal = pd.stock ?? 0
         p.unidadesPorBulto = pd.unidades_por_bulto ?? undefined
         p.seDivideEn = pd.se_divide_en ? Number(pd.se_divide_en) : undefined
@@ -308,7 +308,7 @@ export const applyGananciaToProducts = async (
           price: precioVenta,
           precio_venta: precioVenta,
           ganancia_global: porcentaje,
-          ganancia_individual: false,
+          ganancia_individual: 0,
         }).eq('id', productoId)
       })
     )
@@ -331,7 +331,7 @@ export const updateProductoPrecioVenta = async (
   await supabase.from('productos').update({
     price: precio,
     precio_venta: precio,
-    ganancia_individual: gananciaIndividual,
+    ganancia_individual: gananciaIndividual ? 1 : 0,
   }).eq('id', productoId)
 
   invalidateProductsCache()
