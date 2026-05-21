@@ -148,6 +148,11 @@ export default function ProductosPage() {
   const [remitoImportOpen, setRemitoImportOpen] = useState(false);
   const [activeTab, setActiveTab] = useState("catalogo");
 
+  // Ganancia global
+  const [gananciaInput, setGananciaInput] = useState("");
+  const [applyingGlobal, setApplyingGlobal] = useState(false);
+  const [progressGanancia, setProgressGanancia] = useState({ done: 0, total: 0 });
+
   // Estados para historiales
   const [stockHistory, setStockHistory] = useState<StockMovement[]>([]);
   const [inventoryHistory, setInventoryHistory] = useState<InventorySnapshot[]>(
@@ -448,6 +453,37 @@ export default function ProductosPage() {
       userName,
       details: `Se quitaron ${quantity} unidad(es) del stock`,
     });
+  };
+
+  const handleAplicarGlobal = async () => {
+    const porc = parseFloat(gananciaInput);
+    if (isNaN(porc) || porc < 0) { toast.error("Ingresá un porcentaje válido"); return; }
+    setApplyingGlobal(true);
+    setProgressGanancia({ done: 0, total: 0 });
+    try {
+      const mayoristas = await getMayoristaProductos();
+      const necesitan = mayoristas.filter((p) => !p.gananciaIndividual && p.gananciaGlobal !== porc);
+      if (necesitan.length === 0) {
+        toast.info("Todos ya tienen ese porcentaje");
+        return;
+      }
+      setProgressGanancia({ done: 0, total: necesitan.length });
+      await applyGananciaToProducts(
+        porc,
+        necesitan
+          .filter((p) => !!p.productoId)
+          .map((p) => ({ id: p.id, productoId: p.productoId!, precioUnitarioMayorista: p.precioUnitarioMayorista })),
+        (done, total) => setProgressGanancia({ done, total })
+      );
+      toast.success(`Ganancia del ${porc}% aplicada a ${necesitan.length} productos`);
+      // Recargar productos del catálogo
+      fetchProducts(currentPage, searchQuery, categoryFilter, stockFilter);
+    } catch {
+      toast.error("Error al aplicar la ganancia");
+    } finally {
+      setApplyingGlobal(false);
+      setProgressGanancia({ done: 0, total: 0 });
+    }
   };
 
   const handleCreate = () => {
@@ -805,7 +841,6 @@ export default function ProductosPage() {
         <TabsList className="mb-4 rounded-xl">
           <TabsTrigger value="catalogo" className="rounded-lg">Catálogo</TabsTrigger>
           <TabsTrigger value="recepcion" className="rounded-lg">Recepción de mercadería</TabsTrigger>
-          <TabsTrigger value="precios" className="rounded-lg">Precios de venta</TabsTrigger>
         </TabsList>
         <TabsContent value="catalogo">
       {/* Header */}
@@ -923,6 +958,37 @@ export default function ProductosPage() {
             </>
           }
         />
+
+        {/* Ganancia global */}
+        <div className="flex items-center gap-2 flex-wrap">
+          <Percent className="h-4 w-4 text-muted-foreground" />
+          <span className="text-sm font-medium">Ganancia global:</span>
+          <Input
+            type="number"
+            min={0}
+            placeholder="%"
+            value={gananciaInput}
+            onChange={(e) => setGananciaInput(e.target.value)}
+            className="w-24 h-9 text-sm"
+          />
+          <Button
+            size="sm"
+            disabled={applyingGlobal || !gananciaInput}
+            onClick={handleAplicarGlobal}
+            className="h-9 gap-1"
+          >
+            {applyingGlobal ? <RefreshCw className="h-4 w-4 animate-spin" /> : <Check className="h-4 w-4" />}
+            Aplicar
+          </Button>
+          {applyingGlobal && progressGanancia.total > 0 && (
+            <div className="flex items-center gap-2">
+              <span className="text-xs text-muted-foreground tabular-nums">{progressGanancia.done} / {progressGanancia.total}</span>
+              <div className="w-24 h-2 bg-muted rounded-full overflow-hidden">
+                <div className="h-full bg-primary rounded-full transition-all" style={{ width: `${Math.round((progressGanancia.done / progressGanancia.total) * 100)}%` }} />
+              </div>
+            </div>
+          )}
+        </div>
 
         {/* Barra de búsqueda */}
         <div className="relative">
@@ -1555,9 +1621,6 @@ export default function ProductosPage() {
         <TabsContent value="recepcion" className="mt-2">
           {activeTab === "recepcion" && <RecepcionMercaderia />}
         </TabsContent>
-        <TabsContent value="precios" className="mt-2">
-          {activeTab === "precios" && <PreciosVentaHabilitados />}
-        </TabsContent>
       </Tabs>
 
       {/* Modales */}
@@ -1620,326 +1683,6 @@ export default function ProductosPage() {
         onImportado={onListaImportada}
       />
     </MainLayout>
-  );
-}
-
-// ─── Tab: Precios de venta (mayorista habilitados) ────────────────────────────
-function PreciosVentaHabilitados() {
-  const [productos, setProductos] = useState<MayoristaProducto[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [search, setSearch] = useState("");
-  const [gananciaInput, setGananciaInput] = useState("");
-  const [applyingGlobal, setApplyingGlobal] = useState(false);
-  const [progressGanancia, setProgressGanancia] = useState({ done: 0, total: 0 });
-  const [editingId, setEditingId] = useState<string | null>(null);
-  const [editingMode, setEditingMode] = useState<"precio" | "ganancia">("precio");
-  const [precioInput, setPrecioInput] = useState("");
-  const [gananciaIndInput, setGananciaIndInput] = useState("");
-  const ITEMS_PER_PAGE = 50;
-  const [visibleCount, setVisibleCount] = useState(ITEMS_PER_PAGE);
-
-  useEffect(() => {
-    getMayoristaProductos()
-      .then((data) => setProductos(data.filter((p) => p.habilitado)))
-      .catch(() => toast.error("Error al cargar precios"))
-      .finally(() => setLoading(false));
-  }, []);
-
-  const filtrados = useMemo(() => {
-    const q = search.toLowerCase();
-    if (!q) return productos;
-    return productos.filter(
-      (p) => p.nombre.toLowerCase().includes(q) || p.codigo.toLowerCase().includes(q)
-    );
-  }, [productos, search]);
-
-  const gananciaActual = useMemo(
-    () => productos.find((p) => p.gananciaGlobal != null)?.gananciaGlobal,
-    [productos]
-  );
-
-  const handleAplicarGlobal = async () => {
-    const porc = parseFloat(gananciaInput);
-    if (isNaN(porc) || porc < 0) { toast.error("Ingresá un porcentaje válido"); return; }
-    // Saltear productos con precio individual — solo actualizar los "globales"
-    const necesitan = productos.filter((p) => !p.gananciaIndividual && p.gananciaGlobal !== porc);
-    const individuales = productos.filter((p) => p.gananciaIndividual).length;
-    if (necesitan.length === 0) {
-      toast.info(individuales > 0
-        ? `Todos ya tienen ese porcentaje (${individuales} con precio individual sin modificar)`
-        : "Todos ya tienen ese porcentaje");
-      return;
-    }
-    setApplyingGlobal(true);
-    setProgressGanancia({ done: 0, total: necesitan.length });
-    try {
-      await applyGananciaToProducts(
-        porc,
-        necesitan
-          .filter((p) => !!p.productoId)
-          .map((p) => ({ id: p.id, productoId: p.productoId!, precioUnitarioMayorista: p.precioUnitarioMayorista })),
-        (done, total) => setProgressGanancia({ done, total })
-      );
-      setProductos((prev) =>
-        prev.map((p) =>
-          necesitan.some((n) => n.id === p.id)
-            ? { ...p, gananciaGlobal: porc, gananciaIndividual: false, precioVenta: Math.round(p.precioUnitarioMayorista * (1 + porc / 100) * 100) / 100 }
-            : p
-        )
-      );
-      toast.success(
-        individuales > 0
-          ? `${porc}% aplicado a ${necesitan.length} productos · ${individuales} con precio individual sin modificar`
-          : `Ganancia del ${porc}% aplicada a ${necesitan.length} productos`
-      );
-    } catch {
-      toast.error("Error al aplicar la ganancia");
-    } finally {
-      setApplyingGlobal(false);
-      setProgressGanancia({ done: 0, total: 0 });
-    }
-  };
-
-  const guardarPrecio = async (p: MayoristaProducto) => {
-    const precio = parseFloat(precioInput.replace(",", "."));
-    if (isNaN(precio) || precio < 0) { toast.error("Precio inválido"); return; }
-    if (!p.productoId) { toast.error("Este producto no tiene ID en catálogo"); return; }
-    try {
-      await updateProductoPrecioVenta(p.productoId, precio, true);
-      setProductos((prev) => prev.map((x) => x.id === p.id ? { ...x, precioVenta: precio, gananciaIndividual: true } : x));
-      setEditingId(null);
-      toast.success("Precio individual guardado");
-    } catch {
-      toast.error("Error al guardar el precio");
-    }
-  };
-
-  const guardarGananciaInd = async (p: MayoristaProducto) => {
-    const pct = parseFloat(gananciaIndInput.replace(",", "."));
-    if (isNaN(pct) || pct < 0) { toast.error("Porcentaje inválido"); return; }
-    if (!p.productoId) { toast.error("Este producto no tiene ID en catálogo"); return; }
-    const precio = Math.round(p.precioUnitarioMayorista * (1 + pct / 100) * 100) / 100;
-    try {
-      await updateProductoPrecioVenta(p.productoId, precio, true);
-      setProductos((prev) => prev.map((x) => x.id === p.id ? { ...x, precioVenta: precio, gananciaIndividual: true } : x));
-      setEditingId(null);
-      toast.success("Ganancia individual guardada");
-    } catch {
-      toast.error("Error al guardar la ganancia");
-    }
-  };
-
-  if (loading) {
-    return (
-      <div className="space-y-2 mt-4">
-        {[...Array(6)].map((_, i) => <Skeleton key={i} className="h-12 rounded-xl" />)}
-      </div>
-    );
-  }
-
-  if (productos.length === 0) {
-    return (
-      <div className="text-center py-16 text-muted-foreground">
-        <Percent className="h-12 w-12 mx-auto mb-3 opacity-20" />
-        <p className="text-sm">No hay productos habilitados desde Mayorista.</p>
-      </div>
-    );
-  }
-
-  return (
-    <div className="space-y-4 mt-2">
-      {/* Ganancia global */}
-      <div className="rounded-2xl border p-4 bg-card space-y-3">
-        <p className="text-sm font-semibold flex items-center gap-2">
-          <Percent className="h-4 w-4 text-teal-600" />
-          Ganancia global
-        </p>
-        <div className="flex flex-col sm:flex-row items-start sm:items-center gap-3">
-          <div className="flex items-center gap-2">
-            <Input
-              type="number"
-              min="0"
-              max="500"
-              step="0.5"
-              value={gananciaInput}
-              onChange={(e) => setGananciaInput(e.target.value)}
-              placeholder={gananciaActual != null ? `Actual: ${gananciaActual}%` : "Ej: 30"}
-              className="rounded-xl w-40"
-              onKeyDown={(e) => { if (e.key === "Enter") handleAplicarGlobal(); }}
-            />
-            <span className="text-sm text-muted-foreground">%</span>
-          </div>
-          <Button
-            onClick={handleAplicarGlobal}
-            disabled={applyingGlobal || !gananciaInput}
-            className="rounded-xl gap-2"
-          >
-            {applyingGlobal ? <RefreshCw className="h-4 w-4 animate-spin" /> : <Check className="h-4 w-4" />}
-            Aplicar a todos
-          </Button>
-        </div>
-        {applyingGlobal && progressGanancia.total > 0 && (
-          <div className="space-y-1">
-            <div className="flex justify-between text-xs text-muted-foreground">
-              <span>Aplicando...</span>
-              <span className="tabular-nums">{progressGanancia.done} / {progressGanancia.total}</span>
-            </div>
-            <div className="w-full h-2 bg-muted rounded-full overflow-hidden">
-              <div
-                className="h-full bg-teal-500 rounded-full transition-all duration-200"
-                style={{ width: `${Math.round((progressGanancia.done / progressGanancia.total) * 100)}%` }}
-              />
-            </div>
-          </div>
-        )}
-      </div>
-
-      {/* Buscador */}
-      <div className="relative">
-        <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-        <Input
-          placeholder="Buscar producto..."
-          value={search}
-          onChange={(e) => { setSearch(e.target.value); setVisibleCount(ITEMS_PER_PAGE); }}
-          className="pl-10 rounded-xl"
-        />
-        {search && (
-          <Button variant="ghost" size="icon" className="absolute right-2 top-1/2 -translate-y-1/2 h-6 w-6" onClick={() => setSearch("")}>
-            <X className="h-3.5 w-3.5" />
-          </Button>
-        )}
-      </div>
-
-      {/* Tabla */}
-      <div className="rounded-2xl border overflow-hidden">
-        <div className="overflow-x-auto">
-          <table className="w-full text-sm">
-            <thead className="bg-muted/50 border-b">
-              <tr>
-                <th className="text-left px-4 py-3 font-semibold text-muted-foreground">Nombre</th>
-                <th className="text-right px-4 py-3 font-semibold text-muted-foreground whitespace-nowrap">Precio mayorista</th>
-                <th className="text-right px-4 py-3 font-semibold text-muted-foreground">Ganancia</th>
-                <th className="text-right px-4 py-3 font-semibold text-muted-foreground whitespace-nowrap">Precio de venta</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y">
-              {filtrados.slice(0, visibleCount).map((p) => {
-                const ganancia =
-                  p.precioUnitarioMayorista > 0
-                    ? ((p.precioVenta - p.precioUnitarioMayorista) / p.precioUnitarioMayorista) * 100
-                    : 0;
-                return (
-                  <tr key={p.id} className="hover:bg-muted/20 transition-colors">
-                    <td className="px-4 py-3 font-medium max-w-xs truncate">{p.nombre}</td>
-                    <td className="px-4 py-3 text-right text-muted-foreground">
-                      {formatCurrency(p.precioUnitarioMayorista)}
-                    </td>
-                    <td className="px-4 py-3 text-right text-xs text-muted-foreground">
-                      {editingId === p.id && editingMode === "ganancia" ? (
-                        <div className="flex items-center justify-end gap-1">
-                          <Input
-                            type="number"
-                            min="0"
-                            step="0.1"
-                            value={gananciaIndInput}
-                            onChange={(e) => setGananciaIndInput(e.target.value)}
-                            className="h-7 text-xs rounded-lg w-20 text-right"
-                            autoFocus
-                            onKeyDown={(e) => {
-                              if (e.key === "Enter") guardarGananciaInd(p);
-                              if (e.key === "Escape") setEditingId(null);
-                            }}
-                          />
-                          <span className="text-muted-foreground">%</span>
-                          <Button size="icon" variant="ghost" className="h-7 w-7" onClick={() => guardarGananciaInd(p)}>
-                            <Check className="h-3.5 w-3.5 text-green-600" />
-                          </Button>
-                          <Button size="icon" variant="ghost" className="h-7 w-7" onClick={() => setEditingId(null)}>
-                            <X className="h-3.5 w-3.5 text-destructive" />
-                          </Button>
-                        </div>
-                      ) : (
-                        <button
-                          className="flex items-center gap-1.5 justify-end group w-full"
-                          onClick={() => {
-                            setEditingId(p.id);
-                            setEditingMode("ganancia");
-                            setGananciaIndInput(p.precioVenta > 0 ? ganancia.toFixed(1) : "");
-                          }}
-                        >
-                          {p.precioVenta > 0 ? (
-                            <span className="flex items-center gap-1.5">
-                              {`${ganancia.toFixed(1)}%`}
-                              {p.gananciaIndividual && (
-                                <span className="text-[10px] bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-400 px-1.5 py-0.5 rounded font-medium">ind</span>
-                              )}
-                            </span>
-                          ) : <span>—</span>}
-                          <Pencil className="h-3 w-3 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity" />
-                        </button>
-                      )}
-                    </td>
-                    <td className="px-4 py-3 text-right">
-                      {editingId === p.id && editingMode === "precio" ? (
-                        <div className="flex items-center justify-end gap-1">
-                          <Input
-                            type="number"
-                            min="0"
-                            step="0.01"
-                            value={precioInput}
-                            onChange={(e) => setPrecioInput(e.target.value)}
-                            className="h-7 text-xs rounded-lg w-28 text-right"
-                            autoFocus
-                            onKeyDown={(e) => {
-                              if (e.key === "Enter") guardarPrecio(p);
-                              if (e.key === "Escape") setEditingId(null);
-                            }}
-                          />
-                          <Button size="icon" variant="ghost" className="h-7 w-7" onClick={() => guardarPrecio(p)}>
-                            <Check className="h-3.5 w-3.5 text-green-600" />
-                          </Button>
-                          <Button size="icon" variant="ghost" className="h-7 w-7" onClick={() => setEditingId(null)}>
-                            <X className="h-3.5 w-3.5 text-destructive" />
-                          </Button>
-                        </div>
-                      ) : (
-                        <button
-                          className="flex items-center gap-1.5 justify-end group w-full"
-                          onClick={() => {
-                            setEditingId(p.id);
-                            setEditingMode("precio");
-                            setPrecioInput(p.precioVenta > 0 ? String(p.precioVenta) : "");
-                          }}
-                        >
-                          <span className="font-bold text-teal-600">
-                            {p.precioVenta > 0 ? formatCurrency(p.precioVenta) : (
-                              <span className="text-muted-foreground font-normal text-xs">Sin precio</span>
-                            )}
-                          </span>
-                          <Pencil className="h-3 w-3 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity" />
-                        </button>
-                      )}
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
-        </div>
-        <div className="px-4 py-2 bg-muted/30 border-t text-xs text-muted-foreground flex items-center justify-between">
-          <span>
-            {search
-              ? `${Math.min(visibleCount, filtrados.length)} de ${filtrados.length} resultados`
-              : `${Math.min(visibleCount, productos.length)} de ${productos.length} productos habilitados`}
-          </span>
-          {visibleCount < filtrados.length && (
-            <Button variant="ghost" size="sm" className="text-xs h-7" onClick={() => setVisibleCount((v) => v + ITEMS_PER_PAGE)}>
-              Mostrar más
-            </Button>
-          )}
-        </div>
-      </div>
-    </div>
   );
 }
 

@@ -5,6 +5,20 @@ import { generateReadableId, slugify } from '@/services/supabase-helpers'
 
 const COMMISSION_RATE = 0.1
 
+// Cache: ¿existe la columna payment_method en ventas?
+let _paymentMethodColumnExists: boolean | null = null
+async function ensurePaymentMethodColumn(): Promise<boolean> {
+  if (_paymentMethodColumnExists === true) return true
+  // Intentar leer una venta con payment_method — si funciona, la columna existe
+  const { error } = await supabase.from('ventas').select('payment_method').limit(1)
+  if (!error) {
+    _paymentMethodColumnExists = true
+    return true
+  }
+  _paymentMethodColumnExists = false
+  return false
+}
+
 function mapSale(d: Record<string, any>): Sale {
   return {
     id: d.id,
@@ -173,7 +187,7 @@ export const processSale = async (data: {
     ...(item.itemDiscount ? { itemDiscount: item.itemDiscount } : {}),
   }))
 
-  await supabase.from('ventas').insert({
+  const saleRow2: Record<string, any> = {
     id: saleId,
     sale_number: saleNumber,
     client_id: data.clientId ?? null,
@@ -194,7 +208,11 @@ export const processSale = async (data: {
     delivery_method: data.deliveryMethod ?? 'pickup',
     delivery_address: clientAddress ?? null,
     order_id: data.orderId ?? null,
-  })
+  }
+  const hasPayCol = await ensurePaymentMethodColumn()
+  if (!hasPayCol) delete saleRow2.payment_method
+  const { error: insertErr } = await supabase.from('ventas').insert(saleRow2)
+  if (insertErr) throw new Error(`Error al crear venta: ${insertErr.message}`)
 
   // Descontar stock
   for (const item of data.items) {
@@ -520,7 +538,7 @@ export const processSaleMayorista = async (data: {
 
   const saleStatus: Sale['status'] = modo === 'esperar' ? 'pendiente' : 'listo'
 
-  await supabase.from('ventas').insert({
+  const saleRow: Record<string, any> = {
     id: saleId,
     sale_number: saleNumber,
     client_id: data.clientId ?? null,
@@ -539,7 +557,11 @@ export const processSaleMayorista = async (data: {
     invoice_emitted: false,
     delivery_method: data.deliveryMethod ?? 'pickup',
     delivery_address: clientAddress ?? null,
-  })
+  }
+  const hasPayCol2 = await ensurePaymentMethodColumn()
+  if (!hasPayCol2) delete saleRow.payment_method
+  const { error: insertError } = await supabase.from('ventas').insert(saleRow)
+  if (insertError) throw new Error(`Error al crear venta: ${insertError.message}`)
 
   // Descontar stock solo en modo "disponible"
   if (modo === 'disponible') {

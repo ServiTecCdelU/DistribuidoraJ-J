@@ -185,7 +185,10 @@ function NuevaVentaContent({
 
   const handleConfirmSale = async () => {
     setCartDialogOpen(false);
-    const hayPendiente = state.cart.some(
+    // Pickup siempre es venta directa (modo disponible)
+    // Delivery con stock insuficiente crea pedido
+    const isPickup = state.deliveryMethod === "pickup";
+    const hayPendiente = !isPickup && state.cart.some(
       (item) => item.quantity > (item.product.stockLocal ?? 0)
     );
     const modo = hayPendiente ? "esperar" : "disponible";

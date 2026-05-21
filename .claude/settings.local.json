@@ -21,7 +21,9 @@
       "Bash(taskkill //F //PID 10576)",
       "Bash(taskkill //F //PID 15352)",
       "Bash(taskkill //F //PID 17280)",
-      "Bash(taskkill //F //PID 13004)"
+      "Bash(taskkill //F //PID 13004)",
+      "Bash(grep -l \"MainLayout\" \"/c/Users/Emanuel/Documents/Proyectos/Distribuidora J&J/app/\"*\"/page.tsx\")",
+      "Bash(xargs grep:*)"
     ]
   }
 }
