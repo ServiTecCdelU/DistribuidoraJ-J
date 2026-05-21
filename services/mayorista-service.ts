@@ -3,6 +3,7 @@ import type { MayoristaProducto, MayoristaPrefs } from '@/lib/types'
 import { invalidateProductsCache } from '@/services/products-service'
 
 const BATCH_SIZE = 300
+const UPDATE_CONCURRENCY = 10
 
 function mapDoc(d: Record<string, any>): MayoristaProducto {
   return {
@@ -299,8 +300,8 @@ export const applyGananciaToProducts = async (
   onProgress?: (done: number, total: number) => void
 ): Promise<void> => {
   let done = 0
-  for (let i = 0; i < products.length; i += BATCH_SIZE) {
-    const chunk = products.slice(i, i + BATCH_SIZE)
+  for (let i = 0; i < products.length; i += UPDATE_CONCURRENCY) {
+    const chunk = products.slice(i, i + UPDATE_CONCURRENCY)
     await Promise.all(
       chunk.map(async ({ productoId, precioUnitarioMayorista }) => {
         const precioVenta = Math.round(precioUnitarioMayorista * (1 + porcentaje / 100) * 100) / 100

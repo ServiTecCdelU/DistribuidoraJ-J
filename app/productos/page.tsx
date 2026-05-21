@@ -456,50 +456,20 @@ export default function ProductosPage() {
     const porc = parseFloat(gananciaInput);
     if (isNaN(porc) || porc < 0) { toast.error("Ingresá un porcentaje válido"); return; }
     setApplyingGlobal(true);
-    setProgressGanancia({ done: 0, total: 0 });
     try {
-      const mayoristas = await getMayoristaProductos();
-      const habilitados = mayoristas.filter((p) => p.habilitado && !!p.productoId);
-      console.log("[ganancia] total mayoristas:", mayoristas.length, "habilitados con productoId:", habilitados.length);
-      if (habilitados.length === 0) {
-        toast.info("No hay productos habilitados para aplicar ganancia");
-        setApplyingGlobal(false);
-        return;
-      }
-      // Muestra ejemplo del primer producto para debug
-      const ejemplo = habilitados[0];
-      console.log("[ganancia] ejemplo:", ejemplo.nombre, "precioMayorista:", ejemplo.precioUnitarioMayorista, "productoId:", ejemplo.productoId);
-
-      const items = habilitados.map((p) => ({ id: p.id, productoId: p.productoId!, precioUnitarioMayorista: p.precioUnitarioMayorista }));
-      setProgressGanancia({ done: 0, total: items.length });
-      await applyGananciaToProducts(
-        porc,
-        items,
-        (done, total) => setProgressGanancia({ done, total })
-      );
-
-      // Actualizar precios localmente sin esperar recarga
-      setProducts((prev) => {
-        const precioMap = new Map<string, number>();
-        for (const h of habilitados) {
-          const nuevo = Math.round(h.precioUnitarioMayorista * (1 + porc / 100) * 100) / 100;
-          precioMap.set(h.productoId!, nuevo);
-        }
-        return prev.map((p) => {
-          const nuevoPrecio = precioMap.get(p.id);
-          return nuevoPrecio != null ? { ...p, price: nuevoPrecio } : p;
-        });
+      const res = await fetch("/api/apply-ganancia", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ porcentaje: porc }),
       });
-
-      toast.success(`Ganancia del ${porc}% aplicada a ${habilitados.length} productos`);
-      // También recargar desde DB
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Error del servidor");
+      toast.success(`Ganancia del ${porc}% aplicada a ${data.updated} productos`);
       await fetchProducts(currentPage, searchQuery, categoryFilter, stockFilter);
-    } catch (err) {
-      console.error("[ganancia] error:", err);
-      toast.error("Error al aplicar la ganancia");
+    } catch (err: any) {
+      toast.error(err.message || "Error al aplicar la ganancia");
     } finally {
       setApplyingGlobal(false);
-      setProgressGanancia({ done: 0, total: 0 });
     }
   };
 
