@@ -889,24 +889,6 @@ export default function ProductosPage() {
               )}
             </Button>
 
-            <div className="flex border border-border rounded-lg">
-              <Button
-                variant={viewMode === "grid" ? "secondary" : "ghost"}
-                size="sm"
-                className="rounded-r-none border-0 h-7 w-7 p-0"
-                onClick={() => setViewMode("grid")}
-              >
-                <Grid3x3 className="h-3.5 w-3.5" />
-              </Button>
-              <Button
-                variant={viewMode === "list" ? "secondary" : "ghost"}
-                size="sm"
-                className="rounded-l-none border-0 h-7 w-7 p-0"
-                onClick={() => setViewMode("list")}
-              >
-                <List className="h-3.5 w-3.5" />
-              </Button>
-            </div>
           </div>
 
           {applyingGlobal && progressGanancia.total > 0 && (
