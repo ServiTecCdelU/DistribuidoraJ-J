@@ -147,15 +147,15 @@ function parseRemitoText(text: string): ParsedItem[] {
   return items;
 }
 
-// Busca producto por código
+// Busca producto por código (soporta código mayorista, sin ceros a la izquierda, por ID)
 function findByCode(codigo: string, products: Product[]): Product | null {
-  // Los productos tienen codigo (del mayorista) en el campo codigo
-  // El ID de producto mayorista es "prod_mp_{codigo}"
+  const codigoStripped = codigo.replace(/^0+/, "");
   for (const p of products) {
     if (p.codigo === codigo) return p;
-    // También intentar sin ceros a la izquierda
-    if (p.codigo && p.codigo.replace(/^0+/, "") === codigo.replace(/^0+/, "")) return p;
+    if (p.codigo && p.codigo.replace(/^0+/, "") === codigoStripped) return p;
+    if (p.id === `prod_mp_${codigo}`) return p;
   }
+  console.log(`[remito] No match para código: ${codigo} (stripped: ${codigoStripped}). Ejemplo productos:`, products.slice(0, 3).map(p => ({ id: p.id, codigo: p.codigo })));
   return null;
 }
 
