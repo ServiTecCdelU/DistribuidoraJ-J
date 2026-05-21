@@ -405,3 +405,25 @@ BEGIN
   RETURN jsonb_build_object('sale_id', v_sale_id, 'success', true);
 END;
 $$ LANGUAGE plpgsql;
+
+-- Aplicar ganancia global a todos los productos habilitados (excepto los que tienen precio individual)
+CREATE OR REPLACE FUNCTION apply_ganancia_global(p_porcentaje NUMERIC)
+RETURNS INTEGER AS $$
+DECLARE
+  v_updated INTEGER;
+BEGIN
+  UPDATE productos p
+  SET price = ROUND(mp.precio_lista * (1 + p_porcentaje / 100), 2),
+      precio_venta = ROUND(mp.precio_lista * (1 + p_porcentaje / 100), 2),
+      ganancia_global = p_porcentaje,
+      ganancia_individual = 0
+  FROM mayorista_productos mp
+  WHERE mp.producto_id = p.id
+    AND mp.habilitado = true
+    AND mp.precio_lista IS NOT NULL
+    AND (p.ganancia_individual IS NULL OR p.ganancia_individual = 0);
+
+  GET DIAGNOSTICS v_updated = ROW_COUNT;
+  RETURN v_updated;
+END;
+$$ LANGUAGE plpgsql;
