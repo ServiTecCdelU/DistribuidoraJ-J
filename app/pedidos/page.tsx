@@ -454,7 +454,7 @@ export default function PedidosPage() {
     } finally {
       setProcessingPayment(false);
     }
-  }, [selectedOrder, selectedClientId, clients, paymentType, cashAmount]);
+  }, [selectedOrder, selectedClientId, clients, paymentType, paymentMethod, cashAmount]);
 
   const handleGoToSale = useCallback(() => {
     if (lastSaleResult?.saleId) {
