@@ -339,6 +339,8 @@ export default function CajaPage() {
   const [showCloseModal, setShowCloseModal] = useState(false);
   const [finalAmount, setFinalAmount] = useState("");
   const [closeNotes, setCloseNotes] = useState("");
+  const [closingRegister, setClosingRegister] = useState<CashRegister | null>(null);
+  const [closingSales, setClosingSales] = useState<Sale[] | null>(null);
 
   const [saving, setSaving] = useState(false);
   const [generatingPdf, setGeneratingPdf] = useState(false);
@@ -552,6 +554,31 @@ export default function CajaPage() {
 
   const expectedCash = (currentRegister?.initialAmount || 0) + todayStats.efectivoTotal;
 
+  // Stats para el modal de cierre (puede ser caja actual o una del historial)
+  const closingStats = useMemo(() => {
+    const src = closingSales ?? sales;
+    let efectivoTotal = 0, transferTotal = 0, creditTotal = 0, total = 0;
+    for (const s of src) {
+      total += s.total || 0;
+      const method = (s as any).paymentMethod || "efectivo";
+      if (s.paymentType === "cash") {
+        if (method === "transferencia") transferTotal += s.total || 0;
+        else efectivoTotal += s.total || 0;
+      } else if (s.paymentType === "credit") {
+        creditTotal += s.total || 0;
+      } else if (s.paymentType === "mixed") {
+        const cashAmt = (s as any).cashAmount || 0;
+        const creditAmt = (s as any).creditAmount || 0;
+        if (method === "transferencia") transferTotal += cashAmt;
+        else efectivoTotal += cashAmt;
+        creditTotal += creditAmt;
+      }
+    }
+    return { efectivoTotal, transferTotal, creditTotal, total, count: src.length };
+  }, [closingSales, sales]);
+  const closingRegisterData = closingRegister ?? currentRegister;
+  const closingExpectedCash = (closingRegisterData?.initialAmount || 0) + closingStats.efectivoTotal;
+
   const handleOpenRegister = async () => {
     if (!initialAmount || !user) return;
     setSaving(true);
@@ -591,55 +618,65 @@ export default function CajaPage() {
   };
 
   const handleCloseRegister = async () => {
-    if (!finalAmount || !currentRegister || !user) return;
+    const reg = closingRegisterData;
+    if (!finalAmount || !reg || !user) return;
     setSaving(true);
     try {
       const final_ = parseFloat(finalAmount);
-      const diff = final_ - expectedCash;
+      const diff = final_ - closingExpectedCash;
 
       const { error } = await supabase.from("caja").update({
         closed_at: new Date().toISOString(),
         closed_by: user.name || user.email,
         final_amount: final_,
-        expected_amount: expectedCash,
+        expected_amount: closingExpectedCash,
         difference: diff,
         status: "closed",
         notes: closeNotes || "",
-        sales_count: todayStats.count,
-        total_sales: todayStats.total,
-        cash_total: todayStats.efectivoTotal,
-        credit_total: todayStats.creditTotal,
-        transfer_total: todayStats.transferTotal,
-      }).eq("id", currentRegister.id);
+        sales_count: closingStats.count,
+        total_sales: closingStats.total,
+        cash_total: closingStats.efectivoTotal,
+        credit_total: closingStats.creditTotal,
+        transfer_total: closingStats.transferTotal,
+      }).eq("id", reg.id);
       if (error) throw error;
 
-      setCurrentRegister({
-        ...currentRegister,
+      const updatedReg = {
+        ...reg,
         closedAt: new Date(),
         closedBy: user.name || user.email,
         finalAmount: final_,
-        expectedAmount: expectedCash,
+        expectedAmount: closingExpectedCash,
         difference: diff,
-        status: "closed",
+        status: "closed" as const,
         notes: closeNotes,
-        salesCount: todayStats.count,
-        totalSales: todayStats.total,
-        cashTotal: todayStats.efectivoTotal,
-        creditTotal: todayStats.creditTotal,
-        transferTotal: todayStats.transferTotal,
-      });
+        salesCount: closingStats.count,
+        totalSales: closingStats.total,
+        cashTotal: closingStats.efectivoTotal,
+        creditTotal: closingStats.creditTotal,
+        transferTotal: closingStats.transferTotal,
+      };
+
+      // Actualizar en currentRegister si es la misma
+      if (currentRegister?.id === reg.id) {
+        setCurrentRegister(updatedReg);
+      }
+      // Actualizar en historial si está ahí
+      setHistorialRegisters(prev => prev.map(r => r.id === reg.id ? updatedReg : r));
 
       await auditApi.log({
         action: "cash_register_closed",
         userId: user.id,
         userName: user.name || user.email,
-        description: `Cerro caja. Esperado: ${formatCurrency(expectedCash)}, Contado: ${formatCurrency(final_)}, Diferencia: ${formatCurrency(diff)}`,
+        description: `Cerro caja. Esperado: ${formatCurrency(closingExpectedCash)}, Contado: ${formatCurrency(final_)}, Diferencia: ${formatCurrency(diff)}`,
         entityType: "caja",
-        entityId: currentRegister.id,
+        entityId: reg.id,
       });
       setShowCloseModal(false);
       setFinalAmount("");
       setCloseNotes("");
+      setClosingRegister(null);
+      setClosingSales(null);
     } catch {
       toast.error("Error al cerrar la caja");
     } finally {
@@ -720,7 +757,7 @@ export default function CajaPage() {
             {isOpen && (
               <Button
                 variant="destructive"
-                onClick={() => setShowCloseModal(true)}
+                onClick={() => { setClosingRegister(null); setClosingSales(null); setShowCloseModal(true); }}
               >
                 <LockKeyhole className="h-4 w-4 mr-2" />
                 Cerrar Caja
@@ -1229,19 +1266,20 @@ export default function CajaPage() {
                               <Button
                                 variant="destructive"
                                 size="sm"
-                                onClick={(e) => {
+                                onClick={async (e) => {
                                   e.stopPropagation();
-                                  setCurrentRegister(reg);
-                                  // Cargar ventas de ese día
+                                  setClosingRegister(reg);
+                                  // Cargar ventas del día de esa caja
                                   const cajaDate = new Date(reg.openedAt);
                                   cajaDate.setHours(0, 0, 0, 0);
-                                  salesApi.getAll().then((salesData) => {
-                                    const cajaSales = salesData.filter((s) => {
-                                      const d = new Date(s.createdAt);
-                                      return d >= cajaDate;
-                                    });
-                                    setSales(cajaSales);
+                                  const nextDay = new Date(cajaDate);
+                                  nextDay.setDate(nextDay.getDate() + 1);
+                                  const salesData = await salesApi.getAll();
+                                  const cajaSales = salesData.filter((s) => {
+                                    const d = new Date(s.createdAt);
+                                    return d >= cajaDate && d < nextDay;
                                   });
+                                  setClosingSales(cajaSales);
                                   setShowCloseModal(true);
                                 }}
                               >
@@ -1345,21 +1383,21 @@ export default function CajaPage() {
               <div className="p-3 bg-muted/50 rounded-lg space-y-1.5 text-sm">
                 <div className="flex justify-between">
                   <span className="text-muted-foreground">Monto inicial</span>
-                  <span className="font-medium">{formatCurrency(currentRegister?.initialAmount || 0)}</span>
+                  <span className="font-medium">{formatCurrency(closingRegisterData?.initialAmount || 0)}</span>
                 </div>
                 <div className="flex justify-between">
                   <span className="text-muted-foreground">Ventas efectivo</span>
-                  <span className="font-medium">{formatCurrency(todayStats.efectivoTotal)}</span>
+                  <span className="font-medium">{formatCurrency(closingStats.efectivoTotal)}</span>
                 </div>
-                {todayStats.transferTotal > 0 && (
+                {closingStats.transferTotal > 0 && (
                   <div className="flex justify-between">
                     <span className="text-muted-foreground">Transferencias (no entra en caja)</span>
-                    <span className="font-medium text-muted-foreground">{formatCurrency(todayStats.transferTotal)}</span>
+                    <span className="font-medium text-muted-foreground">{formatCurrency(closingStats.transferTotal)}</span>
                   </div>
                 )}
                 <div className="flex justify-between border-t pt-1.5">
                   <span className="font-medium">Esperado en caja</span>
-                  <span className="font-bold">{formatCurrency(expectedCash)}</span>
+                  <span className="font-bold">{formatCurrency(closingExpectedCash)}</span>
                 </div>
               </div>
               <div>
@@ -1375,11 +1413,11 @@ export default function CajaPage() {
                 />
               </div>
               {finalAmount && (
-                <div className={`p-3 rounded-lg text-sm font-medium ${parseFloat(finalAmount) - expectedCash === 0 ? "bg-emerald-500/10 text-emerald-700" : parseFloat(finalAmount) - expectedCash > 0 ? "bg-blue-500/10 text-blue-700" : "bg-red-500/10 text-red-700"}`}>
-                  Diferencia: {formatCurrency(parseFloat(finalAmount) - expectedCash)}
-                  {parseFloat(finalAmount) - expectedCash === 0 && " - Cuadra perfecto"}
-                  {parseFloat(finalAmount) - expectedCash > 0 && " - Sobrante"}
-                  {parseFloat(finalAmount) - expectedCash < 0 && " - Faltante"}
+                <div className={`p-3 rounded-lg text-sm font-medium ${parseFloat(finalAmount) - closingExpectedCash === 0 ? "bg-emerald-500/10 text-emerald-700" : parseFloat(finalAmount) - closingExpectedCash > 0 ? "bg-blue-500/10 text-blue-700" : "bg-red-500/10 text-red-700"}`}>
+                  Diferencia: {formatCurrency(parseFloat(finalAmount) - closingExpectedCash)}
+                  {parseFloat(finalAmount) - closingExpectedCash === 0 && " - Cuadra perfecto"}
+                  {parseFloat(finalAmount) - closingExpectedCash > 0 && " - Sobrante"}
+                  {parseFloat(finalAmount) - closingExpectedCash < 0 && " - Faltante"}
                 </div>
               )}
               <div>
@@ -1396,7 +1434,7 @@ export default function CajaPage() {
             <DialogFooter>
               <Button
                 variant="outline"
-                onClick={() => setShowCloseModal(false)}
+                onClick={() => { setShowCloseModal(false); setClosingRegister(null); setClosingSales(null); }}
               >
                 Cancelar
               </Button>
