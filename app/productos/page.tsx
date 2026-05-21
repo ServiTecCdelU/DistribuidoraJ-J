@@ -462,6 +462,7 @@ export default function ProductosPage() {
       const necesitan = mayoristas.filter((p) => !p.gananciaIndividual && p.gananciaGlobal !== porc);
       if (necesitan.length === 0) {
         toast.info("Todos ya tienen ese porcentaje");
+        setApplyingGlobal(false);
         return;
       }
       setProgressGanancia({ done: 0, total: necesitan.length });

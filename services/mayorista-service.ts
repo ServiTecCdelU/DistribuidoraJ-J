@@ -302,14 +302,15 @@ export const applyGananciaToProducts = async (
   for (let i = 0; i < products.length; i += BATCH_SIZE) {
     const chunk = products.slice(i, i + BATCH_SIZE)
     await Promise.all(
-      chunk.map(({ productoId, precioUnitarioMayorista }) => {
+      chunk.map(async ({ productoId, precioUnitarioMayorista }) => {
         const precioVenta = Math.round(precioUnitarioMayorista * (1 + porcentaje / 100) * 100) / 100
-        return supabase.from('productos').update({
+        const { error } = await supabase.from('productos').update({
           price: precioVenta,
           precio_venta: precioVenta,
           ganancia_global: porcentaje,
           ganancia_individual: 0,
         }).eq('id', productoId)
+        if (error) console.error(`Error actualizando ${productoId}:`, error.message)
       })
     )
     done += chunk.length

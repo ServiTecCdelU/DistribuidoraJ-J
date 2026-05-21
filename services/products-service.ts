@@ -18,8 +18,8 @@ function mapRow(d: Record<string, any>): Product {
     createdAt: new Date(d.created_at),
     unidadesPorBulto: d.unidades_por_bulto ?? undefined,
     seDivideEn: d.se_divide_en ? Number(d.se_divide_en) : undefined,
-    precioVenta: d.precio_venta ? Number(d.precio_venta) : undefined,
-    gananciaGlobal: d.ganancia_global ? Number(d.ganancia_global) : undefined,
+    precioVenta: d.precio_venta != null ? Number(d.precio_venta) : undefined,
+    gananciaGlobal: d.ganancia_global != null ? Number(d.ganancia_global) : undefined,
     gananciaIndividual: d.ganancia_individual ?? undefined,
     codigo: d.codigo ?? undefined,
   }
