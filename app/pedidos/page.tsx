@@ -294,9 +294,9 @@ export default function PedidosPage() {
         const productosRotos = roturasAdj.map(r => `${r.productName} x${r.quantity}`).join(", ");
         await supabase.from("transacciones").insert({
           id: `perdida_${selectedOrder.id}_${Date.now()}`,
-          type: "expense",
-          amount: totalPerdida,
-          description: `Rotura en pedido #${selectedOrder.id}: ${productosRotos}`,
+          type: "payment",
+          amount: -totalPerdida,
+          description: `[ROTURA] Pedido #${selectedOrder.id}: ${productosRotos}`,
           date: new Date().toISOString(),
         });
       }

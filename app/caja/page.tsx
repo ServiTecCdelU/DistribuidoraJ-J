@@ -412,10 +412,10 @@ export default function CajaPage() {
         const { data: lossData } = await supabase
           .from("transacciones")
           .select("*")
-          .eq("type", "expense")
+          .like("description", "[ROTURA]%")
           .gte("date", cajaDate.toISOString());
         if (!mounted) return;
-        setLosses((lossData || []).map((l: any) => ({ id: l.id, amount: Number(l.amount) || 0, description: l.description || "", date: l.date })));
+        setLosses((lossData || []).map((l: any) => ({ id: l.id, amount: Math.abs(Number(l.amount)) || 0, description: (l.description || "").replace("[ROTURA] ", ""), date: l.date })));
       } catch {
         if (!mounted) return;
         toast.error("Error al cargar datos de caja");
@@ -470,9 +470,9 @@ export default function CajaPage() {
       const { data: lossData } = await supabase
         .from("transacciones")
         .select("*")
-        .eq("type", "expense")
+        .like("description", "[ROTURA]%")
         .gte("date", cajaDate.toISOString());
-      setLosses((lossData || []).map((l: any) => ({ id: l.id, amount: Number(l.amount) || 0, description: l.description || "", date: l.date })));
+      setLosses((lossData || []).map((l: any) => ({ id: l.id, amount: Math.abs(Number(l.amount)) || 0, description: (l.description || "").replace("[ROTURA] ", ""), date: l.date })));
     } catch {
       toast.error("Error al recargar ventas");
     } finally {
