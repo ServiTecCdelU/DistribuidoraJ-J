@@ -15,7 +15,6 @@ import {
   X,
   Receipt,
   UserCheck,
-  Home,
   BarChart3,
   Banknote,
   Shield,
@@ -23,7 +22,6 @@ import {
   Store,
 } from "lucide-react";
 import { useState } from "react";
-import Image from "next/image";
 import { Button } from "@/components/ui/button";
 import { useAuth } from "@/hooks/use-auth";
 import { signOut } from "@/services/auth-service";
@@ -32,7 +30,7 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 export function AppSidebar() {
   const pathname = usePathname();
   const [mobileOpen, setMobileOpen] = useState(false);
-  const [logoLoaded, setLogoLoaded] = useState(false);
+
   const { user } = useAuth();
 
   const employeeType = user?.employeeType;
@@ -65,17 +63,8 @@ export function AppSidebar() {
       {/* HEADER MÓVIL (Solo visible en celular) */}
       <div className="lg:hidden flex items-center justify-between p-4 bg-sidebar border-b border-sidebar-border sticky top-0 z-50">
         <div className="flex items-center gap-2">
-          <div className="relative h-8 w-8 shrink-0">
-            {!logoLoaded && <div className="absolute inset-0 animate-pulse rounded-lg bg-sidebar-accent" />}
-            <Image
-              src="/logo.png"
-              alt="Distribuidora Patricia"
-              width={32}
-              height={32}
-              priority
-              className={`rounded-lg object-contain transition-opacity duration-200 ${logoLoaded ? "opacity-100" : "opacity-0"}`}
-              onLoad={() => setLogoLoaded(true)}
-            />
+          <div className="flex items-center justify-center h-8 w-8 shrink-0 rounded-lg bg-sidebar-primary">
+            <Store className="h-5 w-5 text-sidebar-primary-foreground" />
           </div>
           <span className="font-bold text-sidebar-foreground">Distribuidora Patricia</span>
         </div>
@@ -107,24 +96,15 @@ export function AppSidebar() {
         {/* Header del Sidebar */}
         <div className="flex items-center justify-between px-6 py-6 border-b border-sidebar-border">
           <div className="flex items-center gap-3">
-            <div className="relative flex items-center justify-center min-w-10 h-10 rounded-lg bg-sidebar-primary overflow-hidden">
-              {!logoLoaded && <div className="absolute inset-0 animate-pulse bg-sidebar-accent" />}
-              <Image
-                src="/logo.png"
-                alt="Distribuidora Patricia"
-                width={40}
-                height={40}
-                priority
-                className={`object-contain transition-opacity duration-200 ${logoLoaded ? "opacity-100" : "opacity-0"}`}
-                onLoad={() => setLogoLoaded(true)}
-              />
+            <div className="flex items-center justify-center min-w-10 h-10 rounded-lg bg-sidebar-primary">
+              <Store className="h-6 w-6 text-sidebar-primary-foreground" />
             </div>
             <div className="min-w-0">
               <h1 className="font-semibold text-base text-sidebar-foreground truncate">
                 Distribuidora Patricia
               </h1>
               <p className="text-xs text-sidebar-foreground/60">
-                Distribuidora
+                Sistema de gestión
               </p>
             </div>
           </div>
@@ -165,15 +145,6 @@ export function AppSidebar() {
 
         {/* Footer (Fijo al fondo) */}
         <div className="p-4 border-t border-sidebar-border space-y-3 bg-sidebar">
-          <Link
-            href="/"
-            onClick={() => setMobileOpen(false)}
-            className="flex items-center gap-3 px-4 py-2 rounded-lg text-sm font-medium text-sidebar-foreground/70 hover:bg-sidebar-accent/50 transition-colors"
-          >
-            <Home className="h-5 w-5" />
-            Volver al inicio
-          </Link>
-
           {user && (
             <div className="flex items-center gap-3 p-3 rounded-xl bg-sidebar-accent/30 border border-sidebar-border/50">
               <Avatar className="h-9 w-9 border border-sidebar-border">
