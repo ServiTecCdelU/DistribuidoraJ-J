@@ -145,8 +145,8 @@ function findByCode(codigo: string, products: Product[]): Product | null {
   return null;
 }
 
-// Renderiza PDF a imagen usando pdfjs-dist
-async function pdfToImages(file: File): Promise<HTMLCanvasElement[]> {
+// Extrae texto directamente del PDF (sin OCR), reconstruyendo líneas por posición Y
+async function extractPdfText(file: File): Promise<string> {
   const pdfjsLib = await import("pdfjs-dist");
   pdfjsLib.GlobalWorkerOptions.workerSrc = new URL(
     "pdfjs-dist/build/pdf.worker.mjs",
@@ -155,41 +155,31 @@ async function pdfToImages(file: File): Promise<HTMLCanvasElement[]> {
 
   const arrayBuffer = await file.arrayBuffer();
   const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
-  const canvases: HTMLCanvasElement[] = [];
+  const allLines: string[] = [];
 
   for (let i = 1; i <= pdf.numPages; i++) {
     const page = await pdf.getPage(i);
-    // Escala alta para mejor OCR
-    const scale = 2.5;
-    const viewport = page.getViewport({ scale });
-    const canvas = document.createElement("canvas");
-    canvas.width = viewport.width;
-    canvas.height = viewport.height;
-    const ctx = canvas.getContext("2d")!;
-    await page.render({ canvasContext: ctx, viewport }).promise;
-    canvases.push(canvas);
+    const content = await page.getTextContent();
+
+    // Agrupar items por posición Y (misma línea)
+    const lineMap = new Map<number, { x: number; str: string }[]>();
+    for (const item of content.items as any[]) {
+      if (!item.str || !item.str.trim()) continue;
+      // Redondear Y para agrupar items de la misma línea (tolerancia 2px)
+      const y = Math.round(item.transform[5] / 2) * 2;
+      if (!lineMap.has(y)) lineMap.set(y, []);
+      lineMap.get(y)!.push({ x: item.transform[4], str: item.str });
+    }
+
+    // Ordenar líneas de arriba a abajo (Y descendente en PDF)
+    const sortedYs = [...lineMap.keys()].sort((a, b) => b - a);
+    for (const y of sortedYs) {
+      const items = lineMap.get(y)!.sort((a, b) => a.x - b.x);
+      allLines.push(items.map((i) => i.str).join(" "));
+    }
   }
 
-  return canvases;
-}
-
-// OCR con tesseract.js
-async function ocrCanvases(
-  canvases: HTMLCanvasElement[],
-  onProgress?: (msg: string) => void
-): Promise<string> {
-  const Tesseract = await import("tesseract.js");
-  const texts: string[] = [];
-
-  for (let i = 0; i < canvases.length; i++) {
-    onProgress?.(`Leyendo página ${i + 1} de ${canvases.length}...`);
-    const result = await Tesseract.recognize(canvases[i], "spa", {
-      logger: () => {},
-    });
-    texts.push(result.data.text);
-  }
-
-  return texts.join("\n");
+  return allLines.join("\n");
 }
 
 export function RemitoImportModal({
@@ -230,19 +220,18 @@ export function RemitoImportModal({
 
     setFileName(file.name);
     setParsing(true);
-    setProgressMsg("Convirtiendo PDF a imagen...");
+    setProgressMsg("Leyendo PDF...");
 
     try {
-      // 1. PDF → canvas
-      const canvases = await pdfToImages(file);
-
-      // 2. OCR
-      const text = await ocrCanvases(canvases, setProgressMsg);
+      // 1. Extraer texto directo del PDF (sin OCR)
+      const text = await extractPdfText(file);
 
       setProgressMsg("Analizando texto...");
+      console.log("[remito] Texto extraído del PDF:\n", text);
 
-      // 3. Parsear texto OCR
+      // 3. Parsear texto
       const parsedItems = parseRemitoText(text);
+      console.log("[remito] Items parseados:", parsedItems);
 
       if (parsedItems.length === 0) {
         toast.warning(
