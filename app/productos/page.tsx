@@ -838,57 +838,45 @@ export default function ProductosPage() {
       {/* Header */}
       <div className="mb-4 sm:mb-6">
         {/* Toolbar compacta */}
-        <div className="flex items-center justify-between gap-2 flex-wrap">
-          {/* Izquierda: ganancia global */}
-          <div className="flex items-center gap-2 flex-wrap">
-            <div className="flex items-center gap-1.5 rounded-2xl border border-border bg-card px-3 py-1.5">
-              <Percent className="h-3.5 w-3.5 text-teal-600" />
-              <span className="text-xs font-medium text-muted-foreground hidden sm:inline">Ganancia</span>
-              <Input
-                type="number"
-                min={0}
-                placeholder="%"
-                value={gananciaInput}
-                onChange={(e) => setGananciaInput(e.target.value)}
-                className="w-16 h-7 text-xs px-2"
-              />
-              <Button
-                size="sm"
-                disabled={applyingGlobal || !gananciaInput}
-                onClick={handleAplicarGlobal}
-                className="h-7 px-2 text-xs gap-1"
-              >
-                {applyingGlobal ? <RefreshCw className="h-3.5 w-3.5 animate-spin" /> : <Check className="h-3.5 w-3.5" />}
-                <span className="hidden sm:inline">Aplicar</span>
-              </Button>
-            </div>
-            {applyingGlobal && progressGanancia.total > 0 && (
-              <div className="flex items-center gap-2">
-                <span className="text-xs text-muted-foreground tabular-nums">{progressGanancia.done}/{progressGanancia.total}</span>
-                <div className="w-20 h-1.5 bg-muted rounded-full overflow-hidden">
-                  <div className="h-full bg-teal-500 rounded-full transition-all" style={{ width: `${Math.round((progressGanancia.done / progressGanancia.total) * 100)}%` }} />
-                </div>
-              </div>
-            )}
-          </div>
-
-          {/* Derecha: acciones */}
-          <div className="flex items-center gap-1.5">
+        <div className="flex items-center justify-center gap-2 flex-wrap">
+          <div className="flex items-center gap-1.5 rounded-2xl border border-border bg-card px-3 py-1.5">
+            <Percent className="h-3.5 w-3.5 text-teal-600" />
+            <span className="text-xs font-medium text-muted-foreground hidden sm:inline">Ganancia</span>
+            <Input
+              type="number"
+              min={0}
+              placeholder="%"
+              value={gananciaInput}
+              onChange={(e) => setGananciaInput(e.target.value)}
+              className="w-16 h-7 text-xs px-2"
+            />
             <Button
-              variant="outline"
+              size="sm"
+              disabled={applyingGlobal || !gananciaInput}
+              onClick={handleAplicarGlobal}
+              className="h-7 px-2 text-xs gap-1"
+            >
+              {applyingGlobal ? <RefreshCw className="h-3.5 w-3.5 animate-spin" /> : <Check className="h-3.5 w-3.5" />}
+              <span className="hidden sm:inline">Aplicar</span>
+            </Button>
+
+            <div className="w-px h-5 bg-border mx-1" />
+
+            <Button
+              variant="ghost"
               size="sm"
               onClick={() => setRemitoImportOpen(true)}
-              className="gap-1.5 h-8 px-2.5"
+              className="gap-1.5 h-7 px-2"
             >
               <FileUp className="h-3.5 w-3.5" />
               <span className="hidden sm:inline text-xs">Remito</span>
             </Button>
 
             <Button
-              variant="outline"
+              variant="ghost"
               size="sm"
               onClick={() => setShowFilters(!showFilters)}
-              className="gap-1.5 h-8 px-2.5"
+              className="gap-1 h-7 px-2"
             >
               <Filter className="h-3.5 w-3.5" />
               {activeFilterCount > 0 && (
@@ -905,7 +893,7 @@ export default function ProductosPage() {
               <Button
                 variant={viewMode === "grid" ? "secondary" : "ghost"}
                 size="sm"
-                className="rounded-r-none border-0 h-8 w-8 p-0"
+                className="rounded-r-none border-0 h-7 w-7 p-0"
                 onClick={() => setViewMode("grid")}
               >
                 <Grid3x3 className="h-3.5 w-3.5" />
@@ -913,13 +901,22 @@ export default function ProductosPage() {
               <Button
                 variant={viewMode === "list" ? "secondary" : "ghost"}
                 size="sm"
-                className="rounded-l-none border-0 h-8 w-8 p-0"
+                className="rounded-l-none border-0 h-7 w-7 p-0"
                 onClick={() => setViewMode("list")}
               >
                 <List className="h-3.5 w-3.5" />
               </Button>
             </div>
           </div>
+
+          {applyingGlobal && progressGanancia.total > 0 && (
+            <div className="flex items-center gap-2">
+              <span className="text-xs text-muted-foreground tabular-nums">{progressGanancia.done}/{progressGanancia.total}</span>
+              <div className="w-20 h-1.5 bg-muted rounded-full overflow-hidden">
+                <div className="h-full bg-teal-500 rounded-full transition-all" style={{ width: `${Math.round((progressGanancia.done / progressGanancia.total) * 100)}%` }} />
+              </div>
+            </div>
+          )}
         </div>
 
         {/* Barra de búsqueda */}
