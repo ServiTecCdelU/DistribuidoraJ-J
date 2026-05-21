@@ -132,7 +132,7 @@ export function ModalDetalleVenta({
               variant="outline"
               className={`${claseBadgePago(venta.paymentType)} px-3 py-1`}
             >
-              {etiquetaPago(venta.paymentType, (venta as any).paymentMethod)}
+              {etiquetaPago(venta.paymentType, venta.paymentMethod)}
             </Badge>
           </div>
         </div>
@@ -302,7 +302,7 @@ export function ModalDetalleVenta({
               <div className="flex justify-between items-center">
                 <div className="flex items-center gap-2 text-sm text-amber-700">
                   <Banknote className="h-4 w-4" />
-                  {(venta as any).paymentMethod === "transferencia" ? "Transferencia" : "Efectivo"}
+                  {venta.paymentMethod === "transferencia" ? "Transferencia" : "Efectivo"}
                 </div>
                 <span className="font-semibold text-amber-800">{formatearMoneda(venta.cashAmount || 0)}</span>
               </div>

@@ -42,6 +42,7 @@ export interface Venta {
   items: VentaItem[];
   total: number;
   paymentType: "cash" | "credit" | "mixed";
+  paymentMethod?: "efectivo" | "transferencia";
   cashAmount?: number;
   creditAmount?: number;
   createdAt: any;
@@ -136,6 +137,7 @@ function mapVenta(d: Record<string, any>): Venta {
     items: d.items ?? [],
     total: Number(d.total) || 0,
     paymentType: d.payment_type ?? "cash",
+    paymentMethod: d.payment_method ?? "efectivo",
     cashAmount: d.cash_amount ? Number(d.cash_amount) : undefined,
     creditAmount: d.credit_amount ? Number(d.credit_amount) : undefined,
     createdAt: d.created_at ? new Date(d.created_at) : new Date(),
@@ -255,9 +257,9 @@ export function useVentas(filterBySellerId?: string, clientCityMap?: Record<stri
 
       if (filtros.paymentFilter !== "all") {
         if (filtros.paymentFilter === "efectivo") {
-          if (!(venta.paymentType === "cash" && (venta as any).paymentMethod !== "transferencia")) return false;
+          if (!(venta.paymentType === "cash" && venta.paymentMethod !== "transferencia")) return false;
         } else if (filtros.paymentFilter === "transferencia") {
-          if (!(venta.paymentType === "cash" && (venta as any).paymentMethod === "transferencia")) return false;
+          if (!(venta.paymentType === "cash" && venta.paymentMethod === "transferencia")) return false;
         } else if (venta.paymentType !== filtros.paymentFilter) {
           return false;
         }

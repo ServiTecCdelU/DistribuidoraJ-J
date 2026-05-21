@@ -442,7 +442,7 @@ export function ListaVentas({
                   <div className="text-right shrink-0">
                     <p className="font-bold text-sm text-foreground">{fmt(venta.total)}</p>
                     <Badge variant="outline" className={`text-[10px] ${payBadgeCls(venta.paymentType)}`}>
-                      {payLabel(venta.paymentType, (venta as any).paymentMethod)}
+                      {payLabel(venta.paymentType, venta.paymentMethod)}
                     </Badge>
                   </div>
                 </div>
@@ -474,8 +474,8 @@ export function ListaVentas({
                 </div>
                 <div className="hidden md:flex md:col-span-2 items-center justify-center">
                   <Badge variant="outline" className={`gap-1.5 px-2.5 py-1 ${payBadgeCls(venta.paymentType)}`}>
-                    {payIcon(venta.paymentType, (venta as any).paymentMethod)}
-                    {payLabel(venta.paymentType, (venta as any).paymentMethod)}
+                    {payIcon(venta.paymentType, venta.paymentMethod)}
+                    {payLabel(venta.paymentType, venta.paymentMethod)}
                   </Badge>
                 </div>
                 <div className="hidden md:flex md:col-span-1 items-center justify-center">
