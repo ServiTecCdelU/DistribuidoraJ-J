@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
+import { MainLayout } from "@/components/layout/main-layout";
 import { toast } from "sonner";
 
 interface ParsedProduct {
@@ -91,6 +92,7 @@ export default function ImportProductosPage() {
   };
 
   return (
+    <MainLayout allowedRoles={['admin']} title="Importar Productos" description="Importar productos desde lista">
     <div className="max-w-4xl mx-auto p-6 space-y-6">
       <h1 className="text-2xl font-bold">Importar Productos desde Lista</h1>
       <p className="text-muted-foreground">
@@ -155,5 +157,6 @@ export default function ImportProductosPage() {
         </div>
       )}
     </div>
+    </MainLayout>
   );
 }

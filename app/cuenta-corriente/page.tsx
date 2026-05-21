@@ -228,7 +228,7 @@ export default function CuentaCorrientePage() {
     const clientHistory = clientComprobantes.filter((c) => c.status !== 'pending')
 
     return (
-      <MainLayout title="Cuenta Corriente" description="Detalle de cliente">
+      <MainLayout allowedRoles={['admin']} title="Cuenta Corriente" description="Detalle de cliente">
         {/* Header con botón volver */}
         <div className="flex items-center gap-3 mb-4">
           <Button variant="ghost" size="icon" className="rounded-xl" onClick={() => setSelectedClient(null)}>
@@ -546,7 +546,7 @@ export default function CuentaCorrientePage() {
 
   // Vista principal: listado de deudores
   return (
-    <MainLayout title="Cuenta Corriente" description="Gestión de deudas y comprobantes de pago">
+    <MainLayout allowedRoles={['admin']} title="Cuenta Corriente" description="Gestión de deudas y comprobantes de pago">
       {loading ? (
         <div className="space-y-6">
           <div className="grid grid-cols-2 md:grid-cols-3 gap-3">

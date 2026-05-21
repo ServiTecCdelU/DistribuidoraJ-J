@@ -176,7 +176,7 @@ export default function MayoristaPage() {
   };
 
   return (
-    <MainLayout title="Mayorista" description="Gestión de productos y precios del mayorista">
+    <MainLayout allowedRoles={['admin']} title="Mayorista" description="Gestión de productos y precios del mayorista">
       <div className="space-y-4">
         <PageHeader description="Productos y precios del mayorista" />
 

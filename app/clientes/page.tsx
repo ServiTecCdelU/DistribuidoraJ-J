@@ -253,7 +253,7 @@ export default function ClientesPage() {
   const clientsWithDebt = clients.filter(c => c.currentBalance > 0).length
 
   return (
-    <MainLayout title="Clientes" description="Gestiona tus clientes y sus cuentas corrientes">
+    <MainLayout allowedRoles={['admin']} title="Clientes" description="Gestiona tus clientes y sus cuentas corrientes">
       {/* Stats Cards - Solo visible en desktop */}
       <div className="hidden lg:grid grid-cols-3 gap-4 mb-6">
         <Card className="bg-gradient-to-br from-primary/5 to-primary/10 border-primary/20">

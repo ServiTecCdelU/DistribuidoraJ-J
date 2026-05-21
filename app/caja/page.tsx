@@ -768,7 +768,7 @@ export default function CajaPage() {
   const isClosed = currentRegister?.status === "closed";
 
   return (
-    <MainLayout title="Caja" description="Apertura y cierre de caja diaria">
+    <MainLayout allowedRoles={['admin']} title="Caja" description="Apertura y cierre de caja diaria">
       <div className="p-4 lg:p-6 space-y-6">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
           <div>

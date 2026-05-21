@@ -102,7 +102,7 @@ export default function ClientDetailPage() {
 
   if (loading) {
     return (
-      <MainLayout>
+      <MainLayout allowedRoles={['admin']}>
         <div className="space-y-6">
           <Skeleton className="h-8 w-48" />
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
@@ -118,7 +118,7 @@ export default function ClientDetailPage() {
 
   if (!client) {
     return (
-      <MainLayout>
+      <MainLayout allowedRoles={['admin']}>
         <div className="text-center py-12">
           <p className="text-muted-foreground">Cliente no encontrado</p>
           <Button onClick={() => router.push('/clientes')} className="mt-4">
@@ -130,7 +130,7 @@ export default function ClientDetailPage() {
   }
 
   return (
-    <MainLayout>
+    <MainLayout allowedRoles={['admin']}>
       {/* Header */}
       <PageHeader
         backButton

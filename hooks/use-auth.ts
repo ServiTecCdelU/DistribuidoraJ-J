@@ -13,7 +13,19 @@ function getStoredProfile(): { uid: string; user: User } | null {
   try {
     const raw = sessionStorage.getItem(STORAGE_KEY)
     if (!raw) return null
-    return JSON.parse(raw)
+    const parsed = JSON.parse(raw)
+    // Validar estructura mínima y rol válido
+    if (
+      !parsed?.uid ||
+      !parsed?.user?.id ||
+      !parsed?.user?.email ||
+      !parsed?.user?.role ||
+      !['admin', 'seller'].includes(parsed.user.role)
+    ) {
+      sessionStorage.removeItem(STORAGE_KEY)
+      return null
+    }
+    return parsed
   } catch {
     return null
   }
@@ -51,13 +63,6 @@ export const useAuth = () => {
         clearStoredProfile()
         setUser(null)
         setUnauthorized(false)
-        setLoading(false)
-        return
-      }
-
-      // Si ya tenemos el perfil cacheado para este uid, usarlo directamente
-      if (cachedProfile && cachedProfile.uid === supabaseUser.id) {
-        setUser(cachedProfile.user)
         setLoading(false)
         return
       }

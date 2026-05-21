@@ -69,7 +69,7 @@ export const ensureUserProfile = async (data: {
       .select('*')
       .eq('email', data.email)
       .order('created_at', { ascending: true })
-      .limit(1)
+      .maybeSingle()
 
     if (byEmail) {
       await supabase

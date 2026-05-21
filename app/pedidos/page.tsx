@@ -877,7 +877,7 @@ export default function PedidosPage() {
   }
 
   return (
-    <MainLayout title="Pedidos" description="Seguimiento de pedidos y entregas">
+    <MainLayout allowedRoles={['admin', 'seller']} title="Pedidos" description="Seguimiento de pedidos y entregas">
       <div className="space-y-4">
       <div className="mb-6 space-y-4">
         <div className="flex flex-col lg:flex-row gap-3 justify-between items-start lg:items-center">

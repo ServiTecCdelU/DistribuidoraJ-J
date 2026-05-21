@@ -126,7 +126,7 @@ export default function CobranzasPage() {
   }
 
   return (
-    <MainLayout title="Cobranzas" description="Deudas de tus clientes y comprobantes de pago">
+    <MainLayout allowedRoles={['admin', 'seller']} title="Cobranzas" description="Deudas de tus clientes y comprobantes de pago">
       {loading ? (
         <div className="space-y-6">
           <div className="grid grid-cols-2 md:grid-cols-3 gap-3">

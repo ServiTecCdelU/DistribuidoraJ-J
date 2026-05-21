@@ -301,7 +301,7 @@ export default function DashboardPage() {
 
   if (loading) {
     return (
-      <MainLayout title="Dashboard" description="Resumen ejecutivo y operación diaria">
+      <MainLayout allowedRoles={['admin']} title="Dashboard" description="Resumen ejecutivo y operación diaria">
         <div className="min-h-screen bg-slate-50/50">
           <div className="max-w-[1600px] mx-auto p-2 sm:p-3 lg:p-6 xl:p-8 space-y-3 sm:space-y-4 lg:space-y-6">
             {/* Header skeleton */}
@@ -365,7 +365,7 @@ export default function DashboardPage() {
     : 0
 
   return (
-    <MainLayout title="Dashboard" description="Resumen ejecutivo y operación diaria">
+    <MainLayout allowedRoles={['admin']} title="Dashboard" description="Resumen ejecutivo y operación diaria">
       <div className="min-h-screen bg-slate-50/50">
         <div className="max-w-[1600px] mx-auto p-2 sm:p-3 lg:p-6 xl:p-8 space-y-3 sm:space-y-4 lg:space-y-6">
           

@@ -57,7 +57,7 @@ export function AppSidebar() {
     // { href: "/listas-precios", label: "Listas de Precios", icon: Tag, roles: ["admin"] },
     // { href: "/auditoria", label: "Auditoria", icon: Shield, roles: ["admin"] },
   ].filter(
-    (item) => !item.roles || item.roles.includes(user?.role ?? "customer"),
+    (item) => !item.roles || item.roles.includes(user?.role ?? ""),
   );
 
   return (

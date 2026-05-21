@@ -832,7 +832,7 @@ export default function ProductosPage() {
   );
 
   return (
-    <MainLayout title="Productos" description="Gestiona tu catálogo de productos">
+    <MainLayout allowedRoles={['admin']} title="Productos" description="Gestiona tu catálogo de productos">
       <div>
       {/* Header */}
       <div className="mb-4 sm:mb-6">

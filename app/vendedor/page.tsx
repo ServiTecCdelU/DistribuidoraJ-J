@@ -216,7 +216,7 @@ function VendedorDashboard({ userEmail, userName }: { userEmail: string; userNam
   }
 
   return (
-    <MainLayout title="Nueva Venta" description="">
+    <MainLayout allowedRoles={['admin', 'seller']} title="Nueva Venta" description="">
       {/* Buscador + filtro rubro + carrito */}
       <div className="pb-2 space-y-2 sticky top-[57px] z-10 bg-background lg:top-0 lg:pt-2 px-1">
         <div className="flex items-center gap-2">

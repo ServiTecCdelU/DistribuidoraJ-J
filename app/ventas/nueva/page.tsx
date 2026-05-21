@@ -53,7 +53,7 @@ function NuevaVentaInner() {
 
   if (authLoading) {
     return (
-      <MainLayout>
+      <MainLayout allowedRoles={['admin', 'seller']}>
         <div className="flex items-center justify-center min-h-[60vh]">
           <Loader2 className="h-8 w-8 animate-spin text-primary" />
         </div>
@@ -68,7 +68,7 @@ function NuevaVentaInner() {
 export default function NuevaVentaPage() {
   return (
     <Suspense fallback={
-      <MainLayout>
+      <MainLayout allowedRoles={['admin', 'seller']}>
         <div className="flex items-center justify-center min-h-[60vh]">
           <Loader2 className="h-8 w-8 animate-spin text-primary" />
         </div>
@@ -201,7 +201,7 @@ function NuevaVentaContent({
 
   if (state.processing) {
     return (
-      <MainLayout>
+      <MainLayout allowedRoles={['admin', 'seller']}>
         <div className="flex flex-col items-center justify-center min-h-[80vh] gap-6">
           <div className="relative">
             <div className="absolute inset-0 bg-primary/20 rounded-full animate-ping" />
@@ -220,7 +220,7 @@ function NuevaVentaContent({
 
   if (state.saleComplete) {
     return (
-      <MainLayout>
+      <MainLayout allowedRoles={['admin', 'seller']}>
         <div className="flex flex-col min-h-[80vh]">
           <div className="mb-4">
             <Button
@@ -290,7 +290,7 @@ function NuevaVentaContent({
   }
 
   return (
-    <MainLayout title="Nueva Venta" description="Registra una nueva venta">
+    <MainLayout allowedRoles={['admin', 'seller']} title="Nueva Venta" description="Registra una nueva venta">
       <div className="space-y-4 pb-24 lg:pb-4">
         <PageHeader
           description={

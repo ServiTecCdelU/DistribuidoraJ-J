@@ -121,6 +121,7 @@ export default function VentasPage() {
   const isSeller = user?.role === "seller";
   return (
     <MainLayout
+      allowedRoles={['admin', 'seller']}
       title={isSeller ? "Mis Ventas" : "Ventas"}
       description={isSeller ? "Historial de tus ventas" : "Historial y gestión de ventas"}
     >

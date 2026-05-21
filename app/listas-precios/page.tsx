@@ -182,7 +182,7 @@ export default function ListasPreciosPage() {
   };
 
   return (
-    <MainLayout title="Listas de Precios" description="Gestion de precios por tipo de cliente">
+    <MainLayout allowedRoles={['admin']} title="Listas de Precios" description="Gestion de precios por tipo de cliente">
       <div className="p-4 lg:p-6 space-y-6">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
           <div>

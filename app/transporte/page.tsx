@@ -957,7 +957,7 @@ export default function TransportePage() {
 
   if (!mounted) {
     return (
-      <MainLayout title="Transporte" description="Gestión de entregas">
+      <MainLayout allowedRoles={['admin', 'seller']} title="Transporte" description="Gestión de entregas">
         <DataTableSkeleton columns={3} rows={4} />
       </MainLayout>
     );
@@ -992,7 +992,7 @@ export default function TransportePage() {
     })();
 
     return (
-      <MainLayout title="Mis Entregas" description="Pedidos asignados para entregar">
+      <MainLayout allowedRoles={['admin', 'seller']} title="Mis Entregas" description="Pedidos asignados para entregar">
         {/* Personal stats bar */}
         {myOrders.length > 0 && (
           <div className="mb-6 p-4 rounded-2xl bg-primary/5 border border-primary/20 flex items-center gap-4">
@@ -1243,6 +1243,7 @@ export default function TransportePage() {
 
   return (
     <MainLayout
+      allowedRoles={['admin', 'seller']}
       title="Gestión de Transporte"
       description="Armá repartos y monitoreá las entregas"
     >

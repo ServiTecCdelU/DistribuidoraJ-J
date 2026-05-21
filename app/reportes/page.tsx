@@ -194,7 +194,7 @@ export default function ReportesPage() {
   };
 
   return (
-    <MainLayout title="Reportes" description="Analisis de ventas y exportacion">
+    <MainLayout allowedRoles={['admin']} title="Reportes" description="Analisis de ventas y exportacion">
       <div className="p-4 lg:p-6 space-y-6">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
           <div>

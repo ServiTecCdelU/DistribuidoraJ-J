@@ -336,7 +336,7 @@ export default function EmpleadosPage() {
   const pendingTotal = pendingCommissions.reduce((sum, c) => sum + c.commissionAmount, 0)
 
   return (
-    <MainLayout title="Empleados" description="Gestiona tu equipo de vendedores y transportistas">
+    <MainLayout allowedRoles={['admin']} title="Empleados" description="Gestiona tu equipo de vendedores y transportistas">
       {/* Stats Cards - Solo visible en desktop */}
       <div className="hidden lg:grid grid-cols-4 gap-4 mb-6">
         <Card className="bg-gradient-to-br from-primary/5 to-primary/10 border-primary/20">

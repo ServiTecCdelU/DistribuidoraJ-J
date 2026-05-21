@@ -6,14 +6,25 @@ import { AppSidebar } from './app-sidebar'
 import { useAuth } from '@/hooks/use-auth'
 import { Button } from '@/components/ui/button'
 import { ArrowLeft } from 'lucide-react'
+import type { UserRole } from '@/lib/types'
 
 interface MainLayoutProps {
   children: React.ReactNode
   title?: string
   description?: string
+  allowedRoles?: UserRole[]
 }
 
-export function MainLayout({ children, title, description }: MainLayoutProps) {
+function getRoleHome(user: { role: string; employeeType?: string }): string {
+  if (user.role === 'seller') {
+    if (user.employeeType === 'transportista') return '/pedidos'
+    return '/comisiones'
+  }
+  if (user.role === 'admin') return '/caja'
+  return '/login'
+}
+
+export function MainLayout({ children, title, description, allowedRoles }: MainLayoutProps) {
   const router = useRouter()
   const { user, loading } = useAuth()
 
@@ -24,12 +35,16 @@ export function MainLayout({ children, title, description }: MainLayoutProps) {
   }, [loading, user, router])
 
   useEffect(() => {
-    if (!loading && user?.role === 'customer') {
-      router.push('/tienda')
+    if (!loading && user && allowedRoles && !allowedRoles.includes(user.role)) {
+      router.push(getRoleHome(user))
     }
-  }, [loading, user, router])
+  }, [loading, user, allowedRoles, router])
 
   if (!loading && !user) {
+    return null
+  }
+
+  if (!loading && user && allowedRoles && !allowedRoles.includes(user.role)) {
     return null
   }
 

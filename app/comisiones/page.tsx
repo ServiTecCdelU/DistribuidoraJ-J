@@ -55,7 +55,7 @@ export default function ComisionesPage() {
     : null
 
   return (
-    <MainLayout title="Mis Comisiones" description="Resumen y detalle de tus comisiones">
+    <MainLayout allowedRoles={['admin', 'seller']} title="Mis Comisiones" description="Resumen y detalle de tus comisiones">
       {loading ? (
         <div className="space-y-6">
           <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
