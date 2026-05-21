@@ -81,6 +81,12 @@ function parseRemitoText(text: string): ParsedItem[] {
     const nameTokens: string[] = [];
 
     for (const t of tokens) {
+      // Tokens con letras mezcladas son parte del nombre (X125G, X1KG, X1LT, etc.)
+      if (/[a-zA-Z]/.test(t) && /\d/.test(t)) {
+        nameTokens.push(t);
+        continue;
+      }
+
       // Limpiar caracteres no numéricos
       const stripped = t.replace(/[^0-9.,]/g, "");
       if (!stripped) { nameTokens.push(t); continue; }
@@ -88,15 +94,13 @@ function parseRemitoText(text: string): ParsedItem[] {
       // Detectar si es un número con coma decimal (formato argentino: 819,38)
       // o con punto decimal (formato clásico: 1243.5143)
       let numStr = stripped;
-      // Si tiene coma y no tiene punto, o tiene coma después del punto → coma es decimal
       if (numStr.includes(",")) {
         // "1.057,56" → "1057.56" | "21,0" → "21.0" | "26,000" → "26.000"
         numStr = numStr.replace(/\./g, "").replace(",", ".");
       }
       const num = parseFloat(numStr);
-      const digitRatio = (stripped.match(/\d/g) || []).length / Math.max(t.length, 1);
 
-      if (digitRatio > 0.5 && !isNaN(num) && num >= 0) {
+      if (!isNaN(num) && num >= 0) {
         numericTokens.push({ value: num, raw: t });
       } else {
         nameTokens.push(t);
