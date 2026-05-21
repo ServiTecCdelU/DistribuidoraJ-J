@@ -182,9 +182,13 @@ export function PaymentModal({
   };
 
   // Contar items/unidades activos
+  const activeItems = order.items.filter(i => {
+    const adj = getAdj(i.productId);
+    return i.quantity - adj.rotura - adj.faltante - adj.no_quiere > 0;
+  });
   const activeUnits = order.items.reduce((acc, item) => {
     const adj = getAdj(item.productId);
-    return acc + item.quantity - adj.rotura - adj.faltante - adj.no_quiere;
+    return acc + Math.max(0, item.quantity - adj.rotura - adj.faltante - adj.no_quiere);
   }, 0);
 
   // Resumen de ajustes por tipo
