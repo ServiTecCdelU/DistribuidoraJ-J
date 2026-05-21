@@ -134,7 +134,7 @@ const cajaPdfStyles = StyleSheet.create({
   footer: { marginTop: "auto", paddingTop: 8, borderTop: "1px solid #e5e7eb", flexDirection: "row", justifyContent: "space-between", fontSize: 7, color: "#aaa" },
 });
 
-const CajaPdfDocument = ({ register, sales }: { register: CashRegister; sales: Sale[] }) => {
+const CajaPdfDocument = ({ register, sales, losses = [] }: { register: CashRegister; sales: Sale[]; losses?: { id: string; amount: number; description: string; date: string }[] }) => {
   const isClosed = register.status === "closed";
 
   // Calcular desglose desde ventas si no hay datos guardados
@@ -304,6 +304,23 @@ const CajaPdfDocument = ({ register, sales }: { register: CashRegister; sales: S
           </View>
         )}
 
+        {/* Pérdidas por roturas */}
+        {losses.length > 0 && (
+          <View style={cajaPdfStyles.section}>
+            <Text style={[cajaPdfStyles.sectionTitle, { color: "#dc2626" }]}>Pérdidas por roturas</Text>
+            {losses.map((l, i) => (
+              <View key={i} style={cajaPdfStyles.row}>
+                <Text style={[cajaPdfStyles.label, { flex: 3 }]}>{l.description}</Text>
+                <Text style={[cajaPdfStyles.value, { color: "#dc2626" }]}>-{formatCurrency(l.amount)}</Text>
+              </View>
+            ))}
+            <View style={[cajaPdfStyles.row, { borderTop: "1px solid #fecaca", marginTop: 4, paddingTop: 4 }]}>
+              <Text style={[cajaPdfStyles.label, { fontWeight: "bold" }]}>Total pérdidas</Text>
+              <Text style={[cajaPdfStyles.value, { fontWeight: "bold", color: "#dc2626" }]}>-{formatCurrency(losses.reduce((a, l) => a + l.amount, 0))}</Text>
+            </View>
+          </View>
+        )}
+
         {/* Footer */}
         <View style={cajaPdfStyles.footer}>
           <Text>Caja Diaria - Distribuidora Patricia</Text>
@@ -314,8 +331,8 @@ const CajaPdfDocument = ({ register, sales }: { register: CashRegister; sales: S
   );
 };
 
-const generarCajaPdf = async (register: CashRegister, sales: Sale[]) => {
-  const blob = await pdf(<CajaPdfDocument register={register} sales={sales} />).toBlob();
+const generarCajaPdf = async (register: CashRegister, sales: Sale[], losses: { id: string; amount: number; description: string; date: string }[] = []) => {
+  const blob = await pdf(<CajaPdfDocument register={register} sales={sales} losses={losses} />).toBlob();
   const url = URL.createObjectURL(blob);
   const a = document.createElement("a");
   a.href = url;
@@ -707,7 +724,7 @@ export default function CajaPage() {
     if (!currentRegister) return;
     setGeneratingPdf(true);
     try {
-      await generarCajaPdf(currentRegister, sales);
+      await generarCajaPdf(currentRegister, sales, losses);
       toast.success("PDF descargado");
     } catch {
       toast.error("Error al generar PDF");
@@ -729,7 +746,16 @@ export default function CajaPage() {
         const d = new Date(s.createdAt);
         return d >= start && d <= end;
       });
-      await generarCajaPdf(register, daySales);
+      // Cargar pérdidas del día
+      const { data: lossData } = await supabase
+        .from("transacciones")
+        .select("*")
+        .like("description", "[ROTURA]%")
+        .gte("date", start.toISOString())
+        .lte("date", end.toISOString());
+      const dayLosses = (lossData || []).map((l: any) => ({ id: l.id, amount: Math.abs(Number(l.amount)) || 0, description: (l.description || "").replace("[ROTURA] ", ""), date: l.date }));
+
+      await generarCajaPdf(register, daySales, dayLosses);
       toast.success("PDF descargado");
     } catch {
       toast.error("Error al generar PDF");
