@@ -49,7 +49,7 @@ export const ensureUserProfile = async (data: {
   email: string
   name: string
   role?: UserRole
-}): Promise<User> => {
+}): Promise<User | null> => {
   // Siempre chequear si el email coincide con un vendedor registrado
   const { data: sellerRows } = await supabase
     .from('vendedores')
@@ -162,25 +162,50 @@ export const ensureUserProfile = async (data: {
     return existing
   }
 
-  const docId = await generateReadableId('usuarios', 'usuario', data.name)
-
-  // Si no hay ningun admin, el primer usuario se convierte en admin
-  let autoRole: UserRole = matchingSeller ? 'seller' : (data.role ?? 'customer')
-  if (!matchingSeller && autoRole !== 'admin') {
+  // Si no hay vendedor vinculado, verificar si es el primer admin
+  if (!matchingSeller) {
     const { count } = await supabase
       .from('usuarios')
       .select('id', { count: 'exact', head: true })
       .eq('role', 'admin')
+
     if (count === 0) {
-      autoRole = 'admin'
+      // Primer usuario → admin
+      const docId = await generateReadableId('usuarios', 'usuario', data.name)
+      const profile: User = {
+        id: docId,
+        email: data.email,
+        name: data.name,
+        role: 'admin',
+        sellerId: undefined,
+        employeeType: undefined,
+        isActive: true,
+        createdAt: new Date(),
+      }
+      await supabase.from('usuarios').insert({
+        id: docId,
+        auth_uid: data.id,
+        email: profile.email,
+        name: profile.name,
+        role: 'admin',
+        seller_id: null,
+        employee_type: null,
+        is_active: true,
+      })
+      return profile
     }
+
+    // Usuario no registrado previamente → rechazar
+    return null
   }
 
+  // Vendedor vinculado → crear como seller
+  const docId = await generateReadableId('usuarios', 'usuario', data.name)
   const profile: User = {
     id: docId,
     email: data.email,
     name: data.name,
-    role: autoRole,
+    role: 'seller',
     sellerId: matchingSeller,
     employeeType: matchingEmployeeType,
     isActive: true,
@@ -192,10 +217,10 @@ export const ensureUserProfile = async (data: {
     auth_uid: data.id,
     email: profile.email,
     name: profile.name,
-    role: autoRole,
+    role: 'seller',
     seller_id: profile.sellerId ?? null,
     employee_type: profile.employeeType ?? null,
-    is_active: profile.isActive,
+    is_active: true,
   })
 
   return profile

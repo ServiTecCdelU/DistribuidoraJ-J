@@ -6,7 +6,8 @@ import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
-import { Store, Loader2 } from 'lucide-react'
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog'
+import { Store, Loader2, ShieldAlert } from 'lucide-react'
 import { signInWithGoogle } from '@/services/auth-service'
 import { useAuth } from '@/hooks/use-auth'
 import type { User } from '@/lib/types'
@@ -21,15 +22,23 @@ function getHomeRoute(user: User): string {
 
 export default function LoginPage() {
   const router = useRouter()
-  const { user, loading: authLoading } = useAuth()
+  const { user, loading: authLoading, unauthorized } = useAuth()
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
+  const [showUnauthorized, setShowUnauthorized] = useState(false)
 
   useEffect(() => {
     if (!authLoading && user) {
       router.push(getHomeRoute(user))
     }
   }, [authLoading, user, router])
+
+  useEffect(() => {
+    if (unauthorized) {
+      setShowUnauthorized(true)
+      setLoading(false)
+    }
+  }, [unauthorized])
 
   const handleGoogleSignIn = async () => {
     setError('')
@@ -74,6 +83,27 @@ export default function LoginPage() {
           </div>
         </CardContent>
       </Card>
+
+      <Dialog open={showUnauthorized} onOpenChange={setShowUnauthorized}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <div className="flex justify-center mb-2">
+              <div className="flex items-center justify-center w-12 h-12 rounded-full bg-destructive/10">
+                <ShieldAlert className="h-6 w-6 text-destructive" />
+              </div>
+            </div>
+            <DialogTitle className="text-center">Acceso no autorizado</DialogTitle>
+            <DialogDescription className="text-center">
+              Tu cuenta no está registrada en el sistema. Contacta al administrador para solicitar acceso.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter className="sm:justify-center">
+            <Button variant="outline" onClick={() => setShowUnauthorized(false)}>
+              Entendido
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }

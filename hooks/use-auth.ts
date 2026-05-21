@@ -36,6 +36,7 @@ export const useAuth = () => {
   // Siempre null en el render inicial para que server y client coincidan (evita hydration mismatch).
   const [user, setUser] = useState<User | null>(null)
   const [loading, setLoading] = useState(true)
+  const [unauthorized, setUnauthorized] = useState(false)
 
   useEffect(() => {
     // Restaurar perfil cacheado inmediatamente
@@ -49,6 +50,7 @@ export const useAuth = () => {
         cachedProfile = null
         clearStoredProfile()
         setUser(null)
+        setUnauthorized(false)
         setLoading(false)
         return
       }
@@ -65,6 +67,18 @@ export const useAuth = () => {
         email: supabaseUser.email || '',
         name: supabaseUser.user_metadata?.full_name || supabaseUser.user_metadata?.name || supabaseUser.email?.split('@')[0] || 'Usuario',
       })
+
+      // Usuario no registrado en el sistema
+      if (!profile) {
+        cachedProfile = null
+        clearStoredProfile()
+        await signOut()
+        setUser(null)
+        setUnauthorized(true)
+        setLoading(false)
+        return
+      }
+
       if (!profile.isActive) {
         cachedProfile = null
         clearStoredProfile()
@@ -82,7 +96,7 @@ export const useAuth = () => {
     return () => unsubscribe()
   }, [])
 
-  return { user, loading }
+  return { user, loading, unauthorized }
 }
 
 /** Invalida el cache del perfil (usar tras cambios de rol, etc.) */
