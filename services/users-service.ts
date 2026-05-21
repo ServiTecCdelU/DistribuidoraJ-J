@@ -64,13 +64,14 @@ export const ensureUserProfile = async (data: {
 
   // Si no se encontró por ID/auth_uid, buscar por email (migración Firebase → Supabase)
   if (!existing) {
-    const { data: byEmail } = await supabase
+    const { data: emailRows } = await supabase
       .from('usuarios')
       .select('*')
       .eq('email', data.email)
       .order('created_at', { ascending: true })
-      .maybeSingle()
+      .limit(1)
 
+    const byEmail = emailRows?.[0]
     if (byEmail) {
       await supabase
         .from('usuarios')
