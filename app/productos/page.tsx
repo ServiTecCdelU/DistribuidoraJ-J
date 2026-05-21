@@ -837,159 +837,89 @@ export default function ProductosPage() {
       <div>
       {/* Header */}
       <div className="mb-4 sm:mb-6">
-        <PageHeader
-          actions={
-            <>
-              {/* Descargar Planilla — comentado temporalmente
+        {/* Toolbar compacta */}
+        <div className="flex items-center justify-between gap-2 flex-wrap">
+          {/* Izquierda: ganancia global */}
+          <div className="flex items-center gap-2 flex-wrap">
+            <div className="flex items-center gap-1.5 rounded-2xl border border-border bg-card px-3 py-1.5">
+              <Percent className="h-3.5 w-3.5 text-teal-600" />
+              <span className="text-xs font-medium text-muted-foreground hidden sm:inline">Ganancia</span>
+              <Input
+                type="number"
+                min={0}
+                placeholder="%"
+                value={gananciaInput}
+                onChange={(e) => setGananciaInput(e.target.value)}
+                className="w-16 h-7 text-xs px-2"
+              />
               <Button
-                variant="outline"
                 size="sm"
-                onClick={descargarPlanilla}
-                className="gap-1 sm:gap-2 h-8 sm:h-9 px-2 sm:px-3"
+                disabled={applyingGlobal || !gananciaInput}
+                onClick={handleAplicarGlobal}
+                className="h-7 px-2 text-xs gap-1"
               >
-                <FileDown className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
-                <span className="hidden sm:inline">Descargar Planilla</span>
+                {applyingGlobal ? <RefreshCw className="h-3.5 w-3.5 animate-spin" /> : <Check className="h-3.5 w-3.5" />}
+                <span className="hidden sm:inline">Aplicar</span>
               </Button>
-              */}
-
-              {/* Subir Planilla — comentado temporalmente
-              <Button
-                variant="outline"
-                size="sm"
-                disabled={importando}
-                className="gap-1 sm:gap-2 h-8 sm:h-9 px-2 sm:px-3 relative"
-                onClick={() => document.getElementById("csv-upload")?.click()}
-              >
-                <Upload className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
-                <span className="hidden sm:inline">Subir Planilla</span>
-                <input
-                  id="csv-upload"
-                  type="file"
-                  accept=".csv"
-                  className="hidden"
-                  onChange={(e) => {
-                    const file = e.target.files?.[0];
-                    if (file) subirPlanilla(file);
-                    e.target.value = "";
-                  }}
-                />
-              </Button>
-              */}
-
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => setRemitoImportOpen(true)}
-                className="gap-1 sm:gap-2 h-8 sm:h-9 px-2 sm:px-3"
-              >
-                <FileUp className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
-                <span className="hidden sm:inline">Remito Proveedor</span>
-              </Button>
-
-              {/* Cargar Lista — comentado temporalmente
-              <Button
-                variant="outline"
-                size="sm"
-                className="gap-1 sm:gap-2 h-8 sm:h-9 px-2 sm:px-3"
-                onClick={() => setCargarListaOpen(true)}
-              >
-                <RefreshCw className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
-                <span className="hidden sm:inline">Cargar Lista</span>
-              </Button>
-              */}
-
-              {/* Valor Inventario — comentado temporalmente
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => setShowInventoryHistory(true)}
-                className="gap-1 sm:gap-2 h-8 sm:h-9 px-2 sm:px-3"
-              >
-                <TrendingUp className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
-                <span className="hidden sm:inline">Valor Inventario</span>
-              </Button>
-              */}
-
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => setShowFilters(!showFilters)}
-                className="gap-1 sm:gap-2 h-8 sm:h-9 px-2 sm:px-3"
-              >
-                <Filter className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
-                <span className="hidden sm:inline">Filtros</span>
-                {activeFilterCount > 0 && (
-                  <Badge
-                    variant="secondary"
-                    className="ml-0.5 h-4 w-4 sm:h-5 sm:w-5 p-0 flex items-center justify-center text-[10px] sm:text-xs"
-                  >
-                    {activeFilterCount}
-                  </Badge>
-                )}
-              </Button>
-
-              <div className="flex border border-border rounded-lg">
-                <Button
-                  variant={viewMode === "grid" ? "secondary" : "ghost"}
-                  size="sm"
-                  className="rounded-r-none border-0 h-9"
-                  onClick={() => setViewMode("grid")}
-                >
-                  <Grid3x3 className="h-4 w-4" />
-                </Button>
-                <Button
-                  variant={viewMode === "list" ? "secondary" : "ghost"}
-                  size="sm"
-                  className="rounded-l-none border-0 h-9"
-                  onClick={() => setViewMode("list")}
-                >
-                  <List className="h-4 w-4" />
-                </Button>
-              </div>
-
-              {/* Nuevo — comentado temporalmente
-              <Button
-                onClick={handleCreate}
-                className="gap-1 sm:gap-2 bg-primary hover:bg-primary/90 h-8 sm:h-9 px-2 sm:px-3"
-              >
-                <Plus className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
-                <span className="hidden sm:inline">Nuevo</span>
-                <span className="sm:hidden text-xs">Nuevo</span>
-              </Button>
-              */}
-            </>
-          }
-        />
-
-        {/* Ganancia global */}
-        <div className="flex items-center gap-2 flex-wrap">
-          <Percent className="h-4 w-4 text-muted-foreground" />
-          <span className="text-sm font-medium">Ganancia global:</span>
-          <Input
-            type="number"
-            min={0}
-            placeholder="%"
-            value={gananciaInput}
-            onChange={(e) => setGananciaInput(e.target.value)}
-            className="w-24 h-9 text-sm"
-          />
-          <Button
-            size="sm"
-            disabled={applyingGlobal || !gananciaInput}
-            onClick={handleAplicarGlobal}
-            className="h-9 gap-1"
-          >
-            {applyingGlobal ? <RefreshCw className="h-4 w-4 animate-spin" /> : <Check className="h-4 w-4" />}
-            Aplicar
-          </Button>
-          {applyingGlobal && progressGanancia.total > 0 && (
-            <div className="flex items-center gap-2">
-              <span className="text-xs text-muted-foreground tabular-nums">{progressGanancia.done} / {progressGanancia.total}</span>
-              <div className="w-24 h-2 bg-muted rounded-full overflow-hidden">
-                <div className="h-full bg-primary rounded-full transition-all" style={{ width: `${Math.round((progressGanancia.done / progressGanancia.total) * 100)}%` }} />
-              </div>
             </div>
-          )}
+            {applyingGlobal && progressGanancia.total > 0 && (
+              <div className="flex items-center gap-2">
+                <span className="text-xs text-muted-foreground tabular-nums">{progressGanancia.done}/{progressGanancia.total}</span>
+                <div className="w-20 h-1.5 bg-muted rounded-full overflow-hidden">
+                  <div className="h-full bg-teal-500 rounded-full transition-all" style={{ width: `${Math.round((progressGanancia.done / progressGanancia.total) * 100)}%` }} />
+                </div>
+              </div>
+            )}
+          </div>
+
+          {/* Derecha: acciones */}
+          <div className="flex items-center gap-1.5">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setRemitoImportOpen(true)}
+              className="gap-1.5 h-8 px-2.5"
+            >
+              <FileUp className="h-3.5 w-3.5" />
+              <span className="hidden sm:inline text-xs">Remito</span>
+            </Button>
+
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setShowFilters(!showFilters)}
+              className="gap-1.5 h-8 px-2.5"
+            >
+              <Filter className="h-3.5 w-3.5" />
+              {activeFilterCount > 0 && (
+                <Badge
+                  variant="secondary"
+                  className="h-4 w-4 p-0 flex items-center justify-center text-[10px]"
+                >
+                  {activeFilterCount}
+                </Badge>
+              )}
+            </Button>
+
+            <div className="flex border border-border rounded-lg">
+              <Button
+                variant={viewMode === "grid" ? "secondary" : "ghost"}
+                size="sm"
+                className="rounded-r-none border-0 h-8 w-8 p-0"
+                onClick={() => setViewMode("grid")}
+              >
+                <Grid3x3 className="h-3.5 w-3.5" />
+              </Button>
+              <Button
+                variant={viewMode === "list" ? "secondary" : "ghost"}
+                size="sm"
+                className="rounded-l-none border-0 h-8 w-8 p-0"
+                onClick={() => setViewMode("list")}
+              >
+                <List className="h-3.5 w-3.5" />
+              </Button>
+            </div>
+          </div>
         </div>
 
         {/* Barra de búsqueda */}
