@@ -259,18 +259,21 @@ export default function PedidosPage() {
     try {
       // Aplicar ajustes a los items
       // - rotura: se rompió → descontar stock + registrar pérdida
-      // - faltante_mayorista: no hay en mayorista → solo quitar del pedido
-      // - faltante_armado: error de armado → solo quitar del pedido
-      const faltantes = new Set(
-        adjustments.filter(a => a.type === "faltante_mayorista" || a.type === "faltante_armado").map(a => a.productId)
-      );
-      const roturas = new Map(adjustments.filter(a => a.type === "rotura").map(a => [a.productId, a.quantity]));
+      // - faltante: error humano, está en stock → solo quitar del pedido
+      // - no_quiere: cliente no lo quiere → quitar del pedido (stock no se tocó)
+      const adjByProduct = new Map<string, { rotura: number; faltante: number; no_quiere: number }>();
+      for (const a of adjustments) {
+        const current = adjByProduct.get(a.productId) || { rotura: 0, faltante: 0, no_quiere: 0 };
+        current[a.type === "rotura" ? "rotura" : a.type === "faltante" ? "faltante" : "no_quiere"] += a.quantity;
+        adjByProduct.set(a.productId, current);
+      }
 
       const adjustedItems = selectedOrder.items
-        .filter(item => !faltantes.has(item.productId))
         .map(item => {
-          const roturaQty = roturas.get(item.productId) || 0;
-          return { ...item, quantity: item.quantity - roturaQty };
+          const adj = adjByProduct.get(item.productId);
+          if (!adj) return item;
+          const totalDeduccion = adj.rotura + adj.faltante + adj.no_quiere;
+          return { ...item, quantity: item.quantity - totalDeduccion };
         })
         .filter(item => item.quantity > 0);
 

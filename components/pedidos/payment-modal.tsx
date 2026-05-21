@@ -51,9 +51,9 @@ const calculateOrderTotal = (order: Order) => {
 
 // Tipos de ajuste:
 // - rotura: producto se rompió en el reparto → descuenta stock + registra pérdida en caja
-// - faltante_mayorista: no hay stock ni en local ni en mayorista → solo se quita del pedido
-// - faltante_armado: error al armar, se olvidaron de cargarlo → solo se quita del pedido
-export type AdjustmentType = "rotura" | "faltante_mayorista" | "faltante_armado";
+// - faltante: error de armado, está en stock pero no se cargó → solo se quita del pedido (por unidad)
+// - no_quiere: cliente no lo quiere → vuelve al stock, se quita del pedido (por unidad)
+export type AdjustmentType = "rotura" | "faltante" | "no_quiere";
 
 export interface ItemAdjustment {
   productId: string;
@@ -65,7 +65,8 @@ export interface ItemAdjustment {
 
 type ItemAdj = {
   rotura: number;
-  faltante: AdjustmentType | null; // null = sin faltante
+  faltante: number;
+  no_quiere: number;
 };
 
 interface PaymentModalProps {
@@ -123,10 +124,14 @@ export function PaymentModal({
       if (!item) continue;
       const effectivePrice = item.price - (item.itemDiscount ? (item.price * item.itemDiscount) / 100 : 0);
 
-      if (adj.faltante) {
-        list.push({ productId, productName: item.name, type: adj.faltante, quantity: item.quantity, unitPrice: effectivePrice });
-      } else if (adj.rotura > 0) {
+      if (adj.rotura > 0) {
         list.push({ productId, productName: item.name, type: "rotura", quantity: adj.rotura, unitPrice: effectivePrice });
+      }
+      if (adj.faltante > 0) {
+        list.push({ productId, productName: item.name, type: "faltante", quantity: adj.faltante, unitPrice: effectivePrice });
+      }
+      if (adj.no_quiere > 0) {
+        list.push({ productId, productName: item.name, type: "no_quiere", quantity: adj.no_quiere, unitPrice: effectivePrice });
       }
     }
     return list;
@@ -138,21 +143,15 @@ export function PaymentModal({
 
   if (!order) return null;
 
-  const getAdj = (productId: string): ItemAdj => adjustments[productId] || { rotura: 0, faltante: null };
+  const getAdj = (productId: string): ItemAdj => adjustments[productId] || { rotura: 0, faltante: 0, no_quiere: 0 };
 
-  const setFaltante = (productId: string, type: AdjustmentType | null) => {
+  const setAdjField = (productId: string, field: keyof ItemAdj, qty: number, maxQty: number) => {
     setAdjustments(prev => {
-      const current = prev[productId] || { rotura: 0, faltante: null };
-      // Si ya tiene ese tipo, desactivar
-      const newType = current.faltante === type ? null : type;
-      return { ...prev, [productId]: { rotura: newType ? 0 : current.rotura, faltante: newType } };
-    });
-  };
-
-  const setRotura = (productId: string, qty: number, maxQty: number) => {
-    setAdjustments(prev => {
-      const current = prev[productId] || { rotura: 0, faltante: null };
-      return { ...prev, [productId]: { ...current, rotura: Math.max(0, Math.min(qty, maxQty)), faltante: null } };
+      const current = prev[productId] || { rotura: 0, faltante: 0, no_quiere: 0 };
+      const otherFields = (Object.keys(current) as (keyof ItemAdj)[]).filter(k => k !== field);
+      const usedByOthers = otherFields.reduce((acc, k) => acc + current[k], 0);
+      const clamped = Math.max(0, Math.min(qty, maxQty - usedByOthers));
+      return { ...prev, [productId]: { ...current, [field]: clamped } };
     });
   };
 
@@ -183,16 +182,15 @@ export function PaymentModal({
   };
 
   // Contar items/unidades activos
-  const activeItems = order.items.filter(i => !getAdj(i.productId).faltante);
-  const activeUnits = activeItems.reduce((acc, item) => {
-    const roto = getAdj(item.productId).rotura;
-    return acc + item.quantity - roto;
+  const activeUnits = order.items.reduce((acc, item) => {
+    const adj = getAdj(item.productId);
+    return acc + item.quantity - adj.rotura - adj.faltante - adj.no_quiere;
   }, 0);
 
   // Resumen de ajustes por tipo
   const roturaCount = adjustmentsList.filter(a => a.type === "rotura").length;
-  const faltMayCount = adjustmentsList.filter(a => a.type === "faltante_mayorista").length;
-  const faltArmCount = adjustmentsList.filter(a => a.type === "faltante_armado").length;
+  const faltanteCount = adjustmentsList.filter(a => a.type === "faltante").length;
+  const noQuiereCount = adjustmentsList.filter(a => a.type === "no_quiere").length;
 
   return (
     <Dialog open={isOpen} onOpenChange={(open) => !open && onClose()}>
@@ -357,15 +355,17 @@ export function PaymentModal({
               <div className="divide-y max-h-60 overflow-y-auto">
                 {order.items.map((item) => {
                   const adj = getAdj(item.productId);
-                  const hasFaltante = !!adj.faltante;
+
+                  const totalAdj = adj.rotura + adj.faltante + adj.no_quiere;
+                  const hasAny = totalAdj > 0;
 
                   return (
-                    <div key={item.productId} className={cn("px-3 py-2.5 space-y-2", hasFaltante && "bg-red-50/40")}>
+                    <div key={item.productId} className={cn("px-3 py-2.5 space-y-2", hasAny && "bg-orange-50/40")}>
                       {/* Nombre + cantidad */}
                       <div className="flex items-center justify-between gap-2">
                         <p className={cn(
                           "text-xs font-medium truncate flex-1",
-                          hasFaltante ? "text-red-400 line-through" : "text-gray-900"
+                          totalAdj >= item.quantity ? "text-red-400 line-through" : "text-gray-900"
                         )}>
                           {item.name}
                         </p>
@@ -374,52 +374,46 @@ export function PaymentModal({
                         </span>
                       </div>
 
-                      {/* 3 opciones */}
+                      {/* 3 opciones por unidad */}
                       <div className="flex items-center gap-1.5 flex-wrap">
                         {/* Rotura */}
-                        {!hasFaltante && (
-                          <div className="flex items-center gap-1 bg-orange-50 border border-orange-200 rounded-lg px-2 py-1">
-                            <ShieldAlert className="h-3 w-3 text-orange-500 shrink-0" />
-                            <span className="text-[10px] text-orange-700 font-medium">Roto:</span>
-                            <Input
-                              type="number" min={0} max={item.quantity}
-                              value={adj.rotura || ""}
-                              onChange={(e) => setRotura(item.productId, Number(e.target.value), item.quantity)}
-                              placeholder="0"
-                              className="w-10 h-5 text-[10px] text-center px-0.5 border-orange-300"
-                            />
-                          </div>
-                        )}
+                        <div className="flex items-center gap-1 bg-orange-50 border border-orange-200 rounded-lg px-2 py-1">
+                          <ShieldAlert className="h-3 w-3 text-orange-500 shrink-0" />
+                          <span className="text-[10px] text-orange-700 font-medium">Roto:</span>
+                          <Input
+                            type="number" min={0} max={item.quantity}
+                            value={adj.rotura || ""}
+                            onChange={(e) => setAdjField(item.productId, "rotura", Number(e.target.value), item.quantity)}
+                            placeholder="0"
+                            className="w-10 h-5 text-[10px] text-center px-0.5 border-orange-300"
+                          />
+                        </div>
 
-                        {/* Faltante mayorista */}
-                        <button
-                          type="button"
-                          onClick={() => setFaltante(item.productId, "faltante_mayorista")}
-                          className={cn(
-                            "flex items-center gap-1 px-2 py-1 rounded-lg text-[10px] font-semibold transition-all shrink-0",
-                            adj.faltante === "faltante_mayorista"
-                              ? "bg-red-100 text-red-700 border border-red-300"
-                              : "bg-gray-100 text-gray-500 hover:bg-red-50 hover:text-red-600 border border-gray-200"
-                          )}
-                        >
-                          <PackageX className="h-3 w-3" />
-                          No hay
-                        </button>
+                        {/* Faltante (error humano) */}
+                        <div className="flex items-center gap-1 bg-purple-50 border border-purple-200 rounded-lg px-2 py-1">
+                          <Package className="h-3 w-3 text-purple-500 shrink-0" />
+                          <span className="text-[10px] text-purple-700 font-medium">Faltante:</span>
+                          <Input
+                            type="number" min={0} max={item.quantity}
+                            value={adj.faltante || ""}
+                            onChange={(e) => setAdjField(item.productId, "faltante", Number(e.target.value), item.quantity)}
+                            placeholder="0"
+                            className="w-10 h-5 text-[10px] text-center px-0.5 border-purple-300"
+                          />
+                        </div>
 
-                        {/* Faltante armado */}
-                        <button
-                          type="button"
-                          onClick={() => setFaltante(item.productId, "faltante_armado")}
-                          className={cn(
-                            "flex items-center gap-1 px-2 py-1 rounded-lg text-[10px] font-semibold transition-all shrink-0",
-                            adj.faltante === "faltante_armado"
-                              ? "bg-purple-100 text-purple-700 border border-purple-300"
-                              : "bg-gray-100 text-gray-500 hover:bg-purple-50 hover:text-purple-600 border border-gray-200"
-                          )}
-                        >
-                          <Package className="h-3 w-3" />
-                          Faltante
-                        </button>
+                        {/* No lo quiere */}
+                        <div className="flex items-center gap-1 bg-blue-50 border border-blue-200 rounded-lg px-2 py-1">
+                          <PackageX className="h-3 w-3 text-blue-500 shrink-0" />
+                          <span className="text-[10px] text-blue-700 font-medium">No quiere:</span>
+                          <Input
+                            type="number" min={0} max={item.quantity}
+                            value={adj.no_quiere || ""}
+                            onChange={(e) => setAdjField(item.productId, "no_quiere", Number(e.target.value), item.quantity)}
+                            placeholder="0"
+                            className="w-10 h-5 text-[10px] text-center px-0.5 border-blue-300"
+                          />
+                        </div>
                       </div>
                     </div>
                   );
@@ -436,14 +430,14 @@ export function PaymentModal({
                   {roturaCount} rotura{roturaCount > 1 ? "s" : ""} (descuenta stock)
                 </span>
               )}
-              {faltMayCount > 0 && (
-                <span className="bg-red-100 text-red-700 px-2 py-0.5 rounded-full font-semibold">
-                  {faltMayCount} sin stock mayorista
+              {faltanteCount > 0 && (
+                <span className="bg-purple-100 text-purple-700 px-2 py-0.5 rounded-full font-semibold">
+                  {faltanteCount} faltante{faltanteCount > 1 ? "s" : ""} (está en stock)
                 </span>
               )}
-              {faltArmCount > 0 && (
-                <span className="bg-purple-100 text-purple-700 px-2 py-0.5 rounded-full font-semibold">
-                  {faltArmCount} faltante{faltArmCount > 1 ? "s" : ""} de armado
+              {noQuiereCount > 0 && (
+                <span className="bg-blue-100 text-blue-700 px-2 py-0.5 rounded-full font-semibold">
+                  {noQuiereCount} no quiere (vuelve al stock)
                 </span>
               )}
             </div>
