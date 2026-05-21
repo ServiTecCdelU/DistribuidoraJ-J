@@ -850,6 +850,7 @@ export default function ProductosPage() {
                 <span className="hidden sm:inline">Descargar Planilla</span>
               </Button>
 
+              {/* Subir Planilla — comentado temporalmente
               <Button
                 variant="outline"
                 size="sm"
@@ -871,6 +872,7 @@ export default function ProductosPage() {
                   }}
                 />
               </Button>
+              */}
 
               <Button
                 variant="outline"
@@ -882,6 +884,7 @@ export default function ProductosPage() {
                 <span className="hidden sm:inline">Remito Proveedor</span>
               </Button>
 
+              {/* Cargar Lista — comentado temporalmente
               <Button
                 variant="outline"
                 size="sm"
@@ -891,7 +894,9 @@ export default function ProductosPage() {
                 <RefreshCw className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
                 <span className="hidden sm:inline">Cargar Lista</span>
               </Button>
+              */}
 
+              {/* Valor Inventario — comentado temporalmente
               <Button
                 variant="outline"
                 size="sm"
@@ -901,6 +906,7 @@ export default function ProductosPage() {
                 <TrendingUp className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
                 <span className="hidden sm:inline">Valor Inventario</span>
               </Button>
+              */}
 
               <Button
                 variant="outline"
