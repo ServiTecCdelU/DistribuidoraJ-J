@@ -49,9 +49,9 @@ interface RemitoImportModalProps {
   onConfirm: (updates: { productId: string; newStock: number; productName: string; precioLista: number }[]) => Promise<void>;
 }
 
-// Parsea el texto OCR del remito y extrae items
-// Formato: Codigo Dep Articulo Bultos Cantidad Precio Subtotal
-// Ejemplo: 0101920 01 HARINA PIZZA X 1KG PUREZA 2.00 20.000 1243.5143 24876.28
+// Parsea el texto del remito/factura del proveedor y extrae items
+// Formato León Mayorista: "001 0113271. [E] CINTITAS TOSTEX X125G ASADO 21,0 26,000 819,38 21303,93"
+// Formato remito clásico: "0101920 01 HARINA PIZZA X 1KG PUREZA 2.00 20.000 1243.5143 24876.28"
 function parseRemitoText(text: string): ParsedItem[] {
   const items: ParsedItem[] = [];
   const lines = text.split("\n");
@@ -60,72 +60,86 @@ function parseRemitoText(text: string): ParsedItem[] {
     const line = lines[i].trim();
     if (!line) continue;
 
-    // Buscar líneas que empiecen con un código de 5-8 dígitos
-    const match = line.match(/^(\d{5,8})\s+/);
+    // Formato factura: "001 0113271. [E] DESCRIPCION ... 21,0 26,000 819,38 21303,93"
+    // Nro item (3 dígitos) + código (5-8 dígitos con punto opcional) + [E] + nombre + números
+    const matchFactura = line.match(/^\d{1,3}\s+(\d{5,8})\.?\s+/);
+    // Formato remito clásico: "0101920 01 DESCRIPCION ... 2.00 20.000 1243.5143 24876.28"
+    const matchRemito = line.match(/^(\d{5,8})\s+/);
+
+    const match = matchFactura || matchRemito;
     if (!match) continue;
 
     const codigo = match[1];
-
-    // Extraer el resto de la línea después del código
     const rest = line.slice(match[0].length);
 
-    // Saltar "01" (depósito) si está presente
-    const restNoDep = rest.replace(/^0[1-9]\s+/, "");
+    // Limpiar prefijos: depósito "01 " o tag "[E] "
+    const cleaned = rest.replace(/^0[1-9]\s+/, "").replace(/^\[E\]\s*/, "");
 
-    // Buscar números decimales en la línea (bultos, cantidad, precio, subtotal)
-    // Formato típico: "HARINA PIZZA X 1KG PUREZA 2.00 20.000 1243.5143 24876.28"
-    // Los números al final son: bultos, cantidad, precio_unitario, subtotal
-    // Pero OCR puede leer con variaciones: 2.001 (bultos con basura), etc.
-
-    // Estrategia: extraer todos los tokens numéricos con punto decimal al final de la línea
-    const tokens = restNoDep.split(/\s+/);
-    const numericTokens: { value: number; raw: string; idx: number }[] = [];
+    // Separar tokens
+    const tokens = cleaned.split(/\s+/);
+    const numericTokens: { value: number; raw: string }[] = [];
     const nameTokens: string[] = [];
 
-    for (let j = 0; j < tokens.length; j++) {
-      const t = tokens[j];
-      // Limpiar caracteres de OCR basura (letras sueltas pegadas a números)
-      const cleaned = t.replace(/[^0-9.,]/g, "");
-      // Es un token numérico si tiene al menos 1 dígito y está mayormente compuesto por dígitos/puntos/comas
-      const digitRatio = (cleaned.match(/\d/g) || []).length / Math.max(t.length, 1);
-      const num = parseFloat(cleaned.replace(/,/g, ""));
+    for (const t of tokens) {
+      // Limpiar caracteres no numéricos
+      const stripped = t.replace(/[^0-9.,]/g, "");
+      if (!stripped) { nameTokens.push(t); continue; }
 
-      if (digitRatio > 0.6 && !isNaN(num) && num >= 0) {
-        numericTokens.push({ value: num, raw: t, idx: j });
-      } else if (t.length > 0) {
+      // Detectar si es un número con coma decimal (formato argentino: 819,38)
+      // o con punto decimal (formato clásico: 1243.5143)
+      let numStr = stripped;
+      // Si tiene coma y no tiene punto, o tiene coma después del punto → coma es decimal
+      if (numStr.includes(",")) {
+        // "1.057,56" → "1057.56" | "21,0" → "21.0" | "26,000" → "26.000"
+        numStr = numStr.replace(/\./g, "").replace(",", ".");
+      }
+      const num = parseFloat(numStr);
+      const digitRatio = (stripped.match(/\d/g) || []).length / Math.max(t.length, 1);
+
+      if (digitRatio > 0.5 && !isNaN(num) && num >= 0) {
+        numericTokens.push({ value: num, raw: t });
+      } else {
         nameTokens.push(t);
       }
     }
 
-    // Necesitamos al menos 3 números (bultos + cantidad + precio) para considerar esta línea
-    if (numericTokens.length < 3) {
-      // Puede ser que el artículo continúe en la siguiente línea, agregar al nombre
-      continue;
-    }
+    // Necesitamos al menos 3 números para extraer cantidad y precio
+    if (numericTokens.length < 3) continue;
 
-    // Los primeros números son bultos, cantidad y precio unitario
-    const bultos = numericTokens[0].value;
-    const cantidad = numericTokens[1].value;
-    const precio = numericTokens[2].value;
     const rawName = nameTokens.join(" ").trim();
 
-    // Filtrar headers y líneas no-producto
+    // Filtrar headers
     const nameLower = rawName.toLowerCase();
     if (
-      nameLower.includes("codigo") ||
+      nameLower.includes("descripci") ||
       nameLower.includes("articulo") ||
       nameLower.includes("cantidad") ||
-      nameLower.includes("precio") ||
-      nameLower.includes("subtotal") ||
-      nameLower.includes("deposito") ||
-      nameLower.includes("bultos") ||
+      nameLower.includes("subtot") ||
       rawName.length < 3
     ) {
       continue;
     }
 
-    // Validar que la cantidad tenga sentido (> 0 y < 100000)
-    if (cantidad <= 0 || cantidad > 100000) continue;
+    // Determinar formato por la cantidad de números
+    // Factura León: [IVA%, cantidad, precio_unit, subtotal] → 4 números
+    // Remito clásico: [bultos, cantidad, precio_unit, subtotal] → 4 números
+    let cantidad: number;
+    let precio: number;
+    let bultos = 0;
+
+    if (matchFactura) {
+      // Factura: primer número es IVA%, segundo es cantidad, tercero es precio
+      // Ej: 21,0  26,000  819,38  21303,93
+      cantidad = Math.floor(numericTokens[1].value);
+      precio = numericTokens[2].value;
+    } else {
+      // Remito clásico: primer número es bultos, segundo cantidad, tercero precio
+      bultos = numericTokens[0].value;
+      cantidad = Math.floor(numericTokens[1].value);
+      precio = numericTokens[2].value;
+    }
+
+    if (cantidad <= 0 || cantidad > 100000 || precio <= 0) continue;
 
     items.push({ codigo, rawName, bultos, cantidad, precio });
   }
