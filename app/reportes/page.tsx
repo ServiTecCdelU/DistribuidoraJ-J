@@ -23,6 +23,7 @@ import {
   ShoppingCart,
   CreditCard,
   Banknote,
+  ArrowUpRight,
   Users,
   Loader2,
 } from "lucide-react";
@@ -78,23 +79,44 @@ export default function ReportesPage() {
       const saleDate = toDate(sale.createdAt);
       if (saleDate < from || saleDate > to) return false;
       if (sellerFilter !== "all" && sale.sellerId !== sellerFilter) return false;
-      if (paymentFilter !== "all" && sale.paymentType !== paymentFilter)
-        return false;
+      if (paymentFilter !== "all") {
+        if (paymentFilter === "efectivo") {
+          if (!(sale.paymentType === "cash" && (sale as any).paymentMethod !== "transferencia")) return false;
+        } else if (paymentFilter === "transferencia") {
+          if (!(sale.paymentType === "cash" && (sale as any).paymentMethod === "transferencia")) return false;
+        } else if (sale.paymentType !== paymentFilter) {
+          return false;
+        }
+      }
       return true;
     });
   }, [sales, dateFrom, dateTo, sellerFilter, paymentFilter]);
 
   const stats = useMemo(() => {
-    const total = filteredSales.reduce((sum, s) => sum + (s.total || 0), 0);
-    const cashTotal = filteredSales
-      .filter((s) => s.paymentType === "cash")
-      .reduce((sum, s) => sum + (s.total || 0), 0);
-    const creditTotal = filteredSales
-      .filter((s) => s.paymentType === "credit")
-      .reduce((sum, s) => sum + (s.total || 0), 0);
-    const mixedTotal = filteredSales
-      .filter((s) => s.paymentType === "mixed")
-      .reduce((sum, s) => sum + (s.total || 0), 0);
+    let total = 0;
+    let efectivoTotal = 0;
+    let transferTotal = 0;
+    let creditTotal = 0;
+    let mixedTotal = 0;
+
+    for (const s of filteredSales) {
+      total += s.total || 0;
+      const method = (s as any).paymentMethod || "efectivo";
+      if (s.paymentType === "cash") {
+        if (method === "transferencia") transferTotal += s.total || 0;
+        else efectivoTotal += s.total || 0;
+      } else if (s.paymentType === "credit") {
+        creditTotal += s.total || 0;
+      } else if (s.paymentType === "mixed") {
+        mixedTotal += s.total || 0;
+        const cashAmt = (s as any).cashAmount || 0;
+        const creditAmt = (s as any).creditAmount || 0;
+        if (method === "transferencia") transferTotal += cashAmt;
+        else efectivoTotal += cashAmt;
+        creditTotal += creditAmt;
+      }
+    }
+    const cashTotal = efectivoTotal;
     const avgTicket = filteredSales.length > 0 ? total / filteredSales.length : 0;
 
     // Top products
@@ -124,7 +146,7 @@ export default function ReportesPage() {
     });
     const sellerStats = Object.values(bySeller).sort((a, b) => b.total - a.total);
 
-    return { total, cashTotal, creditTotal, mixedTotal, avgTicket, topProducts, sellerStats };
+    return { total, cashTotal, transferTotal, creditTotal, mixedTotal, avgTicket, topProducts, sellerStats };
   }, [filteredSales]);
 
   const exportCSV = () => {
@@ -239,7 +261,8 @@ export default function ReportesPage() {
                   </SelectTrigger>
                   <SelectContent>
                     <SelectItem value="all">Todos</SelectItem>
-                    <SelectItem value="cash">Efectivo</SelectItem>
+                    <SelectItem value="efectivo">Efectivo</SelectItem>
+                    <SelectItem value="transferencia">Transferencia</SelectItem>
                     <SelectItem value="credit">Cta. Corriente</SelectItem>
                     <SelectItem value="mixed">Mixto</SelectItem>
                   </SelectContent>
@@ -256,7 +279,7 @@ export default function ReportesPage() {
         ) : (
           <>
             {/* Summary Cards */}
-            <div className="grid grid-cols-2 lg:grid-cols-5 gap-4">
+            <div className="grid grid-cols-2 lg:grid-cols-3 gap-4">
               <Card>
                 <CardContent className="p-4">
                   <div className="flex items-center gap-2 mb-1">
@@ -278,11 +301,24 @@ export default function ReportesPage() {
                   <div className="flex items-center gap-2 mb-1">
                     <Banknote className="h-4 w-4 text-green-500" />
                     <span className="text-xs text-muted-foreground">
-                      Contado
+                      Efectivo
                     </span>
                   </div>
                   <p className="text-xl font-bold">
                     {formatCurrency(stats.cashTotal)}
+                  </p>
+                </CardContent>
+              </Card>
+              <Card>
+                <CardContent className="p-4">
+                  <div className="flex items-center gap-2 mb-1">
+                    <ArrowUpRight className="h-4 w-4 text-violet-500" />
+                    <span className="text-xs text-muted-foreground">
+                      Transferencia
+                    </span>
+                  </div>
+                  <p className="text-xl font-bold">
+                    {formatCurrency(stats.transferTotal)}
                   </p>
                 </CardContent>
               </Card>

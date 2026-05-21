@@ -253,7 +253,15 @@ export function useVentas(filterBySellerId?: string, clientCityMap?: Record<stri
         if (!ventaDate || ventaDate > toDate) return false;
       }
 
-      if (filtros.paymentFilter !== "all" && venta.paymentType !== filtros.paymentFilter) return false;
+      if (filtros.paymentFilter !== "all") {
+        if (filtros.paymentFilter === "efectivo") {
+          if (!(venta.paymentType === "cash" && (venta as any).paymentMethod !== "transferencia")) return false;
+        } else if (filtros.paymentFilter === "transferencia") {
+          if (!(venta.paymentType === "cash" && (venta as any).paymentMethod === "transferencia")) return false;
+        } else if (venta.paymentType !== filtros.paymentFilter) {
+          return false;
+        }
+      }
 
       if (filtros.invoiceFilter !== "all") {
         if (filtros.invoiceFilter === "emitted" && !venta.invoiceEmitted) return false;

@@ -186,6 +186,7 @@ export const processSale = async (data: {
     subtotal,
     total,
     payment_type: data.paymentType,
+    payment_method: data.paymentMethod ?? 'efectivo',
     cash_amount: data.cashAmount ?? null,
     credit_amount: data.creditAmount ?? null,
     status: 'completed',
@@ -465,7 +466,13 @@ export const processSaleMayorista = async (data: {
       : 0
   const total = Math.max(0, subtotal - discountAmount)
 
-  const { count } = await supabase.from('ventas').select('id', { count: 'exact', head: true })
+  // Paralelizar queries iniciales
+  const countPromise = supabase.from('ventas').select('id', { count: 'exact', head: true })
+  const clientPromise = data.clientId
+    ? supabase.from('clientes').select('*').eq('id', data.clientId).single()
+    : Promise.resolve({ data: null })
+
+  const [{ count }, { data: cd }] = await Promise.all([countPromise, clientPromise])
   const saleNumber = generateSaleNumber(new Date(), count ?? 0)
 
   let resolvedClientName = data.clientName ?? 'Venta directa'
@@ -477,19 +484,16 @@ export const processSaleMayorista = async (data: {
   let resolvedClientDni: string | null = null
   let clientAddress = data.deliveryAddress
 
-  if (data.clientId) {
-    const { data: cd } = await supabase.from('clientes').select('*').eq('id', data.clientId).single()
-    if (cd) {
-      resolvedClientName = cd.name ?? resolvedClientName
-      resolvedTaxCategory = cd.tax_category ?? null
-      resolvedClientPhone = cd.phone ?? resolvedClientPhone ?? null
-      resolvedClientCuit = cd.cuit ?? null
-      resolvedClientAddress = cd.address ?? null
-      resolvedClientEmail = cd.email ?? null
-      resolvedClientDni = cd.dni ?? null
-      if (data.deliveryMethod === 'delivery' && !data.deliveryAddress) {
-        clientAddress = cd.address ?? data.deliveryAddress
-      }
+  if (cd) {
+    resolvedClientName = cd.name ?? resolvedClientName
+    resolvedTaxCategory = cd.tax_category ?? null
+    resolvedClientPhone = cd.phone ?? resolvedClientPhone ?? null
+    resolvedClientCuit = cd.cuit ?? null
+    resolvedClientAddress = cd.address ?? null
+    resolvedClientEmail = cd.email ?? null
+    resolvedClientDni = cd.dni ?? null
+    if (data.deliveryMethod === 'delivery' && !data.deliveryAddress) {
+      clientAddress = cd.address ?? data.deliveryAddress
     }
   }
 
@@ -528,6 +532,7 @@ export const processSaleMayorista = async (data: {
     items: itemsConStock,
     total,
     payment_type: data.paymentType,
+    payment_method: data.paymentMethod ?? 'efectivo',
     cash_amount: data.cashAmount ?? null,
     credit_amount: data.creditAmount ?? null,
     status: saleStatus,
@@ -547,58 +552,75 @@ export const processSaleMayorista = async (data: {
     }
   }
 
-  // Credito
+  // Credito, saldo a favor y comisión en paralelo
+  const postSaleOps: Promise<void>[] = []
+
   const amountToCredit =
     data.paymentType === 'credit'
       ? total
       : data.paymentType === 'mixed'
         ? (data.creditAmount ?? 0)
         : 0
-
-  if (amountToCredit > 0 && data.clientId) {
-    const { data: cr } = await supabase.from('clientes').select('current_balance').eq('id', data.clientId).single()
-    if (cr) {
-      await supabase.from('clientes').update({ current_balance: (Number(cr.current_balance) || 0) + amountToCredit }).eq('id', data.clientId)
-    }
-    const txId = await generateReadableId('transacciones', 'transaccion', resolvedClientName)
-    await supabase.from('transacciones').insert({
-      id: txId, client_id: data.clientId, type: 'debt', amount: amountToCredit,
-      description: `Venta #${saleNumber}`, date: new Date().toISOString(), sale_id: saleId,
-    })
-  }
-
-  // Saldo a favor
   const overpaymentAmount = data.overpayment ?? 0
-  if (overpaymentAmount > 0 && data.clientId) {
-    const { data: cr } = await supabase.from('clientes').select('current_balance').eq('id', data.clientId).single()
-    if (cr) {
-      await supabase.from('clientes').update({ current_balance: (Number(cr.current_balance) || 0) - overpaymentAmount }).eq('id', data.clientId)
-    }
-    const txId = await generateReadableId('transacciones', 'transaccion', resolvedClientName)
-    await supabase.from('transacciones').insert({
-      id: txId, client_id: data.clientId, type: 'payment', amount: overpaymentAmount,
-      description: `Saldo a favor (Venta #${saleNumber})`, date: new Date().toISOString(), sale_id: saleId,
-    })
+
+  // Crédito + saldo a favor (secuencial entre sí porque tocan current_balance)
+  if ((amountToCredit > 0 || overpaymentAmount > 0) && data.clientId) {
+    postSaleOps.push((async () => {
+      if (amountToCredit > 0) {
+        const { data: cr } = await supabase.from('clientes').select('current_balance').eq('id', data.clientId!).single()
+        if (cr) {
+          await supabase.from('clientes').update({ current_balance: (Number(cr.current_balance) || 0) + amountToCredit - overpaymentAmount }).eq('id', data.clientId!)
+        }
+        const txId = await generateReadableId('transacciones', 'transaccion', resolvedClientName)
+        await supabase.from('transacciones').insert({
+          id: txId, client_id: data.clientId!, type: 'debt', amount: amountToCredit,
+          description: `Venta #${saleNumber}`, date: new Date().toISOString(), sale_id: saleId,
+        })
+        if (overpaymentAmount > 0) {
+          const txId2 = await generateReadableId('transacciones', 'transaccion', resolvedClientName)
+          await supabase.from('transacciones').insert({
+            id: txId2, client_id: data.clientId!, type: 'payment', amount: overpaymentAmount,
+            description: `Saldo a favor (Venta #${saleNumber})`, date: new Date().toISOString(), sale_id: saleId,
+          })
+        }
+      } else if (overpaymentAmount > 0) {
+        const { data: cr } = await supabase.from('clientes').select('current_balance').eq('id', data.clientId!).single()
+        if (cr) {
+          await supabase.from('clientes').update({ current_balance: (Number(cr.current_balance) || 0) - overpaymentAmount }).eq('id', data.clientId!)
+        }
+        const txId = await generateReadableId('transacciones', 'transaccion', resolvedClientName)
+        await supabase.from('transacciones').insert({
+          id: txId, client_id: data.clientId!, type: 'payment', amount: overpaymentAmount,
+          description: `Saldo a favor (Venta #${saleNumber})`, date: new Date().toISOString(), sale_id: saleId,
+        })
+      }
+    })())
   }
 
-  // Comision
+  // Comisión (independiente)
   if (data.sellerId) {
-    const commissionAmount = total * COMMISSION_RATE
-    const now = new Date()
-    const yyyymm = `${now.getFullYear()}${String(now.getMonth() + 1).padStart(2, '00')}`
-    const cId = await generateReadableId('comisiones', 'comision', `${data.sellerName || 'vendedor'}_${yyyymm}`)
-    await supabase.from('comisiones').insert({
-      id: cId, seller_id: data.sellerId, sale_id: saleId, sale_total: total,
-      commission_rate: COMMISSION_RATE * 100, commission_amount: commissionAmount, is_paid: false,
-    })
-    const { data: sr } = await supabase.from('vendedores').select('total_sales, total_commission').eq('id', data.sellerId).single()
-    if (sr) {
-      await supabase.from('vendedores').update({
-        total_sales: (Number(sr.total_sales) || 0) + total,
-        total_commission: (Number(sr.total_commission) || 0) + commissionAmount,
-      }).eq('id', data.sellerId)
-    }
+    postSaleOps.push((async () => {
+      const commissionAmount = total * COMMISSION_RATE
+      const now = new Date()
+      const yyyymm = `${now.getFullYear()}${String(now.getMonth() + 1).padStart(2, '00')}`
+      const [cId, { data: sr }] = await Promise.all([
+        generateReadableId('comisiones', 'comision', `${data.sellerName || 'vendedor'}_${yyyymm}`),
+        supabase.from('vendedores').select('total_sales, total_commission').eq('id', data.sellerId!).single(),
+      ])
+      await Promise.all([
+        supabase.from('comisiones').insert({
+          id: cId, seller_id: data.sellerId!, sale_id: saleId, sale_total: total,
+          commission_rate: COMMISSION_RATE * 100, commission_amount: commissionAmount, is_paid: false,
+        }),
+        sr ? supabase.from('vendedores').update({
+          total_sales: (Number(sr.total_sales) || 0) + total,
+          total_commission: (Number(sr.total_commission) || 0) + commissionAmount,
+        }).eq('id', data.sellerId!) : Promise.resolve(),
+      ])
+    })())
   }
+
+  await Promise.all(postSaleOps)
 
   return {
     id: saleId, saleNumber, clientId: data.clientId, clientName: resolvedClientName,

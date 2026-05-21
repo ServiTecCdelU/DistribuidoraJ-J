@@ -164,6 +164,7 @@ export const salesApi = {
     sellerName?: string
     items: CartItem[]
     paymentType: 'cash' | 'credit' | 'mixed'
+    paymentMethod?: 'efectivo' | 'transferencia'
     cashAmount?: number
     creditAmount?: number
     source?: 'direct' | 'order'

@@ -59,6 +59,7 @@ interface CashRegister {
   totalSales?: number;
   cashTotal?: number;
   creditTotal?: number;
+  transferTotal?: number;
 }
 
 // ── Helpers ──
@@ -92,6 +93,7 @@ const mapRegister = (data: any): CashRegister => ({
   totalSales: data.total_sales,
   cashTotal: data.cash_total,
   creditTotal: data.credit_total,
+  transferTotal: data.transfer_total,
 });
 
 // ══════════════════════ PDF DE CAJA ══════════════════════
@@ -133,17 +135,33 @@ const cajaPdfStyles = StyleSheet.create({
 
 const CajaPdfDocument = ({ register, sales }: { register: CashRegister; sales: Sale[] }) => {
   const isClosed = register.status === "closed";
-  const cashTotal = register.cashTotal ?? sales.reduce((s, v) => {
-    if (v.paymentType === "cash") return s + (v.total || 0);
-    if (v.paymentType === "mixed") return s + ((v as any).cashAmount || 0);
-    return s;
-  }, 0);
-  const creditTotal = register.creditTotal ?? sales.reduce((s, v) => {
-    if (v.paymentType === "credit") return s + (v.total || 0);
-    if (v.paymentType === "mixed") return s + ((v as any).creditAmount || 0);
-    return s;
-  }, 0);
-  const totalSales = register.totalSales ?? sales.reduce((s, v) => s + (v.total || 0), 0);
+
+  // Calcular desglose desde ventas si no hay datos guardados
+  let efectivoTotal = 0;
+  let transferTotal = 0;
+  let creditTotalCalc = 0;
+  let totalCalc = 0;
+  for (const s of sales) {
+    totalCalc += s.total || 0;
+    const method = (s as any).paymentMethod || "efectivo";
+    if (s.paymentType === "cash") {
+      if (method === "transferencia") transferTotal += s.total || 0;
+      else efectivoTotal += s.total || 0;
+    } else if (s.paymentType === "credit") {
+      creditTotalCalc += s.total || 0;
+    } else if (s.paymentType === "mixed") {
+      const cashAmt = (s as any).cashAmount || 0;
+      const creditAmt = (s as any).creditAmount || 0;
+      if (method === "transferencia") transferTotal += cashAmt;
+      else efectivoTotal += cashAmt;
+      creditTotalCalc += creditAmt;
+    }
+  }
+
+  const cashTotal = register.cashTotal ?? efectivoTotal;
+  const transferTotalFinal = register.transferTotal ?? transferTotal;
+  const creditTotal = register.creditTotal ?? creditTotalCalc;
+  const totalSales = register.totalSales ?? totalCalc;
   const salesCount = register.salesCount ?? sales.length;
   const expectedCash = register.initialAmount + cashTotal;
 
@@ -196,17 +214,23 @@ const CajaPdfDocument = ({ register, sales }: { register: CashRegister; sales: S
             <Text style={cajaPdfStyles.statSub}>{salesCount} ventas</Text>
           </View>
           <View style={cajaPdfStyles.statBox}>
-            <Text style={cajaPdfStyles.statLabel}>CONTADO</Text>
+            <Text style={cajaPdfStyles.statLabel}>EFECTIVO</Text>
             <Text style={cajaPdfStyles.statValue}>{formatCurrency(cashTotal)}</Text>
+          </View>
+          <View style={cajaPdfStyles.statBox}>
+            <Text style={cajaPdfStyles.statLabel}>TRANSFERENCIA</Text>
+            <Text style={cajaPdfStyles.statValue}>{formatCurrency(transferTotalFinal)}</Text>
           </View>
           <View style={cajaPdfStyles.statBox}>
             <Text style={cajaPdfStyles.statLabel}>CTA. CORRIENTE</Text>
             <Text style={cajaPdfStyles.statValue}>{formatCurrency(creditTotal)}</Text>
           </View>
+        </View>
+        <View style={[cajaPdfStyles.statsGrid, { marginTop: 0 }]}>
           <View style={cajaPdfStyles.statBox}>
-            <Text style={cajaPdfStyles.statLabel}>EFECTIVO ESPERADO</Text>
+            <Text style={cajaPdfStyles.statLabel}>EFECTIVO ESPERADO EN CAJA</Text>
             <Text style={cajaPdfStyles.statValue}>{formatCurrency(expectedCash)}</Text>
-            <Text style={cajaPdfStyles.statSub}>Inicial + ventas efectivo</Text>
+            <Text style={cajaPdfStyles.statSub}>Inicial + ventas efectivo (sin transf.)</Text>
           </View>
         </View>
 
@@ -460,22 +484,38 @@ export default function CajaPage() {
   };
 
   const todayStats = useMemo(() => {
-    const cashTotal = sales.reduce((sum, s) => {
-      if (s.paymentType === "cash") return sum + (s.total || 0);
-      if (s.paymentType === "mixed") return sum + ((s as any).cashAmount || 0);
-      return sum;
-    }, 0);
-    const creditTotal = sales.reduce((sum, s) => {
-      if (s.paymentType === "credit") return sum + (s.total || 0);
-      if (s.paymentType === "mixed") return sum + ((s as any).creditAmount || 0);
-      return sum;
-    }, 0);
-    const total = sales.reduce((sum, s) => sum + (s.total || 0), 0);
+    let efectivoTotal = 0;
+    let transferTotal = 0;
+    let creditTotal = 0;
+    let total = 0;
 
-    return { cashTotal, creditTotal, total, count: sales.length };
+    for (const s of sales) {
+      total += s.total || 0;
+      const method = (s as any).paymentMethod || "efectivo";
+      if (s.paymentType === "cash") {
+        if (method === "transferencia") {
+          transferTotal += s.total || 0;
+        } else {
+          efectivoTotal += s.total || 0;
+        }
+      } else if (s.paymentType === "credit") {
+        creditTotal += s.total || 0;
+      } else if (s.paymentType === "mixed") {
+        const cashAmt = (s as any).cashAmount || 0;
+        const creditAmt = (s as any).creditAmount || 0;
+        if (method === "transferencia") {
+          transferTotal += cashAmt;
+        } else {
+          efectivoTotal += cashAmt;
+        }
+        creditTotal += creditAmt;
+      }
+    }
+
+    return { efectivoTotal, transferTotal, cashTotal: efectivoTotal + transferTotal, creditTotal, total, count: sales.length };
   }, [sales]);
 
-  const expectedCash = (currentRegister?.initialAmount || 0) + todayStats.cashTotal;
+  const expectedCash = (currentRegister?.initialAmount || 0) + todayStats.efectivoTotal;
 
   const handleOpenRegister = async () => {
     if (!initialAmount || !user) return;
@@ -532,8 +572,9 @@ export default function CajaPage() {
         notes: closeNotes || "",
         sales_count: todayStats.count,
         total_sales: todayStats.total,
-        cash_total: todayStats.cashTotal,
+        cash_total: todayStats.efectivoTotal,
         credit_total: todayStats.creditTotal,
+        transfer_total: todayStats.transferTotal,
       }).eq("id", currentRegister.id);
       if (error) throw error;
 
@@ -548,8 +589,9 @@ export default function CajaPage() {
         notes: closeNotes,
         salesCount: todayStats.count,
         totalSales: todayStats.total,
-        cashTotal: todayStats.cashTotal,
+        cashTotal: todayStats.efectivoTotal,
         creditTotal: todayStats.creditTotal,
+        transferTotal: todayStats.transferTotal,
       });
 
       await auditApi.log({
@@ -769,7 +811,7 @@ export default function CajaPage() {
                 </Card>
 
                 {/* Stats */}
-                <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+                <div className="grid grid-cols-2 lg:grid-cols-5 gap-4">
                   <Card>
                     <CardContent className="p-4">
                       <div className="flex items-center gap-2 mb-1">
@@ -784,9 +826,18 @@ export default function CajaPage() {
                     <CardContent className="p-4">
                       <div className="flex items-center gap-2 mb-1">
                         <Banknote className="h-4 w-4 text-green-500" />
-                        <span className="text-xs text-muted-foreground">Contado</span>
+                        <span className="text-xs text-muted-foreground">Efectivo</span>
                       </div>
-                      <p className="text-xl font-bold">{formatCurrency(todayStats.cashTotal)}</p>
+                      <p className="text-xl font-bold">{formatCurrency(todayStats.efectivoTotal)}</p>
+                    </CardContent>
+                  </Card>
+                  <Card>
+                    <CardContent className="p-4">
+                      <div className="flex items-center gap-2 mb-1">
+                        <ArrowUpRight className="h-4 w-4 text-violet-500" />
+                        <span className="text-xs text-muted-foreground">Transferencia</span>
+                      </div>
+                      <p className="text-xl font-bold">{formatCurrency(todayStats.transferTotal)}</p>
                     </CardContent>
                   </Card>
                   <Card>
@@ -983,7 +1034,7 @@ export default function CajaPage() {
                   ) : (
                     <div className="space-y-4">
                       {/* Info */}
-                      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-sm">
+                      <div className="grid grid-cols-2 sm:grid-cols-5 gap-3 text-sm">
                         <div>
                           <p className="text-xs text-muted-foreground">Monto inicial</p>
                           <p className="font-bold">{formatCurrency(selectedHistorial.initialAmount)}</p>
@@ -993,8 +1044,12 @@ export default function CajaPage() {
                           <p className="font-bold">{formatCurrency(selectedHistorial.totalSales || 0)}</p>
                         </div>
                         <div>
-                          <p className="text-xs text-muted-foreground">Contado</p>
+                          <p className="text-xs text-muted-foreground">Efectivo</p>
                           <p className="font-bold">{formatCurrency(selectedHistorial.cashTotal || 0)}</p>
+                        </div>
+                        <div>
+                          <p className="text-xs text-muted-foreground">Transferencia</p>
+                          <p className="font-bold">{formatCurrency(selectedHistorial.transferTotal || 0)}</p>
                         </div>
                         <div>
                           <p className="text-xs text-muted-foreground">Cta. Corriente</p>
@@ -1235,8 +1290,14 @@ export default function CajaPage() {
                 </div>
                 <div className="flex justify-between">
                   <span className="text-muted-foreground">Ventas efectivo</span>
-                  <span className="font-medium">{formatCurrency(todayStats.cashTotal)}</span>
+                  <span className="font-medium">{formatCurrency(todayStats.efectivoTotal)}</span>
                 </div>
+                {todayStats.transferTotal > 0 && (
+                  <div className="flex justify-between">
+                    <span className="text-muted-foreground">Transferencias (no entra en caja)</span>
+                    <span className="font-medium text-muted-foreground">{formatCurrency(todayStats.transferTotal)}</span>
+                  </div>
+                )}
                 <div className="flex justify-between border-t pt-1.5">
                   <span className="font-medium">Esperado en caja</span>
                   <span className="font-bold">{formatCurrency(expectedCash)}</span>

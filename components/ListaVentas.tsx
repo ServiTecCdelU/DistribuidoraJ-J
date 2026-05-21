@@ -304,7 +304,8 @@ export function ListaVentas({
                 <SelectTrigger className="h-10 w-[150px]"><SelectValue placeholder="Método de pago" /></SelectTrigger>
                 <SelectContent>
                   <SelectItem value="all">Método de pago</SelectItem>
-                  <SelectItem value="cash">Efectivo</SelectItem>
+                  <SelectItem value="efectivo">Efectivo</SelectItem>
+                  <SelectItem value="transferencia">Transferencia</SelectItem>
                   <SelectItem value="credit">Cta. Corriente</SelectItem>
                   <SelectItem value="mixed">Mixto</SelectItem>
                 </SelectContent>
@@ -557,7 +558,7 @@ export function ListaVentas({
             {/* Pago */}
             <FilterSection icon={<Banknote className="h-4 w-4" />} label="Método de pago">
               <div className="grid grid-cols-2 gap-2">
-                {[["all","Todos"],["cash","Efectivo"],["credit","Cta. Corriente"],["mixed","Mixto"]].map(([v, l]) => (
+                {[["all","Todos"],["efectivo","Efectivo"],["transferencia","Transferencia"],["credit","Cta. Corriente"],["mixed","Mixto"]].map(([v, l]) => (
                   <OptionBtn key={v} active={(tmpFiltros as any).paymentFilter === v} onClick={() => setTmpFiltros(f => ({ ...f, paymentFilter: v as any }))}>{l}</OptionBtn>
                 ))}
               </div>
