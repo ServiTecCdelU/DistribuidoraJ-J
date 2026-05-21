@@ -68,8 +68,6 @@ import {
 import { cn } from "@/lib/utils";
 import { Skeleton } from "@/components/ui/skeleton";
 import { toast } from "sonner";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { RecepcionMercaderia } from "@/components/productos/RecepcionMercaderia";
 
 // Tipos para los filtros
 type PriceFilter = "all" | "0-5000" | "5001-10000" | "10001-20000" | "20001+";
@@ -146,7 +144,6 @@ export default function ProductosPage() {
   const [showFilters, setShowFilters] = useState(false);
 
   const [remitoImportOpen, setRemitoImportOpen] = useState(false);
-  const [activeTab, setActiveTab] = useState("catalogo");
 
   // Ganancia global
   const [gananciaInput, setGananciaInput] = useState("");
@@ -837,12 +834,7 @@ export default function ProductosPage() {
 
   return (
     <MainLayout title="Productos" description="Gestiona tu catálogo de productos">
-      <Tabs defaultValue="catalogo" onValueChange={(v) => setActiveTab(v)}>
-        <TabsList className="mb-4 rounded-xl">
-          <TabsTrigger value="catalogo" className="rounded-lg">Catálogo</TabsTrigger>
-          <TabsTrigger value="recepcion" className="rounded-lg">Recepción de mercadería</TabsTrigger>
-        </TabsList>
-        <TabsContent value="catalogo">
+      <div>
       {/* Header */}
       <div className="mb-4 sm:mb-6">
         <PageHeader
@@ -1617,11 +1609,7 @@ export default function ProductosPage() {
         </>
       )}
 
-        </TabsContent>
-        <TabsContent value="recepcion" className="mt-2">
-          {activeTab === "recepcion" && <RecepcionMercaderia />}
-        </TabsContent>
-      </Tabs>
+      </div>
 
       {/* Modales */}
       <ProductModal
