@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect, useMemo, useCallback } from "react";
 import { MainLayout } from "@/components/layout/main-layout";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -13,18 +13,25 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Calendar } from "@/components/ui/calendar";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import {
   DollarSign,
   Banknote,
   CreditCard,
   Clock,
   CheckCircle2,
-  AlertCircle,
   ArrowUpRight,
   ArrowDownRight,
   Loader2,
   LockKeyhole,
   Unlock,
+  FileText,
+  CalendarIcon,
+  Search,
+  ChevronLeft,
+  ChevronRight,
 } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
 import { salesApi, auditApi } from "@/lib/api";
@@ -34,6 +41,7 @@ import { supabase } from "@/lib/supabase";
 import { generateReadableId } from "@/services/supabase-helpers";
 import { formatCurrency, formatTime } from "@/lib/utils/format";
 import { toast } from "sonner";
+import { Document, Page as PdfPage, Text, View, StyleSheet, pdf } from "@react-pdf/renderer";
 
 interface CashRegister {
   id: string;
@@ -47,7 +55,251 @@ interface CashRegister {
   difference?: number;
   status: "open" | "closed";
   notes?: string;
+  salesCount?: number;
+  totalSales?: number;
+  cashTotal?: number;
+  creditTotal?: number;
 }
+
+// ── Helpers ──
+const formatDateShort = (d: Date) =>
+  d.toLocaleDateString("es-AR", { day: "2-digit", month: "2-digit", year: "numeric" });
+
+const formatDateLong = (d: Date) =>
+  new Intl.DateTimeFormat("es-AR", {
+    weekday: "long",
+    day: "numeric",
+    month: "long",
+    year: "numeric",
+  }).format(d);
+
+const formatTimeStr = (d: Date) =>
+  d.toLocaleTimeString("es-AR", { hour: "2-digit", minute: "2-digit" });
+
+const mapRegister = (data: any): CashRegister => ({
+  id: data.id,
+  openedAt: new Date(data.opened_at),
+  closedAt: data.closed_at ? new Date(data.closed_at) : undefined,
+  openedBy: data.opened_by || "",
+  closedBy: data.closed_by || undefined,
+  initialAmount: data.initial_amount || 0,
+  finalAmount: data.final_amount != null ? data.final_amount : undefined,
+  expectedAmount: data.expected_amount != null ? data.expected_amount : undefined,
+  difference: data.difference != null ? data.difference : undefined,
+  status: data.status || "open",
+  notes: data.notes,
+  salesCount: data.sales_count,
+  totalSales: data.total_sales,
+  cashTotal: data.cash_total,
+  creditTotal: data.credit_total,
+});
+
+// ══════════════════════ PDF DE CAJA ══════════════════════
+
+const cajaPdfStyles = StyleSheet.create({
+  page: { padding: "14mm", fontFamily: "Helvetica", fontSize: 9, color: "#1a1a1a", backgroundColor: "white" },
+  header: { borderBottom: "2px solid #0d9488", paddingBottom: 10, marginBottom: 14, flexDirection: "row", justifyContent: "space-between", alignItems: "flex-end" },
+  title: { fontSize: 20, fontWeight: "bold", color: "#0d9488" },
+  subtitle: { fontSize: 10, color: "#555", marginTop: 2 },
+  headerRight: { alignItems: "flex-end" },
+  headerDate: { fontSize: 11, fontWeight: "bold" },
+  headerTime: { fontSize: 8, color: "#666", marginTop: 2 },
+  section: { marginBottom: 12 },
+  sectionTitle: { fontSize: 11, fontWeight: "bold", marginBottom: 6, color: "#0d9488", borderBottom: "1px solid #e5e7eb", paddingBottom: 3 },
+  row: { flexDirection: "row", justifyContent: "space-between", paddingVertical: 3, borderBottom: "0.5px solid #f3f4f6" },
+  label: { fontSize: 9, color: "#555" },
+  value: { fontSize: 9, fontWeight: "bold" },
+  statsGrid: { flexDirection: "row", gap: 10, marginBottom: 12 },
+  statBox: { flex: 1, border: "1px solid #e5e7eb", borderRadius: 4, padding: 8 },
+  statLabel: { fontSize: 7, color: "#888", marginBottom: 2 },
+  statValue: { fontSize: 13, fontWeight: "bold" },
+  statSub: { fontSize: 7, color: "#888", marginTop: 1 },
+  diffPositive: { color: "#059669" },
+  diffNegative: { color: "#dc2626" },
+  diffNeutral: { color: "#059669" },
+  saleRow: { flexDirection: "row", justifyContent: "space-between", paddingVertical: 3, borderBottom: "0.5px solid #f0f0f0", alignItems: "center" },
+  saleClient: { fontSize: 8, fontWeight: "bold", maxWidth: "40%" },
+  saleTime: { fontSize: 7, color: "#888", width: "12%" },
+  saleSeller: { fontSize: 7, color: "#888", width: "18%" },
+  saleAmount: { fontSize: 8, fontWeight: "bold", textAlign: "right", width: "15%" },
+  saleBadge: { fontSize: 6, textAlign: "center", width: "15%", padding: "2px 4px", borderRadius: 3 },
+  cashBadge: { backgroundColor: "#d1fae5", color: "#065f46" },
+  creditBadge: { backgroundColor: "#dbeafe", color: "#1e40af" },
+  mixedBadge: { backgroundColor: "#fef3c7", color: "#92400e" },
+  notesBox: { backgroundColor: "#f9fafb", border: "1px solid #e5e7eb", borderRadius: 4, padding: 8, marginTop: 6 },
+  notesText: { fontSize: 8, color: "#555", fontStyle: "italic" },
+  footer: { marginTop: "auto", paddingTop: 8, borderTop: "1px solid #e5e7eb", flexDirection: "row", justifyContent: "space-between", fontSize: 7, color: "#aaa" },
+});
+
+const CajaPdfDocument = ({ register, sales }: { register: CashRegister; sales: Sale[] }) => {
+  const isClosed = register.status === "closed";
+  const cashTotal = register.cashTotal ?? sales.reduce((s, v) => {
+    if (v.paymentType === "cash") return s + (v.total || 0);
+    if (v.paymentType === "mixed") return s + ((v as any).cashAmount || 0);
+    return s;
+  }, 0);
+  const creditTotal = register.creditTotal ?? sales.reduce((s, v) => {
+    if (v.paymentType === "credit") return s + (v.total || 0);
+    if (v.paymentType === "mixed") return s + ((v as any).creditAmount || 0);
+    return s;
+  }, 0);
+  const totalSales = register.totalSales ?? sales.reduce((s, v) => s + (v.total || 0), 0);
+  const salesCount = register.salesCount ?? sales.length;
+  const expectedCash = register.initialAmount + cashTotal;
+
+  return (
+    <Document>
+      <PdfPage size="A4" style={cajaPdfStyles.page}>
+        {/* Header */}
+        <View style={cajaPdfStyles.header}>
+          <View>
+            <Text style={cajaPdfStyles.title}>Caja Diaria</Text>
+            <Text style={cajaPdfStyles.subtitle}>Distribuidora Patricia</Text>
+          </View>
+          <View style={cajaPdfStyles.headerRight}>
+            <Text style={cajaPdfStyles.headerDate}>{formatDateLong(register.openedAt)}</Text>
+            <Text style={cajaPdfStyles.headerTime}>
+              Abierta: {formatTimeStr(register.openedAt)}
+              {register.closedAt && ` | Cerrada: ${formatTimeStr(register.closedAt)}`}
+            </Text>
+          </View>
+        </View>
+
+        {/* Info de apertura/cierre */}
+        <View style={cajaPdfStyles.section}>
+          <Text style={cajaPdfStyles.sectionTitle}>Datos de la caja</Text>
+          <View style={cajaPdfStyles.row}>
+            <Text style={cajaPdfStyles.label}>Estado</Text>
+            <Text style={cajaPdfStyles.value}>{isClosed ? "CERRADA" : "ABIERTA"}</Text>
+          </View>
+          <View style={cajaPdfStyles.row}>
+            <Text style={cajaPdfStyles.label}>Abierta por</Text>
+            <Text style={cajaPdfStyles.value}>{register.openedBy}</Text>
+          </View>
+          {register.closedBy && (
+            <View style={cajaPdfStyles.row}>
+              <Text style={cajaPdfStyles.label}>Cerrada por</Text>
+              <Text style={cajaPdfStyles.value}>{register.closedBy}</Text>
+            </View>
+          )}
+          <View style={cajaPdfStyles.row}>
+            <Text style={cajaPdfStyles.label}>Monto inicial</Text>
+            <Text style={cajaPdfStyles.value}>{formatCurrency(register.initialAmount)}</Text>
+          </View>
+        </View>
+
+        {/* Estadísticas */}
+        <View style={cajaPdfStyles.statsGrid}>
+          <View style={cajaPdfStyles.statBox}>
+            <Text style={cajaPdfStyles.statLabel}>VENTA TOTAL</Text>
+            <Text style={cajaPdfStyles.statValue}>{formatCurrency(totalSales)}</Text>
+            <Text style={cajaPdfStyles.statSub}>{salesCount} ventas</Text>
+          </View>
+          <View style={cajaPdfStyles.statBox}>
+            <Text style={cajaPdfStyles.statLabel}>CONTADO</Text>
+            <Text style={cajaPdfStyles.statValue}>{formatCurrency(cashTotal)}</Text>
+          </View>
+          <View style={cajaPdfStyles.statBox}>
+            <Text style={cajaPdfStyles.statLabel}>CTA. CORRIENTE</Text>
+            <Text style={cajaPdfStyles.statValue}>{formatCurrency(creditTotal)}</Text>
+          </View>
+          <View style={cajaPdfStyles.statBox}>
+            <Text style={cajaPdfStyles.statLabel}>EFECTIVO ESPERADO</Text>
+            <Text style={cajaPdfStyles.statValue}>{formatCurrency(expectedCash)}</Text>
+            <Text style={cajaPdfStyles.statSub}>Inicial + ventas efectivo</Text>
+          </View>
+        </View>
+
+        {/* Resultado del cierre */}
+        {isClosed && register.difference != null && (
+          <View style={cajaPdfStyles.section}>
+            <Text style={cajaPdfStyles.sectionTitle}>Resultado del cierre</Text>
+            <View style={cajaPdfStyles.row}>
+              <Text style={cajaPdfStyles.label}>Esperado en caja</Text>
+              <Text style={cajaPdfStyles.value}>{formatCurrency(register.expectedAmount || expectedCash)}</Text>
+            </View>
+            <View style={cajaPdfStyles.row}>
+              <Text style={cajaPdfStyles.label}>Contado en caja</Text>
+              <Text style={cajaPdfStyles.value}>{formatCurrency(register.finalAmount || 0)}</Text>
+            </View>
+            <View style={cajaPdfStyles.row}>
+              <Text style={cajaPdfStyles.label}>Diferencia</Text>
+              <Text style={[
+                cajaPdfStyles.value,
+                register.difference === 0
+                  ? cajaPdfStyles.diffNeutral
+                  : register.difference > 0
+                    ? cajaPdfStyles.diffPositive
+                    : cajaPdfStyles.diffNegative,
+              ]}>
+                {formatCurrency(register.difference)}
+                {register.difference === 0 ? " (cuadra)" : register.difference > 0 ? " (sobrante)" : " (faltante)"}
+              </Text>
+            </View>
+            {register.notes && (
+              <View style={cajaPdfStyles.notesBox}>
+                <Text style={cajaPdfStyles.notesText}>Notas: {register.notes}</Text>
+              </View>
+            )}
+          </View>
+        )}
+
+        {/* Detalle de ventas */}
+        {sales.length > 0 && (
+          <View style={cajaPdfStyles.section}>
+            <Text style={cajaPdfStyles.sectionTitle}>Detalle de ventas ({sales.length})</Text>
+            {/* Header de tabla */}
+            <View style={[cajaPdfStyles.saleRow, { borderBottom: "1px solid #d1d5db", paddingBottom: 4, marginBottom: 2 }]}>
+              <Text style={[cajaPdfStyles.saleTime, { fontWeight: "bold", color: "#333" }]}>Hora</Text>
+              <Text style={[cajaPdfStyles.saleClient, { fontWeight: "bold", color: "#333" }]}>Cliente</Text>
+              <Text style={[cajaPdfStyles.saleSeller, { fontWeight: "bold", color: "#333" }]}>Vendedor</Text>
+              <Text style={[cajaPdfStyles.saleBadge, { fontWeight: "bold", color: "#333" }]}>Pago</Text>
+              <Text style={[cajaPdfStyles.saleAmount, { fontWeight: "bold", color: "#333" }]}>Monto</Text>
+            </View>
+            {sales.map((sale, i) => (
+              <View key={i} style={cajaPdfStyles.saleRow}>
+                <Text style={cajaPdfStyles.saleTime}>{formatTimeStr(new Date(sale.createdAt))}</Text>
+                <Text style={cajaPdfStyles.saleClient}>{sale.clientName || "Cons. Final"}</Text>
+                <Text style={cajaPdfStyles.saleSeller}>{sale.sellerName || "-"}</Text>
+                <Text style={[
+                  cajaPdfStyles.saleBadge,
+                  sale.paymentType === "cash"
+                    ? cajaPdfStyles.cashBadge
+                    : sale.paymentType === "credit"
+                      ? cajaPdfStyles.creditBadge
+                      : cajaPdfStyles.mixedBadge,
+                ]}>
+                  {sale.paymentType === "cash"
+                    ? ((sale as any).paymentMethod === "transferencia" ? "Transf." : "Efectivo")
+                    : sale.paymentType === "credit" ? "Cta.Cte." : "Mixto"}
+                </Text>
+                <Text style={cajaPdfStyles.saleAmount}>{formatCurrency(sale.total || 0)}</Text>
+              </View>
+            ))}
+          </View>
+        )}
+
+        {/* Footer */}
+        <View style={cajaPdfStyles.footer}>
+          <Text>Caja Diaria - Distribuidora Patricia</Text>
+          <Text>Generado: {formatDateShort(new Date())} {formatTimeStr(new Date())}</Text>
+        </View>
+      </PdfPage>
+    </Document>
+  );
+};
+
+const generarCajaPdf = async (register: CashRegister, sales: Sale[]) => {
+  const blob = await pdf(<CajaPdfDocument register={register} sales={sales} />).toBlob();
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = `caja_${formatDateShort(register.openedAt).replace(/\//g, "-")}.pdf`;
+  a.click();
+  URL.revokeObjectURL(url);
+};
+
+// ══════════════════════ COMPONENTE PRINCIPAL ══════════════════════
 
 export default function CajaPage() {
   const { user } = useAuth();
@@ -65,6 +317,21 @@ export default function CajaPage() {
   const [closeNotes, setCloseNotes] = useState("");
 
   const [saving, setSaving] = useState(false);
+  const [generatingPdf, setGeneratingPdf] = useState(false);
+
+  // Historial
+  const [historialRegisters, setHistorialRegisters] = useState<CashRegister[]>([]);
+  const [historialLoading, setHistorialLoading] = useState(false);
+  const [searchDate, setSearchDate] = useState<Date | undefined>(undefined);
+  const [calendarOpen, setCalendarOpen] = useState(false);
+  const [historialPage, setHistorialPage] = useState(0);
+  const HISTORIAL_PAGE_SIZE = 10;
+
+  // Detalle de caja histórica
+  const [selectedHistorial, setSelectedHistorial] = useState<CashRegister | null>(null);
+  const [selectedSales, setSelectedSales] = useState<Sale[]>([]);
+  const [detailLoading, setDetailLoading] = useState(false);
+  const [generatingHistorialPdf, setGeneratingHistorialPdf] = useState<string | null>(null);
 
   useEffect(() => {
     let mounted = true;
@@ -83,20 +350,7 @@ export default function CajaPage() {
         if (!mounted) return;
 
         if (registers && registers.length > 0) {
-          const data = registers[0];
-          setCurrentRegister({
-            id: data.id,
-            openedAt: new Date(data.opened_at),
-            closedAt: data.closed_at ? new Date(data.closed_at) : undefined,
-            openedBy: data.opened_by || "",
-            closedBy: data.closed_by || undefined,
-            initialAmount: data.initial_amount || 0,
-            finalAmount: data.final_amount,
-            expectedAmount: data.expected_amount,
-            difference: data.difference,
-            status: data.status || "open",
-            notes: data.notes,
-          });
+          setCurrentRegister(mapRegister(registers[0]));
         }
 
         const salesData = await salesApi.getAll();
@@ -106,7 +360,7 @@ export default function CajaPage() {
           return dt >= today;
         });
         setSales(todaySales);
-      } catch (error) {
+      } catch {
         if (!mounted) return;
         toast.error("Error al cargar datos de caja");
       } finally {
@@ -120,7 +374,6 @@ export default function CajaPage() {
 
   const loadData = async () => {
     try {
-      // Get today's register
       const today = new Date();
       today.setHours(0, 0, 0, 0);
 
@@ -132,46 +385,89 @@ export default function CajaPage() {
         .limit(1);
 
       if (registers && registers.length > 0) {
-        const data = registers[0];
-        setCurrentRegister({
-          id: data.id,
-          openedAt: new Date(data.opened_at),
-          closedAt: data.closed_at ? new Date(data.closed_at) : undefined,
-          openedBy: data.opened_by || "",
-          closedBy: data.closed_by || undefined,
-          initialAmount: data.initial_amount || 0,
-          finalAmount: data.final_amount,
-          expectedAmount: data.expected_amount,
-          difference: data.difference,
-          status: data.status || "open",
-          notes: data.notes,
-        });
+        setCurrentRegister(mapRegister(registers[0]));
       }
 
-      // Get today's sales
       const salesData = await salesApi.getAll();
       const todaySales = salesData.filter((sale) => {
         const d = new Date(sale.createdAt);
         return d >= today;
       });
       setSales(todaySales);
-    } catch (error) {
+    } catch {
       toast.error("Error al recargar ventas");
     } finally {
       setLoading(false);
     }
   };
 
+  const loadHistorial = useCallback(async (date?: Date, page = 0) => {
+    setHistorialLoading(true);
+    try {
+      let query = supabase
+        .from("caja")
+        .select("*")
+        .order("opened_at", { ascending: false });
+
+      if (date) {
+        const start = new Date(date);
+        start.setHours(0, 0, 0, 0);
+        const end = new Date(date);
+        end.setHours(23, 59, 59, 999);
+        query = query.gte("opened_at", start.toISOString()).lte("opened_at", end.toISOString());
+      }
+
+      // Excluir la caja de hoy
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+      if (!date) {
+        query = query.lt("opened_at", today.toISOString());
+      }
+
+      query = query.range(page * HISTORIAL_PAGE_SIZE, (page + 1) * HISTORIAL_PAGE_SIZE - 1);
+
+      const { data, error } = await query;
+      if (error) throw error;
+
+      setHistorialRegisters((data || []).map(mapRegister));
+    } catch {
+      toast.error("Error al cargar historial");
+    } finally {
+      setHistorialLoading(false);
+    }
+  }, []);
+
+  const loadHistorialDetail = async (register: CashRegister) => {
+    setDetailLoading(true);
+    setSelectedHistorial(register);
+    try {
+      const start = new Date(register.openedAt);
+      start.setHours(0, 0, 0, 0);
+      const end = new Date(register.openedAt);
+      end.setHours(23, 59, 59, 999);
+
+      const salesData = await salesApi.getAll();
+      const daySales = salesData.filter((s) => {
+        const d = new Date(s.createdAt);
+        return d >= start && d <= end;
+      });
+      setSelectedSales(daySales);
+    } catch {
+      toast.error("Error al cargar ventas del día");
+    } finally {
+      setDetailLoading(false);
+    }
+  };
+
   const todayStats = useMemo(() => {
-    const cashSales = sales.filter((s) => s.paymentType === "cash" || s.paymentType === "mixed");
     const cashTotal = sales.reduce((sum, s) => {
       if (s.paymentType === "cash") return sum + (s.total || 0);
-      if (s.paymentType === "mixed") return sum + (s.cashAmount || 0);
+      if (s.paymentType === "mixed") return sum + ((s as any).cashAmount || 0);
       return sum;
     }, 0);
     const creditTotal = sales.reduce((sum, s) => {
       if (s.paymentType === "credit") return sum + (s.total || 0);
-      if (s.paymentType === "mixed") return sum + (s.creditAmount || 0);
+      if (s.paymentType === "mixed") return sum + ((s as any).creditAmount || 0);
       return sum;
     }, 0);
     const total = sales.reduce((sum, s) => sum + (s.total || 0), 0);
@@ -212,7 +508,7 @@ export default function CajaPage() {
       });
       setShowOpenModal(false);
       setInitialAmount("");
-    } catch (error) {
+    } catch {
       toast.error("Error al abrir la caja");
     } finally {
       setSaving(false);
@@ -223,13 +519,13 @@ export default function CajaPage() {
     if (!finalAmount || !currentRegister || !user) return;
     setSaving(true);
     try {
-      const final = parseFloat(finalAmount);
-      const diff = final - expectedCash;
+      const final_ = parseFloat(finalAmount);
+      const diff = final_ - expectedCash;
 
       const { error } = await supabase.from("caja").update({
         closed_at: new Date().toISOString(),
         closed_by: user.name || user.email,
-        final_amount: final,
+        final_amount: final_,
         expected_amount: expectedCash,
         difference: diff,
         status: "closed",
@@ -245,28 +541,67 @@ export default function CajaPage() {
         ...currentRegister,
         closedAt: new Date(),
         closedBy: user.name || user.email,
-        finalAmount: final,
+        finalAmount: final_,
         expectedAmount: expectedCash,
         difference: diff,
         status: "closed",
         notes: closeNotes,
+        salesCount: todayStats.count,
+        totalSales: todayStats.total,
+        cashTotal: todayStats.cashTotal,
+        creditTotal: todayStats.creditTotal,
       });
 
       await auditApi.log({
         action: "cash_register_closed",
         userId: user.id,
         userName: user.name || user.email,
-        description: `Cerro caja. Esperado: ${formatCurrency(expectedCash)}, Contado: ${formatCurrency(final)}, Diferencia: ${formatCurrency(diff)}`,
+        description: `Cerro caja. Esperado: ${formatCurrency(expectedCash)}, Contado: ${formatCurrency(final_)}, Diferencia: ${formatCurrency(diff)}`,
         entityType: "caja",
         entityId: currentRegister.id,
       });
       setShowCloseModal(false);
       setFinalAmount("");
       setCloseNotes("");
-    } catch (error) {
+    } catch {
       toast.error("Error al cerrar la caja");
     } finally {
       setSaving(false);
+    }
+  };
+
+  const handleDownloadPdf = async () => {
+    if (!currentRegister) return;
+    setGeneratingPdf(true);
+    try {
+      await generarCajaPdf(currentRegister, sales);
+      toast.success("PDF descargado");
+    } catch {
+      toast.error("Error al generar PDF");
+    } finally {
+      setGeneratingPdf(false);
+    }
+  };
+
+  const handleDownloadHistorialPdf = async (register: CashRegister) => {
+    setGeneratingHistorialPdf(register.id);
+    try {
+      // Cargar ventas del día si no están cargadas
+      const start = new Date(register.openedAt);
+      start.setHours(0, 0, 0, 0);
+      const end = new Date(register.openedAt);
+      end.setHours(23, 59, 59, 999);
+      const salesData = await salesApi.getAll();
+      const daySales = salesData.filter((s) => {
+        const d = new Date(s.createdAt);
+        return d >= start && d <= end;
+      });
+      await generarCajaPdf(register, daySales);
+      toast.success("PDF descargado");
+    } catch {
+      toast.error("Error al generar PDF");
+    } finally {
+      setGeneratingHistorialPdf(null);
     }
   };
 
@@ -280,15 +615,25 @@ export default function CajaPage() {
           <div>
             <h1 className="text-2xl font-bold">Caja Diaria</h1>
             <p className="text-muted-foreground text-sm">
-              {new Intl.DateTimeFormat("es-AR", {
-                weekday: "long",
-                day: "numeric",
-                month: "long",
-                year: "numeric",
-              }).format(new Date())}
+              {formatDateLong(new Date())}
             </p>
           </div>
-          <div>
+          <div className="flex items-center gap-2">
+            {currentRegister && (
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={handleDownloadPdf}
+                disabled={generatingPdf}
+              >
+                {generatingPdf ? (
+                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                ) : (
+                  <FileText className="h-4 w-4 mr-2" />
+                )}
+                PDF
+              </Button>
+            )}
             {!currentRegister && (
               <Button onClick={() => setShowOpenModal(true)}>
                 <Unlock className="h-4 w-4 mr-2" />
@@ -313,244 +658,527 @@ export default function CajaPage() {
           </div>
         </div>
 
-        {loading ? (
-          <div className="space-y-6">
-            {/* Register status skeleton */}
-            <div className="border border-border rounded-2xl p-4">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-3">
-                  <Skeleton className="h-10 w-10 rounded-full" />
-                  <div className="space-y-1.5">
-                    <Skeleton className="h-5 w-32" />
-                    <Skeleton className="h-3 w-48" />
-                  </div>
-                </div>
-                <div className="text-right space-y-1">
-                  <Skeleton className="h-3 w-20 ml-auto" />
-                  <Skeleton className="h-5 w-24 ml-auto" />
-                </div>
-              </div>
-            </div>
+        <Tabs defaultValue="hoy" onValueChange={(v) => {
+          if (v === "historial") {
+            loadHistorial();
+          }
+        }}>
+          <TabsList>
+            <TabsTrigger value="hoy">Hoy</TabsTrigger>
+            <TabsTrigger value="historial">Historial</TabsTrigger>
+          </TabsList>
 
-            {/* Stat cards skeleton */}
-            <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-              {Array.from({ length: 4 }).map((_, i) => (
-                <div key={i} className="border border-border rounded-2xl p-4 space-y-2">
-                  <div className="flex items-center gap-2">
-                    <Skeleton className="h-4 w-4 rounded" />
-                    <Skeleton className="h-3 w-20" />
-                  </div>
-                  <Skeleton className="h-6 w-28" />
-                  <Skeleton className="h-3 w-16" />
-                </div>
-              ))}
-            </div>
-
-            {/* Sales list skeleton */}
-            <div className="border border-border rounded-2xl p-4 space-y-3">
-              <Skeleton className="h-5 w-36" />
-              <div className="space-y-2">
-                {Array.from({ length: 5 }).map((_, i) => (
-                  <div key={i} className="flex items-center justify-between py-2 border-b border-border/50 last:border-0">
+          {/* ═══ TAB HOY ═══ */}
+          <TabsContent value="hoy" className="space-y-6 mt-4">
+            {loading ? (
+              <div className="space-y-6">
+                <div className="border border-border rounded-2xl p-4">
+                  <div className="flex items-center justify-between">
                     <div className="flex items-center gap-3">
-                      <Skeleton className="h-3.5 w-3.5 rounded" />
-                      <div className="space-y-1">
-                        <Skeleton className="h-4 w-32" />
-                        <Skeleton className="h-3 w-24" />
+                      <Skeleton className="h-10 w-10 rounded-full" />
+                      <div className="space-y-1.5">
+                        <Skeleton className="h-5 w-32" />
+                        <Skeleton className="h-3 w-48" />
                       </div>
                     </div>
                     <div className="text-right space-y-1">
-                      <Skeleton className="h-4 w-20 ml-auto" />
-                      <Skeleton className="h-4 w-16 ml-auto rounded-full" />
+                      <Skeleton className="h-3 w-20 ml-auto" />
+                      <Skeleton className="h-5 w-24 ml-auto" />
                     </div>
-                  </div>
-                ))}
-              </div>
-            </div>
-          </div>
-        ) : !currentRegister ? (
-          <Card>
-            <CardContent className="flex flex-col items-center justify-center py-16 text-center">
-              <Banknote className="h-12 w-12 text-muted-foreground mb-4" />
-              <h3 className="text-lg font-semibold mb-1">Caja no abierta</h3>
-              <p className="text-muted-foreground text-sm mb-4">
-                Abri la caja para comenzar a registrar el dia
-              </p>
-              <Button onClick={() => setShowOpenModal(true)}>
-                <Unlock className="h-4 w-4 mr-2" />
-                Abrir Caja
-              </Button>
-            </CardContent>
-          </Card>
-        ) : (
-          <>
-            {/* Register info */}
-            <Card className={isOpen ? "border-emerald-500/30 bg-emerald-500/5" : ""}>
-              <CardContent className="p-4">
-                <div className="flex items-center justify-between flex-wrap gap-2">
-                  <div className="flex items-center gap-3">
-                    <div className={`h-10 w-10 rounded-full flex items-center justify-center ${isOpen ? "bg-emerald-500/10" : "bg-muted"}`}>
-                      {isOpen ? (
-                        <Unlock className="h-5 w-5 text-emerald-500" />
-                      ) : (
-                        <LockKeyhole className="h-5 w-5 text-muted-foreground" />
-                      )}
-                    </div>
-                    <div>
-                      <p className="font-semibold">
-                        {isOpen ? "Caja abierta" : "Caja cerrada"}
-                      </p>
-                      <p className="text-xs text-muted-foreground">
-                        Abierta a las {formatTime(currentRegister.openedAt)} por{" "}
-                        {currentRegister.openedBy}
-                        {currentRegister.closedAt &&
-                          ` | Cerrada a las ${formatTime(currentRegister.closedAt)} por ${currentRegister.closedBy}`}
-                      </p>
-                    </div>
-                  </div>
-                  <div className="text-right">
-                    <p className="text-xs text-muted-foreground">Monto inicial</p>
-                    <p className="font-bold">{formatCurrency(currentRegister.initialAmount)}</p>
                   </div>
                 </div>
-              </CardContent>
-            </Card>
-
-            {/* Stats */}
-            <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-              <Card>
-                <CardContent className="p-4">
-                  <div className="flex items-center gap-2 mb-1">
-                    <DollarSign className="h-4 w-4 text-emerald-500" />
-                    <span className="text-xs text-muted-foreground">Venta total</span>
+                <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+                  {Array.from({ length: 4 }).map((_, i) => (
+                    <div key={i} className="border border-border rounded-2xl p-4 space-y-2">
+                      <div className="flex items-center gap-2">
+                        <Skeleton className="h-4 w-4 rounded" />
+                        <Skeleton className="h-3 w-20" />
+                      </div>
+                      <Skeleton className="h-6 w-28" />
+                      <Skeleton className="h-3 w-16" />
+                    </div>
+                  ))}
+                </div>
+                <div className="border border-border rounded-2xl p-4 space-y-3">
+                  <Skeleton className="h-5 w-36" />
+                  <div className="space-y-2">
+                    {Array.from({ length: 5 }).map((_, i) => (
+                      <div key={i} className="flex items-center justify-between py-2 border-b border-border/50 last:border-0">
+                        <div className="flex items-center gap-3">
+                          <Skeleton className="h-3.5 w-3.5 rounded" />
+                          <div className="space-y-1">
+                            <Skeleton className="h-4 w-32" />
+                            <Skeleton className="h-3 w-24" />
+                          </div>
+                        </div>
+                        <div className="text-right space-y-1">
+                          <Skeleton className="h-4 w-20 ml-auto" />
+                          <Skeleton className="h-4 w-16 ml-auto rounded-full" />
+                        </div>
+                      </div>
+                    ))}
                   </div>
-                  <p className="text-xl font-bold">{formatCurrency(todayStats.total)}</p>
-                  <p className="text-xs text-muted-foreground">{todayStats.count} ventas</p>
-                </CardContent>
-              </Card>
+                </div>
+              </div>
+            ) : !currentRegister ? (
               <Card>
-                <CardContent className="p-4">
-                  <div className="flex items-center gap-2 mb-1">
-                    <Banknote className="h-4 w-4 text-green-500" />
-                    <span className="text-xs text-muted-foreground">Contado</span>
-                  </div>
-                  <p className="text-xl font-bold">{formatCurrency(todayStats.cashTotal)}</p>
-                </CardContent>
-              </Card>
-              <Card>
-                <CardContent className="p-4">
-                  <div className="flex items-center gap-2 mb-1">
-                    <CreditCard className="h-4 w-4 text-blue-500" />
-                    <span className="text-xs text-muted-foreground">Cta. Corriente</span>
-                  </div>
-                  <p className="text-xl font-bold">{formatCurrency(todayStats.creditTotal)}</p>
-                </CardContent>
-              </Card>
-              <Card>
-                <CardContent className="p-4">
-                  <div className="flex items-center gap-2 mb-1">
-                    <Banknote className="h-4 w-4 text-amber-500" />
-                    <span className="text-xs text-muted-foreground">Efectivo esperado</span>
-                  </div>
-                  <p className="text-xl font-bold">{formatCurrency(expectedCash)}</p>
-                  <p className="text-xs text-muted-foreground">
-                    Inicial + ventas efectivo
+                <CardContent className="flex flex-col items-center justify-center py-16 text-center">
+                  <Banknote className="h-12 w-12 text-muted-foreground mb-4" />
+                  <h3 className="text-lg font-semibold mb-1">Caja no abierta</h3>
+                  <p className="text-muted-foreground text-sm mb-4">
+                    Abri la caja para comenzar a registrar el dia
                   </p>
+                  <Button onClick={() => setShowOpenModal(true)}>
+                    <Unlock className="h-4 w-4 mr-2" />
+                    Abrir Caja
+                  </Button>
                 </CardContent>
               </Card>
+            ) : (
+              <>
+                {/* Register info */}
+                <Card className={isOpen ? "border-emerald-500/30 bg-emerald-500/5" : ""}>
+                  <CardContent className="p-4">
+                    <div className="flex items-center justify-between flex-wrap gap-2">
+                      <div className="flex items-center gap-3">
+                        <div className={`h-10 w-10 rounded-full flex items-center justify-center ${isOpen ? "bg-emerald-500/10" : "bg-muted"}`}>
+                          {isOpen ? (
+                            <Unlock className="h-5 w-5 text-emerald-500" />
+                          ) : (
+                            <LockKeyhole className="h-5 w-5 text-muted-foreground" />
+                          )}
+                        </div>
+                        <div>
+                          <p className="font-semibold">
+                            {isOpen ? "Caja abierta" : "Caja cerrada"}
+                          </p>
+                          <p className="text-xs text-muted-foreground">
+                            Abierta a las {formatTime(currentRegister.openedAt)} por{" "}
+                            {currentRegister.openedBy}
+                            {currentRegister.closedAt &&
+                              ` | Cerrada a las ${formatTime(currentRegister.closedAt)} por ${currentRegister.closedBy}`}
+                          </p>
+                        </div>
+                      </div>
+                      <div className="text-right">
+                        <p className="text-xs text-muted-foreground">Monto inicial</p>
+                        <p className="font-bold">{formatCurrency(currentRegister.initialAmount)}</p>
+                      </div>
+                    </div>
+                  </CardContent>
+                </Card>
+
+                {/* Stats */}
+                <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+                  <Card>
+                    <CardContent className="p-4">
+                      <div className="flex items-center gap-2 mb-1">
+                        <DollarSign className="h-4 w-4 text-emerald-500" />
+                        <span className="text-xs text-muted-foreground">Venta total</span>
+                      </div>
+                      <p className="text-xl font-bold">{formatCurrency(todayStats.total)}</p>
+                      <p className="text-xs text-muted-foreground">{todayStats.count} ventas</p>
+                    </CardContent>
+                  </Card>
+                  <Card>
+                    <CardContent className="p-4">
+                      <div className="flex items-center gap-2 mb-1">
+                        <Banknote className="h-4 w-4 text-green-500" />
+                        <span className="text-xs text-muted-foreground">Contado</span>
+                      </div>
+                      <p className="text-xl font-bold">{formatCurrency(todayStats.cashTotal)}</p>
+                    </CardContent>
+                  </Card>
+                  <Card>
+                    <CardContent className="p-4">
+                      <div className="flex items-center gap-2 mb-1">
+                        <CreditCard className="h-4 w-4 text-blue-500" />
+                        <span className="text-xs text-muted-foreground">Cta. Corriente</span>
+                      </div>
+                      <p className="text-xl font-bold">{formatCurrency(todayStats.creditTotal)}</p>
+                    </CardContent>
+                  </Card>
+                  <Card>
+                    <CardContent className="p-4">
+                      <div className="flex items-center gap-2 mb-1">
+                        <Banknote className="h-4 w-4 text-amber-500" />
+                        <span className="text-xs text-muted-foreground">Efectivo esperado</span>
+                      </div>
+                      <p className="text-xl font-bold">{formatCurrency(expectedCash)}</p>
+                      <p className="text-xs text-muted-foreground">
+                        Inicial + ventas efectivo
+                      </p>
+                    </CardContent>
+                  </Card>
+                </div>
+
+                {/* Closed register summary */}
+                {isClosed && currentRegister.difference !== undefined && (
+                  <Card className={currentRegister.difference === 0 ? "border-emerald-500/30" : currentRegister.difference > 0 ? "border-blue-500/30" : "border-red-500/30"}>
+                    <CardContent className="p-4">
+                      <h3 className="font-semibold mb-3">Resultado del cierre</h3>
+                      <div className="grid grid-cols-3 gap-4 text-center">
+                        <div>
+                          <p className="text-xs text-muted-foreground">Esperado</p>
+                          <p className="font-bold">{formatCurrency(currentRegister.expectedAmount || 0)}</p>
+                        </div>
+                        <div>
+                          <p className="text-xs text-muted-foreground">Contado</p>
+                          <p className="font-bold">{formatCurrency(currentRegister.finalAmount || 0)}</p>
+                        </div>
+                        <div>
+                          <p className="text-xs text-muted-foreground">Diferencia</p>
+                          <p className={`font-bold flex items-center justify-center gap-1 ${currentRegister.difference === 0 ? "text-emerald-600" : currentRegister.difference > 0 ? "text-blue-600" : "text-red-600"}`}>
+                            {currentRegister.difference === 0 ? (
+                              <CheckCircle2 className="h-4 w-4" />
+                            ) : currentRegister.difference > 0 ? (
+                              <ArrowUpRight className="h-4 w-4" />
+                            ) : (
+                              <ArrowDownRight className="h-4 w-4" />
+                            )}
+                            {formatCurrency(currentRegister.difference)}
+                          </p>
+                        </div>
+                      </div>
+                      {currentRegister.notes && (
+                        <p className="text-sm text-muted-foreground mt-3 border-t pt-2">
+                          {currentRegister.notes}
+                        </p>
+                      )}
+                    </CardContent>
+                  </Card>
+                )}
+
+                {/* Today's sales */}
+                <Card>
+                  <CardHeader className="pb-3">
+                    <CardTitle className="text-base">
+                      Ventas del dia ({sales.length})
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    {sales.length === 0 ? (
+                      <p className="text-sm text-muted-foreground text-center py-8">
+                        No hay ventas hoy
+                      </p>
+                    ) : (
+                      <div className="space-y-2">
+                        {sales.map((sale) => (
+                          <div
+                            key={sale.id}
+                            className="flex items-center justify-between py-2 border-b border-border/50 last:border-0"
+                          >
+                            <div className="flex items-center gap-3">
+                              <Clock className="h-3.5 w-3.5 text-muted-foreground" />
+                              <div>
+                                <p className="text-sm font-medium">
+                                  {sale.clientName || "Consumidor Final"}
+                                </p>
+                                <p className="text-xs text-muted-foreground">
+                                  {formatTime(new Date(sale.createdAt))}
+                                  {sale.sellerName && ` - ${sale.sellerName}`}
+                                </p>
+                              </div>
+                            </div>
+                            <div className="text-right">
+                              <p className="text-sm font-semibold">
+                                {formatCurrency(sale.total || 0)}
+                              </p>
+                              <Badge
+                                variant={sale.paymentType === "cash" ? "default" : "secondary"}
+                                className="text-[10px]"
+                              >
+                                {sale.paymentType === "cash"
+                                  ? ((sale as any).paymentMethod === "transferencia" ? "Transferencia" : "Efectivo")
+                                  : sale.paymentType === "credit"
+                                    ? "Cta.Cte."
+                                    : "Mixto"}
+                              </Badge>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </CardContent>
+                </Card>
+              </>
+            )}
+          </TabsContent>
+
+          {/* ═══ TAB HISTORIAL ═══ */}
+          <TabsContent value="historial" className="space-y-4 mt-4">
+            {/* Barra de búsqueda */}
+            <div className="flex flex-col sm:flex-row gap-3 items-start sm:items-center">
+              <Popover open={calendarOpen} onOpenChange={setCalendarOpen}>
+                <PopoverTrigger asChild>
+                  <Button variant="outline" className="w-full sm:w-auto justify-start text-left font-normal">
+                    <CalendarIcon className="h-4 w-4 mr-2" />
+                    {searchDate ? formatDateShort(searchDate) : "Buscar por fecha"}
+                  </Button>
+                </PopoverTrigger>
+                <PopoverContent className="w-auto p-0" align="start">
+                  <Calendar
+                    mode="single"
+                    selected={searchDate}
+                    onSelect={(date) => {
+                      setSearchDate(date);
+                      setCalendarOpen(false);
+                      setHistorialPage(0);
+                      loadHistorial(date, 0);
+                    }}
+                    disabled={(date) => date > new Date()}
+                  />
+                </PopoverContent>
+              </Popover>
+              {searchDate && (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => {
+                    setSearchDate(undefined);
+                    setHistorialPage(0);
+                    loadHistorial(undefined, 0);
+                  }}
+                >
+                  Limpiar filtro
+                </Button>
+              )}
             </div>
 
-            {/* Closed register summary */}
-            {isClosed && currentRegister.difference !== undefined && (
-              <Card className={currentRegister.difference === 0 ? "border-emerald-500/30" : currentRegister.difference > 0 ? "border-blue-500/30" : "border-red-500/30"}>
-                <CardContent className="p-4">
-                  <h3 className="font-semibold mb-3">Resultado del cierre</h3>
-                  <div className="grid grid-cols-3 gap-4 text-center">
-                    <div>
-                      <p className="text-xs text-muted-foreground">Esperado</p>
-                      <p className="font-bold">{formatCurrency(currentRegister.expectedAmount || 0)}</p>
-                    </div>
-                    <div>
-                      <p className="text-xs text-muted-foreground">Contado</p>
-                      <p className="font-bold">{formatCurrency(currentRegister.finalAmount || 0)}</p>
-                    </div>
-                    <div>
-                      <p className="text-xs text-muted-foreground">Diferencia</p>
-                      <p className={`font-bold flex items-center justify-center gap-1 ${currentRegister.difference === 0 ? "text-emerald-600" : currentRegister.difference > 0 ? "text-blue-600" : "text-red-600"}`}>
-                        {currentRegister.difference === 0 ? (
-                          <CheckCircle2 className="h-4 w-4" />
-                        ) : currentRegister.difference > 0 ? (
-                          <ArrowUpRight className="h-4 w-4" />
+            {/* Detalle de caja seleccionada */}
+            {selectedHistorial && (
+              <Card className="border-teal-500/30 bg-teal-500/5">
+                <CardHeader className="pb-3">
+                  <div className="flex items-center justify-between">
+                    <CardTitle className="text-base">
+                      Caja del {formatDateShort(selectedHistorial.openedAt)}
+                    </CardTitle>
+                    <div className="flex items-center gap-2">
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => handleDownloadHistorialPdf(selectedHistorial)}
+                        disabled={generatingHistorialPdf === selectedHistorial.id}
+                      >
+                        {generatingHistorialPdf === selectedHistorial.id ? (
+                          <Loader2 className="h-4 w-4 mr-2 animate-spin" />
                         ) : (
-                          <ArrowDownRight className="h-4 w-4" />
+                          <FileText className="h-4 w-4 mr-2" />
                         )}
-                        {formatCurrency(currentRegister.difference)}
-                      </p>
+                        PDF
+                      </Button>
+                      <Button variant="ghost" size="sm" onClick={() => { setSelectedHistorial(null); setSelectedSales([]); }}>
+                        Cerrar
+                      </Button>
                     </div>
                   </div>
-                  {currentRegister.notes && (
-                    <p className="text-sm text-muted-foreground mt-3 border-t pt-2">
-                      {currentRegister.notes}
-                    </p>
+                </CardHeader>
+                <CardContent>
+                  {detailLoading ? (
+                    <div className="space-y-2">
+                      {Array.from({ length: 3 }).map((_, i) => (
+                        <Skeleton key={i} className="h-8 w-full" />
+                      ))}
+                    </div>
+                  ) : (
+                    <div className="space-y-4">
+                      {/* Info */}
+                      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-sm">
+                        <div>
+                          <p className="text-xs text-muted-foreground">Monto inicial</p>
+                          <p className="font-bold">{formatCurrency(selectedHistorial.initialAmount)}</p>
+                        </div>
+                        <div>
+                          <p className="text-xs text-muted-foreground">Venta total</p>
+                          <p className="font-bold">{formatCurrency(selectedHistorial.totalSales || 0)}</p>
+                        </div>
+                        <div>
+                          <p className="text-xs text-muted-foreground">Contado</p>
+                          <p className="font-bold">{formatCurrency(selectedHistorial.cashTotal || 0)}</p>
+                        </div>
+                        <div>
+                          <p className="text-xs text-muted-foreground">Cta. Corriente</p>
+                          <p className="font-bold">{formatCurrency(selectedHistorial.creditTotal || 0)}</p>
+                        </div>
+                      </div>
+
+                      {/* Cierre */}
+                      {selectedHistorial.status === "closed" && selectedHistorial.difference != null && (
+                        <div className="grid grid-cols-3 gap-3 text-sm p-3 rounded-lg bg-muted/50">
+                          <div>
+                            <p className="text-xs text-muted-foreground">Esperado</p>
+                            <p className="font-bold">{formatCurrency(selectedHistorial.expectedAmount || 0)}</p>
+                          </div>
+                          <div>
+                            <p className="text-xs text-muted-foreground">Contado</p>
+                            <p className="font-bold">{formatCurrency(selectedHistorial.finalAmount || 0)}</p>
+                          </div>
+                          <div>
+                            <p className="text-xs text-muted-foreground">Diferencia</p>
+                            <p className={`font-bold ${selectedHistorial.difference === 0 ? "text-emerald-600" : selectedHistorial.difference > 0 ? "text-blue-600" : "text-red-600"}`}>
+                              {formatCurrency(selectedHistorial.difference)}
+                            </p>
+                          </div>
+                        </div>
+                      )}
+
+                      {selectedHistorial.notes && (
+                        <p className="text-sm text-muted-foreground italic">
+                          Notas: {selectedHistorial.notes}
+                        </p>
+                      )}
+
+                      {/* Ventas del día */}
+                      {selectedSales.length > 0 && (
+                        <div>
+                          <p className="text-sm font-medium mb-2">Ventas ({selectedSales.length})</p>
+                          <div className="space-y-1 max-h-60 overflow-y-auto">
+                            {selectedSales.map((sale) => (
+                              <div key={sale.id} className="flex items-center justify-between py-1.5 border-b border-border/30 last:border-0 text-sm">
+                                <div className="flex items-center gap-2">
+                                  <span className="text-xs text-muted-foreground w-12">{formatTimeStr(new Date(sale.createdAt))}</span>
+                                  <span className="font-medium">{sale.clientName || "Cons. Final"}</span>
+                                </div>
+                                <div className="flex items-center gap-2">
+                                  <Badge variant={sale.paymentType === "cash" ? "default" : "secondary"} className="text-[10px]">
+                                    {sale.paymentType === "cash"
+                                      ? ((sale as any).paymentMethod === "transferencia" ? "Transf." : "Efectivo")
+                                      : sale.paymentType === "credit" ? "Cta.Cte." : "Mixto"}
+                                  </Badge>
+                                  <span className="font-semibold">{formatCurrency(sale.total || 0)}</span>
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+                    </div>
                   )}
                 </CardContent>
               </Card>
             )}
 
-            {/* Today's sales */}
-            <Card>
-              <CardHeader className="pb-3">
-                <CardTitle className="text-base">
-                  Ventas del dia ({sales.length})
-                </CardTitle>
-              </CardHeader>
-              <CardContent>
-                {sales.length === 0 ? (
-                  <p className="text-sm text-muted-foreground text-center py-8">
-                    No hay ventas hoy
+            {/* Lista de cajas históricas */}
+            {historialLoading ? (
+              <div className="space-y-3">
+                {Array.from({ length: 5 }).map((_, i) => (
+                  <div key={i} className="border border-border rounded-2xl p-4">
+                    <div className="flex items-center justify-between">
+                      <div className="space-y-1.5">
+                        <Skeleton className="h-5 w-40" />
+                        <Skeleton className="h-3 w-56" />
+                      </div>
+                      <Skeleton className="h-8 w-20" />
+                    </div>
+                  </div>
+                ))}
+              </div>
+            ) : historialRegisters.length === 0 ? (
+              <Card>
+                <CardContent className="flex flex-col items-center justify-center py-12 text-center">
+                  <Search className="h-10 w-10 text-muted-foreground mb-3" />
+                  <p className="text-muted-foreground text-sm">
+                    {searchDate ? "No hay cajas para esa fecha" : "No hay cajas anteriores"}
                   </p>
-                ) : (
-                  <div className="space-y-2">
-                    {sales.map((sale) => (
-                      <div
-                        key={sale.id}
-                        className="flex items-center justify-between py-2 border-b border-border/50 last:border-0"
-                      >
-                        <div className="flex items-center gap-3">
-                          <Clock className="h-3.5 w-3.5 text-muted-foreground" />
-                          <div>
-                            <p className="text-sm font-medium">
-                              {sale.clientName || "Consumidor Final"}
-                            </p>
-                            <p className="text-xs text-muted-foreground">
-                              {formatTime(new Date(sale.createdAt))}
-                              {sale.sellerName && ` - ${sale.sellerName}`}
-                            </p>
+                </CardContent>
+              </Card>
+            ) : (
+              <>
+                <div className="space-y-3">
+                  {historialRegisters.map((reg) => (
+                    <Card
+                      key={reg.id}
+                      className={`cursor-pointer transition-colors hover:border-teal-500/40 ${selectedHistorial?.id === reg.id ? "border-teal-500/50 bg-teal-500/5" : ""}`}
+                      onClick={() => loadHistorialDetail(reg)}
+                    >
+                      <CardContent className="p-4">
+                        <div className="flex items-center justify-between flex-wrap gap-2">
+                          <div className="flex items-center gap-3">
+                            <div className={`h-9 w-9 rounded-full flex items-center justify-center ${reg.status === "closed" ? "bg-muted" : "bg-amber-500/10"}`}>
+                              {reg.status === "closed" ? (
+                                <LockKeyhole className="h-4 w-4 text-muted-foreground" />
+                              ) : (
+                                <Unlock className="h-4 w-4 text-amber-500" />
+                              )}
+                            </div>
+                            <div>
+                              <p className="font-semibold text-sm">
+                                {formatDateShort(reg.openedAt)}
+                                <span className="text-muted-foreground font-normal ml-2">
+                                  {reg.openedBy}
+                                </span>
+                              </p>
+                              <div className="flex items-center gap-3 text-xs text-muted-foreground mt-0.5">
+                                <span>Ventas: {reg.salesCount ?? "?"}</span>
+                                <span>Total: {formatCurrency(reg.totalSales || 0)}</span>
+                                {reg.difference != null && (
+                                  <span className={reg.difference === 0 ? "text-emerald-600" : reg.difference > 0 ? "text-blue-600" : "text-red-600"}>
+                                    Dif: {formatCurrency(reg.difference)}
+                                  </span>
+                                )}
+                              </div>
+                            </div>
+                          </div>
+                          <div className="flex items-center gap-2">
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleDownloadHistorialPdf(reg);
+                              }}
+                              disabled={generatingHistorialPdf === reg.id}
+                            >
+                              {generatingHistorialPdf === reg.id ? (
+                                <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                              ) : (
+                                <FileText className="h-3.5 w-3.5" />
+                              )}
+                            </Button>
+                            <Badge variant={reg.status === "closed" ? "secondary" : "default"} className="text-[10px]">
+                              {reg.status === "closed" ? "Cerrada" : "Abierta"}
+                            </Badge>
                           </div>
                         </div>
-                        <div className="text-right">
-                          <p className="text-sm font-semibold">
-                            {formatCurrency(sale.total || 0)}
-                          </p>
-                          <Badge
-                            variant={sale.paymentType === "cash" ? "default" : "secondary"}
-                            className="text-[10px]"
-                          >
-                            {sale.paymentType === "cash"
-                              ? ((sale as any).paymentMethod === "transferencia" ? "Transferencia" : "Efectivo")
-                              : sale.paymentType === "credit"
-                                ? "Cta.Cte."
-                                : "Mixto"}
-                          </Badge>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </CardContent>
-            </Card>
-          </>
-        )}
+                      </CardContent>
+                    </Card>
+                  ))}
+                </div>
+
+                {/* Paginación */}
+                <div className="flex items-center justify-center gap-2">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    disabled={historialPage === 0}
+                    onClick={() => {
+                      const p = historialPage - 1;
+                      setHistorialPage(p);
+                      loadHistorial(searchDate, p);
+                    }}
+                  >
+                    <ChevronLeft className="h-4 w-4" />
+                  </Button>
+                  <span className="text-sm text-muted-foreground">
+                    Página {historialPage + 1}
+                  </span>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    disabled={historialRegisters.length < HISTORIAL_PAGE_SIZE}
+                    onClick={() => {
+                      const p = historialPage + 1;
+                      setHistorialPage(p);
+                      loadHistorial(searchDate, p);
+                    }}
+                  >
+                    <ChevronRight className="h-4 w-4" />
+                  </Button>
+                </div>
+              </>
+            )}
+          </TabsContent>
+        </Tabs>
 
         {/* Open Register Modal */}
         <Dialog open={showOpenModal} onOpenChange={setShowOpenModal}>
