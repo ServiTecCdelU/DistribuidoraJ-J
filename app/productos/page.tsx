@@ -1635,6 +1635,8 @@ function PreciosVentaHabilitados() {
   const [editingMode, setEditingMode] = useState<"precio" | "ganancia">("precio");
   const [precioInput, setPrecioInput] = useState("");
   const [gananciaIndInput, setGananciaIndInput] = useState("");
+  const ITEMS_PER_PAGE = 50;
+  const [visibleCount, setVisibleCount] = useState(ITEMS_PER_PAGE);
 
   useEffect(() => {
     getMayoristaProductos()
@@ -1798,7 +1800,7 @@ function PreciosVentaHabilitados() {
         <Input
           placeholder="Buscar producto..."
           value={search}
-          onChange={(e) => setSearch(e.target.value)}
+          onChange={(e) => { setSearch(e.target.value); setVisibleCount(ITEMS_PER_PAGE); }}
           className="pl-10 rounded-xl"
         />
         {search && (
@@ -1821,7 +1823,7 @@ function PreciosVentaHabilitados() {
               </tr>
             </thead>
             <tbody className="divide-y">
-              {filtrados.map((p) => {
+              {filtrados.slice(0, visibleCount).map((p) => {
                 const ganancia =
                   p.precioUnitarioMayorista > 0
                     ? ((p.precioVenta - p.precioUnitarioMayorista) / p.precioUnitarioMayorista) * 100
@@ -1924,8 +1926,17 @@ function PreciosVentaHabilitados() {
             </tbody>
           </table>
         </div>
-        <div className="px-4 py-2 bg-muted/30 border-t text-xs text-muted-foreground">
-          {search ? `${filtrados.length} resultados` : `${productos.length} productos habilitados`}
+        <div className="px-4 py-2 bg-muted/30 border-t text-xs text-muted-foreground flex items-center justify-between">
+          <span>
+            {search
+              ? `${Math.min(visibleCount, filtrados.length)} de ${filtrados.length} resultados`
+              : `${Math.min(visibleCount, productos.length)} de ${productos.length} productos habilitados`}
+          </span>
+          {visibleCount < filtrados.length && (
+            <Button variant="ghost" size="sm" className="text-xs h-7" onClick={() => setVisibleCount((v) => v + ITEMS_PER_PAGE)}>
+              Mostrar más
+            </Button>
+          )}
         </div>
       </div>
     </div>
