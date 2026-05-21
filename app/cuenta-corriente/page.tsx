@@ -35,12 +35,12 @@ import {
 } from '@/components/ui/table'
 import { cobranzasApi, clientsApi, paymentsApi, sellersApi } from '@/lib/api'
 import { useAuth } from '@/hooks/use-auth'
-import type { Client, ComprobantePago, Seller, Transaction } from '@/lib/types'
+import type { Client, ComprobantePago, DebtClassification, Seller, Transaction } from '@/lib/types'
 import { formatCurrency, formatDate } from '@/lib/utils/format'
 import {
   Users, FileCheck, CheckCircle2, XCircle, Clock, Loader2, ExternalLink,
   ChevronLeft, DollarSign, ArrowDownCircle, ArrowUpCircle, Search, X,
-  Banknote, CreditCard, Image as ImageIcon,
+  Banknote, CreditCard, Image as ImageIcon, AlertTriangle, Ban,
 } from 'lucide-react'
 import { toast } from 'sonner'
 
@@ -53,6 +53,7 @@ export default function CuentaCorrientePage() {
   const [sellers, setSellers] = useState<Seller[]>([])
   const [loading, setLoading] = useState(true)
   const [filterSeller, setFilterSeller] = useState<string>('all')
+  const [filterClassification, setFilterClassification] = useState<string>('all')
   const [searchQuery, setSearchQuery] = useState('')
 
   // Cliente seleccionado
@@ -98,7 +99,8 @@ export default function CuentaCorrientePage() {
   const filteredClients = debtClients.filter((c) => {
     const matchesSeller = filterSeller === 'all' || c.sellerId === filterSeller
     const matchesSearch = !searchQuery || c.name.toLowerCase().includes(searchQuery.toLowerCase())
-    return matchesSeller && matchesSearch
+    const matchesClassification = filterClassification === 'all' || (c.debtClassification ?? 'normal') === filterClassification
+    return matchesSeller && matchesSearch && matchesClassification
   })
 
   // Seleccionar cliente → cargar detalle
@@ -222,6 +224,23 @@ export default function CuentaCorrientePage() {
     }
   }
 
+  // Cambiar clasificación de deuda
+  const handleChangeClassification = async (clientId: string, classification: DebtClassification) => {
+    try {
+      await clientsApi.update(clientId, { debtClassification: classification })
+      setDebtClients((prev) =>
+        prev.map((c) => c.id === clientId ? { ...c, debtClassification: classification } : c)
+      )
+      if (selectedClient?.id === clientId) {
+        setSelectedClient((prev) => prev ? { ...prev, debtClassification: classification } : prev)
+      }
+      const labels: Record<DebtClassification, string> = { normal: 'Normal', moroso: 'Moroso', incobrable: 'Incobrable' }
+      toast.success(`Clasificación cambiada a ${labels[classification]}`)
+    } catch {
+      toast.error('Error al cambiar clasificación')
+    }
+  }
+
   // Vista detalle de cliente
   if (selectedClient) {
     const clientPending = clientComprobantes.filter((c) => c.status === 'pending')
@@ -242,6 +261,25 @@ export default function CuentaCorrientePage() {
             <p className="text-xs text-muted-foreground">Deuda actual</p>
             <p className="text-xl font-bold text-red-600">{formatCurrency(selectedClient.currentBalance)}</p>
           </div>
+        </div>
+
+        {/* Clasificación de deuda */}
+        <div className="flex items-center gap-3 mb-4 p-3 rounded-xl bg-muted/50">
+          <span className="text-sm font-medium text-muted-foreground">Clasificación:</span>
+          <Select
+            value={selectedClient.debtClassification ?? 'normal'}
+            onValueChange={(val) => handleChangeClassification(selectedClient.id, val as DebtClassification)}
+          >
+            <SelectTrigger className="w-[160px] h-8 text-sm rounded-lg">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="normal">Normal</SelectItem>
+              <SelectItem value="moroso">Moroso</SelectItem>
+              <SelectItem value="incobrable">Incobrable</SelectItem>
+            </SelectContent>
+          </Select>
+          {classificationBadge(selectedClient.debtClassification ?? 'normal')}
         </div>
 
         {loadingDetail ? (
@@ -611,6 +649,17 @@ export default function CuentaCorrientePage() {
                 </Button>
               )}
             </div>
+            <Select value={filterClassification} onValueChange={setFilterClassification}>
+              <SelectTrigger className="w-full sm:w-[170px] rounded-xl">
+                <SelectValue placeholder="Clasificación" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">Todas</SelectItem>
+                <SelectItem value="normal">Normal</SelectItem>
+                <SelectItem value="moroso">Morosos</SelectItem>
+                <SelectItem value="incobrable">Incobrables</SelectItem>
+              </SelectContent>
+            </Select>
             <Select value={filterSeller} onValueChange={setFilterSeller}>
               <SelectTrigger className="w-full sm:w-[200px] rounded-xl">
                 <SelectValue placeholder="Vendedor" />
@@ -648,6 +697,9 @@ export default function CuentaCorrientePage() {
                           <div className="min-w-0 flex-1">
                             <p className="font-semibold text-sm truncate">{c.name}</p>
                             <p className="text-xs text-muted-foreground">{c.sellerName || 'Sin vendedor'}</p>
+                            {(c.debtClassification ?? 'normal') !== 'normal' && (
+                              <div className="mt-1">{classificationBadge(c.debtClassification!)}</div>
+                            )}
                           </div>
                           <div className="text-right shrink-0">
                             <p className="font-bold text-red-600">{formatCurrency(c.currentBalance)}</p>
@@ -675,6 +727,7 @@ export default function CuentaCorrientePage() {
                         <TableHead className="text-right">Deuda</TableHead>
                         <TableHead className="text-right">Límite</TableHead>
                         <TableHead className="text-center">% Usado</TableHead>
+                        <TableHead className="text-center">Estado</TableHead>
                         <TableHead className="text-center">Comprobantes</TableHead>
                       </TableRow>
                     </TableHeader>
@@ -698,6 +751,9 @@ export default function CuentaCorrientePage() {
                               </Badge>
                             </TableCell>
                             <TableCell className="text-center">
+                              {classificationBadge(c.debtClassification ?? 'normal')}
+                            </TableCell>
+                            <TableCell className="text-center">
                               {clientPending.length > 0 ? (
                                 <Badge variant="secondary" className="text-orange-600 bg-orange-50">
                                   <Clock className="h-3 w-3 mr-1" />{clientPending.length}
@@ -719,6 +775,17 @@ export default function CuentaCorrientePage() {
       )}
     </MainLayout>
   )
+}
+
+function classificationBadge(classification: string) {
+  switch (classification) {
+    case 'moroso':
+      return <Badge variant="secondary" className="text-amber-700 bg-amber-50 text-xs"><AlertTriangle className="h-3 w-3 mr-1" />Moroso</Badge>
+    case 'incobrable':
+      return <Badge variant="destructive" className="text-xs"><Ban className="h-3 w-3 mr-1" />Incobrable</Badge>
+    default:
+      return <Badge variant="outline" className="text-xs">Normal</Badge>
+  }
 }
 
 function statusBadge(status: string) {

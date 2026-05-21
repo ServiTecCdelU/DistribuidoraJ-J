@@ -52,9 +52,12 @@ export interface Client {
   currentBalance: number;
   sellerId?: string;
   sellerName?: string;
+  debtClassification?: 'normal' | 'moroso' | 'incobrable';
   notes?: string;
   createdAt: Date;
 }
+
+export type DebtClassification = 'normal' | 'moroso' | 'incobrable';
 
 export interface Transaction {
   id: string;
