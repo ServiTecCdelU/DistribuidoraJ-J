@@ -32,6 +32,7 @@ import {
   Search,
   ChevronLeft,
   ChevronRight,
+  AlertTriangle,
 } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
 import { salesApi, auditApi } from "@/lib/api";
@@ -329,6 +330,7 @@ export default function CajaPage() {
   const { user } = useAuth();
   const [loading, setLoading] = useState(true);
   const [sales, setSales] = useState<Sale[]>([]);
+  const [losses, setLosses] = useState<{ id: string; amount: number; description: string; date: string }[]>([]);
   const [currentRegister, setCurrentRegister] = useState<CashRegister | null>(null);
 
   // Open register modal
@@ -405,6 +407,15 @@ export default function CajaPage() {
           return dt >= cajaDate;
         });
         setSales(todaySales);
+
+        // Cargar pérdidas (roturas) del día
+        const { data: lossData } = await supabase
+          .from("transacciones")
+          .select("*")
+          .eq("type", "expense")
+          .gte("date", cajaDate.toISOString());
+        if (!mounted) return;
+        setLosses((lossData || []).map((l: any) => ({ id: l.id, amount: Number(l.amount) || 0, description: l.description || "", date: l.date })));
       } catch {
         if (!mounted) return;
         toast.error("Error al cargar datos de caja");
@@ -455,6 +466,13 @@ export default function CajaPage() {
         return d >= cajaDate;
       });
       setSales(todaySales);
+
+      const { data: lossData } = await supabase
+        .from("transacciones")
+        .select("*")
+        .eq("type", "expense")
+        .gte("date", cajaDate.toISOString());
+      setLosses((lossData || []).map((l: any) => ({ id: l.id, amount: Number(l.amount) || 0, description: l.description || "", date: l.date })));
     } catch {
       toast.error("Error al recargar ventas");
     } finally {
@@ -549,8 +567,9 @@ export default function CajaPage() {
       }
     }
 
-    return { efectivoTotal, transferTotal, cashTotal: efectivoTotal + transferTotal, creditTotal, total, count: sales.length };
-  }, [sales]);
+    const lossTotal = losses.reduce((acc, l) => acc + l.amount, 0);
+    return { efectivoTotal, transferTotal, cashTotal: efectivoTotal + transferTotal, creditTotal, total, count: sales.length, lossTotal, lossCount: losses.length };
+  }, [sales, losses]);
 
   const expectedCash = (currentRegister?.initialAmount || 0) + todayStats.efectivoTotal;
 
@@ -934,6 +953,29 @@ export default function CajaPage() {
                     </CardContent>
                   </Card>
                 </div>
+
+                {/* Pérdidas por roturas */}
+                {todayStats.lossCount > 0 && (
+                  <Card className="border-red-500/30 bg-red-500/5">
+                    <CardContent className="p-4">
+                      <div className="flex items-center justify-between mb-3">
+                        <div className="flex items-center gap-2">
+                          <AlertTriangle className="h-4 w-4 text-red-500" />
+                          <span className="text-sm font-semibold text-red-700">Pérdidas por roturas</span>
+                        </div>
+                        <span className="text-lg font-bold text-red-600">-{formatCurrency(todayStats.lossTotal)}</span>
+                      </div>
+                      <div className="space-y-1.5">
+                        {losses.map((l) => (
+                          <div key={l.id} className="flex items-center justify-between text-xs">
+                            <span className="text-red-600/80 truncate flex-1 mr-2">{l.description}</span>
+                            <span className="text-red-600 font-medium shrink-0">-{formatCurrency(l.amount)}</span>
+                          </div>
+                        ))}
+                      </div>
+                    </CardContent>
+                  </Card>
+                )}
 
                 {/* Closed register summary */}
                 {isClosed && currentRegister.difference !== undefined && (
