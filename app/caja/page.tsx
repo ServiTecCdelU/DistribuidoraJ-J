@@ -1225,6 +1225,30 @@ export default function CajaPage() {
                                 <FileText className="h-3.5 w-3.5" />
                               )}
                             </Button>
+                            {reg.status === "open" && (
+                              <Button
+                                variant="destructive"
+                                size="sm"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  setCurrentRegister(reg);
+                                  // Cargar ventas de ese día
+                                  const cajaDate = new Date(reg.openedAt);
+                                  cajaDate.setHours(0, 0, 0, 0);
+                                  salesApi.getAll().then((salesData) => {
+                                    const cajaSales = salesData.filter((s) => {
+                                      const d = new Date(s.createdAt);
+                                      return d >= cajaDate;
+                                    });
+                                    setSales(cajaSales);
+                                  });
+                                  setShowCloseModal(true);
+                                }}
+                              >
+                                <LockKeyhole className="h-3.5 w-3.5 mr-1" />
+                                Cerrar
+                              </Button>
+                            )}
                             <Badge variant={reg.status === "closed" ? "secondary" : "default"} className="text-[10px]">
                               {reg.status === "closed" ? "Cerrada" : "Abierta"}
                             </Badge>
