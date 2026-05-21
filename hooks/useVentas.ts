@@ -666,7 +666,8 @@ export function useVentas(filterBySellerId?: string, clientCityMap?: Record<stri
     return PAYMENT_LABELS[tipo] || tipo;
   }, []);
 
-  const claseBadgePago = useCallback((tipo: string) => {
+  const claseBadgePago = useCallback((tipo: string, metodo?: string) => {
+    if (tipo === "cash" && metodo === "transferencia") return "bg-violet-100 text-violet-800";
     return PAYMENT_BADGE_CLASSES[tipo] || "bg-gray-100 text-gray-800";
   }, []);
 

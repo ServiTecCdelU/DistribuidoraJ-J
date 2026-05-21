@@ -36,7 +36,7 @@ interface ModalDetalleVentaProps {
   formatearMoneda: (monto: number) => string;
   formatearFechaHora: (fecha: any) => string;
   etiquetaPago: (tipo: string, metodo?: string) => string;
-  claseBadgePago: (tipo: string) => string;
+  claseBadgePago: (tipo: string, metodo?: string) => string;
   resolverTelefono?: (venta: Venta) => Promise<string>;
   isAdmin?: boolean;
 }
@@ -130,7 +130,7 @@ export function ModalDetalleVenta({
             </div>
             <Badge
               variant="outline"
-              className={`${claseBadgePago(venta.paymentType)} px-3 py-1`}
+              className={`${claseBadgePago(venta.paymentType, venta.paymentMethod)} px-3 py-1`}
             >
               {etiquetaPago(venta.paymentType, venta.paymentMethod)}
             </Badge>

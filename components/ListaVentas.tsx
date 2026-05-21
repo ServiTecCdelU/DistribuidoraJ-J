@@ -68,7 +68,8 @@ const payLabel = (pt: string, pm?: string) => {
   return pt;
 };
 
-const payBadgeCls = (pt: string) => {
+const payBadgeCls = (pt: string, pm?: string) => {
+  if (pt === "cash" && pm === "transferencia") return "bg-violet-100 text-violet-700 border-violet-200 dark:bg-violet-900/30 dark:text-violet-400 dark:border-violet-800";
   if (pt === "cash") return "bg-emerald-100 text-emerald-700 border-emerald-200 dark:bg-emerald-900/30 dark:text-emerald-400 dark:border-emerald-800";
   if (pt === "credit") return "bg-blue-100 text-blue-700 border-blue-200 dark:bg-blue-900/30 dark:text-blue-400 dark:border-blue-800";
   if (pt === "mixed") return "bg-amber-100 text-amber-700 border-amber-200 dark:bg-amber-900/30 dark:text-amber-400 dark:border-amber-800";
@@ -441,7 +442,7 @@ export function ListaVentas({
                   </div>
                   <div className="text-right shrink-0">
                     <p className="font-bold text-sm text-foreground">{fmt(venta.total)}</p>
-                    <Badge variant="outline" className={`text-[10px] ${payBadgeCls(venta.paymentType)}`}>
+                    <Badge variant="outline" className={`text-[10px] ${payBadgeCls(venta.paymentType, venta.paymentMethod)}`}>
                       {payLabel(venta.paymentType, venta.paymentMethod)}
                     </Badge>
                   </div>
@@ -473,7 +474,7 @@ export function ListaVentas({
                   <p className="font-bold text-foreground text-base">{fmt(venta.total)}</p>
                 </div>
                 <div className="hidden md:flex md:col-span-2 items-center justify-center">
-                  <Badge variant="outline" className={`gap-1.5 px-2.5 py-1 ${payBadgeCls(venta.paymentType)}`}>
+                  <Badge variant="outline" className={`gap-1.5 px-2.5 py-1 ${payBadgeCls(venta.paymentType, venta.paymentMethod)}`}>
                     {payIcon(venta.paymentType, venta.paymentMethod)}
                     {payLabel(venta.paymentType, venta.paymentMethod)}
                   </Badge>
