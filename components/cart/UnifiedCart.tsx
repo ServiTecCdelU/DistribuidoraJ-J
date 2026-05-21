@@ -716,8 +716,8 @@ export function UnifiedCart({ role, state, actions, onConfirmSale, allowDiscount
           open={editClientModalOpen}
           onOpenChange={setEditClientModalOpen}
           client={editClientData}
-          showCreditLimit={role === "admin"}
-          showNotes={role === "admin"}
+          showCreditLimit={false}
+          showNotes={false}
           onSave={handleUpdateClient}
         />
       )}
