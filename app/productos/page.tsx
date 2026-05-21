@@ -840,6 +840,7 @@ export default function ProductosPage() {
         <PageHeader
           actions={
             <>
+              {/* Descargar Planilla — comentado temporalmente
               <Button
                 variant="outline"
                 size="sm"
@@ -849,6 +850,7 @@ export default function ProductosPage() {
                 <FileDown className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
                 <span className="hidden sm:inline">Descargar Planilla</span>
               </Button>
+              */}
 
               {/* Subir Planilla — comentado temporalmente
               <Button
