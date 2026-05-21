@@ -25,12 +25,14 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
+import { formatCurrency } from "@/lib/utils/format";
 
 interface ParsedItem {
   codigo: string;
   rawName: string;
   bultos: number;
   cantidad: number;
+  precio: number;
 }
 
 interface MatchedItem {
@@ -44,7 +46,7 @@ interface RemitoImportModalProps {
   open: boolean;
   onClose: () => void;
   products: Product[];
-  onConfirm: (updates: { productId: string; newStock: number; productName: string }[]) => Promise<void>;
+  onConfirm: (updates: { productId: string; newStock: number; productName: string; precioLista: number }[]) => Promise<void>;
 }
 
 // Parsea el texto OCR del remito y extrae items
@@ -95,15 +97,16 @@ function parseRemitoText(text: string): ParsedItem[] {
       }
     }
 
-    // Necesitamos al menos 2 números (bultos + cantidad) para considerar esta línea
-    if (numericTokens.length < 2) {
+    // Necesitamos al menos 3 números (bultos + cantidad + precio) para considerar esta línea
+    if (numericTokens.length < 3) {
       // Puede ser que el artículo continúe en la siguiente línea, agregar al nombre
       continue;
     }
 
-    // Los primeros números son bultos y cantidad
+    // Los primeros números son bultos, cantidad y precio unitario
     const bultos = numericTokens[0].value;
     const cantidad = numericTokens[1].value;
+    const precio = numericTokens[2].value;
     const rawName = nameTokens.join(" ").trim();
 
     // Filtrar headers y líneas no-producto
@@ -124,7 +127,7 @@ function parseRemitoText(text: string): ParsedItem[] {
     // Validar que la cantidad tenga sentido (> 0 y < 100000)
     if (cantidad <= 0 || cantidad > 100000) continue;
 
-    items.push({ codigo, rawName, bultos, cantidad });
+    items.push({ codigo, rawName, bultos, cantidad, precio });
   }
 
   return items;
@@ -338,6 +341,7 @@ export function RemitoImportModal({
           productId: product.id,
           newStock,
           productName: product.name,
+          precioLista: item.parsedItem.precio,
         };
       });
 
@@ -460,7 +464,7 @@ export function RemitoImportModal({
                           {item.matchedProduct!.name}
                         </p>
                         <p className="text-xs text-muted-foreground">
-                          Stock actual: {item.matchedProduct!.stock} · Bultos: {item.parsedItem.bultos}
+                          Stock actual: {item.matchedProduct!.stock} · Bultos: {item.parsedItem.bultos} · Precio lista: {formatCurrency(item.parsedItem.precio)}
                         </p>
                       </div>
                       <button
@@ -578,7 +582,7 @@ export function RemitoImportModal({
                                 [{item.parsedItem.codigo}] {item.parsedItem.rawName}
                               </p>
                               <p className="text-xs text-muted-foreground">
-                                Cantidad: {item.parsedItem.cantidad} · Bultos: {item.parsedItem.bultos}
+                                Cantidad: {item.parsedItem.cantidad} · Bultos: {item.parsedItem.bultos} · Precio lista: {formatCurrency(item.parsedItem.precio)}
                               </p>
                             </div>
                             {/* Asignar producto manualmente */}

@@ -342,6 +342,28 @@ export const updateProductoPrecioVenta = async (
   }
 }
 
+/**
+ * Actualiza precio_lista en mayorista_productos para varios productos a la vez.
+ * Recibe un array de { productoId, precioLista }.
+ */
+export const updatePrecioListaBatch = async (
+  items: Array<{ productoId: string; precioLista: number }>
+): Promise<number> => {
+  let updated = 0
+  await Promise.all(
+    items.map(async ({ productoId, precioLista }) => {
+      const { error } = await supabase
+        .from('mayorista_productos')
+        .update({ precio_lista: precioLista })
+        .eq('producto_id', productoId)
+      if (!error) updated++
+      else console.error('[updatePrecioListaBatch]', productoId, error.message)
+    })
+  )
+  invalidateProductsCache()
+  return updated
+}
+
 // ─── Habilitar / Deshabilitar ─────────────────────────────────────────────────
 
 export const habilitarProducto = async (

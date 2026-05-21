@@ -35,6 +35,7 @@ import {
   updateProductoPrecioVenta,
   sincronizarHabilitadoEnMayorista,
   importarListaPrecios,
+  updatePrecioListaBatch,
   type ImportRow,
 } from "@/services/mayorista-service";
 import {
@@ -479,7 +480,7 @@ export default function ProductosPage() {
   };
 
   const handleRemitoConfirm = async (
-    updates: { productId: string; newStock: number; productName: string }[],
+    updates: { productId: string; newStock: number; productName: string; precioLista: number }[],
   ) => {
     for (const update of updates) {
       const product = products.find((p) => p.id === update.productId);
@@ -498,6 +499,14 @@ export default function ProductosPage() {
         reason: "Importación de remito proveedor",
         details: `Stock actualizado via remito: ${product.stock} → ${update.newStock}`,
       });
+    }
+
+    // Actualizar precio_lista en mayorista_productos
+    const precioUpdates = updates
+      .filter((u) => u.precioLista > 0)
+      .map((u) => ({ productoId: u.productId, precioLista: u.precioLista }));
+    if (precioUpdates.length > 0) {
+      await updatePrecioListaBatch(precioUpdates);
     }
 
     // Recargar productos
