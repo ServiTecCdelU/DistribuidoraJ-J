@@ -459,22 +459,43 @@ export default function ProductosPage() {
     setProgressGanancia({ done: 0, total: 0 });
     try {
       const mayoristas = await getMayoristaProductos();
-      const habilitados = mayoristas.filter((p) => p.habilitado && !!p.productoId && !p.gananciaIndividual);
+      const habilitados = mayoristas.filter((p) => p.habilitado && !!p.productoId);
+      console.log("[ganancia] total mayoristas:", mayoristas.length, "habilitados con productoId:", habilitados.length);
       if (habilitados.length === 0) {
         toast.info("No hay productos habilitados para aplicar ganancia");
         setApplyingGlobal(false);
         return;
       }
-      setProgressGanancia({ done: 0, total: habilitados.length });
+      // Muestra ejemplo del primer producto para debug
+      const ejemplo = habilitados[0];
+      console.log("[ganancia] ejemplo:", ejemplo.nombre, "precioMayorista:", ejemplo.precioUnitarioMayorista, "productoId:", ejemplo.productoId);
+
+      const items = habilitados.map((p) => ({ id: p.id, productoId: p.productoId!, precioUnitarioMayorista: p.precioUnitarioMayorista }));
+      setProgressGanancia({ done: 0, total: items.length });
       await applyGananciaToProducts(
         porc,
-        habilitados.map((p) => ({ id: p.id, productoId: p.productoId!, precioUnitarioMayorista: p.precioUnitarioMayorista })),
+        items,
         (done, total) => setProgressGanancia({ done, total })
       );
+
+      // Actualizar precios localmente sin esperar recarga
+      setProducts((prev) => {
+        const precioMap = new Map<string, number>();
+        for (const h of habilitados) {
+          const nuevo = Math.round(h.precioUnitarioMayorista * (1 + porc / 100) * 100) / 100;
+          precioMap.set(h.productoId!, nuevo);
+        }
+        return prev.map((p) => {
+          const nuevoPrecio = precioMap.get(p.id);
+          return nuevoPrecio != null ? { ...p, price: nuevoPrecio } : p;
+        });
+      });
+
       toast.success(`Ganancia del ${porc}% aplicada a ${habilitados.length} productos`);
-      // Recargar productos del catálogo
-      fetchProducts(currentPage, searchQuery, categoryFilter, stockFilter);
-    } catch {
+      // También recargar desde DB
+      await fetchProducts(currentPage, searchQuery, categoryFilter, stockFilter);
+    } catch (err) {
+      console.error("[ganancia] error:", err);
       toast.error("Error al aplicar la ganancia");
     } finally {
       setApplyingGlobal(false);
