@@ -459,21 +459,19 @@ export default function ProductosPage() {
     setProgressGanancia({ done: 0, total: 0 });
     try {
       const mayoristas = await getMayoristaProductos();
-      const necesitan = mayoristas.filter((p) => !p.gananciaIndividual && p.gananciaGlobal !== porc);
-      if (necesitan.length === 0) {
-        toast.info("Todos ya tienen ese porcentaje");
+      const habilitados = mayoristas.filter((p) => p.habilitado && !!p.productoId && !p.gananciaIndividual);
+      if (habilitados.length === 0) {
+        toast.info("No hay productos habilitados para aplicar ganancia");
         setApplyingGlobal(false);
         return;
       }
-      setProgressGanancia({ done: 0, total: necesitan.length });
+      setProgressGanancia({ done: 0, total: habilitados.length });
       await applyGananciaToProducts(
         porc,
-        necesitan
-          .filter((p) => !!p.productoId)
-          .map((p) => ({ id: p.id, productoId: p.productoId!, precioUnitarioMayorista: p.precioUnitarioMayorista })),
+        habilitados.map((p) => ({ id: p.id, productoId: p.productoId!, precioUnitarioMayorista: p.precioUnitarioMayorista })),
         (done, total) => setProgressGanancia({ done, total })
       );
-      toast.success(`Ganancia del ${porc}% aplicada a ${necesitan.length} productos`);
+      toast.success(`Ganancia del ${porc}% aplicada a ${habilitados.length} productos`);
       // Recargar productos del catálogo
       fetchProducts(currentPage, searchQuery, categoryFilter, stockFilter);
     } catch {
