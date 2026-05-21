@@ -25,7 +25,7 @@ export default function LoginPage() {
   const { user, loading: authLoading, unauthorized } = useAuth()
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
-  const [showUnauthorized, setShowUnauthorized] = useState(false)
+  const [showUnauthorized, setShowUnauthorized] = useState(unauthorized)
 
   useEffect(() => {
     if (!authLoading && user) {
