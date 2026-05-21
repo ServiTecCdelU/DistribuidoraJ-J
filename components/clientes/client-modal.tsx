@@ -77,22 +77,32 @@ export function ClientModal({ open, onOpenChange, client, onSave, showCreditLimi
 
   const validateForm = () => {
     const newErrors: Record<string, string> = {}
-    
+    const isEditing = !!client
+
     if (!formData.name.trim()) {
       newErrors.name = 'El nombre es requerido'
     }
-    if (!formData.cuit.trim()) {
-      newErrors.cuit = 'El CUIT es requerido'
-    } else if (normalizeCuit(formData.cuit).length !== 11) {
-      newErrors.cuit = 'El CUIT debe tener 11 digitos'
-    }
-    if (!formData.email.trim()) {
-      newErrors.email = 'El email es requerido'
-    } else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(formData.email)) {
-      newErrors.email = 'Email invalido'
-    }
-    if (!formData.phone.trim()) {
-      newErrors.phone = 'El telefono es requerido'
+    if (!isEditing) {
+      if (!formData.cuit.trim()) {
+        newErrors.cuit = 'El CUIT es requerido'
+      } else if (normalizeCuit(formData.cuit).length !== 11) {
+        newErrors.cuit = 'El CUIT debe tener 11 digitos'
+      }
+      if (!formData.email.trim()) {
+        newErrors.email = 'El email es requerido'
+      } else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(formData.email)) {
+        newErrors.email = 'Email invalido'
+      }
+      if (!formData.phone.trim()) {
+        newErrors.phone = 'El telefono es requerido'
+      }
+    } else {
+      if (formData.cuit.trim() && normalizeCuit(formData.cuit).length !== 11) {
+        newErrors.cuit = 'El CUIT debe tener 11 digitos'
+      }
+      if (formData.email.trim() && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(formData.email)) {
+        newErrors.email = 'Email invalido'
+      }
     }
     if (formData.creditLimit < 0) {
       newErrors.creditLimit = 'El limite debe ser mayor o igual a 0'
