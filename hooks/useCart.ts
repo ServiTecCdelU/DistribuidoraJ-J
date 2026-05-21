@@ -271,18 +271,9 @@ export function useCart(role: UserRole, userEmail?: string, externalProducts?: P
       setSelectedSavedAddress(null);
       return;
     }
-    // Si tiene addresses[], seleccionar la primera
-    if (selectedClientData.addresses && selectedClientData.addresses.length > 0) {
-      const first = selectedClientData.addresses[0];
-      setSelectedSavedAddress(first);
-      setDeliveryAddress("saved");
-      if (first.lat != null) setDeliveryLat(first.lat);
-      if (first.lng != null) setDeliveryLng(first.lng);
-    } else if (selectedClientData.address) {
-      // Fallback: address legacy
-      setSelectedSavedAddress({ address: selectedClientData.address });
-      setDeliveryAddress("saved");
-    }
+    // No pre-seleccionar dirección — el usuario debe elegirla manualmente
+    setSelectedSavedAddress(null);
+    setDeliveryAddress("saved");
   }, [selectedClientData?.id]);
 
   // --- Load data ---
@@ -676,7 +667,7 @@ export function useCart(role: UserRole, userEmail?: string, externalProducts?: P
 
     if (role === "admin") {
       if (deliveryMethod === "delivery") {
-        if (deliveryAddress === "saved" && !selectedSavedAddress?.address && (!selectedClientData || !selectedClientData.address)) return false;
+        if (deliveryAddress === "saved" && !selectedSavedAddress?.address) return false;
         if (deliveryAddress === "new" && !newAddress.trim()) return false;
       }
       if ((paymentType === "credit" || paymentType === "mixed") && !selectedClientData) return false;
