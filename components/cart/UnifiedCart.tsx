@@ -31,6 +31,7 @@ import {
   MapPin,
   Copy,
   Pencil,
+  X,
 } from "lucide-react";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
@@ -135,12 +136,24 @@ export function UnifiedCart({ role, state, actions, onConfirmSale, allowDiscount
   const handleUpdateClient = async (clientData: any) => {
     const clientId = role === "admin" ? selectedClient : state.dniClientId;
     if (!clientId) return;
-    await clientsApi.update(clientId, clientData);
+    // No enviar creditLimit si no se muestra en el modal (evita pisar el valor real)
+    const { creditLimit, currentBalance, ...updateData } = clientData;
+    if (role === "admin") {
+      // Admin ve el campo, enviar creditLimit
+      await clientsApi.update(clientId, { ...updateData, creditLimit });
+    } else {
+      await clientsApi.update(clientId, updateData);
+    }
     // Actualizar estado local
     actions.setClientEmail(clientData.email || "");
     actions.setClientPhone(clientData.phone || "");
     actions.setClientAddress(clientData.address || "");
     actions.setClientName(clientData.name || "");
+    // Refrescar cliente en el array local para que selectedClientData se actualice
+    const refreshed = await clientsApi.getById(clientId);
+    if (refreshed) {
+      actions.refreshClientInList(refreshed);
+    }
     setEditClientModalOpen(false);
   };
 
@@ -415,6 +428,7 @@ export function UnifiedCart({ role, state, actions, onConfirmSale, allowDiscount
           onOpenNewClient={() => setNewClientModalOpen(true)}
           clientMissingData={clientMissingData}
           onEditClient={() => setEditClientModalOpen(true)}
+          onClearClient={actions.clearClient}
           onClientNameChange={actions.setClientName}
           onClientEmailChange={actions.setClientEmail}
           onClientPhoneChange={actions.setClientPhone}
@@ -510,7 +524,8 @@ export function UnifiedCart({ role, state, actions, onConfirmSale, allowDiscount
           />
         )}
 
-        {/* Payment */}
+        {/* Payment — solo si es retiro en local (delivery pregunta al completar pedido) */}
+        {deliveryMethod !== "delivery" && (
         <div className="space-y-2">
           <Label className="text-xs font-medium text-foreground">Forma de Pago</Label>
           {role === "admin" ? (
@@ -597,9 +612,10 @@ export function UnifiedCart({ role, state, actions, onConfirmSale, allowDiscount
             </div>
           )}
         </div>
+        )}
 
-        {/* Payment amounts (admin only) */}
-        {role === "admin" && paymentType === "cash" && (
+        {/* Payment amounts (admin only, solo pickup) */}
+        {deliveryMethod !== "delivery" && role === "admin" && paymentType === "cash" && (
           <PaymentAmountBox
             label="Monto en Efectivo"
             value={cashAmount}
@@ -611,10 +627,10 @@ export function UnifiedCart({ role, state, actions, onConfirmSale, allowDiscount
             formatCurrency={actions.formatCurrency}
           />
         )}
-        {role === "admin" && paymentType === "credit" && (
+        {deliveryMethod !== "delivery" && role === "admin" && paymentType === "credit" && (
           <PaymentAmountBox label="Monto A Cuenta" value={creditAmountInput} max={finalTotal} onChange={actions.handleCreditAmountChange} color="blue" />
         )}
-        {role === "admin" && paymentType === "mixed" && (
+        {deliveryMethod !== "delivery" && role === "admin" && paymentType === "mixed" && (
           <div className="space-y-2 p-3 rounded-lg bg-amber-50/50 border border-amber-200/50">
             <div className="space-y-2">
               <Label className="text-xs font-medium text-amber-900">Monto en Efectivo</Label>
@@ -716,7 +732,7 @@ function ClientLookupSection({
   clientName, clientEmail, clientPhone, clientAddress,
   selectedClientData, formatCurrency,
   onLookupTypeChange, onLookupChange, onOpenNewClient,
-  clientMissingData, onEditClient,
+  clientMissingData, onEditClient, onClearClient,
   onClientNameChange, onClientEmailChange, onClientPhoneChange,
   clients, onSelectFromSearch,
 }: {
@@ -731,6 +747,7 @@ function ClientLookupSection({
   onOpenNewClient: () => void;
   clientMissingData: string[] | null;
   onEditClient: () => void;
+  onClearClient?: () => void;
   onClientNameChange?: (v: string) => void;
   onClientEmailChange?: (v: string) => void;
   onClientPhoneChange?: (v: string) => void;
@@ -860,7 +877,7 @@ function ClientLookupSection({
                 <Button
                   type="button" variant="ghost" size="sm"
                   className="h-5 text-[10px] text-muted-foreground px-1.5 hover:text-destructive"
-                  onClick={() => onLookupChange("")}
+                  onClick={() => onClearClient?.()}
                 >
                   Cambiar
                 </Button>
@@ -923,17 +940,7 @@ function ClientLookupSection({
       {/* Búsqueda libre */}
       {lookupType === "search" && (
         dniFound ? (
-          <div className="flex items-center justify-between gap-2">
-            <p className="text-xs text-emerald-600 font-medium truncate">Cliente: {clientName}</p>
-            <div className="flex items-center gap-1 shrink-0">
-              <Button type="button" variant="ghost" size="sm"
-                className="h-5 text-[10px] text-primary px-1.5 hover:bg-primary/5"
-                onClick={onEditClient}>Editar</Button>
-              <Button type="button" variant="ghost" size="sm"
-                className="h-5 text-[10px] text-muted-foreground px-1.5 hover:text-destructive"
-                onClick={() => { onLookupChange(""); setSearchText(""); }}>Cambiar</Button>
-            </div>
-          </div>
+          null /* Se muestra en la tarjeta de info del cliente abajo */
         ) : (
           <div className="space-y-1 relative">
             <Input
@@ -975,6 +982,21 @@ function ClientLookupSection({
       {/* Client info */}
       {dniFound ? (
         <div className={`p-3 rounded-lg space-y-1 ${clientMissingData ? "bg-amber-50/50 border border-amber-200/50" : "bg-emerald-50/50 border border-emerald-200/50"}`}>
+          <div className="flex items-center justify-between mb-1">
+            <p className="text-xs text-emerald-600 font-medium">Cliente seleccionado</p>
+            <div className="flex items-center gap-1">
+              <Button type="button" variant="ghost" size="sm"
+                className="h-5 text-[10px] text-primary px-1.5 hover:bg-primary/5"
+                onClick={onEditClient}>
+                <Pencil className="h-2.5 w-2.5 mr-0.5" /> Editar
+              </Button>
+              <Button type="button" variant="ghost" size="sm"
+                className="h-5 text-[10px] text-muted-foreground px-1.5 hover:text-destructive"
+                onClick={() => { onClearClient?.(); setSearchText(""); }}>
+                <X className="h-2.5 w-2.5 mr-0.5" /> Cambiar
+              </Button>
+            </div>
+          </div>
           <div className="flex justify-between text-xs">
             <span className="text-muted-foreground">Nombre:</span>
             <span className="font-medium">{clientName}</span>

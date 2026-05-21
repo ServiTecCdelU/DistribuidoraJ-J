@@ -145,6 +145,8 @@ export interface CartActions {
   registerClientFromDni: () => Promise<void>;
   registerClientFromModal: (form: { name: string; dni: string; cuit: string; email: string; phone: string; address: string; taxCategory: string; creditLimit: number; notes: string }) => Promise<void>;
   setClientCreditLimit: (v: number) => void;
+  clearClient: () => void;
+  refreshClientInList: (client: Client) => void;
 }
 
 export interface NewClientForm {
@@ -985,6 +987,25 @@ export function useCart(role: UserRole, userEmail?: string, externalProducts?: P
     [],
   );
 
+  const clearClient = useCallback(() => {
+    setSelectedClient("");
+    setDniClientId("");
+    setDniFound(false);
+    setDniNotFound(false);
+    setDniLookup("");
+    setClientName("");
+    setClientEmail("");
+    setClientPhone("");
+    setClientAddress("");
+    setClientCuit("");
+    setClientTaxCategory("consumidor_final");
+    setSelectedSavedAddress(null);
+  }, []);
+
+  const refreshClientInList = useCallback((updated: Client) => {
+    setClients((prev) => prev.map((c) => (c.id === updated.id ? updated : c)));
+  }, []);
+
   const selectClientFromSearch = useCallback(
     (clientId: string) => {
       const found = clients.find((c) => c.id === clientId);
@@ -1034,6 +1055,7 @@ export function useCart(role: UserRole, userEmail?: string, externalProducts?: P
     setDiscountType, setDiscountValue, setDiscountOpen,
     canProcessSale, processSale: (modo?: "esperar" | "disponible") => handleProcessSale(modo ?? "disponible"), resetCart, formatCurrency,
     createNewClient, registerClientFromDni, registerClientFromModal, setClientCreditLimit,
+    clearClient, refreshClientInList,
   };
 
   return { state, actions };
