@@ -8,36 +8,47 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Porcentaje inválido' }, { status: 400 })
     }
 
-    // Traer todos los mayorista habilitados con producto_id
-    const { data: mayoristas, error: fetchErr } = await supabaseAdmin
-      .from('mayorista_productos')
-      .select('id, producto_id, precio_lista')
-      .eq('habilitado', true)
-      .not('producto_id', 'is', null)
+    // Traer todos los mayorista habilitados con producto_id y precio_lista
+    const all: any[] = []
+    const PAGE = 1000
+    let from = 0
+    while (true) {
+      const { data, error } = await supabaseAdmin
+        .from('mayorista_productos')
+        .select('producto_id, precio_lista')
+        .eq('habilitado', true)
+        .not('producto_id', 'is', null)
+        .range(from, from + PAGE - 1)
+      if (error) throw error
+      if (!data || data.length === 0) break
+      all.push(...data)
+      if (data.length < PAGE) break
+      from += PAGE
+    }
 
-    if (fetchErr) throw fetchErr
-    if (!mayoristas || mayoristas.length === 0) {
+    if (all.length === 0) {
       return NextResponse.json({ updated: 0 })
     }
 
-    // Armar array de updates
-    const rows = mayoristas.map((m) => ({
-      id: m.producto_id as string,
-      price: Math.round(Number(m.precio_lista) * (1 + porcentaje / 100) * 100) / 100,
-      precio_venta: Math.round(Number(m.precio_lista) * (1 + porcentaje / 100) * 100) / 100,
-      ganancia_global: porcentaje,
-      ganancia_individual: 0,
-    }))
-
-    // Upsert en batches de 500
+    // Actualizar cada producto con update individual pero server-side (sin límite de browser)
     let updated = 0
-    for (let i = 0; i < rows.length; i += 500) {
-      const chunk = rows.slice(i, i + 500)
-      const { error } = await supabaseAdmin
-        .from('productos')
-        .upsert(chunk, { onConflict: 'id', ignoreDuplicates: false })
-      if (error) throw error
-      updated += chunk.length
+    for (let i = 0; i < all.length; i += 50) {
+      const chunk = all.slice(i, i + 50)
+      await Promise.all(
+        chunk.map(async (m: any) => {
+          const precio = Math.round(Number(m.precio_lista) * (1 + porcentaje / 100) * 100) / 100
+          const { error } = await supabaseAdmin
+            .from('productos')
+            .update({
+              price: precio,
+              precio_venta: precio,
+              ganancia_global: porcentaje,
+              ganancia_individual: 0,
+            })
+            .eq('id', m.producto_id)
+          if (!error) updated++
+        })
+      )
     }
 
     return NextResponse.json({ updated })
