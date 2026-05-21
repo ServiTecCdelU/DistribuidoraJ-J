@@ -25,11 +25,11 @@ No hay tests en este proyecto.
 - Revisar estilos existentes antes de tocar cualquier componente visual para mantener consistencia.
 
 ### Despues de hacer cambios — commit y push automaticamente
-Siempre hacer commit y push al terminar cada tarea, sin esperar confirmacion del usuario:
+Hacer UN SOLO commit y push cuando el usuario confirme que todo funciona o cuando se terminen TODOS los cambios pedidos en un mensaje. NO hacer commit por cada cambio intermedio ni por cada fix.
 1. Ejecutar `npm run build` y verificar que no haya errores.
 2. Hacer `git add` de los archivos modificados.
 3. Hacer commit con el mensaje apropiado.
-4. Hacer `git push origin main`.
+4. Hacer `git push origin prueba`.
 
 ### Commit conventions (Conventional Commits)
 - `feat:` nuevas funcionalidades
@@ -78,8 +78,8 @@ Siempre hacer commit y push al terminar cada tarea, sin esperar confirmacion del
 
 ### Git
 - Commitear con mensajes descriptivos en español, en imperativo. Ej: "Agrega validación de stock".
-- Un commit por cambio lógico. No acumular todo en un solo commit gigante.
-- Pushear sin pedir confirmación una vez que los tests pasen.
+- Un commit al final de todos los cambios pedidos. No hacer commits intermedios por cada archivo o fix.
+- Pushear sin pedir confirmación una vez que el build pase.
 
 ### Contexto del proyecto
 - Inferir el contexto del proyecto desde el código. No asumir nada sobre el negocio sin leer primero.
