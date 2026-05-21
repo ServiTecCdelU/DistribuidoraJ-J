@@ -947,6 +947,7 @@ export default function ProductosPage() {
                 </Button>
               </div>
 
+              {/* Nuevo — comentado temporalmente
               <Button
                 onClick={handleCreate}
                 className="gap-1 sm:gap-2 bg-primary hover:bg-primary/90 h-8 sm:h-9 px-2 sm:px-3"
@@ -955,6 +956,7 @@ export default function ProductosPage() {
                 <span className="hidden sm:inline">Nuevo</span>
                 <span className="sm:hidden text-xs">Nuevo</span>
               </Button>
+              */}
             </>
           }
         />
