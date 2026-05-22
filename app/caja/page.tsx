@@ -134,7 +134,7 @@ const cajaPdfStyles = StyleSheet.create({
   footer: { marginTop: "auto", paddingTop: 8, borderTop: "1px solid #e5e7eb", flexDirection: "row", justifyContent: "space-between", fontSize: 7, color: "#aaa" },
 });
 
-const CajaPdfDocument = ({ register, sales, losses = [] }: { register: CashRegister; sales: Sale[]; losses?: { id: string; amount: number; description: string; date: string }[] }) => {
+const CajaPdfDocument = ({ register, sales, losses = [], pagos = [] }: { register: CashRegister; sales: Sale[]; losses?: { id: string; amount: number; description: string; date: string }[]; pagos?: { id: string; sellerName: string; monto: number; createdAt: string }[] }) => {
   const isClosed = register.status === "closed";
 
   // Calcular desglose desde ventas si no hay datos guardados
@@ -164,7 +164,8 @@ const CajaPdfDocument = ({ register, sales, losses = [] }: { register: CashRegis
   const creditTotal = register.creditTotal ?? creditTotalCalc;
   const totalSales = register.totalSales ?? totalCalc;
   const salesCount = register.salesCount ?? sales.length;
-  const expectedCash = register.initialAmount + cashTotal;
+  const pagosTotal = pagos.reduce((a, p) => a + p.monto, 0);
+  const expectedCash = register.initialAmount + cashTotal - pagosTotal;
 
   return (
     <Document>
@@ -231,7 +232,7 @@ const CajaPdfDocument = ({ register, sales, losses = [] }: { register: CashRegis
           <View style={cajaPdfStyles.statBox}>
             <Text style={cajaPdfStyles.statLabel}>EFECTIVO ESPERADO EN CAJA</Text>
             <Text style={cajaPdfStyles.statValue}>{formatCurrency(expectedCash)}</Text>
-            <Text style={cajaPdfStyles.statSub}>Inicial + ventas efectivo (sin transf.)</Text>
+            <Text style={cajaPdfStyles.statSub}>Inicial + efectivo - comisiones</Text>
           </View>
         </View>
 
@@ -321,6 +322,23 @@ const CajaPdfDocument = ({ register, sales, losses = [] }: { register: CashRegis
           </View>
         )}
 
+        {/* Pagos de comisiones */}
+        {pagos.length > 0 && (
+          <View style={cajaPdfStyles.section}>
+            <Text style={[cajaPdfStyles.sectionTitle, { color: "#ea580c" }]}>Pagos de comisiones</Text>
+            {pagos.map((p, i) => (
+              <View key={i} style={cajaPdfStyles.row}>
+                <Text style={[cajaPdfStyles.label, { flex: 3 }]}>{p.sellerName}</Text>
+                <Text style={[cajaPdfStyles.value, { color: "#ea580c" }]}>-{formatCurrency(p.monto)}</Text>
+              </View>
+            ))}
+            <View style={[cajaPdfStyles.row, { borderTop: "1px solid #fed7aa", marginTop: 4, paddingTop: 4 }]}>
+              <Text style={[cajaPdfStyles.label, { fontWeight: "bold" }]}>Total comisiones pagadas</Text>
+              <Text style={[cajaPdfStyles.value, { fontWeight: "bold", color: "#ea580c" }]}>-{formatCurrency(pagosTotal)}</Text>
+            </View>
+          </View>
+        )}
+
         {/* Footer */}
         <View style={cajaPdfStyles.footer}>
           <Text>Caja Diaria - Distribuidora Patricia</Text>
@@ -331,8 +349,8 @@ const CajaPdfDocument = ({ register, sales, losses = [] }: { register: CashRegis
   );
 };
 
-const generarCajaPdf = async (register: CashRegister, sales: Sale[], losses: { id: string; amount: number; description: string; date: string }[] = []) => {
-  const blob = await pdf(<CajaPdfDocument register={register} sales={sales} losses={losses} />).toBlob();
+const generarCajaPdf = async (register: CashRegister, sales: Sale[], losses: { id: string; amount: number; description: string; date: string }[] = [], pagos: { id: string; sellerName: string; monto: number; createdAt: string }[] = []) => {
+  const blob = await pdf(<CajaPdfDocument register={register} sales={sales} losses={losses} pagos={pagos} />).toBlob();
   const url = URL.createObjectURL(blob);
   const a = document.createElement("a");
   a.href = url;
@@ -348,6 +366,7 @@ export default function CajaPage() {
   const [loading, setLoading] = useState(true);
   const [sales, setSales] = useState<Sale[]>([]);
   const [losses, setLosses] = useState<{ id: string; amount: number; description: string; date: string }[]>([]);
+  const [pagosComisiones, setPagosComisiones] = useState<{ id: string; sellerName: string; monto: number; createdAt: string }[]>([]);
   const [currentRegister, setCurrentRegister] = useState<CashRegister | null>(null);
 
   // Open register modal
@@ -433,6 +452,14 @@ export default function CajaPage() {
           .gte("date", cajaDate.toISOString());
         if (!mounted) return;
         setLosses((lossData || []).map((l: any) => ({ id: l.id, amount: Math.abs(Number(l.amount)) || 0, description: (l.description || "").replace("[ROTURA] ", ""), date: l.date })));
+
+        // Cargar pagos de comisiones del día
+        const { data: pagosData } = await supabase
+          .from("pagos_comisiones")
+          .select("id, seller_name, monto, created_at")
+          .gte("created_at", cajaDate.toISOString());
+        if (!mounted) return;
+        setPagosComisiones((pagosData || []).map((p: any) => ({ id: p.id, sellerName: p.seller_name, monto: Number(p.monto) || 0, createdAt: p.created_at })));
       } catch {
         if (!mounted) return;
         toast.error("Error al cargar datos de caja");
@@ -490,6 +517,13 @@ export default function CajaPage() {
         .like("description", "[ROTURA]%")
         .gte("date", cajaDate.toISOString());
       setLosses((lossData || []).map((l: any) => ({ id: l.id, amount: Math.abs(Number(l.amount)) || 0, description: (l.description || "").replace("[ROTURA] ", ""), date: l.date })));
+
+      // Cargar pagos de comisiones del día
+      const { data: pagosData } = await supabase
+        .from("pagos_comisiones")
+        .select("id, seller_name, monto, created_at")
+        .gte("created_at", cajaDate.toISOString());
+      setPagosComisiones((pagosData || []).map((p: any) => ({ id: p.id, sellerName: p.seller_name, monto: Number(p.monto) || 0, createdAt: p.created_at })));
     } catch {
       toast.error("Error al recargar ventas");
     } finally {
@@ -585,10 +619,11 @@ export default function CajaPage() {
     }
 
     const lossTotal = losses.reduce((acc, l) => acc + l.amount, 0);
-    return { efectivoTotal, transferTotal, cashTotal: efectivoTotal + transferTotal, creditTotal, total, count: sales.length, lossTotal, lossCount: losses.length };
-  }, [sales, losses]);
+    const comisionesTotal = pagosComisiones.reduce((acc, p) => acc + p.monto, 0);
+    return { efectivoTotal, transferTotal, cashTotal: efectivoTotal + transferTotal, creditTotal, total, count: sales.length, lossTotal, lossCount: losses.length, comisionesTotal, comisionesCount: pagosComisiones.length };
+  }, [sales, losses, pagosComisiones]);
 
-  const expectedCash = (currentRegister?.initialAmount || 0) + todayStats.efectivoTotal;
+  const expectedCash = (currentRegister?.initialAmount || 0) + todayStats.efectivoTotal - todayStats.comisionesTotal;
 
   // Stats para el modal de cierre (puede ser caja actual o una del historial)
   const closingStats = useMemo(() => {
@@ -613,7 +648,7 @@ export default function CajaPage() {
     return { efectivoTotal, transferTotal, creditTotal, total, count: src.length };
   }, [closingSales, sales]);
   const closingRegisterData = closingRegister ?? currentRegister;
-  const closingExpectedCash = (closingRegisterData?.initialAmount || 0) + closingStats.efectivoTotal;
+  const closingExpectedCash = (closingRegisterData?.initialAmount || 0) + closingStats.efectivoTotal - todayStats.comisionesTotal;
 
   const handleOpenRegister = async () => {
     if (!initialAmount || !user) return;
@@ -724,7 +759,7 @@ export default function CajaPage() {
     if (!currentRegister) return;
     setGeneratingPdf(true);
     try {
-      await generarCajaPdf(currentRegister, sales, losses);
+      await generarCajaPdf(currentRegister, sales, losses, pagosComisiones);
       toast.success("PDF descargado");
     } catch {
       toast.error("Error al generar PDF");
@@ -755,7 +790,15 @@ export default function CajaPage() {
         .lte("date", end.toISOString());
       const dayLosses = (lossData || []).map((l: any) => ({ id: l.id, amount: Math.abs(Number(l.amount)) || 0, description: (l.description || "").replace("[ROTURA] ", ""), date: l.date }));
 
-      await generarCajaPdf(register, daySales, dayLosses);
+      // Cargar pagos de comisiones del día
+      const { data: pagosData } = await supabase
+        .from("pagos_comisiones")
+        .select("id, seller_name, monto, created_at")
+        .gte("created_at", start.toISOString())
+        .lte("created_at", end.toISOString());
+      const dayPagos = (pagosData || []).map((p: any) => ({ id: p.id, sellerName: p.seller_name, monto: Number(p.monto) || 0, createdAt: p.created_at }));
+
+      await generarCajaPdf(register, daySales, dayLosses, dayPagos);
       toast.success("PDF descargado");
     } catch {
       toast.error("Error al generar PDF");
@@ -974,7 +1017,7 @@ export default function CajaPage() {
                       </div>
                       <p className="text-xl font-bold">{formatCurrency(expectedCash)}</p>
                       <p className="text-xs text-muted-foreground">
-                        Inicial + ventas efectivo
+                        Inicial + efectivo - comisiones
                       </p>
                     </CardContent>
                   </Card>
@@ -996,6 +1039,29 @@ export default function CajaPage() {
                           <div key={l.id} className="flex items-center justify-between text-xs">
                             <span className="text-red-600/80 truncate flex-1 mr-2">{l.description}</span>
                             <span className="text-red-600 font-medium shrink-0">-{formatCurrency(l.amount)}</span>
+                          </div>
+                        ))}
+                      </div>
+                    </CardContent>
+                  </Card>
+                )}
+
+                {/* Pagos de comisiones */}
+                {todayStats.comisionesCount > 0 && (
+                  <Card className="border-orange-500/30 bg-orange-500/5">
+                    <CardContent className="p-4">
+                      <div className="flex items-center justify-between mb-3">
+                        <div className="flex items-center gap-2">
+                          <ArrowDownRight className="h-4 w-4 text-orange-500" />
+                          <span className="text-sm font-semibold text-orange-700">Pagos de comisiones</span>
+                        </div>
+                        <span className="text-lg font-bold text-orange-600">-{formatCurrency(todayStats.comisionesTotal)}</span>
+                      </div>
+                      <div className="space-y-1.5">
+                        {pagosComisiones.map((p) => (
+                          <div key={p.id} className="flex items-center justify-between text-xs">
+                            <span className="text-orange-600/80 truncate flex-1 mr-2">{p.sellerName}</span>
+                            <span className="text-orange-600 font-medium shrink-0">-{formatCurrency(p.monto)}</span>
                           </div>
                         ))}
                       </div>
