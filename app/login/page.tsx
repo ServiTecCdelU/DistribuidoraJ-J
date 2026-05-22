@@ -73,10 +73,9 @@ export default function LoginPage() {
   }
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gray-50 p-4">
-      <div className="w-full max-w-4xl grid grid-cols-1 md:grid-cols-2 rounded-2xl overflow-hidden shadow-xl bg-white">
-        {/* Panel izquierdo — branding */}
-        <div className="relative bg-gradient-to-br from-teal-700 via-teal-600 to-cyan-600 p-8 flex flex-col justify-between min-h-[320px] md:min-h-[480px] overflow-hidden">
+    <div className="min-h-screen grid grid-cols-1 md:grid-cols-2">
+      {/* Panel izquierdo — branding */}
+      <div className="relative bg-gradient-to-br from-teal-700 via-teal-600 to-cyan-600 p-8 md:p-12 flex flex-col justify-between min-h-[280px] md:min-h-screen overflow-hidden">
           {/* Círculos decorativos */}
           <div className="absolute -right-16 top-1/4 w-56 h-56 rounded-full bg-white/10" />
           <div className="absolute -right-8 top-1/2 w-40 h-40 rounded-full bg-white/10" />
@@ -94,10 +93,10 @@ export default function LoginPage() {
               Gestión de toda la distribuidora, desde el celular o el mostrador.
             </h1>
           </div>
-        </div>
+      </div>
 
-        {/* Panel derecho — login */}
-        <div className="p-8 md:p-10 flex flex-col justify-center">
+      {/* Panel derecho — login */}
+      <div className="flex flex-col justify-center p-8 md:p-16 bg-white">
           <p className="text-[10.5px] uppercase tracking-widest font-semibold text-muted-foreground/60 mb-5">
             Inicia sesión como
           </p>
@@ -149,7 +148,6 @@ export default function LoginPage() {
             Tu rol se detecta automáticamente al iniciar sesión.
           </p>
         </div>
-      </div>
 
       {/* Modal no autorizado */}
       <Dialog open={showUnauthorized} onOpenChange={setShowUnauthorized}>
