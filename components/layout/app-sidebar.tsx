@@ -78,7 +78,7 @@ export function AppSidebar() {
       label: "Equipo & Análisis",
       items: [
         { href: "/empleados", label: "Empleados", icon: UserCheck, roles: ["admin"] },
-        { href: "/reportes", label: "Reportes", icon: BarChart3, roles: ["admin"] },
+        // { href: "/reportes", label: "Reportes", icon: BarChart3, roles: ["admin"] },
       ],
     },
   ];
