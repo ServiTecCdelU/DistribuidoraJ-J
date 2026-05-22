@@ -522,31 +522,43 @@ export default function PedidosPage() {
         return;
       }
 
-      // Traer productos para stock y mayorista_productos para código
-      const productIds = [...acum.values()].map((f) => f.productId).filter(Boolean);
+      // Traer stock y código de todos los productos del pedido
+      const allItems = Array.from(acum.values());
+      const productIds = allItems.map((f) => f.productId).filter(Boolean);
       const { supabase } = await import("@/lib/supabase");
 
-      // Traer stock de productos
+      // Query 1: stock y codigo desde productos
       const productoMap = new Map<string, { stock: number; codigo?: string }>();
-      for (let i = 0; i < productIds.length; i += 500) {
-        const chunk = productIds.slice(i, i + 500);
-        const { data } = await supabase
-          .from("productos")
-          .select("id, stock, codigo")
-          .in("id", chunk);
-        (data ?? []).forEach((p: any) => productoMap.set(p.id, { stock: p.stock ?? 0, codigo: p.codigo }));
+      if (productIds.length > 0) {
+        for (let i = 0; i < productIds.length; i += 500) {
+          const chunk = productIds.slice(i, i + 500);
+          const { data, error } = await supabase
+            .from("productos")
+            .select("id, stock, codigo")
+            .in("id", chunk);
+          if (!error && data) {
+            data.forEach((p: any) => productoMap.set(p.id, { stock: p.stock ?? 0, codigo: p.codigo }));
+          }
+        }
       }
 
-      // Traer código desde mayorista_productos
+      // Query 2: código desde mayorista_productos (más confiable)
       const codigoMap = new Map<string, string>();
-      for (let i = 0; i < productIds.length; i += 500) {
-        const chunk = productIds.slice(i, i + 500);
-        const { data } = await supabase
-          .from("mayorista_productos")
-          .select("producto_id, codigo")
-          .in("producto_id", chunk);
-        (data ?? []).forEach((mp: any) => { if (mp.codigo) codigoMap.set(mp.producto_id, mp.codigo); });
+      if (productIds.length > 0) {
+        for (let i = 0; i < productIds.length; i += 500) {
+          const chunk = productIds.slice(i, i + 500);
+          const { data, error } = await supabase
+            .from("mayorista_productos")
+            .select("producto_id, codigo")
+            .in("producto_id", chunk);
+          if (!error && data) {
+            data.forEach((mp: any) => { if (mp.codigo) codigoMap.set(mp.producto_id, mp.codigo); });
+          }
+        }
       }
+
+      console.log("[pedido-excel] productIds:", productIds.slice(0, 5));
+      console.log("[pedido-excel] productoMap size:", productoMap.size, "codigoMap size:", codigoMap.size);
 
       const filas = Array.from(acum.values())
         .sort((a, b) => a.nombre.localeCompare(b.nombre, "es"))
