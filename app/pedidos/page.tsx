@@ -522,58 +522,76 @@ export default function PedidosPage() {
         return;
       }
 
-      // Debug: ver estructura real de items
-      const sampleOrder = activos[0];
-      if (sampleOrder) {
-        console.log("[pedido-excel] sample items:", JSON.stringify(sampleOrder.items.slice(0, 2)));
-        console.log("[pedido-excel] acum keys:", [...acum.keys()].slice(0, 3));
-        console.log("[pedido-excel] acum values:", [...acum.values()].slice(0, 2));
-      }
-
-      // Traer stock y código de todos los productos del pedido
-      const allItems = Array.from(acum.values());
-      const productIds = allItems.map((f) => f.productId).filter(Boolean);
       const { supabase } = await import("@/lib/supabase");
+      const allItems = Array.from(acum.values());
 
-      // Query 1: stock y codigo desde productos
-      const productoMap = new Map<string, { stock: number; codigo?: string }>();
+      // Buscar productos por productId (pedidos nuevos) y por nombre (pedidos legacy)
+      const productIds = allItems.map((f) => f.productId).filter(Boolean);
+      const nombres = allItems.map((f) => f.nombre).filter(Boolean);
+
+      // Mapa productId/nombre → { stock, codigo }
+      const infoMap = new Map<string, { stock: number; codigo: string }>();
+
+      // Query 1: buscar por productId en productos
       if (productIds.length > 0) {
         for (let i = 0; i < productIds.length; i += 500) {
           const chunk = productIds.slice(i, i + 500);
-          const { data, error } = await supabase
-            .from("productos")
-            .select("id, stock, codigo")
-            .in("id", chunk);
-          if (!error && data) {
-            data.forEach((p: any) => productoMap.set(p.id, { stock: p.stock ?? 0, codigo: p.codigo }));
-          }
+          const { data } = await supabase.from("productos").select("id, stock, codigo, name").in("id", chunk);
+          (data ?? []).forEach((p: any) => {
+            infoMap.set(p.id, { stock: p.stock ?? 0, codigo: p.codigo ?? "" });
+            // También indexar por nombre para fallback
+            if (p.name) infoMap.set(p.name, { stock: p.stock ?? 0, codigo: p.codigo ?? "" });
+          });
         }
       }
 
-      // Query 2: código desde mayorista_productos (más confiable)
-      const codigoMap = new Map<string, string>();
-      if (productIds.length > 0) {
-        for (let i = 0; i < productIds.length; i += 500) {
-          const chunk = productIds.slice(i, i + 500);
-          const { data, error } = await supabase
-            .from("mayorista_productos")
-            .select("producto_id, codigo")
-            .in("producto_id", chunk);
-          if (!error && data) {
-            data.forEach((mp: any) => { if (mp.codigo) codigoMap.set(mp.producto_id, mp.codigo); });
-          }
+      // Query 2: buscar por nombre los que no matchearon por ID
+      const nombresSinMatch = nombres.filter((n) => !infoMap.has(n));
+      if (nombresSinMatch.length > 0) {
+        for (let i = 0; i < nombresSinMatch.length; i += 50) {
+          const chunk = nombresSinMatch.slice(i, i + 50);
+          const orFilter = chunk.map((n) => `name.eq.${n}`).join(",");
+          const { data } = await supabase.from("productos").select("id, stock, codigo, name").or(orFilter);
+          (data ?? []).forEach((p: any) => {
+            if (p.name) infoMap.set(p.name, { stock: p.stock ?? 0, codigo: p.codigo ?? "" });
+            infoMap.set(p.id, { stock: p.stock ?? 0, codigo: p.codigo ?? "" });
+          });
         }
       }
 
-      console.log("[pedido-excel] productIds:", productIds.slice(0, 5));
-      console.log("[pedido-excel] productoMap size:", productoMap.size, "codigoMap size:", codigoMap.size);
+      // Query 3: códigos desde mayorista_productos (más confiable)
+      const matchedProdIds = [...infoMap.entries()]
+        .filter(([k]) => k.startsWith("prod_"))
+        .map(([k]) => k);
+      if (matchedProdIds.length > 0) {
+        for (let i = 0; i < matchedProdIds.length; i += 500) {
+          const chunk = matchedProdIds.slice(i, i + 500);
+          const { data } = await supabase.from("mayorista_productos").select("producto_id, codigo").in("producto_id", chunk);
+          (data ?? []).forEach((mp: any) => {
+            if (mp.codigo && mp.producto_id) {
+              const existing = infoMap.get(mp.producto_id);
+              if (existing) existing.codigo = mp.codigo;
+            }
+          });
+        }
+      }
+
+      // También usar el campo codigo del item si existe (pedidos nuevos lo guardan)
+      for (const orden of activos) {
+        for (const item of orden.items) {
+          if ((item as any).codigo && item.productId) {
+            const existing = infoMap.get(item.productId);
+            if (existing && !existing.codigo) existing.codigo = (item as any).codigo;
+          }
+        }
+      }
 
       const filas = Array.from(acum.values())
         .sort((a, b) => a.nombre.localeCompare(b.nombre, "es"))
         .map((f) => {
-          const prod = productoMap.get(f.productId);
-          const codigo = codigoMap.get(f.productId) || prod?.codigo || "";
-          const stockDisponible = prod?.stock ?? 0;
+          const info = infoMap.get(f.productId) || infoMap.get(f.nombre);
+          const codigo = info?.codigo || "";
+          const stockDisponible = info?.stock ?? 0;
           const faltante = Math.max(0, f.cantidad - stockDisponible);
           return { codigo, nombre: f.nombre, cantidad: f.cantidad, stockDisponible, faltante };
         });
