@@ -83,14 +83,8 @@ export default function LoginPage() {
           <div className="absolute left-1/2 -bottom-12 w-48 h-48 rounded-full bg-white/5" />
 
           {/* Header */}
-          <div className="relative z-10 flex items-center gap-3">
-            <div className="flex items-center justify-center w-10 h-10 rounded-xl bg-white/20">
-              <Store className="h-5 w-5 text-white" />
-            </div>
-            <div>
-              <h2 className="text-white font-semibold text-lg leading-tight">Distribuidora Patricia</h2>
-              <p className="text-white/60 text-xs uppercase tracking-wider">Sistema interno</p>
-            </div>
+          <div className="relative z-10">
+            <p className="text-white/60 text-xs uppercase tracking-wider">Sistema de Gestión de Distribuidora</p>
           </div>
 
           {/* Footer */}
