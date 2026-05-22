@@ -22,6 +22,7 @@ import { OrderDetailModal } from "@/components/pedidos/order-detail-modal";
 import { PaymentModal, type ItemAdjustment } from "@/components/pedidos/payment-modal";
 import { SuccessModal } from "@/components/pedidos/success-modal";
 import { RouteMapModal } from "@/components/pedidos/route-map-modal";
+import { StockCheckModal, type StockCheckItem } from "@/components/pedidos/stock-check-modal";
 import { statusConfig, statusFlow } from "@/lib/order-constants";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
@@ -90,6 +91,11 @@ export default function PedidosPage() {
   const [routeModalOpen, setRouteModalOpen] = useState(false);
   const [generandoExcel, setGenerandoExcel] = useState(false);
 
+  // Stock check modal
+  const [stockCheckOpen, setStockCheckOpen] = useState(false);
+  const [stockCheckItems, setStockCheckItems] = useState<StockCheckItem[]>([]);
+  const [stockCheckOrder, setStockCheckOrder] = useState<Order | null>(null);
+
   // Selección masiva
   const [selectedOrderIds, setSelectedOrderIds] = useState<Set<string>>(new Set());
   const [bulkTransportistaId, setBulkTransportistaId] = useState<string>("");
@@ -130,18 +136,34 @@ export default function PedidosPage() {
     }
   }, []);
 
-  const handleGenerateRemito = useCallback(async (order: Order) => {
-    // If remito already exists, just download it
-    if (order.remitoNumber && order.remitoPdfBase64) {
-      const link = document.createElement("a");
-      link.href = `data:application/pdf;base64,${order.remitoPdfBase64}`;
-      link.download = `remito-${order.remitoNumber}.pdf`;
-      link.click();
-      return;
-    }
-
+  const generateRemitoForOrder = useCallback(async (order: Order, excludeProductIds: string[] = []) => {
     setGeneratingDoc(true);
     try {
+      const filteredItems = excludeProductIds.length > 0
+        ? order.items.filter((i) => !excludeProductIds.includes(i.productId))
+        : order.items;
+
+      if (filteredItems.length === 0) {
+        toast.error("No quedan productos para generar el remito");
+        return;
+      }
+
+      // Si se excluyeron productos, actualizar el pedido en BD
+      if (excludeProductIds.length > 0) {
+        const { data: updData } = await supabase
+          .from("pedidos")
+          .update({ items: filteredItems })
+          .eq("id", order.id)
+          .select()
+          .single();
+        if (updData) {
+          const mapped = { ...order, items: filteredItems };
+          setOrders((prev) => prev.map((o) => (o.id === order.id ? mapped : o)));
+          if (detailOrder?.id === order.id) setDetailOrder(mapped);
+          order = mapped;
+        }
+      }
+
       // Generate sequential remito number (query ventas for last number)
       const { data: lastRemitos } = await supabase
         .from("ventas")
@@ -185,6 +207,62 @@ export default function PedidosPage() {
       setGeneratingDoc(false);
     }
   }, [detailOrder]);
+
+  const handleGenerateRemito = useCallback(async (order: Order) => {
+    // If remito already exists, just download it
+    if (order.remitoNumber && order.remitoPdfBase64) {
+      const link = document.createElement("a");
+      link.href = `data:application/pdf;base64,${order.remitoPdfBase64}`;
+      link.download = `remito-${order.remitoNumber}.pdf`;
+      link.click();
+      return;
+    }
+
+    // Verificar stock de cada producto
+    // Los items de pedidos usan IDs de mayorista_productos (mp_XXXXX)
+    // pero el stock está en productos con ID prod_mp_XXXXX
+    const productIds = order.items.map((i) => i.productId).filter(Boolean);
+    const prodIds = productIds.map((id) => id.startsWith("mp_") ? `prod_${id}` : id);
+    const stockMap = new Map<string, number>();
+    if (prodIds.length > 0) {
+      for (let i = 0; i < prodIds.length; i += 500) {
+        const chunk = prodIds.slice(i, i + 500);
+        const { data } = await supabase.from("productos").select("id, stock").in("id", chunk);
+        (data ?? []).forEach((p: any) => stockMap.set(p.id, p.stock ?? 0));
+      }
+    }
+
+    const checkItems: StockCheckItem[] = order.items.map((item) => {
+      const prodId = item.productId.startsWith("mp_") ? `prod_${item.productId}` : item.productId;
+      return {
+        productId: item.productId,
+        name: item.name,
+        quantity: item.quantity,
+        stock: stockMap.get(prodId) ?? 0,
+      };
+    });
+
+    const sinStock = checkItems.filter((i) => i.stock < i.quantity);
+
+    if (sinStock.length > 0) {
+      // Mostrar modal de verificación
+      setStockCheckItems(checkItems);
+      setStockCheckOrder(order);
+      setStockCheckOpen(true);
+    } else {
+      // Todo OK, generar directo
+      await generateRemitoForOrder(order);
+    }
+  }, [detailOrder, generateRemitoForOrder]);
+
+  const handleStockCheckConfirm = useCallback(async (excludeProductIds: string[]) => {
+    setStockCheckOpen(false);
+    if (stockCheckOrder) {
+      await generateRemitoForOrder(stockCheckOrder, excludeProductIds);
+    }
+    setStockCheckOrder(null);
+    setStockCheckItems([]);
+  }, [stockCheckOrder, generateRemitoForOrder]);
 
   // handleGenerateInvoice — deshabilitado temporalmente
   const handleGenerateInvoice = useCallback(async (_order: Order) => {}, []);
@@ -1159,6 +1237,13 @@ export default function PedidosPage() {
         sellers={sellers}
         userRole={user?.role}
         onHacerPedido={undefined}
+      />
+
+      <StockCheckModal
+        open={stockCheckOpen}
+        onClose={() => { setStockCheckOpen(false); setStockCheckOrder(null); setStockCheckItems([]); }}
+        items={stockCheckItems}
+        onConfirm={handleStockCheckConfirm}
       />
 
       <PaymentModal
