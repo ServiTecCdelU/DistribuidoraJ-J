@@ -522,15 +522,37 @@ export default function PedidosPage() {
         return;
       }
 
-      // Traer productos para obtener código y stock
-      const productos = await productsApi.getAll();
-      const productoMap = new Map(productos.map((p) => [p.id, p]));
+      // Traer productos para stock y mayorista_productos para código
+      const productIds = [...acum.values()].map((f) => f.productId).filter(Boolean);
+      const { supabase } = await import("@/lib/supabase");
+
+      // Traer stock de productos
+      const productoMap = new Map<string, { stock: number; codigo?: string }>();
+      for (let i = 0; i < productIds.length; i += 500) {
+        const chunk = productIds.slice(i, i + 500);
+        const { data } = await supabase
+          .from("productos")
+          .select("id, stock, codigo")
+          .in("id", chunk);
+        (data ?? []).forEach((p: any) => productoMap.set(p.id, { stock: p.stock ?? 0, codigo: p.codigo }));
+      }
+
+      // Traer código desde mayorista_productos
+      const codigoMap = new Map<string, string>();
+      for (let i = 0; i < productIds.length; i += 500) {
+        const chunk = productIds.slice(i, i + 500);
+        const { data } = await supabase
+          .from("mayorista_productos")
+          .select("producto_id, codigo")
+          .in("producto_id", chunk);
+        (data ?? []).forEach((mp: any) => { if (mp.codigo) codigoMap.set(mp.producto_id, mp.codigo); });
+      }
 
       const filas = Array.from(acum.values())
         .sort((a, b) => a.nombre.localeCompare(b.nombre, "es"))
         .map((f) => {
           const prod = productoMap.get(f.productId);
-          const codigo = prod?.codigo ?? "";
+          const codigo = codigoMap.get(f.productId) || prod?.codigo || "";
           const stockDisponible = prod?.stock ?? 0;
           const faltante = Math.max(0, f.cantidad - stockDisponible);
           return { codigo, nombre: f.nombre, cantidad: f.cantidad, stockDisponible, faltante };
