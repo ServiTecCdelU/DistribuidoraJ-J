@@ -488,9 +488,10 @@ export default function PedidosPage() {
 
       const activos = orders.filter((o) => o.status !== "completed");
 
-      // Consolidar items por productId
+      // Consolidar items por nombre
       type AcumItem = {
         productId: string;
+        codigo: string;
         nombre: string;
         cantidad: number;
         unidadesPorBulto?: number;
@@ -499,15 +500,16 @@ export default function PedidosPage() {
       const acum = new Map<string, AcumItem>();
       for (const orden of activos) {
         for (const item of orden.items) {
-          const key = item.productId || item.name;
+          const key = item.name;
           const existing = acum.get(key);
           if (existing) {
             existing.cantidad += item.quantity;
-            if (!existing.unidadesPorBulto && item.unidadesPorBulto) existing.unidadesPorBulto = item.unidadesPorBulto;
-            if (!existing.precioUnitarioMayorista && item.precioUnitarioMayorista) existing.precioUnitarioMayorista = item.precioUnitarioMayorista;
+            if (!existing.codigo && (item as any).codigo) existing.codigo = (item as any).codigo;
+            if (!existing.productId && item.productId) existing.productId = item.productId;
           } else {
             acum.set(key, {
-              productId: item.productId,
+              productId: item.productId || "",
+              codigo: (item as any).codigo || "",
               nombre: item.name,
               cantidad: item.quantity,
               unidadesPorBulto: item.unidadesPorBulto,
@@ -525,75 +527,53 @@ export default function PedidosPage() {
       const { supabase } = await import("@/lib/supabase");
       const allItems = Array.from(acum.values());
 
-      // Buscar productos por productId (pedidos nuevos) y por nombre (pedidos legacy)
-      const productIds = allItems.map((f) => f.productId).filter(Boolean);
-      const nombres = allItems.map((f) => f.nombre).filter(Boolean);
-
-      // Mapa productId/nombre → { stock, codigo }
-      const infoMap = new Map<string, { stock: number; codigo: string }>();
-
-      // Query 1: buscar por productId en productos
-      if (productIds.length > 0) {
-        for (let i = 0; i < productIds.length; i += 500) {
-          const chunk = productIds.slice(i, i + 500);
-          const { data } = await supabase.from("productos").select("id, stock, codigo, name").in("id", chunk);
-          (data ?? []).forEach((p: any) => {
-            infoMap.set(p.id, { stock: p.stock ?? 0, codigo: p.codigo ?? "" });
-            // También indexar por nombre para fallback
-            if (p.name) infoMap.set(p.name, { stock: p.stock ?? 0, codigo: p.codigo ?? "" });
-          });
-        }
-      }
-
-      // Query 2: buscar por nombre los que no matchearon por ID
-      const nombresSinMatch = nombres.filter((n) => !infoMap.has(n));
-      if (nombresSinMatch.length > 0) {
-        for (let i = 0; i < nombresSinMatch.length; i += 50) {
-          const chunk = nombresSinMatch.slice(i, i + 50);
-          const orFilter = chunk.map((n) => `name.eq.${n}`).join(",");
-          const { data } = await supabase.from("productos").select("id, stock, codigo, name").or(orFilter);
-          (data ?? []).forEach((p: any) => {
-            if (p.name) infoMap.set(p.name, { stock: p.stock ?? 0, codigo: p.codigo ?? "" });
-            infoMap.set(p.id, { stock: p.stock ?? 0, codigo: p.codigo ?? "" });
-          });
-        }
-      }
-
-      // Query 3: códigos desde mayorista_productos (más confiable)
-      const matchedProdIds = [...infoMap.entries()]
-        .filter(([k]) => k.startsWith("prod_"))
-        .map(([k]) => k);
-      if (matchedProdIds.length > 0) {
-        for (let i = 0; i < matchedProdIds.length; i += 500) {
-          const chunk = matchedProdIds.slice(i, i + 500);
-          const { data } = await supabase.from("mayorista_productos").select("producto_id, codigo").in("producto_id", chunk);
-          (data ?? []).forEach((mp: any) => {
-            if (mp.codigo && mp.producto_id) {
-              const existing = infoMap.get(mp.producto_id);
-              if (existing) existing.codigo = mp.codigo;
+      // Buscar código y stock desde mayorista_productos → productos
+      // Paso 1: obtener códigos que faltan buscando por nombre en mayorista_productos
+      const sinCodigo = allItems.filter((f) => !f.codigo);
+      if (sinCodigo.length > 0) {
+        for (let i = 0; i < sinCodigo.length; i += 50) {
+          const chunk = sinCodigo.slice(i, i + 50);
+          const orFilter = chunk.map((f) => `descripcion.eq.${f.nombre}`).join(",");
+          const { data } = await supabase.from("mayorista_productos").select("codigo, descripcion").or(orFilter);
+          if (data) {
+            const descMap = new Map(data.map((r: any) => [r.descripcion, r.codigo]));
+            for (const f of chunk) {
+              const cod = descMap.get(f.nombre);
+              if (cod) f.codigo = cod;
             }
-          });
-        }
-      }
-
-      // También usar el campo codigo del item si existe (pedidos nuevos lo guardan)
-      for (const orden of activos) {
-        for (const item of orden.items) {
-          if ((item as any).codigo && item.productId) {
-            const existing = infoMap.get(item.productId);
-            if (existing && !existing.codigo) existing.codigo = (item as any).codigo;
           }
         }
       }
 
-      const filas = Array.from(acum.values())
+      // Paso 2: con los códigos, buscar producto_id en mayorista_productos
+      const codigos = allItems.map((f) => f.codigo).filter(Boolean);
+      const codigoToProductoId = new Map<string, string>();
+      if (codigos.length > 0) {
+        for (let i = 0; i < codigos.length; i += 500) {
+          const chunk = codigos.slice(i, i + 500);
+          const { data } = await supabase.from("mayorista_productos").select("codigo, producto_id").in("codigo", chunk);
+          (data ?? []).forEach((r: any) => { if (r.producto_id) codigoToProductoId.set(r.codigo, r.producto_id); });
+        }
+      }
+
+      // Paso 3: buscar stock en productos por producto_id
+      const productoIds = [...new Set(codigoToProductoId.values())];
+      const stockMap = new Map<string, number>();
+      if (productoIds.length > 0) {
+        for (let i = 0; i < productoIds.length; i += 500) {
+          const chunk = productoIds.slice(i, i + 500);
+          const { data } = await supabase.from("productos").select("id, stock").in("id", chunk);
+          (data ?? []).forEach((p: any) => stockMap.set(p.id, p.stock ?? 0));
+        }
+      }
+
+      const filas = allItems
         .sort((a, b) => a.nombre.localeCompare(b.nombre, "es"))
         .map((f) => {
-          const info = infoMap.get(f.productId) || infoMap.get(f.nombre);
-          const codigo = info?.codigo || "";
-          const stockDisponible = info?.stock ?? 0;
+          const productoId = codigoToProductoId.get(f.codigo);
+          const stockDisponible = productoId ? (stockMap.get(productoId) ?? 0) : 0;
           const faltante = Math.max(0, f.cantidad - stockDisponible);
-          return { codigo, nombre: f.nombre, cantidad: f.cantidad, stockDisponible, faltante };
+          return { codigo: f.codigo, nombre: f.nombre, cantidad: f.cantidad, stockDisponible, faltante };
         });
 
       const totalUnidades = filas.reduce((s, r) => s + r.cantidad, 0);
