@@ -486,24 +486,24 @@ export function UnifiedCart({ role, state, actions, onConfirmSale, allowDiscount
               type="button"
               variant={deliveryMethod === "pickup" ? "default" : "outline"}
               className={cn(
-                "h-auto py-2 flex-col gap-1 text-xs font-medium transition-all",
+                "h-9 gap-1.5 text-xs font-medium transition-all",
                 deliveryMethod === "pickup" && "bg-primary hover:bg-primary/90 shadow-md",
               )}
               onClick={() => actions.setDeliveryMethod("pickup")}
             >
-              <Home className="h-4 w-4" />
+              <Home className="h-3.5 w-3.5" />
               Retiro en local
             </Button>
             <Button
               type="button"
               variant={deliveryMethod === "delivery" ? "default" : "outline"}
               className={cn(
-                "h-auto py-2 flex-col gap-1 text-xs font-medium transition-all",
+                "h-9 gap-1.5 text-xs font-medium transition-all",
                 deliveryMethod === "delivery" && "bg-primary hover:bg-primary/90 shadow-md",
               )}
               onClick={() => { actions.setDeliveryMethod("delivery"); actions.setSelectedCity("Concepcion del Uruguay"); }}
             >
-              <Truck className="h-4 w-4" />
+              <Truck className="h-3.5 w-3.5" />
               A domicilio
             </Button>
           </div>
@@ -1139,98 +1139,29 @@ export function DeliveryAddressSection({
     setEditingIndex(null);
   };
 
+  const savedAddress = filteredBook.length > 0 ? filteredBook[0] : null;
+  const displayAddress = savedAddress?.entry.address || legacyMainAddress;
+
+  // Auto-seleccionar la dirección al montar
+  useEffect(() => {
+    if (savedAddress) {
+      onSelectSavedAddress(savedAddress.entry);
+    } else if (legacyMainAddress) {
+      onSelectSavedAddress({ address: legacyMainAddress });
+    }
+  }, []);
+
   return (
     <div className="space-y-2 p-3 rounded-lg bg-primary/5 border border-primary/20">
       <Label className="text-xs font-medium text-foreground">Direccion de Entrega</Label>
-      <div className="space-y-2">
-        {hasSavedList && (
-          <div className="space-y-1.5">
-            {filteredBook.map(({ entry, idx }) => {
-              const isSelected = deliveryAddress === "saved" && selectedSavedAddress?.address === entry.address;
-              const isEditing = editingIndex === idx;
-              return (
-                <div key={`${idx}-${entry.address}`} className="space-y-1">
-                  {isEditing ? (
-                    <div className="space-y-1.5">
-                      <Textarea
-                        value={editingValue}
-                        onChange={(e) => setEditingValue(e.target.value)}
-                        className="min-h-[50px] text-sm resize-none"
-                      />
-                      <div className="flex gap-1">
-                        <Button type="button" size="sm" className="h-7 text-[11px] flex-1" onClick={() => handleConfirmEdit(idx)}>
-                          Guardar
-                        </Button>
-                        <Button type="button" variant="outline" size="sm" className="h-7 text-[11px] flex-1" onClick={() => setEditingIndex(null)}>
-                          Cancelar
-                        </Button>
-                      </div>
-                    </div>
-                  ) : (
-                    <div className="flex items-center gap-1">
-                      <Button
-                        type="button"
-                        variant={isSelected ? "default" : "outline"}
-                        className="flex-1 h-auto py-2 px-3 text-xs font-medium justify-start"
-                        onClick={() => onSelectSavedAddress(entry)}
-                      >
-                        <MapPin className="h-3.5 w-3.5 mr-2 shrink-0" />
-                        <span className="truncate text-left">
-                          {entry.address}
-                          {!city && <span className="text-[10px] text-muted-foreground ml-1">({entry.city})</span>}
-                        </span>
-                      </Button>
-                      <Button
-                        type="button" variant="ghost" size="icon"
-                        className="h-8 w-8 shrink-0 text-muted-foreground hover:text-primary"
-                        title="Editar"
-                        onClick={() => handleStartEdit(idx, entry.address)}
-                      >
-                        <Pencil className="h-3.5 w-3.5" />
-                      </Button>
-                      <Button
-                        type="button" variant="ghost" size="icon"
-                        className="h-8 w-8 shrink-0 text-muted-foreground hover:text-destructive"
-                        title="Eliminar"
-                        onClick={() => onDeleteSavedAddress(idx)}
-                      >
-                        <Trash2 className="h-3.5 w-3.5" />
-                      </Button>
-                    </div>
-                  )}
-                </div>
-              );
-            })}
-          </div>
-        )}
-        {showLegacyMain && (
-          <Button
-            type="button"
-            variant={deliveryAddress === "saved" ? "default" : "outline"}
-            className="w-full h-auto py-2 px-3 text-xs font-medium justify-start"
-            onClick={() => { onSelectSavedAddress({ address: legacyMainAddress! }); }}
-          >
-            <MapPin className="h-3.5 w-3.5 mr-2 shrink-0" />
-            <span className="truncate text-left">{legacyMainAddress}</span>
-          </Button>
-        )}
-        <Button
-          type="button"
-          variant={deliveryAddress === "new" ? "default" : "outline"}
-          className="w-full h-auto py-2 flex-col gap-1 text-xs font-medium"
-          onClick={() => { onSelectSavedAddress(null); onSelectType("new"); }}
-        >
-          <MapPin className="h-3.5 w-3.5" /> Nueva Direccion
-        </Button>
-        {deliveryAddress === "new" && (
-          <Textarea
-            placeholder="Ingresa la direccion de entrega..."
-            value={newAddress}
-            onChange={(e) => onNewAddressChange(e.target.value)}
-            className="min-h-[60px] text-sm resize-none"
-          />
-        )}
-      </div>
+      {displayAddress ? (
+        <div className="flex items-center gap-2 p-2 rounded-lg bg-background border text-xs">
+          <MapPin className="h-3.5 w-3.5 text-primary shrink-0" />
+          <span className="truncate">{displayAddress}</span>
+        </div>
+      ) : (
+        <p className="text-xs text-muted-foreground">El cliente no tiene dirección cargada. Editá el cliente para agregar una.</p>
+      )}
     </div>
   );
 }
