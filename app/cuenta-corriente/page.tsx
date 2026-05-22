@@ -145,7 +145,7 @@ export default function CuentaCorrientePage() {
           c.id === comp.clientId
             ? { ...c, currentBalance: Math.max(0, c.currentBalance - comp.amount) }
             : c
-        ).filter((c) => c.currentBalance > 0)
+        )
       )
       if (selectedClient && selectedClient.id === comp.clientId) {
         setSelectedClient((prev) =>
@@ -216,7 +216,7 @@ export default function CuentaCorrientePage() {
       setDebtClients((prev) =>
         prev.map((c) =>
           c.id === selectedClient.id ? { ...c, currentBalance: newBalance } : c
-        ).filter((c) => c.currentBalance > 0)
+        )
       )
       // Refrescar transacciones
       const txs = await clientsApi.getTransactions(selectedClient.id)
@@ -269,7 +269,9 @@ export default function CuentaCorrientePage() {
           </div>
           <div className="text-right">
             <p className="text-xs text-muted-foreground">Deuda actual</p>
-            <p className="text-xl font-bold text-red-600">{formatCurrency(selectedClient.currentBalance)}</p>
+            <p className={`text-xl font-bold ${selectedClient.currentBalance > 0 ? 'text-red-600' : 'text-green-600'}`}>
+              {selectedClient.currentBalance > 0 ? formatCurrency(selectedClient.currentBalance) : 'Cancelada'}
+            </p>
           </div>
         </div>
 
@@ -712,7 +714,11 @@ export default function CuentaCorrientePage() {
                             )}
                           </div>
                           <div className="text-right shrink-0">
-                            <p className="font-bold text-red-600">{formatCurrency(c.currentBalance)}</p>
+                            {c.currentBalance > 0 ? (
+                              <p className="font-bold text-red-600">{formatCurrency(c.currentBalance)}</p>
+                            ) : (
+                              <Badge className="bg-green-100 text-green-700 text-xs"><CheckCircle2 className="h-3 w-3 mr-1" />Cancelada</Badge>
+                            )}
                             {clientPending.length > 0 && (
                               <Badge variant="secondary" className="text-orange-600 bg-orange-50 text-[10px] mt-1">
                                 {clientPending.length} comprobante{clientPending.length > 1 ? 's' : ''}
@@ -753,10 +759,16 @@ export default function CuentaCorrientePage() {
                           >
                             <TableCell className="font-medium">{c.name}</TableCell>
                             <TableCell className="text-sm text-muted-foreground">{c.sellerName || 'Sin asignar'}</TableCell>
-                            <TableCell className="text-right font-bold text-red-600">{formatCurrency(c.currentBalance)}</TableCell>
+                            <TableCell className="text-right">
+                              {c.currentBalance > 0 ? (
+                                <span className="font-bold text-red-600">{formatCurrency(c.currentBalance)}</span>
+                              ) : (
+                                <Badge className="bg-green-100 text-green-700 text-xs"><CheckCircle2 className="h-3 w-3 mr-1" />Cancelada</Badge>
+                              )}
+                            </TableCell>
                             <TableCell className="text-right text-sm">{formatCurrency(c.creditLimit)}</TableCell>
                             <TableCell className="text-center">
-                              <Badge variant={pct >= 90 ? 'destructive' : pct >= 70 ? 'secondary' : 'outline'}>
+                              <Badge variant={c.currentBalance === 0 ? 'outline' : pct >= 90 ? 'destructive' : pct >= 70 ? 'secondary' : 'outline'} className={c.currentBalance === 0 ? 'text-green-600' : ''}>
                                 {pct}%
                               </Badge>
                             </TableCell>

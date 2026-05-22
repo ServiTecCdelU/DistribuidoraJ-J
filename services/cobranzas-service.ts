@@ -28,12 +28,12 @@ export const getClientsBySeller = async (sellerId: string): Promise<Client[]> =>
   }))
 }
 
-// Todos los clientes con deuda (para admin), opcionalmente filtrado por vendedor
+// Todos los clientes con cuenta corriente (deuda actual o cancelada), filtrado por vendedor opcionalmente
 export const getDebtClients = async (sellerId?: string): Promise<(Client & { sellerName?: string })[]> => {
   let query = supabase
     .from('clientes')
     .select('*')
-    .gt('current_balance', 0)
+    .or('current_balance.gt.0,credit_limit.gt.0')
     .order('current_balance', { ascending: false })
 
   if (sellerId) {
