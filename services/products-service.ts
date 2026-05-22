@@ -107,18 +107,36 @@ export const getProductStats = async (): Promise<{
   lowStockCount: number
   outOfStockCount: number
 }> => {
-  const { data, error } = await supabase
-    .from('productos')
-    .select('stock, price')
-    .or('disabled.eq.false,disabled.is.null')
+  const activeFilter = 'disabled.eq.false,disabled.is.null'
 
-  if (error) throw error
-  const rows = data ?? []
+  // Queries de conteo en paralelo (sin límite de 1000 filas)
+  const [totalRes, outRes, lowRes] = await Promise.all([
+    supabase.from('productos').select('*', { count: 'exact', head: true }).or(activeFilter),
+    supabase.from('productos').select('*', { count: 'exact', head: true }).or(activeFilter).eq('stock', 0),
+    supabase.from('productos').select('*', { count: 'exact', head: true }).or(activeFilter).gt('stock', 0).lt('stock', 10),
+  ])
+
+  // Valor de inventario: paginar para sumar todo
+  let totalInventoryValue = 0
+  let from = 0
+  const batchSize = 1000
+  while (true) {
+    const { data } = await supabase
+      .from('productos')
+      .select('stock, price')
+      .or(activeFilter)
+      .range(from, from + batchSize - 1)
+    if (!data || data.length === 0) break
+    totalInventoryValue += data.reduce((sum, r) => sum + (Number(r.price) || 0) * (r.stock ?? 0), 0)
+    if (data.length < batchSize) break
+    from += batchSize
+  }
+
   return {
-    totalProducts: rows.length,
-    totalInventoryValue: rows.reduce((sum, r) => sum + (Number(r.price) || 0) * (r.stock ?? 0), 0),
-    lowStockCount: rows.filter((r) => r.stock > 0 && r.stock < 10).length,
-    outOfStockCount: rows.filter((r) => r.stock === 0).length,
+    totalProducts: totalRes.count ?? 0,
+    totalInventoryValue,
+    lowStockCount: lowRes.count ?? 0,
+    outOfStockCount: outRes.count ?? 0,
   }
 }
 
