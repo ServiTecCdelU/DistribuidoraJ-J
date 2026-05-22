@@ -40,7 +40,6 @@ interface MatchedItem {
   parsedItem: ParsedItem;
   matchedProduct: Product | null;
   quantity: number;
-  action: "add" | "set";
   precioListaActual?: number;
 }
 
@@ -338,8 +337,7 @@ export function RemitoImportModal({
           parsedItem: item,
           matchedProduct,
           quantity: item.cantidad,
-          action: "add" as const,
-          precioListaActual,
+            precioListaActual,
         };
       });
 
@@ -384,12 +382,6 @@ export function RemitoImportModal({
     );
   };
 
-  const updateAction = (index: number, action: "add" | "set") => {
-    setItems((prev) =>
-      prev.map((item, i) => (i === index ? { ...item, action } : item))
-    );
-  };
-
   const updateMatch = (index: number, productId: string) => {
     const product = products.find((p) => p.id === productId) || null;
     setItems((prev) =>
@@ -415,10 +407,7 @@ export function RemitoImportModal({
     try {
       const updates = toUpdate.map((item) => {
         const product = item.matchedProduct!;
-        const newStock =
-          item.action === "add"
-            ? product.stock + item.quantity
-            : item.quantity;
+        const newStock = product.stock + item.quantity;
         return {
           productId: product.id,
           newStock,
@@ -579,32 +568,6 @@ export function RemitoImportModal({
                     </div>
 
                     <div className="flex items-center gap-2 flex-wrap">
-                      {/* Selector accion */}
-                      <div className="flex rounded-lg border border-border overflow-hidden text-xs">
-                        <button
-                          onClick={() => updateAction(index, "add")}
-                          className={cn(
-                            "px-2.5 py-1 transition-colors",
-                            item.action === "add"
-                              ? "bg-primary text-primary-foreground"
-                              : "hover:bg-muted"
-                          )}
-                        >
-                          + Sumar
-                        </button>
-                        <button
-                          onClick={() => updateAction(index, "set")}
-                          className={cn(
-                            "px-2.5 py-1 transition-colors border-l border-border",
-                            item.action === "set"
-                              ? "bg-primary text-primary-foreground"
-                              : "hover:bg-muted"
-                          )}
-                        >
-                          = Fijar
-                        </button>
-                      </div>
-
                       {/* Cantidad */}
                       <div className="flex items-center gap-1.5">
                         <label className="text-xs text-muted-foreground whitespace-nowrap">
@@ -623,9 +586,7 @@ export function RemitoImportModal({
                       <div className="ml-auto text-xs text-muted-foreground">
                         {" "}
                         <span className="font-semibold text-foreground">
-                          {item.action === "add"
-                            ? item.matchedProduct!.stock + item.quantity
-                            : item.quantity}
+                          {item.matchedProduct!.stock + item.quantity}
                         </span>{" "}
                         unidades
                       </div>
