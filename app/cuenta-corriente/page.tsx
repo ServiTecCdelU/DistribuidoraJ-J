@@ -74,6 +74,10 @@ export default function CuentaCorrientePage() {
   const [payMethod, setPayMethod] = useState<string>('efectivo')
   const [payNotes, setPayNotes] = useState('')
 
+  // Paginación lista deudores
+  const [currentPage, setCurrentPage] = useState(1)
+  const PAGE_SIZE = 10
+
   // Preview imagen comprobante
   const [previewUrl, setPreviewUrl] = useState<string | null>(null)
 
@@ -102,6 +106,12 @@ export default function CuentaCorrientePage() {
     const matchesClassification = filterClassification === 'all' || (c.debtClassification ?? 'normal') === filterClassification
     return matchesSeller && matchesSearch && matchesClassification
   })
+
+  const totalPages = Math.ceil(filteredClients.length / PAGE_SIZE)
+  const paginatedClients = filteredClients.slice((currentPage - 1) * PAGE_SIZE, currentPage * PAGE_SIZE)
+
+  // Reset página al cambiar filtros
+  useEffect(() => { setCurrentPage(1) }, [searchQuery, filterSeller, filterClassification])
 
   // Seleccionar cliente → cargar detalle
   const handleSelectClient = async (client: ClientWithSeller) => {
@@ -684,7 +694,7 @@ export default function CuentaCorrientePage() {
             <>
               {/* Mobile cards */}
               <div className="flex flex-col gap-3 md:hidden">
-                {filteredClients.map((c) => {
+                {paginatedClients.map((c) => {
                   const clientPending = comprobantes.filter((comp) => comp.clientId === c.id && comp.status === 'pending')
                   return (
                     <Card
@@ -732,7 +742,7 @@ export default function CuentaCorrientePage() {
                       </TableRow>
                     </TableHeader>
                     <TableBody>
-                      {filteredClients.map((c) => {
+                      {paginatedClients.map((c) => {
                         const pct = c.creditLimit > 0 ? Math.round((c.currentBalance / c.creditLimit) * 100) : 100
                         const clientPending = comprobantes.filter((comp) => comp.clientId === c.id && comp.status === 'pending')
                         return (
@@ -769,6 +779,32 @@ export default function CuentaCorrientePage() {
                   </Table>
                 </CardContent>
               </Card>
+              {/* Paginación */}
+              {totalPages > 1 && (
+                <div className="flex items-center justify-center gap-2 mt-4">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    disabled={currentPage === 1}
+                    onClick={() => setCurrentPage((p) => p - 1)}
+                    className="rounded-xl text-xs"
+                  >
+                    Anterior
+                  </Button>
+                  <span className="text-xs text-muted-foreground tabular-nums">
+                    {currentPage} de {totalPages} ({filteredClients.length} clientes)
+                  </span>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    disabled={currentPage === totalPages}
+                    onClick={() => setCurrentPage((p) => p + 1)}
+                    className="rounded-xl text-xs"
+                  >
+                    Siguiente
+                  </Button>
+                </div>
+              )}
             </>
           )}
         </>
