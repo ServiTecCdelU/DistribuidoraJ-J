@@ -79,8 +79,6 @@ export default function EmpleadosPage() {
   const [selectedSeller, setSelectedSeller] = useState<Seller | null>(null)
   const [commissions, setCommissions] = useState<SellerCommission[]>([])
   const [loadingCommissions, setLoadingCommissions] = useState(false)
-  const [payingCommission, setPayingCommission] = useState<string | null>(null)
-  const [payingAll, setPayingAll] = useState(false)
   const [pagos, setPagos] = useState<any[]>([])
   const [resetting, setResetting] = useState(false)
 
@@ -231,39 +229,6 @@ export default function EmpleadosPage() {
       toast.error('Error al guardar empleado')
     } finally {
       setSaving(false)
-    }
-  }
-
-  const handlePayCommission = async (commissionId: string) => {
-    setPayingCommission(commissionId)
-    try {
-      await sellersApi.payCommission(commissionId)
-      if (selectedSeller) {
-        const updatedCommissions = await sellersApi.getCommissions(selectedSeller.id)
-        setCommissions(updatedCommissions.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()))
-        await loadSellers()
-      }
-      toast.success('Comision marcada como pagada')
-    } catch (error) {
-      toast.error('Error al pagar comision')
-    } finally {
-      setPayingCommission(null)
-    }
-  }
-
-  const handlePayAllCommissions = async () => {
-    if (!selectedSeller) return
-    setPayingAll(true)
-    try {
-      await sellersApi.payAllCommissions(selectedSeller.id)
-      const updatedCommissions = await sellersApi.getCommissions(selectedSeller.id)
-      setCommissions(updatedCommissions.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()))
-      await loadSellers()
-      toast.success('Todas las comisiones fueron pagadas')
-    } catch (error) {
-      toast.error('Error al pagar comisiones')
-    } finally {
-      setPayingAll(false)
     }
   }
 
@@ -1078,24 +1043,6 @@ export default function EmpleadosPage() {
                             )}
                           </p>
                         </div>
-                        {!commission.isPaid && (
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            onClick={() => handlePayCommission(commission.id)}
-                            disabled={payingCommission === commission.id}
-                            className="shrink-0"
-                          >
-                            {payingCommission === commission.id ? (
-                              <Loader2 className="h-4 w-4 animate-spin" />
-                            ) : (
-                              <>
-                                <Banknote className="h-4 w-4 mr-1" />
-                                Pagar
-                              </>
-                            )}
-                          </Button>
-                        )}
                       </div>
                     ))}
                   </div>

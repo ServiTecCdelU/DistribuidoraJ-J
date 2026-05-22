@@ -3,7 +3,6 @@ import { supabase } from '@/lib/supabase'
 import type { CartItem, Sale } from '@/lib/types'
 import { generateReadableId, slugify } from '@/services/supabase-helpers'
 
-const COMMISSION_RATE = 0.1
 
 // Cache: ¿existe la columna payment_method en ventas?
 let _paymentMethodColumnExists: boolean | null = null
@@ -299,34 +298,20 @@ export const processSale = async (data: {
     })
   }
 
-  // Comision para vendedor
+  // Actualizar totales del vendedor (comisiones se derivan de ventas)
   if (data.sellerId) {
-    const commissionAmount = total * COMMISSION_RATE
-    const now = new Date()
-    const yyyymm = `${now.getFullYear()}${String(now.getMonth() + 1).padStart(2, '0')}`
-    const cId = await generateReadableId('comisiones', 'comision', `${data.sellerName || 'vendedor'}_${yyyymm}`)
-    await supabase.from('comisiones').insert({
-      id: cId,
-      seller_id: data.sellerId,
-      seller_name: data.sellerName ?? null,
-      sale_id: saleId,
-      sale_total: total,
-      commission_rate: COMMISSION_RATE * 100,
-      commission_amount: commissionAmount,
-      is_paid: false,
-    })
-
     const { data: sellerRow } = await supabase
       .from('vendedores')
-      .select('total_sales, total_commission')
+      .select('total_sales, total_commission, commission_rate')
       .eq('id', data.sellerId)
       .single()
     if (sellerRow) {
+      const rate = (Number(sellerRow.commission_rate) || 10) / 100
       await supabase
         .from('vendedores')
         .update({
           total_sales: (Number(sellerRow.total_sales) || 0) + total,
-          total_commission: (Number(sellerRow.total_commission) || 0) + commissionAmount,
+          total_commission: (Number(sellerRow.total_commission) || 0) + (total * rate),
         })
         .eq('id', data.sellerId)
     }
@@ -619,26 +604,17 @@ export const processSaleMayorista = async (data: {
     })())
   }
 
-  // Comisión (independiente)
+  // Actualizar totales del vendedor (comisiones se derivan de ventas)
   if (data.sellerId) {
     postSaleOps.push((async () => {
-      const commissionAmount = total * COMMISSION_RATE
-      const now = new Date()
-      const yyyymm = `${now.getFullYear()}${String(now.getMonth() + 1).padStart(2, '00')}`
-      const [cId, { data: sr }] = await Promise.all([
-        generateReadableId('comisiones', 'comision', `${data.sellerName || 'vendedor'}_${yyyymm}`),
-        supabase.from('vendedores').select('total_sales, total_commission').eq('id', data.sellerId!).single(),
-      ])
-      await Promise.all([
-        supabase.from('comisiones').insert({
-          id: cId, seller_id: data.sellerId!, sale_id: saleId, sale_total: total,
-          commission_rate: COMMISSION_RATE * 100, commission_amount: commissionAmount, is_paid: false,
-        }),
-        sr ? supabase.from('vendedores').update({
+      const { data: sr } = await supabase.from('vendedores').select('total_sales, total_commission, commission_rate').eq('id', data.sellerId!).single()
+      if (sr) {
+        const rate = (Number(sr.commission_rate) || 10) / 100
+        await supabase.from('vendedores').update({
           total_sales: (Number(sr.total_sales) || 0) + total,
-          total_commission: (Number(sr.total_commission) || 0) + commissionAmount,
-        }).eq('id', data.sellerId!) : Promise.resolve(),
-      ])
+          total_commission: (Number(sr.total_commission) || 0) + (total * rate),
+        }).eq('id', data.sellerId!)
+      }
     })())
   }
 

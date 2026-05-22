@@ -38,8 +38,6 @@ import {
   getSellerById,
   getSellerCommissions,
   getSellers,
-  payAllCommissions,
-  payCommission,
   updateSeller,
   resetCommissions,
   getPagosComisiones,
@@ -288,12 +286,6 @@ export const sellersApi = {
   },
   async getAllCommissions(): Promise<SellerCommission[]> {
     return getAllCommissions()
-  },
-  async payCommission(commissionId: string): Promise<SellerCommission> {
-    return payCommission(commissionId)
-  },
-  async payAllCommissions(sellerId: string): Promise<void> {
-    return payAllCommissions(sellerId)
   },
   async resetCommissions(sellerId: string, sellerName: string, nota?: string): Promise<PagoComision> {
     return resetCommissions(sellerId, sellerName, nota)
