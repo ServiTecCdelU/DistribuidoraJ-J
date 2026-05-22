@@ -560,28 +560,20 @@ export function UnifiedCart({ role, state, actions, onConfirmSale, allowDiscount
           ) : (
             <div className="grid grid-cols-2 gap-2">
               <Button
-                type="button"
+                type="button" size="sm"
                 variant={paymentMethod === "efectivo" ? "default" : "outline"}
-                className={cn(
-                  "h-auto py-2 flex-col gap-1 text-xs font-medium transition-all",
-                  paymentMethod === "efectivo" && "bg-emerald-600 hover:bg-emerald-700 shadow-md",
-                )}
+                className={cn("h-9 text-xs gap-1.5", paymentMethod === "efectivo" && "bg-emerald-600 hover:bg-emerald-700 shadow-md")}
                 onClick={() => actions.setPaymentMethod("efectivo")}
               >
-                <Banknote className="h-4 w-4" />
-                Efectivo
+                <Banknote className="h-3.5 w-3.5" /> Efectivo
               </Button>
               <Button
-                type="button"
+                type="button" size="sm"
                 variant={paymentMethod === "transferencia" ? "default" : "outline"}
-                className={cn(
-                  "h-auto py-2 flex-col gap-1 text-xs font-medium transition-all",
-                  paymentMethod === "transferencia" && "bg-violet-600 hover:bg-violet-700 shadow-md",
-                )}
+                className={cn("h-9 text-xs gap-1.5", paymentMethod === "transferencia" && "bg-violet-600 hover:bg-violet-700 shadow-md")}
                 onClick={() => actions.setPaymentMethod("transferencia")}
               >
-                <ArrowLeftRight className="h-4 w-4" />
-                Transferencia
+                <ArrowLeftRight className="h-3.5 w-3.5" /> Transferencia
               </Button>
             </div>
           )}
@@ -1263,12 +1255,12 @@ function PaymentButton({
       type="button"
       variant={current === type ? "default" : "outline"}
       className={cn(
-        "h-auto py-2 flex-col gap-1 text-xs font-medium transition-all",
+        "h-9 gap-1.5 text-xs font-medium transition-all",
         current === type && `${colorMap[color]} shadow-md`,
       )}
       onClick={() => onClick(type)}
     >
-      <Icon className="h-4 w-4" />
+      <Icon className="h-3.5 w-3.5" />
       {label}
     </Button>
   );
