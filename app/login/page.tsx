@@ -141,6 +141,10 @@ export default function LoginPage() {
           <p className="text-xs text-muted-foreground/50 text-center mt-4">
             Tu rol se detecta automáticamente al iniciar sesión.
           </p>
+
+          <p className="text-[10px] text-muted-foreground/40 text-center mt-8">
+            Desarrollado por <span className="font-semibold text-muted-foreground/60">ServiTec</span>
+          </p>
         </div>
 
       {/* Modal no autorizado */}
