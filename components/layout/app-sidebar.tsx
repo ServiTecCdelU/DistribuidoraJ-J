@@ -160,7 +160,7 @@ export function AppSidebar() {
         <nav className="flex-1 px-3 py-3 overflow-y-auto custom-scrollbar space-y-5">
           {filteredGroups.map((group) => (
             <div key={group.label}>
-              <p className="px-4 mb-2 text-[10.5px] uppercase tracking-widest font-semibold text-sidebar-foreground/40">
+              <p className="px-4 mb-2 text-xs uppercase tracking-widest font-semibold text-sidebar-foreground/40">
                 {group.label}
               </p>
               <div className="space-y-0.5">

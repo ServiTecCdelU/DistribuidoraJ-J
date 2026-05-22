@@ -91,7 +91,7 @@ export default function LoginPage() {
 
       {/* Panel derecho — login */}
       <div className="flex flex-col justify-center p-6 md:p-16 bg-white">
-          <p className="text-[10.5px] uppercase tracking-widest font-semibold text-muted-foreground/60 mb-5">
+          <p className="text-xs uppercase tracking-widest font-semibold text-muted-foreground/60 mb-5">
             Inicia sesión como
           </p>
 

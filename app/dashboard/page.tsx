@@ -438,7 +438,7 @@ export default function DashboardPage() {
                       <span className="text-xs font-medium text-sky-700">Golloara</span>
                     </div>
                     <h2 className="text-lg sm:text-xl font-semibold text-foreground">Resumen ejecutivo</h2>
-                    <p className="text-[10px] sm:text-xs text-muted-foreground max-w-lg">
+                    <p className="text-xs text-muted-foreground max-w-lg">
                       Vista rápida del rendimiento, stock y pedidos críticos.
                     </p>
                   </div>
@@ -492,7 +492,7 @@ export default function DashboardPage() {
                   className="group border-border/40 bg-white/80 backdrop-blur-sm shadow-sm hover:shadow-md transition-all duration-300 hover:-translate-y-0.5"
                 >
                   <CardHeader className="flex flex-row items-center justify-between pb-1 sm:pb-2 p-2 sm:p-3">
-                    <CardTitle className="text-[10px] sm:text-xs font-medium text-muted-foreground truncate pr-1">
+                    <CardTitle className="text-xs font-medium text-muted-foreground truncate pr-1">
                       {kpi.title}
                     </CardTitle>
                     <div className={`h-6 w-6 sm:h-7 sm:w-7 rounded ${colorClasses} flex items-center justify-center border shrink-0`}>
@@ -508,7 +508,7 @@ export default function DashboardPage() {
                     
                     <div className="flex items-center gap-1 flex-wrap">
                       <span
-                        className={`inline-flex items-center gap-0.5 text-[9px] sm:text-[10px] font-medium px-1 py-0.5 rounded-full ${
+                        className={`inline-flex items-center gap-0.5 text-xs font-medium px-1 py-0.5 rounded-full ${
                           isPositive
                             ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
                             : 'bg-rose-50 text-rose-700 border border-rose-200'
@@ -521,10 +521,10 @@ export default function DashboardPage() {
                         )}
                         {Math.abs(kpi.change)}%
                       </span>
-                      <span className="text-[9px] sm:text-[10px] text-muted-foreground hidden sm:inline">vs período anterior</span>
+                      <span className="text-xs text-muted-foreground hidden sm:inline">vs período anterior</span>
                     </div>
                     
-                    <p className="text-[9px] sm:text-[10px] text-muted-foreground truncate">{kpi.detail}</p>
+                    <p className="text-xs text-muted-foreground truncate">{kpi.detail}</p>
                     
                     <div className="hidden sm:block h-6 sm:h-7 pt-0.5">
                       <ResponsiveContainer width="100%" height="100%">
@@ -562,9 +562,9 @@ export default function DashboardPage() {
                 <CardHeader className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 sm:gap-0 pb-1 sm:pb-2 p-2 sm:p-3">
                   <div>
                     <CardTitle className="text-sm sm:text-base font-semibold">Ventas y comparativa semanal</CardTitle>
-                    <p className="text-[10px] sm:text-xs text-muted-foreground mt-0.5">Últimos 7 días</p>
+                    <p className="text-xs text-muted-foreground mt-0.5">Últimos 7 días</p>
                   </div>
-                  <Badge variant="secondary" className="rounded-md sm:rounded-lg bg-emerald-50 text-emerald-700 border-emerald-200 font-medium text-[10px] sm:text-xs w-fit">
+                  <Badge variant="secondary" className="rounded-md sm:rounded-lg bg-emerald-50 text-emerald-700 border-emerald-200 font-medium text-xs w-fit">
                     {weeklyChange > 0 ? '+' : ''}{weeklyChange.toFixed(1)}% vs semana anterior
                   </Badge>
                 </CardHeader>
@@ -686,7 +686,7 @@ export default function DashboardPage() {
                 <CardHeader className="flex flex-row items-center justify-between pb-1 p-2 sm:p-3">
                   <div>
                     <CardTitle className="text-sm sm:text-base font-semibold">Distribución de productos</CardTitle>
-                    <p className="text-[10px] sm:text-xs text-muted-foreground mt-0.5">Por categoría</p>
+                    <p className="text-xs text-muted-foreground mt-0.5">Por categoría</p>
                   </div>
                   <Paquete className="h-3.5 w-3.5 sm:h-4 sm:w-4 text-slate-400" />
                 </CardHeader>
@@ -713,7 +713,7 @@ export default function DashboardPage() {
                         <div className="text-lg sm:text-xl font-bold text-slate-700">
                           {productDistribution.length > 0 ? `${productDistribution[0].value}%` : '0%'}
                         </div>
-                        <div className="text-[9px] sm:text-[10px] text-muted-foreground">
+                        <div className="text-xs text-muted-foreground">
                           {productDistribution.length > 0 ? productDistribution[0].name : 'Sin datos'}
                         </div>
                       </div>
@@ -722,7 +722,7 @@ export default function DashboardPage() {
                   
                   <div className="mt-2 sm:mt-3 space-y-1 sm:space-y-1.5">
                     {productDistribution.map((item) => (
-                      <div key={item.name} className="flex items-center justify-between text-[10px] sm:text-xs">
+                      <div key={item.name} className="flex items-center justify-between text-xs">
                         <div className="flex items-center gap-1.5">
                           <span
                             className="h-2 w-2 sm:h-2 sm:w-2 rounded-full"
@@ -765,7 +765,7 @@ export default function DashboardPage() {
                         </div>
                         <div className="min-w-0">
                           <p className="text-xs font-medium text-foreground truncate">{product.name}</p>
-                          <p className="text-[9px] sm:text-[10px] text-muted-foreground">{product.category}</p>
+                          <p className="text-xs text-muted-foreground">{product.category}</p>
                         </div>
                       </div>
                       <div className="text-right shrink-0">
@@ -789,7 +789,7 @@ export default function DashboardPage() {
                     <AlertCircle className="h-3.5 w-3.5 sm:h-4 sm:w-4 text-rose-500" />
                     Stock bajo
                   </CardTitle>
-                  <p className="text-[10px] sm:text-xs text-muted-foreground mt-0.5">Productos que requieren atención inmediata</p>
+                  <p className="text-xs text-muted-foreground mt-0.5">Productos que requieren atención inmediata</p>
                 </div>
                 <Button 
                   variant="ghost" 
@@ -819,16 +819,16 @@ export default function DashboardPage() {
                           />
                           <div className="min-w-0">
                             <p className="text-xs font-medium text-foreground truncate">{product.name}</p>
-                            <p className="text-[9px] sm:text-[10px] text-muted-foreground">{product.category}</p>
+                            <p className="text-xs text-muted-foreground">{product.category}</p>
                           </div>
                         </div>
-                        <Badge className={`${isCritical ? 'bg-rose-50 text-rose-700 border-rose-200' : 'bg-amber-50 text-amber-700 border-amber-200'} border text-[9px] sm:text-[10px] shrink-0`}>
+                        <Badge className={`${isCritical ? 'bg-rose-50 text-rose-700 border-rose-200' : 'bg-amber-50 text-amber-700 border-amber-200'} border text-xs shrink-0`}>
                           {product.stock} uds
                         </Badge>
                       </div>
                       
                       <div className="space-y-1 sm:space-y-1.5">
-                        <div className="flex items-center justify-between text-[9px] sm:text-[10px]">
+                        <div className="flex items-center justify-between text-xs">
                           <span className="text-muted-foreground">Stock actual</span>
                           <span className="font-medium text-foreground">{percent}% del mínimo</span>
                         </div>
@@ -839,11 +839,11 @@ export default function DashboardPage() {
                           />
                         </div>
                         <div className="flex items-center justify-between pt-0.5 sm:pt-1">
-                          <span className="text-[9px] sm:text-[10px] text-muted-foreground">Mínimo: 10 uds</span>
+                          <span className="text-xs text-muted-foreground">Mínimo: 10 uds</span>
                           <Button 
                             size="sm" 
                             variant="outline" 
-                            className="h-5 sm:h-6 text-[9px] sm:text-[10px] rounded border-slate-200 hover:bg-slate-50"
+                            className="h-5 sm:h-6 text-xs rounded border-slate-200 hover:bg-slate-50"
                             onClick={() => handleReabastecer(product.id)}
                           >
                             Reabastecer
@@ -865,7 +865,7 @@ export default function DashboardPage() {
                       <CreditCard className="h-3.5 w-3.5 sm:h-4 sm:w-4 text-orange-500" />
                       Deudores
                     </CardTitle>
-                    <p className="text-[10px] sm:text-xs text-muted-foreground mt-0.5">Clientes con saldo pendiente</p>
+                    <p className="text-xs text-muted-foreground mt-0.5">Clientes con saldo pendiente</p>
                   </div>
                   <div className="relative w-full sm:w-48">
                     <Buscar className="absolute left-2 sm:left-2.5 top-1/2 -translate-y-1/2 h-3 w-3 sm:h-3.5 sm:w-3.5 text-muted-foreground" />
@@ -893,7 +893,7 @@ export default function DashboardPage() {
                       </div>
                       <div className="min-w-0">
                         <p className="text-xs font-medium text-foreground truncate">{debtor.name}</p>
-                        <p className="text-[9px] sm:text-[10px] text-muted-foreground flex items-center gap-1">
+                        <p className="text-xs text-muted-foreground flex items-center gap-1">
                           <AlertCircle className="h-2 w-2 sm:h-2.5 sm:w-2.5" />
                           Saldo pendiente
                         </p>
@@ -906,14 +906,14 @@ export default function DashboardPage() {
                 ))}
                 
                 <div className="flex items-center justify-between pt-2 sm:pt-3 border-t border-slate-100">
-                  <span className="text-[9px] sm:text-[10px] text-muted-foreground">
+                  <span className="text-xs text-muted-foreground">
                     Página {debtorPage} de {totalPages}
                   </span>
                   <div className="flex gap-1 sm:gap-1.5">
                     <Button
                       size="sm"
                       variant="outline"
-                      className="h-6 sm:h-7 text-[9px] sm:text-[10px] rounded px-1.5 sm:px-2"
+                      className="h-6 sm:h-7 text-xs rounded px-1.5 sm:px-2"
                       disabled={debtorPage === 1}
                       onClick={() => setDebtorPage((page) => Math.max(1, page - 1))}
                     >
@@ -923,7 +923,7 @@ export default function DashboardPage() {
                     <Button
                       size="sm"
                       variant="outline"
-                      className="h-6 sm:h-7 text-[9px] sm:text-[10px] rounded px-1.5 sm:px-2"
+                      className="h-6 sm:h-7 text-xs rounded px-1.5 sm:px-2"
                       disabled={debtorPage === totalPages}
                       onClick={() => setDebtorPage((page) => Math.min(totalPages, page + 1))}
                     >
@@ -944,9 +944,9 @@ export default function DashboardPage() {
                   <Camion className="h-3.5 w-3.5 sm:h-4 sm:w-4 text-sky-500" />
                   Pedidos pendientes
                 </CardTitle>
-                <p className="text-[10px] sm:text-xs text-muted-foreground mt-0.5">Seguimiento en tiempo real</p>
+                <p className="text-xs text-muted-foreground mt-0.5">Seguimiento en tiempo real</p>
               </div>
-              <Badge variant="secondary" className="rounded-md sm:rounded-lg bg-sky-50 text-sky-700 border-sky-200 font-medium text-[10px] sm:text-xs w-fit">
+              <Badge variant="secondary" className="rounded-md sm:rounded-lg bg-sky-50 text-sky-700 border-sky-200 font-medium text-xs w-fit">
                 {pendingOrders.length} en curso
               </Badge>
             </CardHeader>
@@ -969,18 +969,18 @@ export default function DashboardPage() {
                           <p className="text-xs font-semibold text-foreground group-hover:text-sky-700 transition-colors truncate">
                             {order.clientName || 'Cliente no especificado'}
                           </p>
-                          <p className="text-[9px] sm:text-[10px] text-muted-foreground font-mono mt-0.5">{order.id.slice(0, 8)}</p>
+                          <p className="text-xs text-muted-foreground font-mono mt-0.5">{order.id.slice(0, 8)}</p>
                         </div>
                         <div className={`p-1 rounded ${meta.bg} shrink-0`}>
                           <StatusIcon className={`h-3 w-3 sm:h-3.5 sm:w-3.5 ${meta.color}`} />
                         </div>
                       </div>
 
-                      <div className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[9px] sm:text-[10px] font-medium border ${meta.bg} ${meta.color} mb-1.5 sm:mb-2`}>
+                      <div className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full text-xs font-medium border ${meta.bg} ${meta.color} mb-1.5 sm:mb-2`}>
                         {meta.label}
                       </div>
                       
-                      <div className="flex items-center justify-between text-[9px] sm:text-[10px] text-muted-foreground pt-1.5 sm:pt-2 border-t border-slate-100">
+                      <div className="flex items-center justify-between text-xs text-muted-foreground pt-1.5 sm:pt-2 border-t border-slate-100">
                         <span className="flex items-center gap-0.5">
                           <Paquete className="h-2 w-2 sm:h-2.5 sm:w-2.5" />
                           {itemsCount} productos
@@ -1012,33 +1012,33 @@ export default function DashboardPage() {
             <div className="space-y-2 sm:space-y-3">
               <div className="rounded-lg bg-slate-50 border border-slate-100 p-2.5 sm:p-3">
                 <p className="text-xs sm:text-sm font-semibold text-foreground">{selectedOrder.clientName || 'Cliente no especificado'}</p>
-                <p className="text-[10px] sm:text-xs text-muted-foreground font-mono mt-0.5">{selectedOrder.id}</p>
+                <p className="text-xs text-muted-foreground font-mono mt-0.5">{selectedOrder.id}</p>
               </div>
 
               <div className="grid grid-cols-2 gap-1.5 sm:gap-2">
                 <div className="rounded-lg bg-slate-50 border border-slate-100 p-2">
-                  <p className="text-[9px] sm:text-[10px] text-muted-foreground mb-0.5">Estado</p>
+                  <p className="text-xs text-muted-foreground mb-0.5">Estado</p>
                   {(() => { const m = statusMeta[selectedOrder.status] ?? statusMeta['pending']; return (
-                  <div className={`inline-flex items-center gap-1 px-1 py-0.5 rounded text-[9px] sm:text-[10px] font-medium border ${m.bg} ${m.color}`}>
+                  <div className={`inline-flex items-center gap-1 px-1 py-0.5 rounded text-xs font-medium border ${m.bg} ${m.color}`}>
                     {m.label}
                   </div>
                   ); })()}
                 </div>
                 <div className="rounded-lg bg-slate-50 border border-slate-100 p-2">
-                  <p className="text-[9px] sm:text-[10px] text-muted-foreground mb-0.5">Tiempo estimado</p>
+                  <p className="text-xs text-muted-foreground mb-0.5">Tiempo estimado</p>
                   <p className="text-xs font-semibold text-foreground flex items-center gap-1">
                     <Reloj className="h-2.5 w-2.5 sm:h-3 sm:w-3 text-slate-400" />
                     {selectedOrder.status === 'delivery' ? '30 min' : '45 min'}
                   </p>
                 </div>
                 <div className="rounded-lg bg-slate-50 border border-slate-100 p-2">
-                  <p className="text-[9px] sm:text-[10px] text-muted-foreground mb-0.5">Productos</p>
+                  <p className="text-xs text-muted-foreground mb-0.5">Productos</p>
                   <p className="text-xs font-semibold text-foreground">
                     {selectedOrder.items.reduce((acc, item) => acc + item.quantity, 0)} unidades
                   </p>
                 </div>
                 <div className="rounded-lg bg-slate-50 border border-slate-100 p-2">
-                  <p className="text-[9px] sm:text-[10px] text-muted-foreground mb-0.5">Dirección</p>
+                  <p className="text-xs text-muted-foreground mb-0.5">Dirección</p>
                   <p className="text-xs font-semibold text-foreground truncate">{selectedOrder.address}</p>
                 </div>
               </div>
