@@ -102,7 +102,7 @@ export function AppSidebar() {
           <div className="flex items-center justify-center h-8 w-8 shrink-0 rounded-lg bg-sidebar-primary">
             <Store className="h-5 w-5 text-sidebar-primary-foreground" />
           </div>
-          <span className="font-bold text-sidebar-foreground">Distribuidora Patricia</span>
+          <span className="font-bold text-sidebar-foreground">Distribuidora 002</span>
         </div>
         <Button
           variant="ghost"
@@ -137,7 +137,7 @@ export function AppSidebar() {
             </div>
             <div className="min-w-0 flex-1">
               <h1 className="font-semibold text-base text-sidebar-foreground truncate">
-                Distribuidora Patricia
+                Distribuidora 002
               </h1>
               {user && (
                 <p className="text-xs text-sidebar-foreground/50 truncate">
