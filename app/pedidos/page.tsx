@@ -191,6 +191,20 @@ export default function PedidosPage() {
         remitoNumber,
       };
 
+      // Descontar stock de cada producto incluido en el remito
+      for (const item of filteredItems) {
+        const prodId = item.productId.startsWith("mp_") ? `prod_${item.productId}` : item.productId;
+        await supabase.rpc('decrement_stock', { p_id: prodId, p_qty: item.quantity }).then(({ error }) => {
+          if (error) {
+            return supabase.from('productos').select('stock').eq('id', prodId).single().then(({ data: prod }) => {
+              if (prod) {
+                return supabase.from('productos').update({ stock: Math.max(0, (prod.stock || 0) - item.quantity) }).eq('id', prodId);
+              }
+            });
+          }
+        });
+      }
+
       const { generarPdfCliente } = await import("@/hooks/useGenerarPdf");
       const pdfBase64 = await generarPdfCliente(ventaData, "remito");
       const updatedOrder = await ordersApi.saveRemitoToOrder(order.id, remitoNumber, pdfBase64);
