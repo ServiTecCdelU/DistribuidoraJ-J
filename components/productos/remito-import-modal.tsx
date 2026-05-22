@@ -262,34 +262,86 @@ export function RemitoImportModal({
         return;
       }
 
-      // 4. Matchear por código contra productos de la BD
-      const matched: MatchedItem[] = parsedItems.map((item) => ({
-        parsedItem: item,
-        matchedProduct: findByCode(item.codigo, products),
-        quantity: item.cantidad,
-        action: "add" as const,
-      }));
+      // 4. Buscar códigos en mayorista_productos para obtener producto_id y precio_lista
+      const codigos = parsedItems.map((item) => item.codigo);
+      const { data: mpRows } = await supabase
+        .from("mayorista_productos")
+        .select("id, codigo, producto_id, precio_lista, descripcion")
+        .in("codigo", codigos);
 
-      // 5. Buscar precio_lista actual en mayorista_productos para comparar
-      const matchedProductIds = matched
-        .filter((m) => m.matchedProduct)
-        .map((m) => m.matchedProduct!.id);
-      if (matchedProductIds.length > 0) {
-        const { data: mpRows } = await supabase
-          .from("mayorista_productos")
-          .select("producto_id, precio_lista")
-          .in("producto_id", matchedProductIds);
-        if (mpRows) {
-          const precioMap = new Map(
-            mpRows.map((r: any) => [r.producto_id, Number(r.precio_lista) || 0])
-          );
-          for (const item of matched) {
-            if (item.matchedProduct) {
-              item.precioListaActual = precioMap.get(item.matchedProduct.id) ?? 0;
-            }
+      // Mapa código → info de mayorista
+      const mpByCodigo = new Map<string, { productoId: string | null; precioLista: number; descripcion: string }>();
+      if (mpRows) {
+        for (const mp of mpRows) {
+          mpByCodigo.set(mp.codigo, {
+            productoId: mp.producto_id,
+            precioLista: Number(mp.precio_lista) || 0,
+            descripcion: mp.descripcion ?? "",
+          });
+        }
+      }
+
+      // Buscar productos asociados por producto_id
+      const productoIds = [...mpByCodigo.values()]
+        .map((v) => v.productoId)
+        .filter(Boolean) as string[];
+      const productosMap = new Map<string, Product>();
+      if (productoIds.length > 0) {
+        const { data: prodRows } = await supabase
+          .from("productos")
+          .select("*")
+          .in("id", productoIds);
+        if (prodRows) {
+          for (const row of prodRows) {
+            const p: Product = {
+              id: row.id,
+              name: row.name ?? "",
+              description: row.description ?? "",
+              price: Number(row.price) || 0,
+              stock: row.stock ?? 0,
+              imageUrl: row.image_url ?? "",
+              category: row.category ?? "",
+              createdAt: new Date(row.created_at),
+              unidadesPorBulto: row.unidades_por_bulto ?? undefined,
+              seDivideEn: row.se_divide_en ? Number(row.se_divide_en) : undefined,
+              precioVenta: row.precio_venta != null ? Number(row.precio_venta) : undefined,
+              gananciaGlobal: row.ganancia_global != null ? Number(row.ganancia_global) : undefined,
+              gananciaIndividual: row.ganancia_individual ?? undefined,
+              codigo: row.codigo ?? undefined,
+            };
+            productosMap.set(p.id, p);
           }
         }
       }
+
+      // Matchear: primero por mayorista_productos, fallback a búsqueda local
+      const matched: MatchedItem[] = parsedItems.map((item) => {
+        const mpInfo = mpByCodigo.get(item.codigo);
+        let matchedProduct: Product | null = null;
+        let precioListaActual: number | undefined;
+
+        if (mpInfo) {
+          precioListaActual = mpInfo.precioLista;
+          if (mpInfo.productoId) {
+            matchedProduct = productosMap.get(mpInfo.productoId) ?? null;
+          }
+          // Si no tiene producto asociado, fallback a búsqueda local por código
+          if (!matchedProduct) {
+            matchedProduct = findByCode(item.codigo, products);
+          }
+        } else {
+          // Código no existe en mayorista_productos, buscar en productos locales
+          matchedProduct = findByCode(item.codigo, products);
+        }
+
+        return {
+          parsedItem: item,
+          matchedProduct,
+          quantity: item.cantidad,
+          action: "add" as const,
+          precioListaActual,
+        };
+      });
 
       setItems(matched);
       setStep("review");
