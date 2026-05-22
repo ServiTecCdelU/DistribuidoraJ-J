@@ -5,9 +5,8 @@ import React from "react"
 import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { Button } from '@/components/ui/button'
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog'
-import { Store, Loader2, ShieldAlert } from 'lucide-react'
+import { Store, Loader2, ShieldAlert, ShieldCheck, ClipboardList, Truck, ChevronRight } from 'lucide-react'
 import { signInWithGoogle } from '@/services/auth-service'
 import { useAuth } from '@/hooks/use-auth'
 import type { User } from '@/lib/types'
@@ -19,6 +18,27 @@ function getHomeRoute(user: User): string {
   }
   return '/caja'
 }
+
+const roles = [
+  {
+    title: 'Administrador',
+    description: 'Caja, productos, clientes, reportes',
+    icon: ShieldCheck,
+    color: 'bg-teal-100 text-teal-700',
+  },
+  {
+    title: 'Vendedor / Distribuidor',
+    description: 'Toma pedidos, cobra, mira comisiones',
+    icon: ClipboardList,
+    color: 'bg-sky-100 text-sky-700',
+  },
+  {
+    title: 'Transportista',
+    description: 'Ruta del día, entregas, cobranza',
+    icon: Truck,
+    color: 'bg-emerald-100 text-emerald-700',
+  },
+]
 
 export default function LoginPage() {
   const router = useRouter()
@@ -46,44 +66,98 @@ export default function LoginPage() {
 
     try {
       await signInWithGoogle()
-      // Supabase OAuth usa redirect — el usuario sale y vuelve.
-      // onAuthStateChange captura el retorno.
     } catch (error) {
-      setError('No se pudo iniciar sesion con Google')
+      setError('No se pudo iniciar sesión con Google')
       setLoading(false)
     }
   }
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-background p-4">
-      <Card className="w-full max-w-md">
-        <CardHeader className="text-center">
-          <div className="flex justify-center mb-4">
-            <div className="flex items-center justify-center w-16 h-16 rounded-2xl bg-primary">
-              <Store className="h-8 w-8 text-primary-foreground" />
+    <div className="min-h-screen flex items-center justify-center bg-gray-50 p-4">
+      <div className="w-full max-w-4xl grid grid-cols-1 md:grid-cols-2 rounded-2xl overflow-hidden shadow-xl bg-white">
+        {/* Panel izquierdo — branding */}
+        <div className="relative bg-gradient-to-br from-teal-700 via-teal-600 to-cyan-600 p-8 flex flex-col justify-between min-h-[320px] md:min-h-[480px] overflow-hidden">
+          {/* Círculos decorativos */}
+          <div className="absolute -right-16 top-1/4 w-56 h-56 rounded-full bg-white/10" />
+          <div className="absolute -right-8 top-1/2 w-40 h-40 rounded-full bg-white/10" />
+          <div className="absolute left-1/2 -bottom-12 w-48 h-48 rounded-full bg-white/5" />
+
+          {/* Header */}
+          <div className="relative z-10 flex items-center gap-3">
+            <div className="flex items-center justify-center w-10 h-10 rounded-xl bg-white/20">
+              <Store className="h-5 w-5 text-white" />
+            </div>
+            <div>
+              <h2 className="text-white font-semibold text-lg leading-tight">Distribuidora Patricia</h2>
+              <p className="text-white/60 text-xs uppercase tracking-wider">Sistema interno</p>
             </div>
           </div>
-          <CardTitle className="text-2xl sm:text-3xl">Distribuidora Patricia</CardTitle>
-          <CardDescription>Ingrese sus credenciales para acceder al sistema</CardDescription>
-        </CardHeader>
-        <CardContent>
-          <div className="space-y-4">
-            {error && (
-              <p className="text-sm text-destructive">{error}</p>
-            )}
-            <Button
-              type="button"
-              className="w-full"
-              onClick={handleGoogleSignIn}
-              disabled={loading || authLoading}
-            >
-              {loading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-              Continuar con Google
-            </Button>
-          </div>
-        </CardContent>
-      </Card>
 
+          {/* Footer */}
+          <div className="relative z-10">
+            <p className="text-white/50 text-xs mb-2">v2.4 &middot; 2026</p>
+            <h1 className="text-white text-2xl md:text-3xl font-bold leading-snug">
+              Gestión de toda la distribuidora, desde el celular o el mostrador.
+            </h1>
+          </div>
+        </div>
+
+        {/* Panel derecho — login */}
+        <div className="p-8 md:p-10 flex flex-col justify-center">
+          <p className="text-[10.5px] uppercase tracking-widest font-semibold text-muted-foreground/60 mb-5">
+            Inicia sesión como
+          </p>
+
+          {/* Role cards */}
+          <div className="space-y-3 mb-8">
+            {roles.map((role) => (
+              <div
+                key={role.title}
+                className="flex items-center gap-4 p-4 rounded-xl border border-border/60 hover:border-border hover:bg-accent/30 transition-colors"
+              >
+                <div className={`flex items-center justify-center w-10 h-10 rounded-xl shrink-0 ${role.color}`}>
+                  <role.icon className="h-5 w-5" />
+                </div>
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-medium text-foreground">{role.title}</p>
+                  <p className="text-xs text-muted-foreground">{role.description}</p>
+                </div>
+                <ChevronRight className="h-4 w-4 text-muted-foreground/40 shrink-0" />
+              </div>
+            ))}
+          </div>
+
+          {/* Google sign in */}
+          {error && (
+            <p className="text-sm text-destructive mb-3">{error}</p>
+          )}
+          <Button
+            type="button"
+            variant="outline"
+            className="w-full h-12 text-sm font-medium rounded-xl"
+            onClick={handleGoogleSignIn}
+            disabled={loading || authLoading}
+          >
+            {loading ? (
+              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+            ) : (
+              <svg className="mr-2 h-5 w-5" viewBox="0 0 24 24">
+                <path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92a5.06 5.06 0 0 1-2.2 3.32v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.1z" fill="#4285F4" />
+                <path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" fill="#34A853" />
+                <path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z" fill="#FBBC05" />
+                <path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" fill="#EA4335" />
+              </svg>
+            )}
+            Continuar con Google
+          </Button>
+
+          <p className="text-xs text-muted-foreground/50 text-center mt-4">
+            Tu rol se detecta automáticamente al iniciar sesión.
+          </p>
+        </div>
+      </div>
+
+      {/* Modal no autorizado */}
       <Dialog open={showUnauthorized} onOpenChange={setShowUnauthorized}>
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
