@@ -602,6 +602,12 @@ export function RemitoImportModal({
                         onChange={(e) => updateMatch(index, e.target.value)}
                         className="flex-1 text-xs border border-border rounded-md px-2 py-1 bg-background"
                       >
+                        {/* Incluir el producto matcheado si no está en la lista */}
+                        {!products.some((p) => p.id === item.matchedProduct!.id) && (
+                          <option value={item.matchedProduct!.id}>
+                            {item.matchedProduct!.name}
+                          </option>
+                        )}
                         {products.map((p) => (
                           <option key={p.id} value={p.id}>
                             {p.name}
