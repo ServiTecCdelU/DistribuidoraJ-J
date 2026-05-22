@@ -296,9 +296,11 @@ export default function EmpleadosPage() {
     ? sellers.reduce((sum, s) => sum + s.commissionRate, 0) / sellers.length
     : 0
 
-  // Pending commissions for detail modal
+  // Commissions for detail modal
   const pendingCommissions = commissions.filter(c => !c.isPaid)
   const pendingTotal = pendingCommissions.reduce((sum, c) => sum + c.commissionAmount, 0)
+  const allSalesTotal = commissions.reduce((sum, c) => sum + c.saleTotal, 0)
+  const allCommissionsTotal = commissions.reduce((sum, c) => sum + c.commissionAmount, 0)
 
   return (
     <MainLayout allowedRoles={['admin']} title="Empleados" description="Gestiona tu equipo de vendedores y transportistas">
@@ -926,13 +928,13 @@ export default function EmpleadosPage() {
                 <div className="rounded-xl p-4 bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800">
                   <p className="text-xs text-muted-foreground font-medium uppercase tracking-wide mb-1">Ventas Totales</p>
                   <p className="font-bold text-xl text-foreground">
-                    {formatCurrency(selectedSeller.totalSales || 0)}
+                    {formatCurrency(allSalesTotal)}
                   </p>
                 </div>
                 <div className="rounded-xl p-4 bg-emerald-50 dark:bg-emerald-900/20 border border-emerald-200 dark:border-emerald-800">
                   <p className="text-xs text-muted-foreground font-medium uppercase tracking-wide mb-1">Comisiones Totales</p>
                   <p className="font-bold text-xl text-emerald-600 dark:text-emerald-400">
-                    {formatCurrency(selectedSeller.totalCommission || 0)}
+                    {formatCurrency(allCommissionsTotal)}
                   </p>
                 </div>
                 <div className="rounded-xl p-4 bg-rose-50 dark:bg-rose-900/20 border border-rose-200 dark:border-rose-800 col-span-2 sm:col-span-1">

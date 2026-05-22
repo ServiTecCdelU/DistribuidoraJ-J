@@ -145,6 +145,12 @@ export const resetCommissions = async (sellerId: string, sellerName: string, not
 
   const monto = pendientes.reduce((sum, c) => sum + c.commissionAmount, 0)
 
+  // Resetear comisiones y ventas pendientes del vendedor
+  await supabase
+    .from('vendedores')
+    .update({ total_commission: 0, total_sales: 0 })
+    .eq('id', sellerId)
+
   // Registrar el pago — el timestamp actúa como cutoff para marcar comisiones como pagadas
   const pagoId = `pago_${sellerId}_${Date.now()}`
   const row = {
