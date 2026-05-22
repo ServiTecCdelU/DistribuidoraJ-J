@@ -722,6 +722,7 @@ export default function ProductosPage() {
     totalInventoryValue: 0,
     lowStockCount: 0,
     outOfStockCount: 0,
+    gananciaActual: null as number | null,
   });
 
   const fetchStats = useCallback(async () => {
@@ -862,6 +863,9 @@ export default function ProductosPage() {
           <div className="flex items-center gap-1.5 rounded-2xl border border-border bg-card px-3 py-1.5">
             <Percent className="h-3.5 w-3.5 text-teal-600" />
             <span className="text-xs font-medium text-muted-foreground hidden sm:inline">Ganancia</span>
+            {stats.gananciaActual != null && (
+              <span className="text-xs font-semibold text-teal-600">{stats.gananciaActual}%</span>
+            )}
             <Input
               type="number"
               min={0}
