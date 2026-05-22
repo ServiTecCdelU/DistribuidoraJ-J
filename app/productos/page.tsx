@@ -743,10 +743,12 @@ export default function ProductosPage() {
 
   const paginatedProducts = filteredProducts;
 
-  // Listas dinámicas para el modal (unión de defaults + valores reales en productos)
-  const availableCategories = useMemo(() => {
-    return products.map((p) => p.category).filter(Boolean);
-  }, [products]);
+  // Categorías reales de la BD
+  const [availableCategories, setAvailableCategories] = useState<string[]>([]);
+
+  useEffect(() => {
+    productsApi.getCategories().then(setAvailableCategories).catch(() => {});
+  }, []);
 
   const activeFilterCount = [
     categoryFilter !== "all",

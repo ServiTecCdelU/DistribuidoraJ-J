@@ -8,6 +8,7 @@ import {
   searchProducts,
   updateProduct,
   getProductStats,
+  getProductCategories,
 } from '@/services/products-service'
 import type { ProductSearchParams, ProductSearchResult } from '@/services/products-service'
 import {
@@ -106,6 +107,9 @@ export const productsApi = {
   },
   async getStats() {
     return getProductStats()
+  },
+  async getCategories() {
+    return getProductCategories()
   },
   async create(product: Omit<Product, 'id' | 'createdAt'>): Promise<Product> {
     return createProduct(product)

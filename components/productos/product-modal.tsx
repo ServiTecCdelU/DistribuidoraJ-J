@@ -27,17 +27,7 @@ import { Loader2, Upload, ImageIcon, X, Plus, PackagePlus } from "lucide-react";
 
 const DEFAULT_IMAGE = "/logo.png";
 
-const DEFAULT_CATEGORIES = [
-  "Congelado embutido",
-  "Congelado cárnico",
-  "Congelado papa",
-  "Congelado verdura",
-  "Congelado rebozado",
-  "Bebida",
-  "Lácteo",
-  "Conserva",
-  "Snack",
-];
+const DEFAULT_CATEGORIES: string[] = [];
 
 const DEFAULT_MARCAS = [
   "MIO",

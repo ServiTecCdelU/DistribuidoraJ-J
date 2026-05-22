@@ -146,6 +146,27 @@ export const getProductStats = async (): Promise<{
   }
 }
 
+export const getProductCategories = async (): Promise<string[]> => {
+  const all: string[] = []
+  let from = 0
+  const PAGE = 1000
+  while (true) {
+    const { data, error } = await supabase
+      .from('productos')
+      .select('category')
+      .or('disabled.eq.false,disabled.is.null')
+      .range(from, from + PAGE - 1)
+    if (error) throw error
+    if (!data || data.length === 0) break
+    for (const r of data) {
+      if (r.category) all.push(r.category)
+    }
+    if (data.length < PAGE) break
+    from += PAGE
+  }
+  return [...new Set(all)].sort()
+}
+
 export const getProductById = async (id: string): Promise<Product | undefined> => {
   const { data } = await supabase
     .from('productos')
