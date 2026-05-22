@@ -305,7 +305,7 @@ export function ProductModal({
                       id="price-may"
                       type="number"
                       min="0"
-                      step="100"
+                      step="0.01"
                       value={formData.price || ""}
                       onChange={(e) => setFormData({ ...formData, price: Number(e.target.value) })}
                       className="pl-7 h-10"
@@ -572,7 +572,7 @@ export function ProductModal({
                         id="price"
                         type="number"
                         min="0"
-                        step="100"
+                        step="0.01"
                         value={formData.price || ""}
                         onChange={(e) =>
                           setFormData({ ...formData, price: Number(e.target.value) })
