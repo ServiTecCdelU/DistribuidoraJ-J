@@ -75,20 +75,14 @@ export default function LoginPage() {
   return (
     <div className="min-h-screen grid grid-cols-1 md:grid-cols-2">
       {/* Panel izquierdo — branding */}
-      <div className="relative bg-gradient-to-br from-teal-700 via-teal-600 to-cyan-600 p-8 md:p-12 flex flex-col justify-between min-h-[280px] md:min-h-screen overflow-hidden">
+      <div className="relative bg-gradient-to-br from-teal-700 via-teal-600 to-cyan-600 p-8 md:p-12 flex flex-col items-start justify-center min-h-[280px] md:min-h-screen overflow-hidden">
           {/* Círculos decorativos */}
           <div className="absolute -right-16 top-1/4 w-56 h-56 rounded-full bg-white/10" />
           <div className="absolute -right-8 top-1/2 w-40 h-40 rounded-full bg-white/10" />
           <div className="absolute left-1/2 -bottom-12 w-48 h-48 rounded-full bg-white/5" />
 
-          {/* Header */}
           <div className="relative z-10">
-            <p className="text-white/60 text-xs uppercase tracking-wider">Sistema de Gestión de Distribuidora</p>
-          </div>
-
-          {/* Footer */}
-          <div className="relative z-10">
-            <p className="text-white/50 text-xs mb-2">v2.4 &middot; 2026</p>
+            <p className="text-white/60 text-xs uppercase tracking-wider mb-4">Sistema de Gestión de Distribuidora</p>
             <h1 className="text-white text-2xl md:text-3xl font-bold leading-snug">
               Gestión de toda la distribuidora, desde el celular o el mostrador.
             </h1>
