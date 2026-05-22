@@ -84,7 +84,7 @@ export default function LoginPage() {
 
           {/* Header */}
           <div className="relative z-10">
-            <p className="text-white/60 text-xs uppercase tracking-wider">Sistema de Gestión de Distribuidora</p>
+            <p className="text-white/60 text-xs uppercase tracking-wider">Sistema de Gestión de Distribuidora 002</p>
           </div>
 
           {/* Footer */}
