@@ -72,7 +72,6 @@ export function AppSidebar() {
       items: [
         { href: "/productos", label: "Productos", icon: Package, roles: ["admin"] },
         { href: "/clientes", label: "Clientes", icon: Users, roles: ["admin"] },
-        { href: "/listas-precios", label: "Listas de precios", icon: Tag, roles: ["admin"] },
       ],
     },
     {
