@@ -62,7 +62,7 @@ export function AppSidebar() {
         { href: user?.role === "seller" ? "/vendedor" : "/ventas/nueva", label: "Nueva Venta", icon: ShoppingCart, roles: ["admin", ...(isVendedor ? ["seller"] : [])] },
         { href: "/pedidos", label: "Pedidos", icon: Truck, roles: ["admin", ...(isTransportista ? ["seller"] : [])] },
         { href: "/comisiones", label: "Mis Comisiones", icon: Banknote, roles: ["seller"] },
-        { href: "/cobranzas", label: "Cobranzas", icon: Receipt, roles: [...(isVendedor ? ["seller"] : [])] },
+        // { href: "/cobranzas", label: "Cobranzas", icon: Receipt, roles: [...(isVendedor ? ["seller"] : [])] },
         { href: "/cuenta-corriente", label: "Cuenta Corriente", icon: Users, roles: ["admin"] },
         { href: "/mayorista", label: "Mayorista", icon: Store, roles: ["admin"] },
       ],
