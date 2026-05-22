@@ -509,6 +509,18 @@ export default function ProductosPage() {
       await updatePrecioListaBatch(precioUpdates);
     }
 
+    // Recalcular precio_venta usando ganancia_global para productos con cambio de precio
+    for (const update of updates) {
+      if (update.precioLista <= 0) continue;
+      const product = products.find((p) => p.id === update.productId);
+      if (!product || product.gananciaGlobal == null || product.gananciaGlobal <= 0) continue;
+      const nuevoPrecioVenta = Math.round(update.precioLista * (1 + product.gananciaGlobal / 100) * 100) / 100;
+      await productsApi.update(update.productId, {
+        price: nuevoPrecioVenta,
+        precioVenta: nuevoPrecioVenta,
+      } as any);
+    }
+
     // Recargar productos
     await fetchProducts(currentPage, searchQuery, categoryFilter, stockFilter);
   };

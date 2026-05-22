@@ -26,6 +26,7 @@ import {
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import { formatCurrency } from "@/lib/utils/format";
+import { supabase } from "@/lib/supabase";
 
 interface ParsedItem {
   codigo: string;
@@ -40,6 +41,7 @@ interface MatchedItem {
   matchedProduct: Product | null;
   quantity: number;
   action: "add" | "set";
+  precioListaActual?: number;
 }
 
 interface RemitoImportModalProps {
@@ -268,6 +270,27 @@ export function RemitoImportModal({
         action: "add" as const,
       }));
 
+      // 5. Buscar precio_lista actual en mayorista_productos para comparar
+      const matchedProductIds = matched
+        .filter((m) => m.matchedProduct)
+        .map((m) => m.matchedProduct!.id);
+      if (matchedProductIds.length > 0) {
+        const { data: mpRows } = await supabase
+          .from("mayorista_productos")
+          .select("producto_id, precio_lista")
+          .in("producto_id", matchedProductIds);
+        if (mpRows) {
+          const precioMap = new Map(
+            mpRows.map((r: any) => [r.producto_id, Number(r.precio_lista) || 0])
+          );
+          for (const item of matched) {
+            if (item.matchedProduct) {
+              item.precioListaActual = precioMap.get(item.matchedProduct.id) ?? 0;
+            }
+          }
+        }
+      }
+
       setItems(matched);
       setStep("review");
     } catch (err) {
@@ -364,6 +387,9 @@ export function RemitoImportModal({
 
   const matchedCount = items.filter((i) => i.matchedProduct !== null).length;
   const unmatchedCount = items.filter((i) => i.matchedProduct === null).length;
+  const priceChangedCount = items.filter(
+    (i) => i.matchedProduct && i.precioListaActual != null && i.precioListaActual > 0 && Math.abs(i.parsedItem.precio - i.precioListaActual) > 0.01
+  ).length;
 
   return (
     <Dialog open={open} onOpenChange={handleClose}>
@@ -440,6 +466,14 @@ export function RemitoImportModal({
                 <CheckCircle2 className="h-3.5 w-3.5" />
                 {matchedCount} coincidencias
               </Badge>
+              {priceChangedCount > 0 && (
+                <Badge
+                  variant="outline"
+                  className="gap-1.5 text-xs text-amber-600 border-amber-200"
+                >
+                  ⚠ {priceChangedCount} con cambio de precio
+                </Badge>
+              )}
               {unmatchedCount > 0 && (
                 <Badge
                   variant="outline"
@@ -471,8 +505,18 @@ export function RemitoImportModal({
                           {item.matchedProduct!.name}
                         </p>
                         <p className="text-xs text-muted-foreground">
-                          Stock actual: {item.matchedProduct!.stock} · Bultos: {item.parsedItem.bultos} · Precio lista: {formatCurrency(item.parsedItem.precio)}
+                          Stock actual: {item.matchedProduct!.stock} · Cantidad: {item.parsedItem.cantidad}
                         </p>
+                        {item.precioListaActual != null && item.precioListaActual > 0 && Math.abs(item.parsedItem.precio - item.precioListaActual) > 0.01 ? (
+                          <p className="text-xs font-medium text-amber-600">
+                            ⚠ Precio cambió: {formatCurrency(item.precioListaActual)} → {formatCurrency(item.parsedItem.precio)}
+                            {" "}({item.parsedItem.precio > item.precioListaActual ? "+" : ""}{((item.parsedItem.precio - item.precioListaActual) / item.precioListaActual * 100).toFixed(1)}%)
+                          </p>
+                        ) : (
+                          <p className="text-xs text-muted-foreground">
+                            Precio lista: {formatCurrency(item.parsedItem.precio)} ✓
+                          </p>
+                        )}
                       </div>
                       <button
                         onClick={() => removeItem(index)}
