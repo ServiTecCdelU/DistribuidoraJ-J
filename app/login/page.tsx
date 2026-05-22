@@ -75,7 +75,7 @@ export default function LoginPage() {
   return (
     <div className="min-h-screen grid grid-cols-1 md:grid-cols-2">
       {/* Panel izquierdo — branding */}
-      <div className="relative bg-gradient-to-br from-teal-700 via-teal-600 to-cyan-600 p-6 md:p-12 flex flex-col items-start justify-center min-h-[180px] md:min-h-screen overflow-hidden">
+      <div className="relative bg-gradient-to-br from-teal-700 via-teal-600 to-cyan-600 p-6 md:p-12 flex flex-col items-start justify-center min-h-[140px] md:min-h-screen overflow-hidden">
           {/* Círculos decorativos */}
           <div className="absolute -right-16 top-1/4 w-56 h-56 rounded-full bg-white/10" />
           <div className="absolute -right-8 top-1/2 w-40 h-40 rounded-full bg-white/10" />

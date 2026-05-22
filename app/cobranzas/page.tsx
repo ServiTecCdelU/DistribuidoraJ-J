@@ -163,7 +163,7 @@ export default function CobranzasPage() {
                 <p className="text-xs text-muted-foreground mt-0.5">esperando revisión</p>
               </CardContent>
             </Card>
-            <Card className="col-span-2 md:col-span-1">
+            <Card className="col-span-1">
               <CardHeader className="pb-1 pt-4 px-4 flex flex-row items-center justify-between space-y-0">
                 <CardTitle className="text-xs font-medium text-muted-foreground">Aprobados este mes</CardTitle>
                 <CheckCircle2 className="h-4 w-4 text-green-500" />

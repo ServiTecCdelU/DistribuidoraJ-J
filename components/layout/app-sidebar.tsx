@@ -124,7 +124,7 @@ export function AppSidebar() {
       {/* SIDEBAR */}
       <aside
         className={cn(
-          "fixed top-0 left-0 z-[70] h-full w-72 bg-sidebar text-sidebar-foreground border-r border-sidebar-border transition-transform duration-300 flex flex-col",
+          "fixed top-0 left-0 z-[70] h-full w-64 lg:w-72 bg-sidebar text-sidebar-foreground border-r border-sidebar-border transition-transform duration-300 flex flex-col",
           mobileOpen ? "translate-x-0" : "-translate-x-full lg:translate-x-0",
         )}
       >

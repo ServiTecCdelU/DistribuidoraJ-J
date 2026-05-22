@@ -616,7 +616,7 @@ export default function ClientesPage() {
 
       {/* Client Detail Modal */}
       <Dialog open={detailModalOpen} onOpenChange={setDetailModalOpen}>
-        <DialogContent className="sm:max-w-md">
+        <DialogContent className="max-w-[calc(100vw-2rem)] sm:max-w-md">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-3">
               {selectedClient && (
@@ -779,7 +779,7 @@ export default function ClientesPage() {
 
       {/* Dialog Consultar ARCA */}
       <Dialog open={arcaDialogOpen} onOpenChange={(open) => { setArcaDialogOpen(open); if (!open) setArcaCuit('') }}>
-        <DialogContent className="sm:max-w-sm">
+        <DialogContent className="max-w-[calc(100vw-2rem)] sm:max-w-sm">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               <Search className="h-4 w-4 text-primary" />

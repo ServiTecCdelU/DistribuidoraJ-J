@@ -51,8 +51,8 @@ export function MainLayout({ children, title, description, allowedRoles }: MainL
   return (
     <div className="min-h-screen bg-background">
       <AppSidebar />
-      <main className="lg:ml-64 min-h-screen">
-        <div className="px-4 pb-6 pt-16 sm:px-6 sm:pt-16 lg:p-8">
+      <main className="lg:ml-72 min-h-screen">
+        <div className="px-4 pb-6 pt-14 sm:px-6 sm:pt-14 lg:p-8">
           {title && (
             <div className="relative flex items-center h-10 mb-1">
               <Button

@@ -418,8 +418,8 @@ export default function DashboardPage() {
                 >
                   <span className="flex items-center gap-1">
                     <Sliders className="h-3 w-3" />
-                    <span className="hidden xs:inline">Personalizado</span>
-                    <span className="xs:hidden">Pers.</span>
+                    <span className="hidden sm:inline">Personalizado</span>
+                    <span className="sm:hidden">Pers.</span>
                   </span>
                 </Button>
               </div>
@@ -475,7 +475,7 @@ export default function DashboardPage() {
           </div>
 
           {/* KPIs Grid - Más compacto en móvil */}
-          <section className="grid grid-cols-2 lg:grid-cols-4 gap-2 sm:gap-3">
+          <section className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-2 sm:gap-3">
             {kpis.map((kpi) => {
               const Icon = kpi.icon
               const isPositive = kpi.positive
