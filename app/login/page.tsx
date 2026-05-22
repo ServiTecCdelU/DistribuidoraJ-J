@@ -75,7 +75,7 @@ export default function LoginPage() {
   return (
     <div className="min-h-screen grid grid-cols-1 md:grid-cols-2">
       {/* Panel izquierdo — branding */}
-      <div className="relative bg-gradient-to-br from-teal-700 via-teal-600 to-cyan-600 p-8 md:p-12 flex flex-col items-start justify-center min-h-[280px] md:min-h-screen overflow-hidden">
+      <div className="relative bg-gradient-to-br from-teal-700 via-teal-600 to-cyan-600 p-6 md:p-12 flex flex-col items-start justify-center min-h-[180px] md:min-h-screen overflow-hidden">
           {/* Círculos decorativos */}
           <div className="absolute -right-16 top-1/4 w-56 h-56 rounded-full bg-white/10" />
           <div className="absolute -right-8 top-1/2 w-40 h-40 rounded-full bg-white/10" />
@@ -90,17 +90,17 @@ export default function LoginPage() {
       </div>
 
       {/* Panel derecho — login */}
-      <div className="flex flex-col justify-center p-8 md:p-16 bg-white">
+      <div className="flex flex-col justify-center p-6 md:p-16 bg-white">
           <p className="text-[10.5px] uppercase tracking-widest font-semibold text-muted-foreground/60 mb-5">
             Inicia sesión como
           </p>
 
           {/* Role cards */}
-          <div className="space-y-3 mb-8">
+          <div className="space-y-2 md:space-y-3 mb-5 md:mb-8">
             {roles.map((role) => (
               <div
                 key={role.title}
-                className="flex items-center gap-4 p-4 rounded-xl border border-border/60 hover:border-border hover:bg-accent/30 transition-colors"
+                className="flex items-center gap-3 md:gap-4 p-3 md:p-4 rounded-xl border border-border/60 hover:border-border hover:bg-accent/30 transition-colors"
               >
                 <div className={`flex items-center justify-center w-10 h-10 rounded-xl shrink-0 ${role.color}`}>
                   <role.icon className="h-5 w-5" />
