@@ -481,19 +481,7 @@ export function UnifiedCart({ role, state, actions, onConfirmSale, allowDiscount
           <React.Fragment>
           <div className="space-y-2">
           <Label className="text-xs font-medium text-foreground">Metodo de Entrega</Label>
-          <div className="grid grid-cols-2 gap-2">
-            <Button
-              type="button"
-              variant={deliveryMethod === "pickup" ? "default" : "outline"}
-              className={cn(
-                "h-9 gap-1.5 text-xs font-medium transition-all",
-                deliveryMethod === "pickup" && "bg-primary hover:bg-primary/90 shadow-md",
-              )}
-              onClick={() => actions.setDeliveryMethod("pickup")}
-            >
-              <Home className="h-3.5 w-3.5" />
-              Retiro en local
-            </Button>
+          <div className={cn("grid gap-2", role === "seller" ? "grid-cols-1" : "grid-cols-2")}>
             <Button
               type="button"
               variant={deliveryMethod === "delivery" ? "default" : "outline"}
@@ -506,6 +494,20 @@ export function UnifiedCart({ role, state, actions, onConfirmSale, allowDiscount
               <Truck className="h-3.5 w-3.5" />
               A domicilio
             </Button>
+            {role !== "seller" && (
+            <Button
+              type="button"
+              variant={deliveryMethod === "pickup" ? "default" : "outline"}
+              className={cn(
+                "h-9 gap-1.5 text-xs font-medium transition-all",
+                deliveryMethod === "pickup" && "bg-primary hover:bg-primary/90 shadow-md",
+              )}
+              onClick={() => actions.setDeliveryMethod("pickup")}
+            >
+              <Home className="h-3.5 w-3.5" />
+              Retiro en local
+            </Button>
+            )}
           </div>
         </div>
 

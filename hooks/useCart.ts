@@ -210,8 +210,8 @@ export function useCart(role: UserRole, userEmail?: string, externalProducts?: P
   const [creditAmountInput, setCreditAmountInput] = useState(0);
 
   // Delivery
-  const [selectedCity, setSelectedCity] = useState<City | "">("");
-  const [deliveryMethod, setDeliveryMethod] = useState<DeliveryMethod>("pickup");
+  const [selectedCity, setSelectedCity] = useState<City | "">("Concepcion del Uruguay");
+  const [deliveryMethod, setDeliveryMethod] = useState<DeliveryMethod>("delivery");
   const [deliveryAddress, setDeliveryAddress] = useState<DeliveryAddressType>("saved");
   const [newAddress, setNewAddress] = useState("");
   const [deliveryLat, setDeliveryLat] = useState<number | null>(null);
@@ -941,8 +941,8 @@ export function useCart(role: UserRole, userEmail?: string, externalProducts?: P
     setDniNotFound(false);
     setDniClientId("");
     setClientCreditLimit(50000);
-    setSelectedCity("");
-    setDeliveryMethod("pickup");
+    setSelectedCity("Concepcion del Uruguay");
+    setDeliveryMethod("delivery");
     setDeliveryAddress("saved");
     setNewAddress("");
     setSelectedSavedAddress(null);
