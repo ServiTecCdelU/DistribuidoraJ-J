@@ -717,14 +717,23 @@ export default function ProductosPage() {
     });
   }, [products, priceFilter]);
 
-  const stats = useMemo(() => {
-    return {
-      totalProducts,
-      totalInventoryValue: filteredProducts.reduce((sum, p) => sum + p.price * p.stock, 0),
-      lowStockCount: filteredProducts.filter((p) => p.stock > 0 && p.stock < 10).length,
-      outOfStockCount: filteredProducts.filter((p) => p.stock === 0).length,
-    };
-  }, [filteredProducts, totalProducts]);
+  const [stats, setStats] = useState({
+    totalProducts: 0,
+    totalInventoryValue: 0,
+    lowStockCount: 0,
+    outOfStockCount: 0,
+  });
+
+  const fetchStats = useCallback(async () => {
+    try {
+      const s = await productsApi.getStats();
+      setStats(s);
+    } catch { /* noop */ }
+  }, []);
+
+  useEffect(() => {
+    fetchStats();
+  }, [products]);
 
   // Reset page when filters change
   useEffect(() => {

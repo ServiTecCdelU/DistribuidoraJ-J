@@ -7,6 +7,7 @@ import {
   getProductsPaginated,
   searchProducts,
   updateProduct,
+  getProductStats,
 } from '@/services/products-service'
 import type { ProductSearchParams, ProductSearchResult } from '@/services/products-service'
 import {
@@ -102,6 +103,9 @@ export const productsApi = {
   },
   async getById(id: string): Promise<Product | undefined> {
     return getProductById(id)
+  },
+  async getStats() {
+    return getProductStats()
   },
   async create(product: Omit<Product, 'id' | 'createdAt'>): Promise<Product> {
     return createProduct(product)

@@ -101,6 +101,27 @@ export const searchProducts = async (params: ProductSearchParams): Promise<Produ
   }
 }
 
+export const getProductStats = async (): Promise<{
+  totalProducts: number
+  totalInventoryValue: number
+  lowStockCount: number
+  outOfStockCount: number
+}> => {
+  const { data, error } = await supabase
+    .from('productos')
+    .select('stock, price')
+    .eq('disabled', false)
+
+  if (error) throw error
+  const rows = data ?? []
+  return {
+    totalProducts: rows.length,
+    totalInventoryValue: rows.reduce((sum, r) => sum + (Number(r.price) || 0) * (r.stock ?? 0), 0),
+    lowStockCount: rows.filter((r) => r.stock > 0 && r.stock < 10).length,
+    outOfStockCount: rows.filter((r) => r.stock === 0).length,
+  }
+}
+
 export const getProductById = async (id: string): Promise<Product | undefined> => {
   const { data } = await supabase
     .from('productos')
