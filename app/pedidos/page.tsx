@@ -522,6 +522,14 @@ export default function PedidosPage() {
         return;
       }
 
+      // Debug: ver estructura real de items
+      const sampleOrder = activos[0];
+      if (sampleOrder) {
+        console.log("[pedido-excel] sample items:", JSON.stringify(sampleOrder.items.slice(0, 2)));
+        console.log("[pedido-excel] acum keys:", [...acum.keys()].slice(0, 3));
+        console.log("[pedido-excel] acum values:", [...acum.values()].slice(0, 2));
+      }
+
       // Traer stock y código de todos los productos del pedido
       const allItems = Array.from(acum.values());
       const productIds = allItems.map((f) => f.productId).filter(Boolean);
