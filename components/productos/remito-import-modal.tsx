@@ -133,15 +133,17 @@ function parseRemitoText(text: string): ParsedItem[] {
     let bultos = 0;
 
     if (matchFactura) {
-      // Factura: primer número es IVA%, segundo es cantidad, tercero es precio
-      // Ej: 21,0  26,000  819,38  21303,93
-      cantidad = Math.floor(numericTokens[1].value);
-      precio = numericTokens[2].value;
+      // Factura: últimos 4 números son [IVA%, cantidad, precio_unit, subtotal]
+      // Se toman desde el final porque la descripción puede contener números (ej: "9 DE ORO")
+      const len = numericTokens.length;
+      cantidad = Math.floor(numericTokens[len - 3].value);
+      precio = numericTokens[len - 2].value;
     } else {
-      // Remito clásico: primer número es bultos, segundo cantidad, tercero precio
-      bultos = numericTokens[0].value;
-      cantidad = Math.floor(numericTokens[1].value);
-      precio = numericTokens[2].value;
+      // Remito clásico: últimos 4 números son [bultos, cantidad, precio_unit, subtotal]
+      const len = numericTokens.length;
+      bultos = numericTokens[len - 4]?.value ?? 0;
+      cantidad = Math.floor(numericTokens[len - 3].value);
+      precio = numericTokens[len - 2].value;
     }
 
     if (cantidad <= 0 || cantidad > 100000 || precio <= 0) continue;
