@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import {
   Dialog,
   DialogContent,
@@ -97,6 +97,17 @@ export function OrderDetailModal({
   const router = useRouter();
   const [selectedTransportista, setSelectedTransportista] = useState<string>("");
   const [showTransportistaSelect, setShowTransportistaSelect] = useState(false);
+
+  // Autoseleccionar si hay un solo transportista
+  const transportistasFiltered = useMemo(
+    () => sellers.filter((s) => s.employeeType === "transportista" || s.employeeType === "ambos"),
+    [sellers]
+  );
+  useEffect(() => {
+    if (transportistasFiltered.length === 1 && !selectedTransportista) {
+      setSelectedTransportista(transportistasFiltered[0].id);
+    }
+  }, [transportistasFiltered, selectedTransportista]);
   const [generando, setGenerando] = useState(false);
   const [downloading, setDownloading] = useState<"invoice" | "remito" | null>(null);
 
@@ -117,9 +128,7 @@ export function OrderDetailModal({
   };
 
   const nextStatus = getNextStatus(order.status);
-  const transportistas = sellers.filter(
-    (s) => s.employeeType === "transportista" || s.employeeType === "ambos"
-  );
+  const transportistas = transportistasFiltered;
 
   const handleAssign = () => {
     if (!selectedTransportista || !onAssignTransportista) return;

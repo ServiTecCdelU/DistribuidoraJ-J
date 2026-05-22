@@ -99,6 +99,14 @@ export default function PedidosPage() {
   // Selección masiva
   const [selectedOrderIds, setSelectedOrderIds] = useState<Set<string>>(new Set());
   const [bulkTransportistaId, setBulkTransportistaId] = useState<string>("");
+
+  // Autoseleccionar transportista si hay uno solo
+  useEffect(() => {
+    const t = sellers.filter(s => s.employeeType === "transportista" || s.employeeType === "ambos");
+    if (t.length === 1 && !bulkTransportistaId) {
+      setBulkTransportistaId(t[0].id);
+    }
+  }, [sellers, bulkTransportistaId]);
   const [bulkAssigning, setBulkAssigning] = useState(false);
 
   // Success state
