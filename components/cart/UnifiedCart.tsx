@@ -32,6 +32,7 @@ import {
   Copy,
   Pencil,
   X,
+  AlertTriangle,
 } from "lucide-react";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
@@ -913,6 +914,25 @@ function ClientLookupSection({
                 >
                   Completar datos del cliente
                 </Button>
+              </div>
+            )}
+            {selectedClientData?.debtClassification && selectedClientData.debtClassification !== 'normal' && (
+              <div className={`mt-2 p-2.5 rounded-xl border flex items-start gap-2 ${
+                selectedClientData.debtClassification === 'incobrable'
+                  ? 'bg-red-50 border-red-200 text-red-800'
+                  : 'bg-amber-50 border-amber-200 text-amber-800'
+              }`}>
+                <AlertTriangle className="h-4 w-4 shrink-0 mt-0.5" />
+                <div className="text-xs">
+                  <p className="font-semibold">
+                    {selectedClientData.debtClassification === 'incobrable' ? 'Cliente INCOBRABLE' : 'Cliente MOROSO'}
+                  </p>
+                  <p className="mt-0.5 opacity-80">
+                    {selectedClientData.debtClassification === 'incobrable'
+                      ? 'Este cliente tiene deuda incobrable. Consultar con el administrador antes de vender.'
+                      : 'Este cliente tiene deuda en mora. Proceder con precaución.'}
+                  </p>
+                </div>
               </div>
             )}
           </div>
