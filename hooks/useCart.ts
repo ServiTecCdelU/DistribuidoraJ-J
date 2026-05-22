@@ -884,8 +884,6 @@ export function useCart(role: UserRole, userEmail?: string, externalProducts?: P
           modo,
         });
 
-        setLastSaleId(sale.id);
-        setSaleComplete(true);
         const msg = modo === "esperar"
           ? "Venta creada — pendiente de stock mayorista"
           : "Venta confirmada con stock disponible";
@@ -900,6 +898,7 @@ export function useCart(role: UserRole, userEmail?: string, externalProducts?: P
           }
         });
 
+        resetCart();
         return "sale";
       }
     } catch (error) {

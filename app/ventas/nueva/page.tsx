@@ -192,11 +192,7 @@ function NuevaVentaContent({
       (item) => item.quantity > (item.product.stockLocal ?? 0)
     );
     const modo = hayPendiente ? "esperar" : "disponible";
-    const result = await actions.processSale(modo);
-    if (result === "order") {
-      const canSeePedidos = employeeType === "transportista" || employeeType === "ambos";
-      router.push(canSeePedidos ? "/pedidos" : "/ventas");
-    }
+    await actions.processSale(modo);
   };
 
   if (state.processing) {
