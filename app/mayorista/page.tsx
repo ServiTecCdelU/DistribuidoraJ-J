@@ -1569,7 +1569,7 @@ function ExcelImportDialog({
             </div>
 
             <div className="rounded-xl border overflow-hidden">
-              <div className="overflow-x-auto max-h-52">
+              <div className="overflow-x-auto max-h-64 sm:max-h-52">
                 <table className="w-full text-xs">
                   <thead className="bg-muted/50 sticky top-0">
                     <tr>

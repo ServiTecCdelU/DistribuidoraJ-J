@@ -459,7 +459,7 @@ export default function ClientesPage() {
                                 {client.email && (
                                   <p className="text-sm text-foreground flex items-center gap-1.5">
                                     <Mail className="h-3 w-3 text-muted-foreground shrink-0" />
-                                    <span className="truncate max-w-[180px]">{client.email}</span>
+                                    <span className="truncate max-w-[120px] sm:max-w-[180px]">{client.email}</span>
                                   </p>
                                 )}
                                 {client.phone && (
@@ -529,7 +529,7 @@ export default function ClientesPage() {
               </div>
 
               {/* Mobile List */}
-              <div className="md:hidden border border-border rounded-2xl overflow-hidden bg-card shadow-sm divide-y divide-border pb-24">
+              <div className="md:hidden border border-border rounded-2xl overflow-hidden bg-card shadow-sm divide-y divide-border pb-4">
                 {pagedClients.map((client) => {
                   const debt = getDebtIndicator(client.currentBalance || 0, client.creditLimit || 0)
                   const DebtIcon = debt.icon
