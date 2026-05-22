@@ -110,7 +110,7 @@ export const getProductStats = async (): Promise<{
   const { data, error } = await supabase
     .from('productos')
     .select('stock, price')
-    .eq('disabled', false)
+    .or('disabled.eq.false,disabled.is.null')
 
   if (error) throw error
   const rows = data ?? []
