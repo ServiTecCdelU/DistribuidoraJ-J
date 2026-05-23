@@ -229,24 +229,36 @@ export function UnifiedCart({ role, state, actions, onConfirmSale, allowDiscount
                         <Trash2 className="h-3 w-3" />
                       </Button>
                     </div>
-                    {/* Fila inferior: stock info + lote + controles + total */}
+                    {/* Stock local + lote */}
+                    {esMayorista && (
+                      <div className="flex items-center gap-2 flex-wrap">
+                        {stockLocal === 0 ? (
+                          <span className="text-[10px] font-medium text-rose-500">Sin stock local</span>
+                        ) : cantidadPendiente > 0 ? (
+                          <>
+                            <span className="text-[10px] font-medium text-emerald-600">{stockLocal} en stock</span>
+                            <span className="text-[10px] text-muted-foreground">·</span>
+                            <span className="text-[10px] font-medium text-amber-600">faltan {cantidadPendiente} (mayorista)</span>
+                          </>
+                        ) : (
+                          <span className="text-[10px] font-medium text-emerald-600">{stockLocal} en stock</span>
+                        )}
+                        {(() => {
+                          const upb = (item.product as any).unidadesPorBulto;
+                          const sde = (item.product as any).seDivideEn;
+                          if (!upb) return null;
+                          const unidadesLote = sde && sde > 1 ? Math.floor(upb / sde) : upb;
+                          return (
+                            <>
+                              <span className="text-[10px] text-muted-foreground">·</span>
+                              <span className="text-[10px] text-muted-foreground">{unidadesLote} u./lote</span>
+                            </>
+                          );
+                        })()}
+                      </div>
+                    )}
+                    {/* Controles cantidad + total */}
                     <div className="flex items-center gap-2">
-                      {esMayorista && (
-                        <span className={cn("text-[10px] shrink-0", cantidadStockLocal > 0 ? "text-emerald-600" : "text-muted-foreground")}>
-                          L:{cantidadStockLocal}/{item.quantity}{cantidadPendiente > 0 && <span className="text-amber-600"> +{cantidadPendiente}</span>}
-                        </span>
-                      )}
-                      {(() => {
-                        const upb = (item.product as any).unidadesPorBulto;
-                        const sde = (item.product as any).seDivideEn;
-                        if (!upb) return null;
-                        const unidadesLote = sde && sde > 1 ? Math.floor(upb / sde) : upb;
-                        return (
-                          <span className="text-[10px] text-muted-foreground shrink-0">
-                            {unidadesLote} u./lote
-                          </span>
-                        );
-                      })()}
                       <div className="flex items-center gap-0.5 ml-auto">
                         <Button variant="ghost" size="icon" className="h-6 w-6 rounded-md"
                           onClick={() => actions.updateQuantity(item.product.id, -1)} disabled={item.quantity <= 1}>
