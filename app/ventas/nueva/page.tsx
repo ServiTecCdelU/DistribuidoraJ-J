@@ -345,7 +345,7 @@ function NuevaVentaContent({
           </div>
         ) : (
           <div className="space-y-3">
-            <ProductGrid products={enabledProducts} cart={state.cart} addToCart={actions.addToCart} removeFromCart={actions.removeFromCart} formatCurrency={actions.formatCurrency} />
+            <ProductGrid products={enabledProducts} cart={state.cart} addToCart={actions.addToCart} removeFromCart={actions.removeFromCart} updateQuantity={actions.updateQuantity} formatCurrency={actions.formatCurrency} />
             {/* Paginación */}
             {totalPages > 1 && (
               <div className="flex items-center justify-between pt-2">
@@ -431,12 +431,13 @@ function NuevaVentaContent({
 // ─── Sub-componentes de productos ─────────────────────────────────────────────
 
 const ProductListItem = memo(function ProductListItem({
-  product, quantity, onAdd, onRemove, formatCurrency,
+  product, quantity, onAdd, onRemove, onDecrement, formatCurrency,
 }: {
   product: Product;
   quantity: number;
   onAdd: (p: Product) => void;
   onRemove: (id: string) => void;
+  onDecrement: (id: string, delta: number) => void;
   formatCurrency: (n: number) => string;
 }) {
   const seDivideEn = (product as any).seDivideEn;
@@ -496,7 +497,7 @@ const ProductListItem = memo(function ProductListItem({
           ) : (
             <div className="flex items-center gap-1">
               <button
-                onClick={() => onRemove(product.id)}
+                onClick={() => quantity === 1 ? onRemove(product.id) : onDecrement(product.id, -1)}
                 className="h-8 w-8 rounded-xl border-2 border-border active:bg-muted flex items-center justify-center transition-colors touch-manipulation"
               >
                 <span className="text-base font-bold leading-none">−</span>
@@ -517,12 +518,13 @@ const ProductListItem = memo(function ProductListItem({
 });
 
 function ProductGrid({
-  products, cart, addToCart, removeFromCart, formatCurrency,
+  products, cart, addToCart, removeFromCart, updateQuantity, formatCurrency,
 }: {
   products: Product[];
   cart: CartItem[];
   addToCart: (p: Product) => void;
   removeFromCart: (id: string) => void;
+  updateQuantity: (id: string, delta: number) => void;
   formatCurrency: (n: number) => string;
 }) {
   const cartMap = useMemo(() => {
@@ -540,6 +542,7 @@ function ProductGrid({
           quantity={cartMap.get(product.id) || 0}
           onAdd={addToCart}
           onRemove={removeFromCart}
+          onDecrement={updateQuantity}
           formatCurrency={formatCurrency}
         />
       ))}
