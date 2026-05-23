@@ -466,9 +466,16 @@ export function UnifiedCart({ role, state, actions, onConfirmSale, allowDiscount
 
         {/* Navigation buttons for step 2 */}
         {role !== null && cartStep === "client" && (
-          <div className="flex gap-2 pt-1">
-            <Button variant="outline" className="flex-1 h-10 text-sm" onClick={() => setCartStep("products")}>← Productos</Button>
-            <Button className="flex-1 h-10 text-sm" onClick={() => setCartStep("checkout")}>Siguiente →</Button>
+          <div className="space-y-2 pt-1">
+            {!dniFound && (
+              <p className="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-xl px-3 py-2 text-center font-medium">
+                Seleccioná un cliente para continuar
+              </p>
+            )}
+            <div className="flex gap-2">
+              <Button variant="outline" className="flex-1 h-10 text-sm" onClick={() => setCartStep("products")}>← Productos</Button>
+              <Button className="flex-1 h-10 text-sm" disabled={!dniFound} onClick={() => setCartStep("checkout")}>Siguiente →</Button>
+            </div>
           </div>
         )}
 
