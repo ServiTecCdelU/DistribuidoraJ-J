@@ -457,29 +457,17 @@ const ProductListItem = memo(function ProductListItem({
       <div className="flex-1 min-w-0">
         <p className="font-medium text-sm leading-tight">{product.name}</p>
         <div className="flex items-center gap-2 mt-0.5 flex-wrap">
-          {product.codigo && (
-            <span className="font-mono text-[11px] text-muted-foreground">{product.codigo}</span>
-          )}
-          {product.category && (
-            <>
-              <span className="text-[11px] text-muted-foreground">·</span>
-              <span className="text-[11px] text-muted-foreground truncate">{product.category}</span>
-            </>
-          )}
           {stockLocal !== undefined && (
-            <>
-              <span className="text-[11px] text-muted-foreground">·</span>
-              <span className={cn(
-                "text-[11px] font-medium",
-                stockLocal === 0 ? "text-rose-500" : "text-emerald-600"
-              )}>
-                {stockLocal === 0 ? "Sin stock" : `${stockLocal} en stock`}
-              </span>
-            </>
+            <span className={cn(
+              "text-[11px] font-medium",
+              stockLocal === 0 ? "text-rose-500" : "text-emerald-600"
+            )}>
+              {stockLocal === 0 ? "Sin stock" : `${stockLocal} en stock`}
+            </span>
           )}
           {unidadesLote && (
             <>
-              <span className="text-[11px] text-muted-foreground">·</span>
+              {stockLocal !== undefined && <span className="text-[11px] text-muted-foreground">·</span>}
               <span className="text-[11px] text-muted-foreground">{unidadesLote} u./lote</span>
             </>
           )}
