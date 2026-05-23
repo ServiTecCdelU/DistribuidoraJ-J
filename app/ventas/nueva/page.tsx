@@ -448,18 +448,21 @@ const ProductListItem = memo(function ProductListItem({
 
   return (
     <div className={cn(
-      "flex items-center gap-3 px-3 py-3 rounded-xl border transition-colors",
+      "px-3 py-3 rounded-xl border transition-colors space-y-1.5",
       quantity > 0
         ? "bg-teal-50/60 border-teal-200 dark:bg-teal-950/20 dark:border-teal-800"
         : "bg-card border-border",
     )}>
-      {/* Info producto */}
-      <div className="flex-1 min-w-0">
-        <p className="font-medium text-sm leading-tight truncate">{product.name}</p>
-        <div className="flex items-center gap-2 mt-0.5 flex-wrap">
+      {/* Nombre — línea completa */}
+      <p className="font-medium text-sm leading-tight truncate">{product.name}</p>
+
+      {/* Fila inferior: info + precio + controles */}
+      <div className="flex items-center gap-2">
+        {/* Stock y lote */}
+        <div className="flex items-center gap-2 flex-1 min-w-0">
           {stockLocal !== undefined && (
             <span className={cn(
-              "text-[11px] font-medium",
+              "text-[11px] font-medium shrink-0",
               stockLocal === 0 ? "text-rose-500" : "text-emerald-600"
             )}>
               {stockLocal === 0 ? "Sin stock" : `${stockLocal} en stock`}
@@ -468,46 +471,46 @@ const ProductListItem = memo(function ProductListItem({
           {unidadesLote && (
             <>
               {stockLocal !== undefined && <span className="text-[11px] text-muted-foreground">·</span>}
-              <span className="text-[11px] text-muted-foreground">{unidadesLote} u./lote</span>
+              <span className="text-[11px] text-muted-foreground shrink-0">{unidadesLote} u./lote</span>
             </>
           )}
         </div>
-      </div>
 
-      {/* Precio */}
-      <div className="text-right shrink-0">
-        <p className="font-bold text-sm text-teal-600">{formatCurrency(product.price)}</p>
-        {seDivideEn && seDivideEn > 1 && (
-          <p className="text-[10px] text-muted-foreground">/ lote</p>
-        )}
-      </div>
+        {/* Precio */}
+        <div className="text-right shrink-0">
+          <p className="font-bold text-sm text-teal-600">{formatCurrency(product.price)}</p>
+          {seDivideEn && seDivideEn > 1 && (
+            <p className="text-[10px] text-muted-foreground leading-none">/ lote</p>
+          )}
+        </div>
 
-      {/* Controles cantidad */}
-      <div className="shrink-0">
-        {quantity === 0 ? (
-          <button
-            onClick={() => onAdd(product)}
-            className="h-10 w-10 rounded-xl bg-teal-600 active:bg-teal-700 text-white flex items-center justify-center transition-colors touch-manipulation"
-          >
-            <Plus className="h-5 w-5" />
-          </button>
-        ) : (
-          <div className="flex items-center gap-1.5">
-            <button
-              onClick={() => onRemove(product.id)}
-              className="h-9 w-9 rounded-xl border-2 border-border active:bg-muted flex items-center justify-center transition-colors touch-manipulation"
-            >
-              <span className="text-base font-bold leading-none">−</span>
-            </button>
-            <span className="w-7 text-center text-sm font-bold text-teal-600">{quantity}</span>
+        {/* Controles */}
+        <div className="shrink-0">
+          {quantity === 0 ? (
             <button
               onClick={() => onAdd(product)}
-              className="h-9 w-9 rounded-xl border-2 border-teal-500 bg-teal-50 active:bg-teal-100 text-teal-700 flex items-center justify-center transition-colors touch-manipulation"
+              className="h-9 w-9 rounded-xl bg-teal-600 active:bg-teal-700 text-white flex items-center justify-center transition-colors touch-manipulation"
             >
-              <Plus className="h-4 w-4" />
+              <Plus className="h-5 w-5" />
             </button>
-          </div>
-        )}
+          ) : (
+            <div className="flex items-center gap-1">
+              <button
+                onClick={() => onRemove(product.id)}
+                className="h-8 w-8 rounded-xl border-2 border-border active:bg-muted flex items-center justify-center transition-colors touch-manipulation"
+              >
+                <span className="text-base font-bold leading-none">−</span>
+              </button>
+              <span className="w-6 text-center text-sm font-bold text-teal-600">{quantity}</span>
+              <button
+                onClick={() => onAdd(product)}
+                className="h-8 w-8 rounded-xl border-2 border-teal-500 bg-teal-50 active:bg-teal-100 text-teal-700 flex items-center justify-center transition-colors touch-manipulation"
+              >
+                <Plus className="h-4 w-4" />
+              </button>
+            </div>
+          )}
+        </div>
       </div>
     </div>
   );
