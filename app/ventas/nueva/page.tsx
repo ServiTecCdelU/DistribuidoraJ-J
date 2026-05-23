@@ -455,7 +455,7 @@ const ProductListItem = memo(function ProductListItem({
     )}>
       {/* Info producto */}
       <div className="flex-1 min-w-0">
-        <p className="font-medium text-sm leading-tight">{product.name}</p>
+        <p className="font-medium text-sm leading-tight truncate">{product.name}</p>
         <div className="flex items-center gap-2 mt-0.5 flex-wrap">
           {stockLocal !== undefined && (
             <span className={cn(
