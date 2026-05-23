@@ -82,27 +82,14 @@ export function ClientModal({ open, onOpenChange, client, onSave, showCreditLimi
     if (!formData.name.trim()) {
       newErrors.name = 'El nombre es requerido'
     }
-    if (!isEditing) {
-      if (!formData.cuit.trim()) {
-        newErrors.cuit = 'El CUIT es requerido'
-      } else if (normalizeCuit(formData.cuit).length !== 11) {
-        newErrors.cuit = 'El CUIT debe tener 11 digitos'
-      }
-      if (!formData.email.trim()) {
-        newErrors.email = 'El email es requerido'
-      } else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(formData.email)) {
-        newErrors.email = 'Email invalido'
-      }
-      if (!formData.phone.trim()) {
-        newErrors.phone = 'El telefono es requerido'
-      }
-    } else {
-      if (formData.cuit.trim() && normalizeCuit(formData.cuit).length !== 11) {
-        newErrors.cuit = 'El CUIT debe tener 11 digitos'
-      }
-      if (formData.email.trim() && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(formData.email)) {
-        newErrors.email = 'Email invalido'
-      }
+    if (!formData.address.trim()) {
+      newErrors.address = 'El domicilio es requerido'
+    }
+    if (formData.cuit.trim() && normalizeCuit(formData.cuit).length !== 11) {
+      newErrors.cuit = 'El CUIT debe tener 11 digitos'
+    }
+    if (formData.email.trim() && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(formData.email)) {
+      newErrors.email = 'Email invalido'
     }
     if (formData.creditLimit < 0) {
       newErrors.creditLimit = 'El limite debe ser mayor o igual a 0'
@@ -176,7 +163,7 @@ export function ClientModal({ open, onOpenChange, client, onSave, showCreditLimi
               </div>
               <div className="space-y-2">
                 <Label htmlFor="cuit" className="text-foreground">
-                  CUIL / CUIT <span className="text-destructive">*</span>
+                  CUIL / CUIT
                 </Label>
                 <Input
                   id="cuit"
@@ -220,7 +207,7 @@ export function ClientModal({ open, onOpenChange, client, onSave, showCreditLimi
               <div className="space-y-2">
                 <Label htmlFor="email" className="text-foreground flex items-center gap-2">
                   <Mail className="h-3.5 w-3.5" />
-                  Email <span className="text-destructive">*</span>
+                  Email
                 </Label>
                 <Input
                   id="email"
@@ -235,7 +222,7 @@ export function ClientModal({ open, onOpenChange, client, onSave, showCreditLimi
               <div className="space-y-2">
                 <Label htmlFor="phone" className="text-foreground flex items-center gap-2">
                   <Phone className="h-3.5 w-3.5" />
-                  Telefono <span className="text-destructive">*</span>
+                  Telefono
                 </Label>
                 <Input
                   id="phone"
@@ -251,14 +238,16 @@ export function ClientModal({ open, onOpenChange, client, onSave, showCreditLimi
             <div className="space-y-2">
               <Label htmlFor="address" className="text-foreground flex items-center gap-2">
                 <MapPin className="h-3.5 w-3.5" />
-                Direccion
+                Direccion <span className="text-destructive">*</span>
               </Label>
               <Input
                 id="address"
                 value={formData.address}
                 onChange={(e) => setFormData({ ...formData, address: e.target.value })}
                 placeholder="Av. Corrientes 1234, CABA"
+                className={errors.address ? 'border-destructive' : ''}
               />
+              {errors.address && <p className="text-xs text-destructive">{errors.address}</p>}
             </div>
           </div>
 
