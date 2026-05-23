@@ -59,7 +59,7 @@ export function AppSidebar() {
       items: [
         { href: "/caja", label: "Caja diaria", icon: Banknote, roles: ["admin"] },
         { href: "/ventas", label: user?.role === "seller" ? "Mis Ventas" : "Ventas", icon: Receipt, roles: ["admin", ...(isVendedor ? ["seller"] : [])] },
-        { href: user?.role === "seller" ? "/vendedor" : "/ventas/nueva", label: "Nueva Venta", icon: ShoppingCart, roles: ["admin", ...(isVendedor ? ["seller"] : [])] },
+        { href: "/ventas/nueva", label: "Nueva Venta", icon: ShoppingCart, roles: ["admin", ...(isVendedor ? ["seller"] : [])] },
         { href: "/pedidos", label: "Pedidos", icon: Truck, roles: ["admin", ...(isTransportista ? ["seller"] : [])] },
         { href: "/comisiones", label: "Mis Comisiones", icon: Banknote, roles: ["seller"] },
         // { href: "/cobranzas", label: "Cobranzas", icon: Receipt, roles: [...(isVendedor ? ["seller"] : [])] },
