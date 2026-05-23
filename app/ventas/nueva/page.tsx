@@ -345,7 +345,7 @@ function NuevaVentaContent({
           </div>
         ) : (
           <div className="space-y-3">
-            <ProductGrid products={enabledProducts} cart={state.cart} addToCart={actions.addToCart} formatCurrency={actions.formatCurrency} />
+            <ProductGrid products={enabledProducts} cart={state.cart} addToCart={actions.addToCart} removeFromCart={actions.removeFromCart} formatCurrency={actions.formatCurrency} />
             {/* Paginación */}
             {totalPages > 1 && (
               <div className="flex items-center justify-between pt-2">
@@ -431,49 +431,108 @@ function NuevaVentaContent({
 // ─── Sub-componentes de productos ─────────────────────────────────────────────
 
 const ProductListItem = memo(function ProductListItem({
-  product, quantity, onAdd, formatCurrency, disabled,
+  product, quantity, onAdd, onRemove, formatCurrency,
 }: {
   product: Product;
   quantity: number;
   onAdd: (p: Product) => void;
+  onRemove: (id: string) => void;
   formatCurrency: (n: number) => string;
-  disabled?: boolean;
 }) {
+  const seDivideEn = (product as any).seDivideEn;
+  const unidadesPorBulto = (product as any).unidadesPorBulto;
+  const stockLocal = product.stockLocal;
+  const unidadesLote = unidadesPorBulto
+    ? (seDivideEn && seDivideEn > 1 ? Math.floor(unidadesPorBulto / seDivideEn) : unidadesPorBulto)
+    : null;
+
   return (
-    <tr
-      className={cn(
-        "cursor-pointer transition-colors hover:bg-muted/40",
-        disabled && "opacity-60",
-        quantity > 0 ? "bg-primary/5" : "",
-      )}
-      onClick={() => onAdd(product)}
-    >
-      <td className="py-1.5 pl-3 pr-2 text-xs text-muted-foreground font-mono whitespace-nowrap">{product.codigo ?? "—"}</td>
-      <td className="py-1.5 px-2 text-sm font-medium max-w-0 w-full">
-        <span className="block truncate">{product.name}</span>
-      </td>
-      <td className="py-1.5 px-2 text-xs font-semibold text-right whitespace-nowrap">
-        {formatCurrency(product.price)}
-      </td>
-      <td className="py-1.5 pl-2 pr-3 text-center w-8">
-        {quantity > 0 && (
-          <span className="inline-flex h-5 w-5 rounded-full bg-primary text-primary-foreground items-center justify-center text-[10px] font-bold">
-            {quantity}
-          </span>
+    <div className={cn(
+      "flex items-center gap-3 px-3 py-3 rounded-xl border transition-colors",
+      quantity > 0
+        ? "bg-teal-50/60 border-teal-200 dark:bg-teal-950/20 dark:border-teal-800"
+        : "bg-card border-border",
+    )}>
+      {/* Info producto */}
+      <div className="flex-1 min-w-0">
+        <p className="font-medium text-sm leading-tight">{product.name}</p>
+        <div className="flex items-center gap-2 mt-0.5 flex-wrap">
+          {product.codigo && (
+            <span className="font-mono text-[11px] text-muted-foreground">{product.codigo}</span>
+          )}
+          {product.category && (
+            <>
+              <span className="text-[11px] text-muted-foreground">·</span>
+              <span className="text-[11px] text-muted-foreground truncate">{product.category}</span>
+            </>
+          )}
+          {stockLocal !== undefined && (
+            <>
+              <span className="text-[11px] text-muted-foreground">·</span>
+              <span className={cn(
+                "text-[11px] font-medium",
+                stockLocal === 0 ? "text-rose-500" : "text-emerald-600"
+              )}>
+                {stockLocal === 0 ? "Sin stock" : `${stockLocal} en stock`}
+              </span>
+            </>
+          )}
+          {unidadesLote && (
+            <>
+              <span className="text-[11px] text-muted-foreground">·</span>
+              <span className="text-[11px] text-muted-foreground">{unidadesLote} u./lote</span>
+            </>
+          )}
+        </div>
+      </div>
+
+      {/* Precio */}
+      <div className="text-right shrink-0">
+        <p className="font-bold text-sm text-teal-600">{formatCurrency(product.price)}</p>
+        {seDivideEn && seDivideEn > 1 && (
+          <p className="text-[10px] text-muted-foreground">/ lote</p>
         )}
-      </td>
-    </tr>
+      </div>
+
+      {/* Controles cantidad */}
+      <div className="shrink-0">
+        {quantity === 0 ? (
+          <button
+            onClick={() => onAdd(product)}
+            className="h-10 w-10 rounded-xl bg-teal-600 active:bg-teal-700 text-white flex items-center justify-center transition-colors touch-manipulation"
+          >
+            <Plus className="h-5 w-5" />
+          </button>
+        ) : (
+          <div className="flex items-center gap-1.5">
+            <button
+              onClick={() => onRemove(product.id)}
+              className="h-9 w-9 rounded-xl border-2 border-border active:bg-muted flex items-center justify-center transition-colors touch-manipulation"
+            >
+              <span className="text-base font-bold leading-none">−</span>
+            </button>
+            <span className="w-7 text-center text-sm font-bold text-teal-600">{quantity}</span>
+            <button
+              onClick={() => onAdd(product)}
+              className="h-9 w-9 rounded-xl border-2 border-teal-500 bg-teal-50 active:bg-teal-100 text-teal-700 flex items-center justify-center transition-colors touch-manipulation"
+            >
+              <Plus className="h-4 w-4" />
+            </button>
+          </div>
+        )}
+      </div>
+    </div>
   );
 });
 
 function ProductGrid({
-  products, cart, addToCart, formatCurrency, disabled = false,
+  products, cart, addToCart, removeFromCart, formatCurrency,
 }: {
   products: Product[];
   cart: CartItem[];
   addToCart: (p: Product) => void;
+  removeFromCart: (id: string) => void;
   formatCurrency: (n: number) => string;
-  disabled?: boolean;
 }) {
   const cartMap = useMemo(() => {
     const map = new Map<string, number>();
@@ -482,29 +541,17 @@ function ProductGrid({
   }, [cart]);
 
   return (
-    <div className="rounded-xl border border-border overflow-hidden">
-      <table className="w-full table-fixed border-collapse">
-        <thead>
-          <tr className="bg-muted/50 text-xs text-muted-foreground">
-            <th className="py-1.5 pl-3 pr-2 text-left font-medium w-20">Código</th>
-            <th className="py-1.5 px-2 text-left font-medium">Nombre</th>
-            <th className="py-1.5 px-2 text-right font-medium w-24">Precio</th>
-            <th className="py-1.5 pl-2 pr-3 w-8" />
-          </tr>
-        </thead>
-        <tbody className="divide-y divide-border">
-          {products.map((product) => (
-            <ProductListItem
-              key={product.id}
-              product={product}
-              quantity={cartMap.get(product.id) || 0}
-              onAdd={addToCart}
-              formatCurrency={formatCurrency}
-              disabled={disabled}
-            />
-          ))}
-        </tbody>
-      </table>
+    <div className="space-y-1.5">
+      {products.map((product) => (
+        <ProductListItem
+          key={product.id}
+          product={product}
+          quantity={cartMap.get(product.id) || 0}
+          onAdd={addToCart}
+          onRemove={removeFromCart}
+          formatCurrency={formatCurrency}
+        />
+      ))}
     </div>
   );
 }
