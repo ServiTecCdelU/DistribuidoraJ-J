@@ -229,11 +229,16 @@ export function UnifiedCart({ role, state, actions, onConfirmSale, allowDiscount
                         <Trash2 className="h-3 w-3" />
                       </Button>
                     </div>
-                    {/* Fila inferior: stock info + controles + total */}
+                    {/* Fila inferior: stock info + lote + controles + total */}
                     <div className="flex items-center gap-2">
                       {esMayorista && (
                         <span className={cn("text-[10px] shrink-0", cantidadStockLocal > 0 ? "text-emerald-600" : "text-muted-foreground")}>
                           L:{cantidadStockLocal}/{item.quantity}{cantidadPendiente > 0 && <span className="text-amber-600"> +{cantidadPendiente}</span>}
+                        </span>
+                      )}
+                      {(item.product as any).seDivideEn > 1 && (
+                        <span className="text-[10px] text-muted-foreground shrink-0">
+                          Lote: {(item.product as any).seDivideEn} u.
                         </span>
                       )}
                       <div className="flex items-center gap-0.5 ml-auto">
