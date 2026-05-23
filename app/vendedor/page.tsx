@@ -180,8 +180,7 @@ function VendedorDashboard({ userEmail, userName }: { userEmail: string; userNam
       (item) => item.quantity > ((item.product as any).stockLocal ?? 0)
     );
     const modo = hayPendiente ? "esperar" : "disponible";
-    const result = await actions.processSale(modo);
-    if (result === "order") router.push("/pedidos");
+    await actions.processSale(modo);
   };
 
   if (state.processing) {
