@@ -236,11 +236,17 @@ export function UnifiedCart({ role, state, actions, onConfirmSale, allowDiscount
                           L:{cantidadStockLocal}/{item.quantity}{cantidadPendiente > 0 && <span className="text-amber-600"> +{cantidadPendiente}</span>}
                         </span>
                       )}
-                      {(item.product as any).seDivideEn > 1 && (
-                        <span className="text-[10px] text-muted-foreground shrink-0">
-                          Lote: {(item.product as any).seDivideEn} u.
-                        </span>
-                      )}
+                      {(() => {
+                        const upb = (item.product as any).unidadesPorBulto;
+                        const sde = (item.product as any).seDivideEn;
+                        if (!upb) return null;
+                        const unidadesLote = sde && sde > 1 ? Math.floor(upb / sde) : upb;
+                        return (
+                          <span className="text-[10px] text-muted-foreground shrink-0">
+                            {unidadesLote} u./lote
+                          </span>
+                        );
+                      })()}
                       <div className="flex items-center gap-0.5 ml-auto">
                         <Button variant="ghost" size="icon" className="h-6 w-6 rounded-md"
                           onClick={() => actions.updateQuantity(item.product.id, -1)} disabled={item.quantity <= 1}>
