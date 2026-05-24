@@ -92,6 +92,11 @@ export function UnifiedCart({ role, state, actions, onConfirmSale, allowDiscount
   const [transferConfig, setTransferConfig] = useState<TransferConfig>({ alias: '', titular: '', banco: '' });
   const [cartStep, setCartStep] = useState<"products" | "client" | "checkout">("products");
 
+  // Resetear step cuando el carrito se vacía (después de confirmar venta)
+  useEffect(() => {
+    if (cart.length === 0) setCartStep("products");
+  }, [cart.length]);
+
   useEffect(() => {
     transferApi.getConfig().then(setTransferConfig).catch(() => {});
   }, []);
