@@ -998,77 +998,73 @@ export default function PedidosPage() {
   return (
     <MainLayout allowedRoles={['admin', 'seller']} title="Pedidos" description="Seguimiento de pedidos y entregas">
       <div className="space-y-4">
-      <div className="mb-6 space-y-4">
-        <div className="flex items-center gap-2 justify-end">
-            {hasActiveFilters && (
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={clearFilters}
-                className="text-muted-foreground"
-              >
-                <Filter className="h-4 w-4 mr-2" />
-                Limpiar filtros
-              </Button>
-            )}
-            {filterStatus !== "pending" && filterStatus !== "delivery" && (
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => setRouteModalOpen(true)}
-                disabled={filteredOrders.filter(o => o.address && o.city && o.status !== "completed").length === 0}
-                className="gap-2"
-              >
-                <Navigation className="h-4 w-4" />
-                <span className="hidden sm:inline">Iniciar Recorrido</span>
-                <span className="sm:hidden">Ruta</span>
-              </Button>
-            )}
-            {filterStatus !== "pending" && (
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={handlePrintCargo}
-                disabled={filteredOrders.length === 0}
-                className="gap-2"
-              >
-                <ClipboardList className="h-4 w-4" />
-                <span className="hidden sm:inline">Listado de Carga</span>
-                <span className="sm:hidden">Carga</span>
-              </Button>
-            )}
-            {filterStatus !== "preparation" && filterStatus !== "delivery" && (
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={handleDescargarExcel}
-                disabled={generandoExcel}
-                className="gap-2 border-emerald-300 text-emerald-700 hover:bg-emerald-50"
-              >
-                {generandoExcel ? <Loader2 className="h-4 w-4 animate-spin" /> : <FileSpreadsheet className="h-4 w-4" />}
-                <span className="hidden sm:inline">Descargar Pedido</span>
-                <span className="sm:hidden">Excel</span>
-              </Button>
-            )}
-        </div>
-
-        <OrdersFilters
-          filterStatus={filterStatus}
-          setFilterStatus={setFilterStatus}
-          filterClient={filterClient}
-          setFilterClient={setFilterClient}
-          filterSeller={filterSeller}
-          setFilterSeller={setFilterSeller}
-          filterTransportista={filterTransportista}
-          setFilterTransportista={setFilterTransportista}
-          searchQuery={searchQuery}
-          setSearchQuery={setSearchQuery}
-          clients={clients}
-          sellers={uniqueSellers}
-          transportistas={transportistas}
-          orders={orders}
-        />
-      </div>
+      <OrdersFilters
+        filterStatus={filterStatus}
+        setFilterStatus={setFilterStatus}
+        filterClient={filterClient}
+        setFilterClient={setFilterClient}
+        filterSeller={filterSeller}
+        setFilterSeller={setFilterSeller}
+        filterTransportista={filterTransportista}
+        setFilterTransportista={setFilterTransportista}
+        searchQuery={searchQuery}
+        setSearchQuery={setSearchQuery}
+        clients={clients}
+        sellers={uniqueSellers}
+        transportistas={transportistas}
+        orders={orders}
+      >
+        {hasActiveFilters && (
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={clearFilters}
+            className="text-muted-foreground"
+          >
+            <Filter className="h-4 w-4 mr-2" />
+            Limpiar filtros
+          </Button>
+        )}
+        {filterStatus !== "pending" && filterStatus !== "delivery" && (
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => setRouteModalOpen(true)}
+            disabled={filteredOrders.filter(o => o.address && o.city && o.status !== "completed").length === 0}
+            className="gap-2"
+          >
+            <Navigation className="h-4 w-4" />
+            <span className="hidden sm:inline">Iniciar Recorrido</span>
+            <span className="sm:hidden">Ruta</span>
+          </Button>
+        )}
+        {filterStatus !== "pending" && (
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={handlePrintCargo}
+            disabled={filteredOrders.length === 0}
+            className="gap-2"
+          >
+            <ClipboardList className="h-4 w-4" />
+            <span className="hidden sm:inline">Listado de Carga</span>
+            <span className="sm:hidden">Carga</span>
+          </Button>
+        )}
+        {filterStatus !== "preparation" && filterStatus !== "delivery" && (
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={handleDescargarExcel}
+            disabled={generandoExcel}
+            className="gap-2 border-emerald-300 text-emerald-700 hover:bg-emerald-50"
+          >
+            {generandoExcel ? <Loader2 className="h-4 w-4 animate-spin" /> : <FileSpreadsheet className="h-4 w-4" />}
+            <span className="hidden sm:inline">Descargar Pedido</span>
+            <span className="sm:hidden">Excel</span>
+          </Button>
+        )}
+      </OrdersFilters>
 
 
       {loading ? (

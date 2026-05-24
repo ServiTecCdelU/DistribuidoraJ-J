@@ -37,6 +37,7 @@ interface OrdersFiltersProps {
   sellers: { id: string; name: string }[];
   transportistas?: { id: string; name: string }[];
   orders: Order[];
+  children?: React.ReactNode;
 }
 
 export function OrdersFilters({
@@ -54,6 +55,7 @@ export function OrdersFilters({
   sellers,
   transportistas,
   orders,
+  children,
 }: OrdersFiltersProps) {
   const [filtersOpen, setFiltersOpen] = useState(false);
 
@@ -83,8 +85,8 @@ export function OrdersFilters({
 
   return (
     <div className="space-y-3">
-      {/* Status tabs + buscador + filtro toggle */}
-      <div className="flex flex-col sm:flex-row gap-2">
+      {/* Fila 1: Status tabs + botones de acción */}
+      <div className="flex items-center gap-2">
         <div className="flex gap-2 overflow-x-auto pb-1 scrollbar-hide flex-1">
           <button
             onClick={() => setFilterStatus("all")}
@@ -126,41 +128,48 @@ export function OrdersFilters({
           })}
         </div>
 
-        <div className="flex gap-2 shrink-0">
-          {/* Buscador */}
-          <div className="relative flex-1 sm:w-56 sm:flex-none">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-            <Input
-              placeholder="Buscar cliente, vendedor..."
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              className="pl-9 pr-8"
-            />
-            {searchQuery && (
-              <button
-                onClick={() => setSearchQuery("")}
-                className="absolute right-3 top-1/2 -translate-y-1/2"
-              >
-                <X className="h-4 w-4 text-muted-foreground hover:text-foreground" />
-              </button>
-            )}
+        {/* Botones de acción (children) */}
+        {children && (
+          <div className="flex items-center gap-2 shrink-0">
+            {children}
           </div>
+        )}
+      </div>
 
-          {/* Botón toggle filtros */}
-          <Button
-            variant={filtersOpen ? "default" : "outline"}
-            size="icon"
-            className={`shrink-0 h-10 w-10 relative ${filtersOpen ? "bg-teal-600 hover:bg-teal-700 text-white" : ""}`}
-            onClick={() => setFiltersOpen(!filtersOpen)}
-          >
-            <SlidersHorizontal className="h-4 w-4" />
-            {activeFilterCount > 0 && !filtersOpen && (
-              <span className="absolute -top-1.5 -right-1.5 flex h-4 w-4 items-center justify-center rounded-full bg-red-500 text-[10px] font-bold text-white leading-none">
-                {activeFilterCount}
-              </span>
-            )}
-          </Button>
+      {/* Fila 2: Buscador + toggle filtros */}
+      <div className="flex gap-2">
+        <div className="relative flex-1">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+          <Input
+            placeholder="Buscar cliente, vendedor..."
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            className="pl-9 pr-8"
+          />
+          {searchQuery && (
+            <button
+              onClick={() => setSearchQuery("")}
+              className="absolute right-3 top-1/2 -translate-y-1/2"
+            >
+              <X className="h-4 w-4 text-muted-foreground hover:text-foreground" />
+            </button>
+          )}
         </div>
+
+        {/* Botón toggle filtros */}
+        <Button
+          variant={filtersOpen ? "default" : "outline"}
+          size="icon"
+          className={`shrink-0 h-10 w-10 relative ${filtersOpen ? "bg-teal-600 hover:bg-teal-700 text-white" : ""}`}
+          onClick={() => setFiltersOpen(!filtersOpen)}
+        >
+          <SlidersHorizontal className="h-4 w-4" />
+          {activeFilterCount > 0 && !filtersOpen && (
+            <span className="absolute -top-1.5 -right-1.5 flex h-4 w-4 items-center justify-center rounded-full bg-red-500 text-[10px] font-bold text-white leading-none">
+              {activeFilterCount}
+            </span>
+          )}
+        </Button>
       </div>
 
       {/* Panel de filtros colapsable */}
