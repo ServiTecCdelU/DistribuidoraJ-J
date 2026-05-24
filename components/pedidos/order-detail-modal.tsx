@@ -110,6 +110,9 @@ export function OrderDetailModal({
   }, [transportistasFiltered, selectedTransportista]);
   const [generando, setGenerando] = useState(false);
   const [downloading, setDownloading] = useState<"invoice" | "remito" | null>(null);
+  const [showProducts, setShowProducts] = useState(false);
+
+  useEffect(() => { setShowProducts(false); }, [order?.id]);
 
   if (!order) return null;
 
@@ -183,18 +186,13 @@ export function OrderDetailModal({
     <Dialog open={isOpen} onOpenChange={(open) => !open && onClose()}>
       <DialogContent className="sm:max-w-2xl w-[calc(100vw-1rem)] max-h-[92vh] flex flex-col p-0 gap-0 overflow-hidden">
         <DialogHeader className="p-4 sm:p-6 pb-3 sm:pb-4 border-b shrink-0">
-          <div className="flex items-center justify-between gap-2">
-            <DialogTitle className="text-base sm:text-xl flex items-center gap-2 sm:gap-3 min-w-0">
-              <span className="font-mono truncate">#{generateOrderNumber(order.createdAt)}</span>
-              <div className={`inline-flex items-center gap-1 sm:gap-1.5 px-2 py-0.5 rounded-full ${config.bgColor} border ${config.borderColor} shrink-0`}>
-                <div className={`w-1.5 h-1.5 rounded-full ${config.dotColor}`} />
-                <span className={`text-xs font-semibold ${config.color}`}>{config.label}</span>
-              </div>
-            </DialogTitle>
-            <Button variant="ghost" size="sm" onClick={onClose} className="h-8 w-8 p-0 rounded-full shrink-0">
-              <X className="h-4 w-4" />
-            </Button>
-          </div>
+          <DialogTitle className="text-base sm:text-xl flex items-center gap-2 sm:gap-3 min-w-0">
+            <span className="font-mono truncate">#{generateOrderNumber(order.createdAt)}</span>
+            <div className={`inline-flex items-center gap-1 sm:gap-1.5 px-2 py-0.5 rounded-full ${config.bgColor} border ${config.borderColor} shrink-0`}>
+              <div className={`w-1.5 h-1.5 rounded-full ${config.dotColor}`} />
+              <span className={`text-xs font-semibold ${config.color}`}>{config.label}</span>
+            </div>
+          </DialogTitle>
         </DialogHeader>
 
         <div className="flex-1 overflow-y-auto overscroll-contain">
@@ -317,100 +315,104 @@ export function OrderDetailModal({
 
           {/* Productos */}
           <div>
-            <Label className="text-xs text-gray-500 uppercase flex items-center gap-1.5 mb-2">
-              <Box className="h-3.5 w-3.5" />
-              Productos ({order.items.length})
-            </Label>
-            <div className="rounded-xl border border-gray-100 overflow-x-auto">
-              <table className="w-full min-w-[380px] text-xs">
-                <thead>
-                  <tr className="bg-gray-50 border-b border-gray-100 text-[11px] font-semibold text-gray-500 uppercase">
-                    <th className="px-3 py-2 text-left">Producto</th>
-                    <th className="px-2 py-2 text-right w-10">Cant.</th>
-                    <th className="px-2 py-2 text-right w-24">P. unit</th>
-                    <th className="px-2 py-2 text-right w-12">Dto.</th>
-                    <th className="px-3 py-2 text-right w-24">Subtotal</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {order.items.map((item, index) => {
-                    const dto = item.itemDiscount ?? 0;
-                    const precioConDto = item.price * (1 - dto / 100);
-                    const subtotal = precioConDto * item.quantity;
-                    return (
-                      <tr key={index} className="border-b border-gray-100 last:border-0 hover:bg-gray-50/50 transition-colors">
-                        <td className="px-3 py-2.5 font-medium text-gray-900 truncate max-w-0">
-                          {item.name}
-                        </td>
-                        <td className="px-2 py-2.5 text-right text-gray-700 font-mono">
-                          {item.quantity}
-                        </td>
-                        <td className="px-2 py-2.5 text-right text-gray-700">
-                          {dto > 0
-                            ? <span className="flex flex-col items-end"><s className="text-gray-400">{formatPrice(item.price)}</s><span>{formatPrice(precioConDto)}</span></span>
-                            : formatPrice(item.price)
-                          }
-                        </td>
-                        <td className="px-2 py-2.5 text-right">
-                          {dto > 0
-                            ? <span className="text-emerald-600 font-semibold">{dto}%</span>
-                            : <span className="text-gray-300">—</span>
-                          }
-                        </td>
-                        <td className="px-3 py-2.5 text-right font-semibold text-gray-900">
-                          {formatPrice(subtotal)}
-                        </td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-                <tfoot>
-                  {(() => {
-                    const subtotalBruto = order.items.reduce((acc, i) => acc + i.price * i.quantity, 0);
-                    const subtotalConItemDtos = order.items.reduce((acc, i) => {
-                      const base = i.price * i.quantity;
-                      const dto = i.itemDiscount ? (base * i.itemDiscount) / 100 : 0;
-                      return acc + base - dto;
-                    }, 0);
-                    const hayItemDtos = subtotalBruto > subtotalConItemDtos;
-                    const generalDiscount = (order as any).discount ?? 0;
-                    const generalDiscountType = (order as any).discountType;
-                    const generalDiscountAmt = generalDiscount > 0
-                      ? (generalDiscountType === "percent" ? (subtotalConItemDtos * generalDiscount) / 100 : generalDiscount)
-                      : 0;
-                    const total = Math.max(0, subtotalConItemDtos - generalDiscountAmt);
-                    return (
-                      <>
-                        {(hayItemDtos || generalDiscountAmt > 0) && (
-                          <tr className="border-t border-gray-100 bg-gray-50/50">
-                            <td colSpan={4} className="px-3 py-1.5 text-xs text-gray-500">Subtotal</td>
-                            <td className="px-3 py-1.5 text-right text-xs text-gray-500">{formatPrice(subtotalBruto)}</td>
-                          </tr>
-                        )}
-                        {hayItemDtos && (
-                          <tr className="bg-gray-50/50">
-                            <td colSpan={4} className="px-3 py-1 text-xs text-emerald-600">Dto. por producto</td>
-                            <td className="px-3 py-1 text-right text-xs text-emerald-600">-{formatPrice(subtotalBruto - subtotalConItemDtos)}</td>
-                          </tr>
-                        )}
-                        {generalDiscountAmt > 0 && (
-                          <tr className="bg-gray-50/50">
-                            <td colSpan={4} className="px-3 py-1 text-xs text-emerald-600">
-                              Dto. general {generalDiscountType === "percent" ? `(${generalDiscount}%)` : ""}
-                            </td>
-                            <td className="px-3 py-1 text-right text-xs text-emerald-600">-{formatPrice(generalDiscountAmt)}</td>
-                          </tr>
-                        )}
-                        <tr className="border-t border-gray-200 bg-gray-50">
-                          <td colSpan={4} className="px-3 py-2.5 text-sm font-semibold text-gray-700">Total</td>
-                          <td className="px-3 py-2.5 text-right font-bold text-gray-900">{formatPrice(total)}</td>
+            <button
+              onClick={() => setShowProducts((v) => !v)}
+              className="w-full flex items-center justify-between gap-2 py-2 text-left"
+            >
+              <Label className="text-xs text-gray-500 uppercase flex items-center gap-1.5 cursor-pointer">
+                <Box className="h-3.5 w-3.5" />
+                Productos ({order.items.length})
+              </Label>
+              <span className="text-xs text-primary font-medium shrink-0">
+                {showProducts ? "Ocultar" : "Ver productos"}
+              </span>
+            </button>
+            {showProducts && (
+              <div className="rounded-xl border border-gray-100 overflow-x-auto mt-1">
+                <table className="w-full min-w-[380px] text-xs">
+                  <thead>
+                    <tr className="bg-gray-50 border-b border-gray-100 text-[11px] font-semibold text-gray-500 uppercase">
+                      <th className="px-3 py-2 text-left">Producto</th>
+                      <th className="px-2 py-2 text-right w-10">Cant.</th>
+                      <th className="px-2 py-2 text-right w-24">P. unit</th>
+                      <th className="px-2 py-2 text-right w-12">Dto.</th>
+                      <th className="px-3 py-2 text-right w-24">Subtotal</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {order.items.map((item, index) => {
+                      const dto = item.itemDiscount ?? 0;
+                      const precioConDto = item.price * (1 - dto / 100);
+                      const subtotal = precioConDto * item.quantity;
+                      return (
+                        <tr key={index} className="border-b border-gray-100 last:border-0 hover:bg-gray-50/50 transition-colors">
+                          <td className="px-3 py-2.5 font-medium text-gray-900 truncate max-w-0">{item.name}</td>
+                          <td className="px-2 py-2.5 text-right text-gray-700 font-mono">{item.quantity}</td>
+                          <td className="px-2 py-2.5 text-right text-gray-700">
+                            {dto > 0
+                              ? <span className="flex flex-col items-end"><s className="text-gray-400">{formatPrice(item.price)}</s><span>{formatPrice(precioConDto)}</span></span>
+                              : formatPrice(item.price)
+                            }
+                          </td>
+                          <td className="px-2 py-2.5 text-right">
+                            {dto > 0
+                              ? <span className="text-emerald-600 font-semibold">{dto}%</span>
+                              : <span className="text-gray-300">—</span>
+                            }
+                          </td>
+                          <td className="px-3 py-2.5 text-right font-semibold text-gray-900">{formatPrice(subtotal)}</td>
                         </tr>
-                      </>
-                    );
-                  })()}
-                </tfoot>
-              </table>
-            </div>
+                      );
+                    })}
+                  </tbody>
+                  <tfoot>
+                    {(() => {
+                      const subtotalBruto = order.items.reduce((acc, i) => acc + i.price * i.quantity, 0);
+                      const subtotalConItemDtos = order.items.reduce((acc, i) => {
+                        const base = i.price * i.quantity;
+                        const dto = i.itemDiscount ? (base * i.itemDiscount) / 100 : 0;
+                        return acc + base - dto;
+                      }, 0);
+                      const hayItemDtos = subtotalBruto > subtotalConItemDtos;
+                      const generalDiscount = (order as any).discount ?? 0;
+                      const generalDiscountType = (order as any).discountType;
+                      const generalDiscountAmt = generalDiscount > 0
+                        ? (generalDiscountType === "percent" ? (subtotalConItemDtos * generalDiscount) / 100 : generalDiscount)
+                        : 0;
+                      const total = Math.max(0, subtotalConItemDtos - generalDiscountAmt);
+                      return (
+                        <>
+                          {(hayItemDtos || generalDiscountAmt > 0) && (
+                            <tr className="border-t border-gray-100 bg-gray-50/50">
+                              <td colSpan={4} className="px-3 py-1.5 text-xs text-gray-500">Subtotal</td>
+                              <td className="px-3 py-1.5 text-right text-xs text-gray-500">{formatPrice(subtotalBruto)}</td>
+                            </tr>
+                          )}
+                          {hayItemDtos && (
+                            <tr className="bg-gray-50/50">
+                              <td colSpan={4} className="px-3 py-1 text-xs text-emerald-600">Dto. por producto</td>
+                              <td className="px-3 py-1 text-right text-xs text-emerald-600">-{formatPrice(subtotalBruto - subtotalConItemDtos)}</td>
+                            </tr>
+                          )}
+                          {generalDiscountAmt > 0 && (
+                            <tr className="bg-gray-50/50">
+                              <td colSpan={4} className="px-3 py-1 text-xs text-emerald-600">
+                                Dto. general {generalDiscountType === "percent" ? `(${generalDiscount}%)` : ""}
+                              </td>
+                              <td className="px-3 py-1 text-right text-xs text-emerald-600">-{formatPrice(generalDiscountAmt)}</td>
+                            </tr>
+                          )}
+                          <tr className="border-t border-gray-200 bg-gray-50">
+                            <td colSpan={4} className="px-3 py-2.5 text-sm font-semibold text-gray-700">Total</td>
+                            <td className="px-3 py-2.5 text-right font-bold text-gray-900">{formatPrice(total)}</td>
+                          </tr>
+                        </>
+                      );
+                    })()}
+                  </tfoot>
+                </table>
+              </div>
+            )}
           </div>
 
           {/* Progreso */}
