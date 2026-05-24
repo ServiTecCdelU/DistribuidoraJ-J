@@ -85,12 +85,33 @@ export function OrdersFilters({
 
   return (
     <div className="space-y-3">
-      {/* Fila 1: Status tabs + botones de acción */}
-      <div className="flex flex-col sm:flex-row sm:items-center gap-2">
-        <div className="flex gap-1.5 sm:gap-2 overflow-x-auto pb-1 scrollbar-hide flex-1">
+      {/* Fila 1: Status tabs (desktop) / Select (mobile) + botones de acción */}
+      <div className="flex items-center gap-2">
+        {/* Mobile: Select de estado */}
+        <div className="sm:hidden flex-1">
+          <Select value={filterStatus} onValueChange={setFilterStatus}>
+            <SelectTrigger className="w-full">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">Todos ({getStatusCount("all")})</SelectItem>
+              {statusFlow.filter((s) => s !== "completed").map((status) => {
+                const config = statusConfig[status];
+                return (
+                  <SelectItem key={status} value={status}>
+                    {config.label} ({getStatusCount(status)})
+                  </SelectItem>
+                );
+              })}
+            </SelectContent>
+          </Select>
+        </div>
+
+        {/* Desktop: tabs de estado */}
+        <div className="hidden sm:flex gap-2 overflow-x-auto pb-1 scrollbar-hide flex-1">
           <button
             onClick={() => setFilterStatus("all")}
-            className={`flex items-center gap-1 sm:gap-2 px-2.5 sm:px-4 py-1.5 sm:py-2.5 rounded-lg sm:rounded-xl border-2 transition-all whitespace-nowrap min-w-fit text-xs sm:text-sm ${
+            className={`flex items-center gap-2 px-4 py-2.5 rounded-xl border-2 transition-all whitespace-nowrap min-w-fit text-sm ${
               filterStatus === "all"
                 ? "border-gray-900 bg-gray-900 text-white shadow-lg"
                 : "bg-white border-gray-200 hover:border-gray-300 text-gray-700"
@@ -109,13 +130,13 @@ export function OrdersFilters({
               <button
                 key={status}
                 onClick={() => setFilterStatus(status)}
-                className={`flex items-center gap-1 sm:gap-2 px-2.5 sm:px-4 py-1.5 sm:py-2.5 rounded-lg sm:rounded-xl border-2 transition-all whitespace-nowrap min-w-fit text-xs sm:text-sm ${
+                className={`flex items-center gap-2 px-4 py-2.5 rounded-xl border-2 transition-all whitespace-nowrap min-w-fit text-sm ${
                   isActive
                     ? `${config.bgColor} ${config.borderColor} ${config.color} shadow-md ring-2 ring-offset-1`
                     : "bg-white border-gray-200 hover:border-gray-300"
                 }`}
               >
-                <div className={`w-2 h-2 sm:w-2.5 sm:h-2.5 rounded-full ${config.dotColor}`} />
+                <div className={`w-2.5 h-2.5 rounded-full ${config.dotColor}`} />
                 <span className={`font-semibold ${isActive ? config.color : "text-gray-900"}`}>
                   {count}
                 </span>
@@ -129,7 +150,7 @@ export function OrdersFilters({
 
         {/* Botones de acción (children) */}
         {children && (
-          <div className="flex items-center gap-1.5 sm:gap-2 shrink-0 overflow-x-auto scrollbar-hide">
+          <div className="flex items-center gap-1.5 sm:gap-2 shrink-0">
             {children}
           </div>
         )}
