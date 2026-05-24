@@ -82,6 +82,8 @@ export default function PedidosPage() {
   const [clientSearch, setClientSearch] = useState("");
   const [showClientModal, setShowClientModal] = useState(false);
   const [processingPayment, setProcessingPayment] = useState(false);
+  // Todos los pedidos del cliente seleccionado para completar juntos
+  const [selectedClientOrders, setSelectedClientOrders] = useState<Order[]>([]);
 
   const [routeModalOpen, setRouteModalOpen] = useState(false);
   const [generandoExcel, setGenerandoExcel] = useState(false);
@@ -315,6 +317,11 @@ export default function PedidosPage() {
     if (newStatus === "completed") {
       const order = orders.find((o) => o.id === orderId);
       if (order) {
+        // Guardar todos los pedidos del mismo cliente para completarlos juntos
+        const clientOrders = orders.filter(
+          (o) => o.status !== "completed" && (o.clientName === order.clientName || (o.clientId && o.clientId === order.clientId))
+        );
+        setSelectedClientOrders(clientOrders.length > 0 ? clientOrders : [order]);
         setActiveModal(null);
         setDetailOrder(null);
         setSelectedOrder(order);
@@ -477,9 +484,16 @@ export default function PedidosPage() {
         transferencia_amount: transferencia > 0 ? transferencia : null,
       }).eq("id", sale.id).then(() => {}).catch(() => {});
 
-      const updated = await ordersApi.completeOrder(selectedOrder.id, sale.id);
+      // Completar TODOS los pedidos del cliente (incluido el principal y los adicionales)
+      const ordersToComplete = selectedClientOrders.length > 0 ? selectedClientOrders : [selectedOrder];
+      const completedOrders = await Promise.all(
+        ordersToComplete.map((o) => ordersApi.completeOrder(o.id, sale.id))
+      );
       setOrders((prev) =>
-        prev.map((o) => (o.id === selectedOrder.id ? updated : o)),
+        prev.map((o) => {
+          const completedVersion = completedOrders.find((c) => c.id === o.id);
+          return completedVersion ?? o;
+        }),
       );
 
       // Boleta — deshabilitado temporalmente
@@ -557,6 +571,9 @@ export default function PedidosPage() {
       setActiveModal("success");
       setSelectedOrder(null);
       setSelectedClientId("");
+      setSelectedClientOrders([]);
+      // Recargar desde servidor para asegurar que la lista quede limpia
+      loadData();
     } catch (error) {
       toast.error(
         error instanceof Error ? error.message : "Error al completar el pedido",
@@ -564,7 +581,7 @@ export default function PedidosPage() {
     } finally {
       setProcessingPayment(false);
     }
-  }, [selectedOrder, selectedClientId, clients]);
+  }, [selectedOrder, selectedClientId, clients, selectedClientOrders, loadData]);
 
   const handleGoToSale = useCallback(() => {
     if (lastSaleResult?.saleId) {
