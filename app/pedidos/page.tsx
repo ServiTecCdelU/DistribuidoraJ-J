@@ -612,7 +612,7 @@ export default function PedidosPage() {
   const handleDescargarExcel = useCallback(async () => {
     setGenerandoExcel(true);
     try {
-      const XLSX = await import("xlsx");
+      const XLSX = await import("xlsx-js-style");
 
       const activos = orders.filter((o) => o.status !== "completed");
 
@@ -735,18 +735,92 @@ export default function PedidosPage() {
 
       // Anchos de columna
       ws["!cols"] = [
-        { wch: 14 },  // Código
-        { wch: 40 },  // Descripción
-        { wch: 16 },  // Unidades pedidas
-        { wch: 16 },  // Stock disponible
-        { wch: 16 },  // Faltante
+        { wch: 14 },
+        { wch: 40 },
+        { wch: 16 },
+        { wch: 16 },
+        { wch: 16 },
       ];
 
-      // Código como texto (columna A)
-      for (let r = 2; r <= lastDataRow; r++) {
-        const ref = `A${r}`;
-        if (ws[ref]) ws[ref].t = "s";
+      const cols = ["A", "B", "C", "D", "E"];
+      const headerStyle = {
+        font: { bold: true, sz: 11, color: { rgb: "FFFFFF" } },
+        fill: { fgColor: { rgb: "1F4E78" } },
+        alignment: { horizontal: "center" as const, vertical: "center" as const },
+        border: {
+          top: { style: "thin" as const, color: { rgb: "D9D9D9" } },
+          bottom: { style: "thin" as const, color: { rgb: "D9D9D9" } },
+          left: { style: "thin" as const, color: { rgb: "D9D9D9" } },
+          right: { style: "thin" as const, color: { rgb: "D9D9D9" } },
+        },
+      };
+      const cellBorder = {
+        top: { style: "thin" as const, color: { rgb: "D9D9D9" } },
+        bottom: { style: "thin" as const, color: { rgb: "D9D9D9" } },
+        left: { style: "thin" as const, color: { rgb: "D9D9D9" } },
+        right: { style: "thin" as const, color: { rgb: "D9D9D9" } },
+      };
+
+      // Estilos encabezado
+      for (const col of cols) {
+        const ref = `${col}1`;
+        if (ws[ref]) ws[ref].s = headerStyle;
       }
+
+      // Estilos filas de datos
+      for (let r = 2; r <= lastDataRow; r++) {
+        const fila = filas[r - 2];
+        const isFaltante = fila && fila.faltante > 0;
+
+        for (const col of cols) {
+          const ref = `${col}${r}`;
+          if (!ws[ref]) continue;
+
+          if (col === "A") ws[ref].t = "s"; // código como texto
+
+          ws[ref].s = {
+            font: { sz: 10, ...(isFaltante ? { color: { rgb: "9C0006" }, bold: true } : {}) },
+            fill: isFaltante ? { fgColor: { rgb: "F8CBAD" } } : {},
+            alignment: col === "B" ? { vertical: "center" as const } : { horizontal: "center" as const, vertical: "center" as const },
+            border: cellBorder,
+          };
+        }
+
+        // Celda faltante en rojo fuerte
+        if (isFaltante) {
+          const ref = `E${r}`;
+          if (ws[ref]) {
+            ws[ref].s = {
+              font: { bold: true, sz: 10, color: { rgb: "FFFFFF" } },
+              fill: { fgColor: { rgb: "C00000" } },
+              alignment: { horizontal: "center" as const, vertical: "center" as const },
+              border: cellBorder,
+            };
+          }
+        }
+      }
+
+      // Estilo fila de totales
+      const totalRowIdx = wsData.length;
+      for (const col of cols) {
+        const ref = `${col}${totalRowIdx}`;
+        if (ws[ref]) {
+          ws[ref].s = {
+            font: { bold: true, sz: 11 },
+            fill: { fgColor: { rgb: "F2F2F2" } },
+            alignment: col === "B" ? {} : { horizontal: "center" as const },
+            border: {
+              top: { style: "medium" as const, color: { rgb: "1F4E78" } },
+              bottom: { style: "thin" as const, color: { rgb: "D9D9D9" } },
+              left: { style: "thin" as const, color: { rgb: "D9D9D9" } },
+              right: { style: "thin" as const, color: { rgb: "D9D9D9" } },
+            },
+          };
+        }
+      }
+
+      // Altura fila encabezado
+      ws["!rows"] = [{ hpt: 28 }];
 
       const wb = XLSX.utils.book_new();
       XLSX.utils.book_append_sheet(wb, ws, "Pedido");
