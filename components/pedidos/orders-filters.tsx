@@ -86,7 +86,7 @@ export function OrdersFilters({
   return (
     <div className="space-y-3">
       {/* Fila 1: Status tabs + botones de acción */}
-      <div className="flex items-center gap-2">
+      <div className="flex flex-col sm:flex-row sm:items-center gap-2">
         <div className="flex gap-1.5 sm:gap-2 overflow-x-auto pb-1 scrollbar-hide flex-1">
           <button
             onClick={() => setFilterStatus("all")}
@@ -129,7 +129,7 @@ export function OrdersFilters({
 
         {/* Botones de acción (children) */}
         {children && (
-          <div className="flex items-center gap-2 shrink-0">
+          <div className="flex items-center gap-1.5 sm:gap-2 shrink-0 overflow-x-auto scrollbar-hide">
             {children}
           </div>
         )}
