@@ -68,6 +68,7 @@ Hacer UN SOLO commit y push cuando el usuario confirme que todo funciona o cuand
 - No pedir permiso para leer archivos, instalar dependencias, crear ramas ni borrar código muerto.
 
 ### Ejecución y código
+- Leer solo los archivos estrictamente necesarios para la tarea. No explorar el proyecto si no hace falta.
 - Testear el código antes de declarar una tarea terminada. Si falla, corregir y volver a testear.
 - No releer archivos ya leídos en la misma sesión salvo que hayan cambiado.
 - Preferir edición quirúrgica sobre reescrituras completas. Cambiar solo lo necesario.
