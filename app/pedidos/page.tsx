@@ -1234,52 +1234,57 @@ export default function PedidosPage() {
                   <table className="w-full table-fixed">
                     <thead className="bg-muted/50 border-b">
                       <tr className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
-                        {user?.role === "admin" && <th className="pl-3 pr-1 py-2.5 w-8"></th>}
-                        <th className="px-3 py-2.5 text-left w-40">Cliente</th>
-                        <th className="px-3 py-2.5 text-left">Productos</th>
-                        <th className="px-3 py-2.5 text-left w-44 hidden md:table-cell">Dirección</th>
-                        <th className="px-3 py-2.5 text-left w-32">Estado</th>
-                        <th className="px-3 py-2.5 text-right w-16"></th>
+                        {user?.role === "admin" && <th className="pl-3 pr-1 py-2 w-8"></th>}
+                        <th className="px-3 py-2 text-left w-36">Cliente</th>
+                        <th className="px-3 py-2 text-left">Productos</th>
+                        <th className="px-3 py-2 text-left w-40 hidden md:table-cell">Dirección</th>
+                        <th className="px-3 py-2 text-left w-44">Estado</th>
                       </tr>
                     </thead>
                     <tbody>
-                      <tr className="hover:bg-muted/30 transition-colors text-sm border-b border-border/50 last:border-0">
+                      <tr
+                        className="hover:bg-muted/30 transition-colors text-sm cursor-pointer"
+                        onClick={onView}
+                      >
                         {user?.role === "admin" && (
-                          <td className="pl-3 pr-1 py-3 w-8">
+                          <td className="pl-3 pr-1 py-2.5 w-8">
                             <input
                               type="checkbox"
                               checked={isGroupSelected}
                               onChange={() => toggleGroup(clientOrders)}
+                              onClick={(e) => e.stopPropagation()}
                               className="h-4 w-4 rounded border-gray-300 accent-teal-600 cursor-pointer"
                             />
                           </td>
                         )}
-                        <td className="px-3 py-3">
+                        <td className="px-3 py-2.5">
                           <p className="text-xs font-semibold text-foreground truncate">{client}</p>
                           {clientOrders.length > 1 && (
                             <p className="text-[10px] text-muted-foreground">{clientOrders.length} pedidos</p>
                           )}
                         </td>
-                        <td className="px-3 py-3 max-w-[280px]">
+                        <td className="px-3 py-2.5">
                           <p className="text-xs text-foreground truncate" title={productosResumen}>{productosResumen}</p>
                           <p className="text-[10px] text-muted-foreground mt-0.5">
                             {mergedItems.length} {mergedItems.length === 1 ? "producto" : "productos"}
                           </p>
                         </td>
-                        <td className="px-3 py-3 hidden md:table-cell">
-                          <p className="text-xs text-muted-foreground truncate max-w-[180px]">
+                        <td className="px-3 py-2.5 hidden md:table-cell">
+                          <p className="text-xs text-muted-foreground truncate max-w-[160px]">
                             {displayOrder.address && displayOrder.address !== "Retiro en local"
                               ? displayOrder.address
                               : <span className="italic">Retiro en local</span>}
                           </p>
                           {displayOrder.city && <p className="text-[10px] text-muted-foreground/70">{displayOrder.city}</p>}
                         </td>
-                        <td className="px-3 py-3 whitespace-nowrap"><StatusBadge /></td>
-                        <td className="px-3 py-3 text-right">
-                          <Button variant="ghost" size="sm" onClick={onView} className="h-8 text-xs gap-1.5 text-primary hover:bg-primary/5">
-                            <Eye className="h-3.5 w-3.5" />
-                            <span className="hidden sm:inline">Ver</span>
-                          </Button>
+                        <td className="px-3 py-2.5">
+                          <div className="flex items-center gap-2">
+                            <StatusBadge />
+                            <Button variant="ghost" size="sm" onClick={(e) => { e.stopPropagation(); onView(); }} className="h-7 text-xs gap-1 text-primary hover:bg-primary/5 ml-auto">
+                              <Eye className="h-3.5 w-3.5" />
+                              Ver
+                            </Button>
+                          </div>
                         </td>
                       </tr>
                     </tbody>
@@ -1287,10 +1292,10 @@ export default function PedidosPage() {
                 </div>
 
                 {/* Mobile: una card por cliente */}
-                <div className="lg:hidden mb-2">
+                <div className="lg:hidden mb-1.5">
                   <Card className="overflow-hidden">
                     <div
-                      className="flex items-start gap-2 px-3 py-3 cursor-pointer hover:bg-muted/20 transition-colors"
+                      className="flex items-center gap-2 px-3 py-2 cursor-pointer hover:bg-muted/20 transition-colors"
                       onClick={onView}
                     >
                       {user?.role === "admin" && (
@@ -1299,20 +1304,19 @@ export default function PedidosPage() {
                           checked={isGroupSelected}
                           onChange={() => toggleGroup(clientOrders)}
                           onClick={(e) => e.stopPropagation()}
-                          className="h-4 w-4 mt-0.5 rounded border-gray-300 accent-teal-600 cursor-pointer shrink-0"
+                          className="h-4 w-4 rounded border-gray-300 accent-teal-600 cursor-pointer shrink-0"
                         />
                       )}
-                      <div className="flex-1 min-w-0 space-y-1">
-                        <div className="flex items-center gap-1.5">
-                          <User className="h-3.5 w-3.5 text-primary shrink-0" />
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-1 mb-0.5">
                           <p className="text-xs font-semibold text-foreground truncate">{client}</p>
                           {clientOrders.length > 1 && (
-                            <span className="text-[10px] text-muted-foreground shrink-0">({clientOrders.length} pedidos)</span>
+                            <span className="text-[10px] text-muted-foreground shrink-0">({clientOrders.length})</span>
                           )}
                         </div>
-                        <p className="text-xs text-foreground truncate" title={productosResumen}>{productosResumen}</p>
+                        <p className="text-[11px] text-muted-foreground truncate">{productosResumen}</p>
                         {displayOrder.address && displayOrder.address !== "Retiro en local" && (
-                          <p className="text-[10px] text-muted-foreground truncate">{displayOrder.address}</p>
+                          <p className="text-[10px] text-muted-foreground/70 truncate">{displayOrder.address}</p>
                         )}
                       </div>
                       <div className="flex items-center gap-1.5 shrink-0">
@@ -1320,7 +1324,7 @@ export default function PedidosPage() {
                         <Button
                           variant="ghost" size="icon"
                           onClick={(e) => { e.stopPropagation(); onView(); }}
-                          className="h-7 w-7 text-primary hover:bg-primary/5"
+                          className="h-6 w-6 text-primary hover:bg-primary/5"
                         >
                           <Eye className="h-3.5 w-3.5" />
                         </Button>
