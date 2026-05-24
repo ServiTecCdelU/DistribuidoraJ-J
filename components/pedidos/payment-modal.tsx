@@ -11,7 +11,6 @@ import {
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import {
   Select,
   SelectContent,
@@ -21,7 +20,7 @@ import {
 } from "@/components/ui/select";
 import { formatPrice } from "@/lib/utils/format";
 import type { Order, Client } from "@/lib/types";
-import { Banknote, CreditCard, UserPlus, Loader2, Wallet, ArrowLeftRight, AlertTriangle, PackageX, ChevronDown, ChevronUp, ShieldAlert, Package, Upload, ImageIcon, X as XIcon } from "lucide-react";
+import { Banknote, CreditCard, UserPlus, Loader2, ArrowLeftRight, AlertTriangle, PackageX, ChevronDown, ChevronUp, ShieldAlert, Package, Upload, ImageIcon, X as XIcon, ChevronDown as ChevronDownIcon } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 const generateOrderNumber = (createdAt: Date | string, index: number) => {
@@ -78,13 +77,7 @@ interface PaymentModalProps {
   setClientSearch: (value: string) => void;
   selectedClientId: string;
   setSelectedClientId: (value: string) => void;
-  paymentType: "cash" | "credit" | "split";
-  setPaymentType: (value: "cash" | "credit" | "split") => void;
-  paymentMethod: "efectivo" | "transferencia";
-  setPaymentMethod: (value: "efectivo" | "transferencia") => void;
-  cashAmount: string;
-  setCashAmount: (value: string) => void;
-  onComplete: (adjustments: ItemAdjustment[], comprobanteFile?: File) => void;
+  onComplete: (adjustments: ItemAdjustment[], payments: { efectivo: number; transferencia: number; cuentaCorriente: number }, comprobanteFile?: File) => void;
   processing: boolean;
   onNewClient: () => void;
 }
@@ -98,24 +91,26 @@ export function PaymentModal({
   setClientSearch,
   selectedClientId,
   setSelectedClientId,
-  paymentType,
-  setPaymentType,
-  paymentMethod,
-  setPaymentMethod,
-  cashAmount,
-  setCashAmount,
   onComplete,
   processing,
   onNewClient,
 }: PaymentModalProps) {
   const [adjustments, setAdjustments] = useState<Record<string, ItemAdj>>({});
   const [adjustOpen, setAdjustOpen] = useState(false);
+
+  // Nuevos estados de pago multi-método
+  const [efectivoAmount, setEfectivoAmount] = useState("");
+  const [transferenciaAmount, setTransferenciaAmount] = useState("");
+  const [cuentaCorrienteAmount, setCuentaCorrienteAmount] = useState("");
   const [comprobanteFile, setComprobanteFile] = useState<File | null>(null);
   const [comprobantePreview, setComprobantePreview] = useState<string>("");
 
   useEffect(() => {
     setAdjustments({});
     setAdjustOpen(false);
+    setEfectivoAmount("");
+    setTransferenciaAmount("");
+    setCuentaCorrienteAmount("");
     setComprobanteFile(null);
     setComprobantePreview("");
   }, [order?.id]);
@@ -170,9 +165,14 @@ export function PaymentModal({
 
   const originalTotal = calculateOrderTotal(order);
   const total = Math.max(0, originalTotal - adjustmentDeduction);
-  const cashAmountNum = Number(cashAmount || 0);
-  const remainingAmount = Math.max(total - cashAmountNum, 0);
   const hasAdjustments = adjustmentsList.length > 0;
+
+  // Montos ingresados
+  const efectivo = Number(efectivoAmount || 0);
+  const transferencia = Number(transferenciaAmount || 0);
+  const cuentaCorriente = Number(cuentaCorrienteAmount || 0);
+  const ingresado = efectivo + transferencia + cuentaCorriente;
+  const restante = Math.max(0, total - ingresado);
 
   const filteredClients = clients.filter((client) => {
     const query = clientSearch.trim().toLowerCase();
@@ -184,13 +184,11 @@ export function PaymentModal({
   });
 
   const isValid = () => {
-    // Si todo es rotura, permitir confirmar para registrar la pérdida
     const soloRoturas = adjustmentsList.length > 0 && adjustmentsList.every(a => a.type === "rotura");
     if (total <= 0 && !soloRoturas) return false;
     if (total <= 0 && soloRoturas) return true;
-    if (paymentType === "cash") return true;
-    if ((paymentType === "credit" || paymentType === "split") && !selectedClientId && !order.clientId) return false;
-    if (paymentType === "split") return cashAmountNum > 0 && cashAmountNum < total;
+    if (restante !== 0) return false;
+    if (cuentaCorriente > 0 && !selectedClientId && !order.clientId) return false;
     return true;
   };
 
@@ -208,6 +206,24 @@ export function PaymentModal({
   const roturaCount = adjustmentsList.filter(a => a.type === "rotura").length;
   const faltanteCount = adjustmentsList.filter(a => a.type === "faltante").length;
   const noQuiereCount = adjustmentsList.filter(a => a.type === "no_quiere").length;
+
+  // Botón "↓ resto" — completa el campo con el restante calculado sin ese campo
+  const fillResto = (field: "efectivo" | "transferencia" | "cuentaCorriente") => {
+    const others = {
+      efectivo: efectivo,
+      transferencia: transferencia,
+      cuentaCorriente: cuentaCorriente,
+    };
+    // Excluir el campo actual del cálculo de "otros"
+    const otherSum = Object.entries(others)
+      .filter(([k]) => k !== field)
+      .reduce((acc, [, v]) => acc + v, 0);
+    const resto = Math.max(0, total - otherSum);
+    const rounded = Math.round(resto * 100) / 100;
+    if (field === "efectivo") setEfectivoAmount(rounded > 0 ? String(rounded) : "");
+    else if (field === "transferencia") setTransferenciaAmount(rounded > 0 ? String(rounded) : "");
+    else setCuentaCorrienteAmount(rounded > 0 ? String(rounded) : "");
+  };
 
   return (
     <Dialog open={isOpen} onOpenChange={(open) => !open && onClose()}>
@@ -232,70 +248,147 @@ export function PaymentModal({
             </div>
           </div>
 
-          {/* Tipo de pago — 3 columnas compactas */}
-          <RadioGroup
-            value={paymentType}
-            onValueChange={(v) => setPaymentType(v as "cash" | "credit" | "split")}
-            className="grid grid-cols-3 gap-2"
-          >
-            <label className={cn(
-              "flex flex-col items-center gap-1.5 p-3 rounded-xl border-2 cursor-pointer transition-all text-center",
-              paymentType === "cash" ? "border-green-500 bg-green-50/50" : "border-gray-200 hover:border-gray-300 bg-white"
-            )}>
-              <RadioGroupItem value="cash" className="sr-only" />
-              <div className={cn("h-9 w-9 rounded-lg flex items-center justify-center", paymentType === "cash" ? "bg-green-100" : "bg-gray-100")}>
-                <Banknote className={cn("h-4 w-4", paymentType === "cash" ? "text-green-600" : "text-gray-500")} />
-              </div>
-              <span className={cn("text-xs font-semibold", paymentType === "cash" ? "text-green-900" : "text-gray-700")}>Efectivo</span>
-            </label>
+          {/* ── Sección de pagos multi-método ── */}
+          <div className="space-y-3 p-4 rounded-xl border border-gray-200 bg-gray-50/50">
+            <div className="flex items-center justify-between">
+              <p className="text-sm font-semibold text-gray-700">Forma de pago</p>
+              <span className={cn(
+                "text-sm font-bold px-2.5 py-0.5 rounded-full",
+                restante > 0 ? "bg-red-100 text-red-700" : ingresado > 0 ? "bg-green-100 text-green-700" : "bg-gray-100 text-gray-500"
+              )}>
+                {restante > 0 ? `Restante: ${formatPrice(restante)}` : ingresado > 0 ? "Cubierto" : "Sin ingresar"}
+              </span>
+            </div>
 
-            <label className={cn(
-              "flex flex-col items-center gap-1.5 p-3 rounded-xl border-2 cursor-pointer transition-all text-center",
-              paymentType === "credit" ? "border-blue-500 bg-blue-50/50" : "border-gray-200 hover:border-gray-300 bg-white"
-            )}>
-              <RadioGroupItem value="credit" className="sr-only" />
-              <div className={cn("h-9 w-9 rounded-lg flex items-center justify-center", paymentType === "credit" ? "bg-blue-100" : "bg-gray-100")}>
-                <CreditCard className={cn("h-4 w-4", paymentType === "credit" ? "text-blue-600" : "text-gray-500")} />
+            {/* Efectivo */}
+            <div className="space-y-1.5">
+              <Label className="text-xs font-semibold text-gray-600 flex items-center gap-1.5">
+                <Banknote className="h-3.5 w-3.5 text-green-600" /> Efectivo
+              </Label>
+              <div className="flex gap-2">
+                <div className="relative flex-1">
+                  <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 text-sm">$</span>
+                  <Input
+                    type="number"
+                    min="0"
+                    value={efectivoAmount}
+                    onChange={(e) => setEfectivoAmount(e.target.value)}
+                    placeholder="0"
+                    className="pl-7 bg-white"
+                  />
+                </div>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  className="h-9 px-2.5 text-xs gap-1 shrink-0 border-green-300 text-green-700 hover:bg-green-50"
+                  onClick={() => fillResto("efectivo")}
+                  title="Completar con el monto restante"
+                >
+                  <ChevronDownIcon className="h-3.5 w-3.5" />
+                  Resto
+                </Button>
               </div>
-              <span className={cn("text-xs font-semibold", paymentType === "credit" ? "text-blue-900" : "text-gray-700")}>Cta. Cte.</span>
-            </label>
+            </div>
 
-            <label className={cn(
-              "flex flex-col items-center gap-1.5 p-3 rounded-xl border-2 cursor-pointer transition-all text-center",
-              paymentType === "split" ? "border-amber-500 bg-amber-50/50" : "border-gray-200 hover:border-gray-300 bg-white"
-            )}>
-              <RadioGroupItem value="split" className="sr-only" />
-              <div className={cn("h-9 w-9 rounded-lg flex items-center justify-center", paymentType === "split" ? "bg-amber-100" : "bg-gray-100")}>
-                <Wallet className={cn("h-4 w-4", paymentType === "split" ? "text-amber-600" : "text-gray-500")} />
+            {/* Transferencia */}
+            <div className="space-y-1.5">
+              <Label className="text-xs font-semibold text-gray-600 flex items-center gap-1.5">
+                <ArrowLeftRight className="h-3.5 w-3.5 text-violet-600" /> Transferencia
+              </Label>
+              <div className="flex gap-2">
+                <div className="relative flex-1">
+                  <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 text-sm">$</span>
+                  <Input
+                    type="number"
+                    min="0"
+                    value={transferenciaAmount}
+                    onChange={(e) => setTransferenciaAmount(e.target.value)}
+                    placeholder="0"
+                    className="pl-7 bg-white"
+                  />
+                </div>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  className="h-9 px-2.5 text-xs gap-1 shrink-0 border-violet-300 text-violet-700 hover:bg-violet-50"
+                  onClick={() => fillResto("transferencia")}
+                  title="Completar con el monto restante"
+                >
+                  <ChevronDownIcon className="h-3.5 w-3.5" />
+                  Resto
+                </Button>
               </div>
-              <span className={cn("text-xs font-semibold", paymentType === "split" ? "text-amber-900" : "text-gray-700")}>Parcial</span>
-            </label>
-          </RadioGroup>
+            </div>
 
-          {/* Efectivo / Transferencia */}
-          {(paymentType === "cash" || paymentType === "split") && (
-            <div className="grid grid-cols-2 gap-2">
-              <Button type="button" size="sm" variant={paymentMethod === "efectivo" ? "default" : "outline"}
-                className={cn("h-9 text-sm gap-2", paymentMethod === "efectivo" && "bg-emerald-600 hover:bg-emerald-700")}
-                onClick={() => setPaymentMethod("efectivo")}>
-                <Banknote className="h-4 w-4" /> Efectivo
-              </Button>
-              <Button type="button" size="sm" variant={paymentMethod === "transferencia" ? "default" : "outline"}
-                className={cn("h-9 text-sm gap-2", paymentMethod === "transferencia" && "bg-violet-600 hover:bg-violet-700")}
-                onClick={() => setPaymentMethod("transferencia")}>
-                <ArrowLeftRight className="h-4 w-4" /> Transferencia
-              </Button>
+            {/* Cuenta Corriente */}
+            <div className="space-y-1.5">
+              <Label className="text-xs font-semibold text-gray-600 flex items-center gap-1.5">
+                <CreditCard className="h-3.5 w-3.5 text-blue-600" /> Cuenta Corriente
+              </Label>
+              <div className="flex gap-2">
+                <div className="relative flex-1">
+                  <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 text-sm">$</span>
+                  <Input
+                    type="number"
+                    min="0"
+                    value={cuentaCorrienteAmount}
+                    onChange={(e) => setCuentaCorrienteAmount(e.target.value)}
+                    placeholder="0"
+                    className="pl-7 bg-white"
+                  />
+                </div>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  className="h-9 px-2.5 text-xs gap-1 shrink-0 border-blue-300 text-blue-700 hover:bg-blue-50"
+                  onClick={() => fillResto("cuentaCorriente")}
+                  title="Completar con el monto restante"
+                >
+                  <ChevronDownIcon className="h-3.5 w-3.5" />
+                  Resto
+                </Button>
+              </div>
+            </div>
+          </div>
+
+          {/* Comprobante de transferencia */}
+          {transferencia > 0 && (
+            <div className="space-y-2 px-1">
+              <Label className="text-xs font-semibold text-violet-800 flex items-center gap-1.5">
+                <Upload className="h-3.5 w-3.5" /> Comprobante de transferencia
+              </Label>
+              {comprobantePreview ? (
+                <div className="relative rounded-lg overflow-hidden border border-violet-200">
+                  <img src={comprobantePreview} alt="Comprobante" className="w-full max-h-48 object-contain bg-gray-50" />
+                  <button
+                    type="button"
+                    onClick={() => { setComprobanteFile(null); setComprobantePreview(""); }}
+                    className="absolute top-1.5 right-1.5 h-6 w-6 rounded-full bg-black/60 flex items-center justify-center hover:bg-black/80"
+                  >
+                    <XIcon className="h-3.5 w-3.5 text-white" />
+                  </button>
+                </div>
+              ) : (
+                <label className="flex flex-col items-center gap-1.5 p-3 border-2 border-dashed border-violet-300 rounded-xl cursor-pointer bg-white hover:bg-violet-50 transition-colors">
+                  <ImageIcon className="h-6 w-6 text-violet-400" />
+                  <span className="text-xs text-violet-600 font-medium">Tocá para subir la foto del comprobante</span>
+                  <input type="file" accept="image/*" capture="environment" onChange={handleComprobanteChange} className="sr-only" />
+                </label>
+              )}
             </div>
           )}
 
-          {/* Cliente para cta cte / split */}
-          {(paymentType === "credit" || paymentType === "split") && (
-            <div className="space-y-3 p-3 bg-gray-50 rounded-xl border border-gray-200">
-              <Label className="text-sm font-semibold flex items-center gap-2">
-                <CreditCard className="h-4 w-4" /> Cliente
+          {/* Cliente para cuenta corriente */}
+          {cuentaCorriente > 0 && (
+            <div className="space-y-3 p-3 bg-blue-50 rounded-xl border border-blue-200">
+              <Label className="text-sm font-semibold flex items-center gap-2 text-blue-900">
+                <CreditCard className="h-4 w-4" /> Cliente (Cuenta Corriente)
               </Label>
               {order.clientId ? (
-                <div className="flex items-center gap-2 px-3 py-2 rounded-lg bg-blue-50 border border-blue-200">
+                <div className="flex items-center gap-2 px-3 py-2 rounded-lg bg-white border border-blue-200">
                   <CreditCard className="h-4 w-4 text-blue-500 shrink-0" />
                   <span className="text-sm font-medium text-blue-900">
                     {order.clientName || clients.find(c => c.id === order.clientId)?.name || "Cliente del pedido"}
@@ -322,63 +415,8 @@ export function PaymentModal({
                       <UserPlus className="h-4 w-4 mr-2" /> Nuevo
                     </Button>
                   </div>
-                  {!selectedClientId && <p className="text-xs text-amber-600">Selecciona un cliente para continuar</p>}
+                  {!selectedClientId && <p className="text-xs text-amber-600">Seleccioná un cliente para continuar</p>}
                 </>
-              )}
-            </div>
-          )}
-
-          {/* Split amount */}
-          {paymentType === "split" && (
-            <div className="space-y-3 p-3 bg-amber-50 rounded-xl border border-amber-200">
-              {/* Monto efectivo */}
-              <Label htmlFor="cashAmount" className="text-sm font-semibold text-amber-900 flex items-center gap-1.5">
-                <Banknote className="h-3.5 w-3.5" /> Monto en efectivo
-              </Label>
-              <div className="relative">
-                <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500 font-semibold">$</span>
-                <Input id="cashAmount" type="number" min="1" max={total - 1} value={cashAmount}
-                  onChange={(e) => setCashAmount(e.target.value)} placeholder="0"
-                  className="pl-8 bg-white border-amber-300 focus:border-amber-500" />
-              </div>
-
-              {/* Desglose */}
-              <div className="rounded-lg bg-white border border-amber-200 divide-y divide-amber-100">
-                <div className="flex justify-between items-center px-3 py-2 text-sm">
-                  <span className="flex items-center gap-1.5 text-amber-700"><Banknote className="h-3.5 w-3.5" /> Efectivo</span>
-                  <span className="font-semibold text-amber-900">{formatPrice(cashAmountNum)}</span>
-                </div>
-                <div className="flex justify-between items-center px-3 py-2 text-sm">
-                  <span className="flex items-center gap-1.5 text-violet-700"><ArrowLeftRight className="h-3.5 w-3.5" /> Transferencia</span>
-                  <span className="font-semibold text-violet-900">{formatPrice(remainingAmount)}</span>
-                </div>
-              </div>
-
-              {/* Comprobante de transferencia */}
-              {remainingAmount > 0 && (
-                <div className="space-y-2">
-                  <Label className="text-xs font-semibold text-violet-800 flex items-center gap-1.5">
-                    <Upload className="h-3.5 w-3.5" /> Comprobante de transferencia
-                  </Label>
-                  {comprobantePreview ? (
-                    <div className="relative rounded-lg overflow-hidden border border-violet-200">
-                      <img src={comprobantePreview} alt="Comprobante" className="w-full max-h-48 object-contain bg-gray-50" />
-                      <button
-                        type="button"
-                        onClick={() => { setComprobanteFile(null); setComprobantePreview(""); }}
-                        className="absolute top-1.5 right-1.5 h-6 w-6 rounded-full bg-black/60 flex items-center justify-center hover:bg-black/80"
-                      >
-                        <XIcon className="h-3.5 w-3.5 text-white" />
-                      </button>
-                    </div>
-                  ) : (
-                    <label className="flex flex-col items-center gap-1.5 p-3 border-2 border-dashed border-violet-300 rounded-xl cursor-pointer bg-white hover:bg-violet-50 transition-colors">
-                      <ImageIcon className="h-6 w-6 text-violet-400" />
-                      <span className="text-xs text-violet-600 font-medium">Tocá para subir la foto del comprobante</span>
-                      <input type="file" accept="image/*" capture="environment" onChange={handleComprobanteChange} className="sr-only" />
-                    </label>
-                  )}
-                </div>
               )}
             </div>
           )}
@@ -522,8 +560,11 @@ export function PaymentModal({
             <Button variant="outline" className="flex-1 h-11" onClick={onClose} disabled={processing}>
               Cancelar
             </Button>
-            <Button className="flex-1 h-11 font-semibold" onClick={() => onComplete(adjustmentsList, comprobanteFile ?? undefined)}
-              disabled={processing || !isValid()}>
+            <Button
+              className="flex-1 h-11 font-semibold"
+              onClick={() => onComplete(adjustmentsList, { efectivo, transferencia, cuentaCorriente }, comprobanteFile ?? undefined)}
+              disabled={processing || !isValid()}
+            >
               {processing ? (
                 <><Loader2 className="h-4 w-4 mr-2 animate-spin" />Procesando...</>
               ) : "Confirmar Pago"}

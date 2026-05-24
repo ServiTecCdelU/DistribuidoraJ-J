@@ -25,6 +25,7 @@ interface SuccessModalProps {
     discountLabel?: string;
     saleId: string;
     client?: Client;
+    paymentLabel?: string;
   } | null;
   onGoToSale: () => void;
 }
@@ -37,12 +38,15 @@ export function SuccessModal({
 }: SuccessModalProps) {
   if (!saleResult) return null;
 
-  const getPaymentLabel = (type: string, method?: string) => {
+  const getPaymentLabel = (type: string, method?: string, paymentLabel?: string) => {
+    if (paymentLabel) return paymentLabel;
     switch (type) {
       case "cash":
         return method === "transferencia" ? "Transferencia" : "Efectivo";
       case "credit":
         return "Cuenta Corriente";
+      case "mixed":
+        return "Pago Mixto";
       case "split":
         return "Pago Parcial";
       default:
@@ -56,6 +60,8 @@ export function SuccessModal({
         return "bg-green-100 text-green-700 border-green-200";
       case "credit":
         return "bg-blue-100 text-blue-700 border-blue-200";
+      case "mixed":
+        return "bg-purple-100 text-purple-700 border-purple-200";
       case "split":
         return "bg-amber-100 text-amber-700 border-amber-200";
       default:
@@ -118,7 +124,7 @@ export function SuccessModal({
                 variant="outline"
                 className={`${getPaymentColor(saleResult.paymentType)} font-semibold`}
               >
-                {getPaymentLabel(saleResult.paymentType, saleResult.paymentMethod)}
+                {getPaymentLabel(saleResult.paymentType, saleResult.paymentMethod, saleResult.paymentLabel)}
               </Badge>
             </div>
 

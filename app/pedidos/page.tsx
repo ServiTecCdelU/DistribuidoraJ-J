@@ -8,7 +8,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { DataTableSkeleton } from "@/components/ui/data-table-skeleton";
 import { Input } from "@/components/ui/input";
 import { ClientModal } from "@/components/clientes/client-modal";
-import { ordersApi, salesApi, clientsApi, paymentsApi, sellersApi, productsApi } from "@/lib/api";
+import { ordersApi, salesApi, clientsApi, sellersApi, productsApi } from "@/lib/api";
 import type { Order, OrderStatus, Client, Seller } from "@/lib/types";
 import { Package, Search, User, Filter, X, Loader2, Navigation, ClipboardList, ShoppingCart, FileSpreadsheet, Eye } from "lucide-react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
@@ -78,11 +78,6 @@ export default function PedidosPage() {
   const [selectedOrder, setSelectedOrder] = useState<Order | null>(null);
 
   // Payment state
-  const [paymentType, setPaymentType] = useState<"cash" | "credit" | "split">(
-    "cash",
-  );
-  const [paymentMethod, setPaymentMethod] = useState<"efectivo" | "transferencia">("efectivo");
-  const [cashAmount, setCashAmount] = useState("");
   const [selectedClientId, setSelectedClientId] = useState<string>("");
   const [clientSearch, setClientSearch] = useState("");
   const [showClientModal, setShowClientModal] = useState(false);
@@ -118,6 +113,7 @@ export default function PedidosPage() {
     discountLabel?: string;
     saleId: string;
     client?: Client;
+    paymentLabel?: string;
   } | null>(null);
 
   const loadData = useCallback(async (isMounted?: () => boolean) => {
@@ -307,10 +303,8 @@ export default function PedidosPage() {
   useEffect(() => {
     if (selectedOrder?.clientId) {
       setSelectedClientId(selectedOrder.clientId);
-      setPaymentType("cash");
     } else if (selectedOrder) {
       setSelectedClientId("");
-      setPaymentType("cash");
     }
   }, [selectedOrder]);
 
@@ -340,7 +334,11 @@ export default function PedidosPage() {
     }
   }, [orders, detailOrder]);
 
-  const handleCompleteOrder = useCallback(async (adjustments: ItemAdjustment[] = [], comprobanteFile?: File) => {
+  const handleCompleteOrder = useCallback(async (
+    adjustments: ItemAdjustment[] = [],
+    payments: { efectivo: number; transferencia: number; cuentaCorriente: number } = { efectivo: 0, transferencia: 0, cuentaCorriente: 0 },
+    comprobanteFile?: File
+  ) => {
     if (!selectedOrder) return;
     setProcessingPayment(true);
 
@@ -410,9 +408,6 @@ export default function PedidosPage() {
         toast.success("Pedido cerrado — roturas registradas como pérdida");
         setActiveModal(null);
         setSelectedOrder(null);
-        setPaymentType("cash");
-        setPaymentMethod("efectivo");
-        setCashAmount("");
         setSelectedClientId("");
         setProcessingPayment(false);
         return;
@@ -429,25 +424,22 @@ export default function PedidosPage() {
         ? Math.max(0, itemsTotal - ((selectedOrder as any).discountType === "percent" ? (itemsTotal * disc) / 100 : disc))
         : itemsTotal;
 
+      const { efectivo, transferencia, cuentaCorriente } = payments;
+      const cashTotal = efectivo + transferencia;
+      const hasCuentaCorriente = cuentaCorriente > 0;
+
+      const salePaymentType: "cash" | "credit" | "mixed" =
+        hasCuentaCorriente && cashTotal > 0 ? "mixed" :
+        hasCuentaCorriente ? "credit" : "cash";
+
+      const primaryMethod: "efectivo" | "transferencia" =
+        transferencia > 0 && efectivo === 0 ? "transferencia" : "efectivo";
+
       const resolvedClientId = selectedClientId || selectedOrder.clientId;
       const client = clients.find((c) => c.id === resolvedClientId);
 
-      if (
-        (paymentType === "credit" || paymentType === "split") &&
-        !resolvedClientId
-      ) {
+      if (hasCuentaCorriente && !resolvedClientId) {
         throw new Error("Debe seleccionar un cliente para cuenta corriente");
-      }
-
-      const normalizedCashAmount =
-        paymentType === "split" ? Number(cashAmount || 0) : 0;
-      if (
-        paymentType === "split" &&
-        (normalizedCashAmount <= 0 || normalizedCashAmount >= total)
-      ) {
-        throw new Error(
-          "El pago en efectivo debe ser mayor a 0 y menor al total",
-        );
       }
 
       const sale = await salesApi.processSale({
@@ -472,8 +464,10 @@ export default function PedidosPage() {
         })),
         discount: (selectedOrder as any).discount ?? undefined,
         discountType: (selectedOrder as any).discountType ?? undefined,
-        paymentType: paymentType === "split" ? "credit" : paymentType,
-        paymentMethod,
+        paymentType: salePaymentType,
+        paymentMethod: primaryMethod,
+        cashAmount: cashTotal > 0 ? cashTotal : undefined,
+        creditAmount: hasCuentaCorriente ? cuentaCorriente : undefined,
         source: "order",
         createOrder: false,
         orderId: selectedOrder.id,
@@ -482,13 +476,11 @@ export default function PedidosPage() {
         deliveryAddress: selectedOrder.address,
       });
 
-      if (paymentType === "split" && client && normalizedCashAmount > 0) {
-        await paymentsApi.registerCashPayment({
-          clientId: client.id,
-          amount: normalizedCashAmount,
-          description: `Pago parcial pedido #${selectedOrder.id}`,
-        });
-      }
+      // Guardar montos individuales (best-effort)
+      supabase.from("ventas").update({
+        efectivo_amount: efectivo > 0 ? efectivo : null,
+        transferencia_amount: transferencia > 0 ? transferencia : null,
+      }).eq("id", sale.id).then(() => {}).catch(() => {});
 
       const updated = await ordersApi.completeOrder(selectedOrder.id, sale.id);
       setOrders((prev) =>
@@ -515,8 +507,8 @@ export default function PedidosPage() {
         );
       }
 
-      // Subir comprobante de transferencia (pago mixto) si se adjuntó
-      if (comprobanteFile) {
+      // Subir comprobante de transferencia si se adjuntó
+      if (comprobanteFile && transferencia > 0) {
         try {
           const ext = comprobanteFile.name.split(".").pop() || "jpg";
           const fileName = `comprobante_${sale.id}_${Date.now()}.${ext}`;
@@ -550,22 +542,25 @@ export default function PedidosPage() {
           : `Descuento -${formatPrice(discAmt)}`;
       }
 
+      const paymentParts = [
+        efectivo > 0 ? "Efectivo" : "",
+        transferencia > 0 ? "Transferencia" : "",
+        cuentaCorriente > 0 ? "Cta.Cte." : "",
+      ].filter(Boolean).join(" + ");
+
       setLastSaleResult({
-        paymentType,
-        paymentMethod,
+        paymentType: salePaymentType,
+        paymentMethod: primaryMethod,
         total,
         originalTotal: orderDisc > 0 ? rawTotal : undefined,
         discountLabel,
         saleId: sale.id,
         client,
+        paymentLabel: paymentParts,
       });
 
-      // React 18 batchea múltiples setState — no hace falta setTimeout
       setActiveModal("success");
       setSelectedOrder(null);
-      setPaymentType("cash");
-      setPaymentMethod("efectivo");
-      setCashAmount("");
       setSelectedClientId("");
     } catch (error) {
       toast.error(
@@ -574,7 +569,7 @@ export default function PedidosPage() {
     } finally {
       setProcessingPayment(false);
     }
-  }, [selectedOrder, selectedClientId, clients, paymentType, paymentMethod, cashAmount]);
+  }, [selectedOrder, selectedClientId, clients]);
 
   const handleGoToSale = useCallback(() => {
     if (lastSaleResult?.saleId) {
@@ -1390,12 +1385,6 @@ export default function PedidosPage() {
         setClientSearch={setClientSearch}
         selectedClientId={selectedClientId}
         setSelectedClientId={setSelectedClientId}
-        paymentType={paymentType}
-        setPaymentType={setPaymentType}
-        paymentMethod={paymentMethod}
-        setPaymentMethod={setPaymentMethod}
-        cashAmount={cashAmount}
-        setCashAmount={setCashAmount}
         onComplete={handleCompleteOrder}
         processing={processingPayment}
         onNewClient={() => setShowClientModal(true)}

@@ -153,8 +153,10 @@ const CajaPdfDocument = ({ register, sales, losses = [], pagos = [] }: { registe
     } else if (s.paymentType === "mixed") {
       const cashAmt = (s as any).cashAmount || 0;
       const creditAmt = (s as any).creditAmount || 0;
-      if (method === "transferencia") transferTotal += cashAmt;
-      else efectivoTotal += cashAmt;
+      const efectivoAmt = (s as any).efectivo_amount ?? (method !== "transferencia" ? cashAmt : 0);
+      const transferenciaAmt = (s as any).transferencia_amount ?? (method === "transferencia" ? cashAmt : 0);
+      efectivoTotal += efectivoAmt;
+      transferTotal += transferenciaAmt;
       creditTotalCalc += creditAmt;
     }
   }
@@ -609,11 +611,10 @@ export default function CajaPage() {
       } else if (s.paymentType === "mixed") {
         const cashAmt = (s as any).cashAmount || 0;
         const creditAmt = (s as any).creditAmount || 0;
-        if (method === "transferencia") {
-          transferTotal += cashAmt;
-        } else {
-          efectivoTotal += cashAmt;
-        }
+        const efectivoAmt = (s as any).efectivo_amount ?? (method !== "transferencia" ? cashAmt : 0);
+        const transferenciaAmt = (s as any).transferencia_amount ?? (method === "transferencia" ? cashAmt : 0);
+        efectivoTotal += efectivoAmt;
+        transferTotal += transferenciaAmt;
         creditTotal += creditAmt;
       }
     }
@@ -640,8 +641,10 @@ export default function CajaPage() {
       } else if (s.paymentType === "mixed") {
         const cashAmt = (s as any).cashAmount || 0;
         const creditAmt = (s as any).creditAmount || 0;
-        if (method === "transferencia") transferTotal += cashAmt;
-        else efectivoTotal += cashAmt;
+        const efectivoAmt = (s as any).efectivo_amount ?? (method !== "transferencia" ? cashAmt : 0);
+        const transferenciaAmt = (s as any).transferencia_amount ?? (method === "transferencia" ? cashAmt : 0);
+        efectivoTotal += efectivoAmt;
+        transferTotal += transferenciaAmt;
         creditTotal += creditAmt;
       }
     }
