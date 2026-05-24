@@ -10,7 +10,7 @@ import { Input } from "@/components/ui/input";
 import { ClientModal } from "@/components/clientes/client-modal";
 import { ordersApi, salesApi, clientsApi, paymentsApi, sellersApi, productsApi } from "@/lib/api";
 import type { Order, OrderStatus, Client, Seller } from "@/lib/types";
-import { Package, Search, User, Filter, X, Loader2, Navigation, ClipboardList, ShoppingCart, FileSpreadsheet } from "lucide-react";
+import { Package, Search, User, Filter, X, Loader2, Navigation, ClipboardList, ShoppingCart, FileSpreadsheet, Eye } from "lucide-react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { toast } from "sonner";
 import { useAuth } from "@/hooks/use-auth";
@@ -1186,85 +1186,151 @@ export default function PedidosPage() {
             </div>
           )}
 
-          {ordersGroupedByClient.map(({ client, orders: clientOrders }) => (
-            <div key={client}>
-              {/* Client header */}
-              <div className="flex items-center gap-2 mb-2 px-1">
-                {user?.role === "admin" && (
-                  <input
-                    type="checkbox"
-                    className="h-4 w-4 rounded border-gray-300 accent-teal-600 cursor-pointer"
-                    checked={clientOrders.length > 0 && clientOrders.every(o => selectedOrderIds.has(o.id))}
-                    onChange={() => toggleGroup(clientOrders)}
-                  />
-                )}
-                <User className="h-4 w-4 text-primary" />
-                <h2 className="text-base font-bold text-foreground">{client}</h2>
-                <span className="text-xs text-muted-foreground">({clientOrders.length} {clientOrders.length === 1 ? "pedido" : "pedidos"})</span>
-                {user?.role === "admin" && clientOrders.some(o => selectedOrderIds.has(o.id)) && (
-                  <Badge variant="secondary" className="ml-auto text-xs">{clientOrders.filter(o => selectedOrderIds.has(o.id)).length} sel.</Badge>
-                )}
-              </div>
+          {ordersGroupedByClient.map(({ client, orders: clientOrders }) => {
+            // Merge all items across orders (sum quantities for same product)
+            const itemMap = new Map<string, Order["items"][0]>();
+            clientOrders.forEach((order) => {
+              order.items.forEach((item) => {
+                const key = item.productId || item.name;
+                const existing = itemMap.get(key);
+                if (existing) {
+                  itemMap.set(key, { ...existing, quantity: existing.quantity + item.quantity });
+                } else {
+                  itemMap.set(key, { ...item });
+                }
+              });
+            });
+            const mergedItems = Array.from(itemMap.values());
+            const productosResumen = mergedItems.map((i) => `${i.quantity}× ${i.name}`).join(" · ");
+            const firstOrder = clientOrders[0];
+            const isGroupSelected = clientOrders.length > 0 && clientOrders.every((o) => selectedOrderIds.has(o.id));
+            // Status: most "pending" (first non-completed, else first)
+            const displayOrder = clientOrders.find((o) => o.status !== "completed") ?? firstOrder;
+            const config = statusConfig[displayOrder.status] || {
+              label: displayOrder.status,
+              color: "text-gray-700",
+              dotColor: "bg-gray-500",
+              bgColor: "bg-gray-50",
+              borderColor: "border-gray-200",
+            };
+            const mergedOrder: Order = { ...firstOrder, items: mergedItems };
 
-              {/* Desktop table */}
-              <div className="hidden lg:block border rounded-xl overflow-hidden shadow-sm mb-2">
-                <table className="w-full table-fixed">
-                  <thead className="bg-muted/50 border-b">
-                    <tr className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
+            const onView = () => {
+              setDetailOrder(mergedOrder);
+              setActiveModal("detail");
+            };
+
+            const StatusBadge = () => (
+              <div className={`inline-flex items-center gap-1.5 px-2 py-1 rounded-full text-xs font-semibold shrink-0 ${config.bgColor} border ${config.borderColor}`}>
+                <div className={`w-1.5 h-1.5 rounded-full ${config.dotColor}`} />
+                <span className={config.color}>{config.label}</span>
+              </div>
+            );
+
+            return (
+              <div key={client}>
+                {/* Desktop: una fila por cliente */}
+                <div className="hidden lg:block border rounded-xl overflow-hidden shadow-sm mb-2">
+                  <table className="w-full table-fixed">
+                    <thead className="bg-muted/50 border-b">
+                      <tr className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
+                        {user?.role === "admin" && <th className="pl-3 pr-1 py-2.5 w-8"></th>}
+                        <th className="px-3 py-2.5 text-left w-40">Cliente</th>
+                        <th className="px-3 py-2.5 text-left">Productos</th>
+                        <th className="px-3 py-2.5 text-left w-44 hidden md:table-cell">Dirección</th>
+                        <th className="px-3 py-2.5 text-left w-32">Estado</th>
+                        <th className="px-3 py-2.5 text-right w-16"></th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      <tr className="hover:bg-muted/30 transition-colors text-sm border-b border-border/50 last:border-0">
+                        {user?.role === "admin" && (
+                          <td className="pl-3 pr-1 py-3 w-8">
+                            <input
+                              type="checkbox"
+                              checked={isGroupSelected}
+                              onChange={() => toggleGroup(clientOrders)}
+                              className="h-4 w-4 rounded border-gray-300 accent-teal-600 cursor-pointer"
+                            />
+                          </td>
+                        )}
+                        <td className="px-3 py-3">
+                          <p className="text-xs font-semibold text-foreground truncate">{client}</p>
+                          {clientOrders.length > 1 && (
+                            <p className="text-[10px] text-muted-foreground">{clientOrders.length} pedidos</p>
+                          )}
+                        </td>
+                        <td className="px-3 py-3 max-w-[280px]">
+                          <p className="text-xs text-foreground truncate" title={productosResumen}>{productosResumen}</p>
+                          <p className="text-[10px] text-muted-foreground mt-0.5">
+                            {mergedItems.length} {mergedItems.length === 1 ? "producto" : "productos"}
+                          </p>
+                        </td>
+                        <td className="px-3 py-3 hidden md:table-cell">
+                          <p className="text-xs text-muted-foreground truncate max-w-[180px]">
+                            {displayOrder.address && displayOrder.address !== "Retiro en local"
+                              ? displayOrder.address
+                              : <span className="italic">Retiro en local</span>}
+                          </p>
+                          {displayOrder.city && <p className="text-[10px] text-muted-foreground/70">{displayOrder.city}</p>}
+                        </td>
+                        <td className="px-3 py-3 whitespace-nowrap"><StatusBadge /></td>
+                        <td className="px-3 py-3 text-right">
+                          <Button variant="ghost" size="sm" onClick={onView} className="h-8 text-xs gap-1.5 text-primary hover:bg-primary/5">
+                            <Eye className="h-3.5 w-3.5" />
+                            <span className="hidden sm:inline">Ver</span>
+                          </Button>
+                        </td>
+                      </tr>
+                    </tbody>
+                  </table>
+                </div>
+
+                {/* Mobile: una card por cliente */}
+                <div className="lg:hidden mb-2">
+                  <Card className="overflow-hidden">
+                    <div
+                      className="flex items-start gap-2 px-3 py-3 cursor-pointer hover:bg-muted/20 transition-colors"
+                      onClick={onView}
+                    >
                       {user?.role === "admin" && (
-                        <th className="pl-3 pr-1 py-2.5 w-8"></th>
+                        <input
+                          type="checkbox"
+                          checked={isGroupSelected}
+                          onChange={() => toggleGroup(clientOrders)}
+                          onClick={(e) => e.stopPropagation()}
+                          className="h-4 w-4 mt-0.5 rounded border-gray-300 accent-teal-600 cursor-pointer shrink-0"
+                        />
                       )}
-                      <th className="px-3 py-2.5 text-left w-32">Fecha</th>
-                      <th className="px-3 py-2.5 text-left">Productos</th>
-                      <th className="px-3 py-2.5 text-left w-44 hidden md:table-cell">Dirección</th>
-                      <th className="px-3 py-2.5 text-left w-32">Estado</th>
-                      <th className="px-3 py-2.5 text-right w-16"></th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-gray-100">
-                    {clientOrders.map((order, index) => (
-                      <OrderCard
-                        key={order.id}
-                        order={order}
-                        index={index}
-                        totalOrders={filteredOrders.length}
-                        variant="table"
-                        onViewDetails={() => {
-                          setDetailOrder(order);
-                          setActiveModal("detail");
-                        }}
-                        isSelected={selectedOrderIds.has(order.id)}
-                        onToggleSelect={user?.role === "admin" ? () => toggleOrder(order.id) : undefined}
-                      />
-                    ))}
-                  </tbody>
-                </table>
+                      <div className="flex-1 min-w-0 space-y-1">
+                        <div className="flex items-center gap-1.5">
+                          <User className="h-3.5 w-3.5 text-primary shrink-0" />
+                          <p className="text-xs font-semibold text-foreground truncate">{client}</p>
+                          {clientOrders.length > 1 && (
+                            <span className="text-[10px] text-muted-foreground shrink-0">({clientOrders.length} pedidos)</span>
+                          )}
+                        </div>
+                        <p className="text-xs text-foreground truncate" title={productosResumen}>{productosResumen}</p>
+                        {displayOrder.address && displayOrder.address !== "Retiro en local" && (
+                          <p className="text-[10px] text-muted-foreground truncate">{displayOrder.address}</p>
+                        )}
+                      </div>
+                      <div className="flex items-center gap-1.5 shrink-0">
+                        <StatusBadge />
+                        <Button
+                          variant="ghost" size="icon"
+                          onClick={(e) => { e.stopPropagation(); onView(); }}
+                          className="h-7 w-7 text-primary hover:bg-primary/5"
+                        >
+                          <Eye className="h-3.5 w-3.5" />
+                        </Button>
+                      </div>
+                    </div>
+                  </Card>
+                </div>
               </div>
-
-              {/* Mobile: un solo card por cliente */}
-              <div className="lg:hidden mb-2">
-                <Card className="overflow-hidden">
-                  <div>
-                    {clientOrders.map((order, index) => (
-                      <OrderCard
-                        key={order.id}
-                        order={order}
-                        index={index}
-                        totalOrders={filteredOrders.length}
-                        variant="card"
-                        onViewDetails={() => {
-                          setDetailOrder(order);
-                          setActiveModal("detail");
-                        }}
-                        isSelected={selectedOrderIds.has(order.id)}
-                        onToggleSelect={user?.role === "admin" ? () => toggleOrder(order.id) : undefined}
-                      />
-                    ))}
-                  </div>
-                </Card>
-              </div>
-            </div>
-          ))}
+            );
+          })}
         </div>
       )}
 
