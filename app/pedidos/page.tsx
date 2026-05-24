@@ -708,86 +708,45 @@ export default function PedidosPage() {
 
       // Construir datos de la hoja — arranca directo desde fila 1
       const wsData: (string | number)[][] = [];
+      const lastDataRow = filas.length + 1; // header is row 1, data starts row 2
+      const totalRow = lastDataRow + 2; // 1 fila vacía de separación
 
       // Fila 1: encabezados
       wsData.push(["Código", "Descripción", "Unidades pedidas", "Stock disponible", "Faltante (unid.)"]);
 
       // Filas de datos
       for (const f of filas) {
-        wsData.push([f.codigo, f.nombre, f.cantidad, f.stockDisponible, f.faltante]);
+        wsData.push([f.codigo || "", f.nombre, f.cantidad, f.stockDisponible, f.faltante]);
       }
 
-      // 2 filas vacías de separación
-      wsData.push([]);
+      // 1 fila vacía de separación
       wsData.push([]);
 
-      // Fila de totales
-      wsData.push([`TOTAL  items: ${filas.length}`, "", totalUnidades, "", ""]);
+      // Fila de totales con fórmulas
+      wsData.push([
+        `TOTAL — ${filas.length} items`,
+        "",
+        totalUnidades,
+        filas.reduce((s, r) => s + r.stockDisponible, 0),
+        filas.reduce((s, r) => s + r.faltante, 0),
+      ]);
 
       const ws = XLSX.utils.aoa_to_sheet(wsData);
 
-      // Anchos de columna — total ~80 caracteres, entra en A4 portrait
+      // Anchos de columna
       ws["!cols"] = [
-        { wch: 10 },  // Código
-        { wch: 32 },  // Descripción
-        { wch: 10 },  // Unidades pedidas
-        { wch: 10 },  // Stock disponible
-        { wch: 10 },  // Faltante
+        { wch: 14 },  // Código
+        { wch: 40 },  // Descripción
+        { wch: 16 },  // Unidades pedidas
+        { wch: 16 },  // Stock disponible
+        { wch: 16 },  // Faltante
       ];
 
-      const cols = ["A", "B", "C", "D", "E"];
-
-      // Estilos encabezado (fila 1)
-      for (const col of cols) {
-        const cellRef = `${col}1`;
-        if (ws[cellRef]) {
-          ws[cellRef].s = {
-            font: { bold: true, sz: 9, color: { rgb: "FFFFFF" } },
-            fill: { fgColor: { rgb: "0F766E" } },
-            alignment: { horizontal: "center", vertical: "center" },
-          };
-        }
+      // Código como texto (columna A)
+      for (let r = 2; r <= lastDataRow; r++) {
+        const ref = `A${r}`;
+        if (ws[ref]) ws[ref].t = "s";
       }
-
-      // Fuente base sz 9 para todas las filas de datos
-      const dataStartRow = 2;
-      filas.forEach((_, i) => {
-        for (const col of cols) {
-          const cellRef = `${col}${dataStartRow + i}`;
-          if (ws[cellRef] && !ws[cellRef].s) {
-            ws[cellRef].s = { font: { sz: 9 }, alignment: { vertical: "center" } };
-          } else if (ws[cellRef]) {
-            ws[cellRef].s = { ...ws[cellRef].s, font: { ...ws[cellRef].s?.font, sz: 9 } };
-          }
-        }
-      });
-
-      // Estilo fila de totales
-      const totalRowIdx = wsData.length;
-      for (const col of cols) {
-        const cellRef = `${col}${totalRowIdx}`;
-        if (ws[cellRef]) {
-          ws[cellRef].s = {
-            font: { bold: true, sz: 9 },
-            fill: { fgColor: { rgb: "F0FDFA" } },
-            border: { top: { style: "thin", color: { rgb: "0F766E" } } },
-          };
-        }
-      }
-
-      // Resaltar faltante > 0 en columna E
-      filas.forEach((f, i) => {
-        if (f.faltante > 0) {
-          const cellRef = `E${dataStartRow + i}`;
-          if (ws[cellRef]) {
-            ws[cellRef].s = {
-              font: { bold: true, sz: 9, color: { rgb: "DC2626" } },
-              fill: { fgColor: { rgb: "FEF2F2" } },
-              alignment: { horizontal: "center" },
-            };
-          }
-        }
-      });
 
       const wb = XLSX.utils.book_new();
       XLSX.utils.book_append_sheet(wb, ws, "Pedido");
