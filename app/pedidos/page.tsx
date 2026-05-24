@@ -1165,11 +1165,31 @@ export default function PedidosPage() {
           </CardContent>
         </Card>
       ) : (
-        <div className="space-y-6">
+        <div className="space-y-4">
+          {/* Select all */}
+          {user?.role === "admin" && (
+            <div className="flex items-center gap-2 px-1">
+              <input
+                type="checkbox"
+                className="h-4 w-4 rounded border-gray-300 accent-teal-600 cursor-pointer"
+                checked={filteredOrders.length > 0 && filteredOrders.every(o => selectedOrderIds.has(o.id))}
+                onChange={() => {
+                  const allSelected = filteredOrders.every(o => selectedOrderIds.has(o.id));
+                  if (allSelected) {
+                    setSelectedOrderIds(new Set());
+                  } else {
+                    setSelectedOrderIds(new Set(filteredOrders.map(o => o.id)));
+                  }
+                }}
+              />
+              <span className="text-xs text-muted-foreground">Seleccionar todos ({filteredOrders.length})</span>
+            </div>
+          )}
+
           {ordersGroupedByClient.map(({ client, orders: clientOrders }) => (
             <div key={client}>
               {/* Client header */}
-              <div className="flex items-center gap-2 mb-3 px-1">
+              <div className="flex items-center gap-2 mb-2 px-1">
                 {user?.role === "admin" && (
                   <input
                     type="checkbox"
@@ -1178,24 +1198,23 @@ export default function PedidosPage() {
                     onChange={() => toggleGroup(clientOrders)}
                   />
                 )}
-                <User className="h-5 w-5 text-primary" />
-                <h2 className="text-lg font-bold text-foreground">{client}</h2>
-                <span className="text-sm text-muted-foreground">({clientOrders.length} {clientOrders.length === 1 ? "pedido" : "pedidos"})</span>
+                <User className="h-4 w-4 text-primary" />
+                <h2 className="text-base font-bold text-foreground">{client}</h2>
+                <span className="text-xs text-muted-foreground">({clientOrders.length} {clientOrders.length === 1 ? "pedido" : "pedidos"})</span>
                 {user?.role === "admin" && clientOrders.some(o => selectedOrderIds.has(o.id)) && (
                   <Badge variant="secondary" className="ml-auto text-xs">{clientOrders.filter(o => selectedOrderIds.has(o.id)).length} sel.</Badge>
                 )}
               </div>
 
               {/* Desktop table */}
-              <div className="hidden lg:block border rounded-xl overflow-hidden shadow-sm mb-3">
+              <div className="hidden lg:block border rounded-xl overflow-hidden shadow-sm mb-2">
                 <table className="w-full table-fixed">
                   <thead className="bg-muted/50 border-b">
                     <tr className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
                       {user?.role === "admin" && (
                         <th className="pl-3 pr-1 py-2.5 w-8"></th>
                       )}
-                      <th className="px-3 py-2.5 text-left w-28">Pedido</th>
-                      <th className="px-3 py-2.5 text-left w-36">Cliente</th>
+                      <th className="px-3 py-2.5 text-left w-32">Fecha</th>
                       <th className="px-3 py-2.5 text-left">Productos</th>
                       <th className="px-3 py-2.5 text-left w-44 hidden md:table-cell">Dirección</th>
                       <th className="px-3 py-2.5 text-left w-32">Estado</th>
@@ -1222,23 +1241,27 @@ export default function PedidosPage() {
                 </table>
               </div>
 
-              {/* Mobile cards */}
-              <div className="lg:hidden space-y-3 mb-3">
-                {clientOrders.map((order, index) => (
-                  <OrderCard
-                    key={order.id}
-                    order={order}
-                    index={index}
-                    totalOrders={filteredOrders.length}
-                    variant="card"
-                    onViewDetails={() => {
-                      setDetailOrder(order);
-                      setActiveModal("detail");
-                    }}
-                    isSelected={selectedOrderIds.has(order.id)}
-                    onToggleSelect={user?.role === "admin" ? () => toggleOrder(order.id) : undefined}
-                  />
-                ))}
+              {/* Mobile: un solo card por cliente */}
+              <div className="lg:hidden mb-2">
+                <Card className="overflow-hidden">
+                  <div>
+                    {clientOrders.map((order, index) => (
+                      <OrderCard
+                        key={order.id}
+                        order={order}
+                        index={index}
+                        totalOrders={filteredOrders.length}
+                        variant="card"
+                        onViewDetails={() => {
+                          setDetailOrder(order);
+                          setActiveModal("detail");
+                        }}
+                        isSelected={selectedOrderIds.has(order.id)}
+                        onToggleSelect={user?.role === "admin" ? () => toggleOrder(order.id) : undefined}
+                      />
+                    ))}
+                  </div>
+                </Card>
               </div>
             </div>
           ))}
