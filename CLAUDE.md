@@ -30,7 +30,7 @@ Hacer UN SOLO commit y push cuando el usuario confirme que todo funciona o cuand
 1. Ejecutar `npm run build` y verificar que no haya errores.
 2. Hacer `git add` de los archivos modificados.
 3. Hacer commit con el mensaje apropiado.
-4. Hacer `git push origin prueba`.
+4. Hacer `git push origin main`.
 
 ### Commit conventions (Conventional Commits)
 - `feat:` nuevas funcionalidades
@@ -121,6 +121,7 @@ Next.js 16 (App Router) desplegado en Vercel. Maneja ventas, pedidos, inventario
 - **Supabase clients**: `lib/supabase.ts` (client-side, anon key), `lib/supabase-admin.ts` (server-side, service role key).
 - **PDF Generation**: `@react-pdf/renderer` client-side; `puppeteer-core` + `@sparticuz/chromium` server-side en `/api/generate-pdf`
 - **Facturacion**: `@afipsdk/afip.js` para AFIP (Facturas A/B/C, CAE)
+- **Excel**: `xlsx-js-style` para generación de Excel con estilos (celdas coloreadas, bordes, fórmulas)
 - **Notificaciones**: `sonner` para toasts
 
 ### Layout y Navegacion
@@ -148,6 +149,15 @@ Next.js 16 (App Router) desplegado en Vercel. Maneja ventas, pedidos, inventario
 - El campo `category` en `productos` corresponde al rubro del listado mayorista.
 - IDs en BD: `mayorista_productos.id` = `mp_{codigo}`, `productos.id` = `prod_mp_{codigo}`.
 - Scripts de carga en `scripts/habilitar-desde-excel.js`.
+
+### Pedidos (`app/pedidos/page.tsx`)
+- Workflow: `pending` → `preparation` → `delivery` → `completed`. Completados no se muestran en pedidos (van a Ventas).
+- Vista unificada: tabla única desktop (`hidden lg:block`) + lista compacta mobile (`lg:hidden`). Ambas muestran: cliente, cantidad productos, dirección, deuda, estado.
+- Filtros en `components/pedidos/orders-filters.tsx`: tabs de estado (desktop) / Select (mobile), panel colapsable con filtros por cliente/vendedor/transportista.
+- Botones de acción: "Listado de Carga" (imprime HTML), "Descargar Pedido" (Excel con `xlsx-js-style`), "Todos a preparación", "Todos a reparto".
+- Pedidos se agrupan por cliente (`ordersGroupedByClient`), items del mismo producto se mergean.
+- Deuda del cliente se muestra con colores: amber (normal con deuda), rojo (moroso), rojo oscuro (incobrable), verde (al día).
+- Modales: `OrderDetailModal`, `PaymentModal`, `SuccessModal`, `StockCheckModal`.
 
 ### Ventas atómicas
 `processSale()` usa la función RPC `process_sale()` en PostgreSQL que ejecuta en una transacción ACID: inserta venta, descuenta stock, registra crédito del cliente y comisión del vendedor.
