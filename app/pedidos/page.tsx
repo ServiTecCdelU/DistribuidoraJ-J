@@ -1110,13 +1110,13 @@ export default function PedidosPage() {
         <>
           {/* Desktop: tabla única */}
           <div className="hidden lg:block border rounded-2xl overflow-hidden shadow-sm">
-            <table className="w-full table-fixed">
+            <table className="w-full">
               <thead className="bg-muted/50 border-b">
                 <tr className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
-                  <th className="px-3 py-2 text-left w-36">Cliente</th>
-                  <th className="px-3 py-2 text-left">Productos</th>
-                  <th className="px-3 py-2 text-left w-40">Dirección</th>
-                  <th className="px-3 py-2 text-left w-44">Estado</th>
+                  <th className="px-4 py-2 text-left">Cliente</th>
+                  <th className="px-4 py-2 text-center w-24">Productos</th>
+                  <th className="px-4 py-2 text-left">Dirección</th>
+                  <th className="px-4 py-2 text-center w-36">Estado</th>
                 </tr>
               </thead>
               <tbody className="divide-y">
@@ -1144,32 +1144,32 @@ export default function PedidosPage() {
 
                   return (
                     <tr key={client} className="hover:bg-muted/30 transition-colors text-sm cursor-pointer" onClick={onView}>
-                      <td className="px-3 py-2.5">
+                      <td className="px-4 py-2.5">
                         <p className="text-xs font-semibold text-foreground truncate">{client}</p>
                         {clientOrders.length > 1 && (
                           <p className="text-[10px] text-muted-foreground">{clientOrders.length} pedidos</p>
                         )}
                       </td>
-                      <td className="px-3 py-2.5">
-                        <p className="text-xs text-foreground">
-                          {mergedItems.length} {mergedItems.length === 1 ? "producto" : "productos"}
-                        </p>
+                      <td className="px-4 py-2.5 text-center">
+                        <span className="text-xs text-foreground">
+                          {mergedItems.length}
+                        </span>
                       </td>
-                      <td className="px-3 py-2.5">
-                        <p className="text-xs text-muted-foreground truncate max-w-[160px]">
+                      <td className="px-4 py-2.5">
+                        <p className="text-xs text-muted-foreground truncate">
                           {displayOrder.address && displayOrder.address !== "Retiro en local"
                             ? displayOrder.address
                             : <span className="italic">Retiro en local</span>}
                         </p>
                         {displayOrder.city && <p className="text-[10px] text-muted-foreground/70">{displayOrder.city}</p>}
                       </td>
-                      <td className="px-3 py-2.5">
-                        <div className="flex items-center gap-2">
+                      <td className="px-4 py-2.5">
+                        <div className="flex items-center justify-center gap-2">
                           <div className={`inline-flex items-center gap-1.5 px-2 py-1 rounded-full text-xs font-semibold shrink-0 ${config.bgColor} border ${config.borderColor}`}>
                             <div className={`w-1.5 h-1.5 rounded-full ${config.dotColor}`} />
                             <span className={config.color}>{config.label}</span>
                           </div>
-                          <Button variant="ghost" size="sm" onClick={(e) => { e.stopPropagation(); onView(); }} className="h-7 text-xs gap-1 text-primary hover:bg-primary/5 ml-auto">
+                          <Button variant="ghost" size="sm" onClick={(e) => { e.stopPropagation(); onView(); }} className="h-7 text-xs gap-1 text-primary hover:bg-primary/5">
                             <Eye className="h-3.5 w-3.5" />
                             Ver
                           </Button>
