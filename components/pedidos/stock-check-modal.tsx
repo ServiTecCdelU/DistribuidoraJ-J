@@ -8,7 +8,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
-import { AlertTriangle, CheckCircle, Package, X } from "lucide-react";
+import { AlertTriangle, CheckCircle, Package } from "lucide-react";
 
 export interface StockCheckItem {
   productId: string;
@@ -32,15 +32,10 @@ export function StockCheckModal({ open, onClose, items, onConfirm }: StockCheckM
     <Dialog open={open} onOpenChange={(o) => !o && onClose()}>
       <DialogContent className="sm:max-w-md w-[calc(100vw-1rem)] max-h-[80vh] flex flex-col p-0 gap-0 overflow-hidden">
         <DialogHeader className="p-4 pb-3 border-b shrink-0">
-          <div className="flex items-center justify-between">
-            <DialogTitle className="text-base flex items-center gap-2">
-              <AlertTriangle className="h-5 w-5 text-amber-500" />
-              Verificar stock
-            </DialogTitle>
-            <Button variant="ghost" size="sm" onClick={onClose} className="h-8 w-8 p-0 rounded-full">
-              <X className="h-4 w-4" />
-            </Button>
-          </div>
+          <DialogTitle className="text-base flex items-center gap-2">
+            <AlertTriangle className="h-5 w-5 text-amber-500" />
+            Verificar stock
+          </DialogTitle>
         </DialogHeader>
 
         <div className="flex-1 overflow-y-auto p-4 space-y-3">

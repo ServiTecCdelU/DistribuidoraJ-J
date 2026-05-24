@@ -71,7 +71,7 @@ export function SuccessModal({
 
   return (
     <Dialog open={isOpen} onOpenChange={(open) => !open && onClose()}>
-      <DialogContent className="sm:max-w-md p-0 overflow-hidden">
+      <DialogContent className="sm:max-w-md p-0 overflow-hidden" showCloseButton={false}>
         <DialogHeader className="sr-only">
           <DialogTitle>Pedido Completado Exitosamente</DialogTitle>
         </DialogHeader>

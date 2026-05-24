@@ -10,22 +10,20 @@ import { ClientModal } from "@/components/clientes/client-modal";
 import { ordersApi, salesApi, clientsApi, sellersApi, productsApi } from "@/lib/api";
 import type { Order, OrderStatus, Client, Seller } from "@/lib/types";
 import { Package, Filter, Loader2, Navigation, ClipboardList, FileSpreadsheet, Eye } from "lucide-react";
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { toast } from "sonner";
 import { useAuth } from "@/hooks/use-auth";
 import { useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabase";
 import { OrdersFilters } from "@/components/pedidos/orders-filters";
-import { OrderCard } from "@/components/pedidos/order-card";
+
 import { OrderDetailModal } from "@/components/pedidos/order-detail-modal";
 import { PaymentModal, type ItemAdjustment } from "@/components/pedidos/payment-modal";
 import { SuccessModal } from "@/components/pedidos/success-modal";
 import { RouteMapModal } from "@/components/pedidos/route-map-modal";
 import { StockCheckModal, type StockCheckItem } from "@/components/pedidos/stock-check-modal";
-import { statusConfig, statusFlow } from "@/lib/order-constants";
+import { statusConfig } from "@/lib/order-constants";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Badge } from "@/components/ui/badge";
-import { formatCurrency as formatPrice, formatDateShort as formatDate, formatDateFull } from "@/lib/utils/format";
+import { formatCurrency as formatPrice } from "@/lib/utils/format";
 
 export const generateOrderNumber = (date: Date, index: number) => {
   const d = new Date(date);
