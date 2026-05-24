@@ -1019,7 +1019,7 @@ export default function PedidosPage() {
             variant="ghost"
             size="sm"
             onClick={clearFilters}
-            className="text-muted-foreground"
+            className="text-muted-foreground hidden sm:flex"
           >
             <Filter className="h-4 w-4 mr-2" />
             Limpiar filtros
@@ -1031,11 +1031,10 @@ export default function PedidosPage() {
             size="sm"
             onClick={() => setRouteModalOpen(true)}
             disabled={filteredOrders.filter(o => o.address && o.city && o.status !== "completed").length === 0}
-            className="gap-2"
+            className="gap-2 sm:gap-2"
           >
             <Navigation className="h-4 w-4" />
             <span className="hidden sm:inline">Iniciar Recorrido</span>
-            <span className="sm:hidden">Ruta</span>
           </Button>
         )}
         {filterStatus !== "pending" && (
@@ -1048,7 +1047,6 @@ export default function PedidosPage() {
           >
             <ClipboardList className="h-4 w-4" />
             <span className="hidden sm:inline">Listado de Carga</span>
-            <span className="sm:hidden">Carga</span>
           </Button>
         )}
         {filterStatus !== "preparation" && filterStatus !== "delivery" && (
@@ -1061,7 +1059,6 @@ export default function PedidosPage() {
           >
             {generandoExcel ? <Loader2 className="h-4 w-4 animate-spin" /> : <FileSpreadsheet className="h-4 w-4" />}
             <span className="hidden sm:inline">Descargar Pedido</span>
-            <span className="sm:hidden">Excel</span>
           </Button>
         )}
       </OrdersFilters>
