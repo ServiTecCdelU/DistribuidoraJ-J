@@ -215,27 +215,12 @@ export const processSale = async (data: {
 
   // Descontar stock
   for (const item of data.items) {
-    await supabase.rpc('decrement_stock', {
-      p_id: item.product.id,
-      p_qty: item.quantity,
-    }).then(({ error }) => {
-      // Fallback: update directo si RPC no existe
-      if (error) {
-        return supabase
-          .from('productos')
-          .select('stock')
-          .eq('id', item.product.id)
-          .single()
-          .then(({ data: prod }) => {
-            if (prod) {
-              return supabase
-                .from('productos')
-                .update({ stock: (prod.stock || 0) - item.quantity })
-                .eq('id', item.product.id)
-            }
-          })
-      }
-    })
+    // Los pedidos usan IDs de mayorista_productos (mp_XXXX); stock vive en productos (prod_mp_XXXX)
+    const prodId = item.product.id?.startsWith('mp_') ? `prod_${item.product.id}` : item.product.id
+    const { data: prod } = await supabase.from('productos').select('stock').eq('id', prodId).single()
+    if (prod) {
+      await supabase.from('productos').update({ stock: Math.max(0, (prod.stock || 0) - item.quantity) }).eq('id', prodId)
+    }
   }
 
   // Procesar credito

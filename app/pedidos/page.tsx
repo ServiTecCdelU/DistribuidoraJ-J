@@ -377,15 +377,10 @@ export default function PedidosPage() {
           });
           // También descontar de productos.stock (tabla principal)
           const prodId = r.productId.startsWith("mp_") ? `prod_${r.productId}` : r.productId;
-          await supabase.rpc('decrement_stock', { p_id: prodId, p_qty: r.quantity }).then(({ error }) => {
-            if (error) {
-              return supabase.from('productos').select('stock').eq('id', prodId).single().then(({ data: prod }) => {
-                if (prod) {
-                  return supabase.from('productos').update({ stock: Math.max(0, (prod.stock || 0) - r.quantity) }).eq('id', prodId);
-                }
-              });
-            }
-          });
+          const { data: prod } = await supabase.from('productos').select('stock').eq('id', prodId).single();
+          if (prod) {
+            await supabase.from('productos').update({ stock: Math.max(0, (prod.stock || 0) - r.quantity) }).eq('id', prodId);
+          }
         }
         const totalPerdida = roturasAdj.reduce((acc, r) => acc + r.unitPrice * r.quantity, 0);
         const productosRotos = roturasAdj.map(r => `${r.productName} x${r.quantity}`).join(", ");
