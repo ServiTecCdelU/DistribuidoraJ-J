@@ -712,34 +712,29 @@ export default function PedidosPage() {
       const totalRow = lastDataRow + 2; // 1 fila vacía de separación
 
       // Fila 1: encabezados
-      wsData.push(["Código", "Descripción", "Unidades pedidas", "Stock disponible", "Faltante (unid.)"]);
+      wsData.push(["Código", "Descripción", "Pedido", "Stock", "Faltante"]);
 
       // Filas de datos
       for (const f of filas) {
         wsData.push([f.codigo || "", f.nombre, f.cantidad, f.stockDisponible, f.faltante]);
       }
 
-      // 1 fila vacía de separación
+      // 2 filas vacías de separación
+      wsData.push([]);
       wsData.push([]);
 
-      // Fila de totales con fórmulas
-      wsData.push([
-        `TOTAL — ${filas.length} items`,
-        "",
-        totalUnidades,
-        filas.reduce((s, r) => s + r.stockDisponible, 0),
-        filas.reduce((s, r) => s + r.faltante, 0),
-      ]);
+      // Fila de totales
+      wsData.push([`TOTAL  items: ${filas.length}`, "", null, null, null]);
 
       const ws = XLSX.utils.aoa_to_sheet(wsData);
 
       // Anchos de columna
       ws["!cols"] = [
-        { wch: 14 },
-        { wch: 40 },
-        { wch: 16 },
-        { wch: 16 },
-        { wch: 16 },
+        { wch: 12 },
+        { wch: 46 },
+        { wch: 18 },
+        { wch: 18 },
+        { wch: 18 },
       ];
 
       const cols = ["A", "B", "C", "D", "E"];
@@ -800,21 +795,29 @@ export default function PedidosPage() {
         }
       }
 
-      // Estilo fila de totales
+      // Fórmulas SUM en fila de totales
       const totalRowIdx = wsData.length;
+      ws[`C${totalRowIdx}`] = { t: "n", f: `SUM(C2:C${lastDataRow})` };
+      ws[`D${totalRowIdx}`] = { t: "n", f: `SUM(D2:D${lastDataRow})` };
+      ws[`E${totalRowIdx}`] = { t: "n", f: `SUM(E2:E${lastDataRow})` };
+
+      // Estilo fila de totales
+      const totalStyle = {
+        font: { bold: true, sz: 11 },
+        fill: { fgColor: { rgb: "F2F2F2" } },
+        border: {
+          top: { style: "medium" as const, color: { rgb: "1F4E78" } },
+          bottom: { style: "thin" as const, color: { rgb: "D9D9D9" } },
+          left: { style: "thin" as const, color: { rgb: "D9D9D9" } },
+          right: { style: "thin" as const, color: { rgb: "D9D9D9" } },
+        },
+      };
       for (const col of cols) {
         const ref = `${col}${totalRowIdx}`;
         if (ws[ref]) {
           ws[ref].s = {
-            font: { bold: true, sz: 11 },
-            fill: { fgColor: { rgb: "F2F2F2" } },
+            ...totalStyle,
             alignment: col === "B" ? {} : { horizontal: "center" as const },
-            border: {
-              top: { style: "medium" as const, color: { rgb: "1F4E78" } },
-              bottom: { style: "thin" as const, color: { rgb: "D9D9D9" } },
-              left: { style: "thin" as const, color: { rgb: "D9D9D9" } },
-              right: { style: "thin" as const, color: { rgb: "D9D9D9" } },
-            },
           };
         }
       }
