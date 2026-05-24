@@ -102,6 +102,7 @@ Hacer UN SOLO commit y push cuando el usuario confirme que todo funciona o cuand
 - Listas de precios en `services/price-list-service.ts` -> tabla `listas_precios`.
 - Caja diaria en tabla `caja`.
 - `lib/api.ts` es la fachada sobre todos los services. Las pages deben importar desde `@/lib/api`, no directamente desde `services/`.
+- Configuración de transferencia bancaria (alias, titular, banco) se guarda en la tabla `configuracion` con `key = 'transferencia'` — gestionada por `services/transfer-config-service.ts`.
 
 ## Arquitectura General
 
@@ -133,6 +134,7 @@ Next.js 16 (App Router) desplegado en Vercel. Maneja ventas, pedidos, inventario
 
 ### Utilidades Compartidas
 - **`lib/utils/format.ts`** — formateo centralizado ARS (`formatCurrency`, `formatCurrencyDecimals`) y formatters de fecha/hora. Siempre importar desde aca; no crear instancias `Intl` inline.
+- **`lib/utils/doc-actions.ts`** — `descargarDocumento()` y `buildDocFilename()` para descarga de PDFs (boletas/remitos) desde base64. Usar en lugar de lógica inline de descarga.
 - **`services/supabase-helpers.ts`** — exporta `toDate(value)` que convierte valores legacy (Timestamp, Date, string) a `Date`, `slugify()` y `generateReadableId()`.
 
 ### Mayorista
@@ -148,8 +150,13 @@ Next.js 16 (App Router) desplegado en Vercel. Maneja ventas, pedidos, inventario
 ### Ventas atómicas
 `processSale()` usa la función RPC `process_sale()` en PostgreSQL que ejecuta en una transacción ACID: inserta venta, descuenta stock, registra crédito del cliente y comisión del vendedor.
 
+### Páginas adicionales
+- **`app/vendedor/`** — vista mobile para vendedores en campo: búsqueda de productos + `UnifiedCart` inline. Acceso solo con rol `seller`.
+- **`app/cobranzas/`** — registro de cobranzas a clientes (cuenta corriente).
+- **`app/cuenta-corriente/`** — historial de movimientos de cuenta corriente por cliente.
+
 ### API Routes
-Rutas públicas (no requieren auth) en `app/api/public/` — clientes, productos, pedidos, mas-vendidos, vendedores. Rutas protegidas: facturación (`/api/facturacion/`), ventas (`/api/ventas/emitir`), AFIP (`/api/afip/`), PDF (`/api/generate-pdf`), importación (`/api/import-productos`), remitos (`/api/remitos`, `/api/parse-remito`), Drive (`/api/drive`).
+Rutas públicas (no requieren auth) en `app/api/public/` — clientes, productos, pedidos, mas-vendidos, vendedores. Rutas protegidas: facturación (`/api/facturacion/`), ventas (`/api/ventas/emitir`), AFIP (`/api/afip/`), PDF (`/api/generate-pdf`), importación (`/api/import-productos`), remitos (`/api/remitos`, `/api/parse-remito`), Drive (`/api/drive`), ganancia global mayorista (`/api/apply-ganancia` — invoca RPC `apply_ganancia_global`).
 
 ### Caveats Importantes
 - `next.config.mjs` tiene `typescript.ignoreBuildErrors: true` e `images.unoptimized: true`
