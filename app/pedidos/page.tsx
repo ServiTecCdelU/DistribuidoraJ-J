@@ -1116,6 +1116,7 @@ export default function PedidosPage() {
                   <th className="px-4 py-2 text-left">Cliente</th>
                   <th className="px-4 py-2 text-center w-24">Productos</th>
                   <th className="px-4 py-2 text-left">Dirección</th>
+                  <th className="px-4 py-2 text-center w-32">Deuda</th>
                   <th className="px-4 py-2 text-center w-36">Estado</th>
                 </tr>
               </thead>
@@ -1141,6 +1142,9 @@ export default function PedidosPage() {
                   };
                   const mergedOrder: Order = { ...firstOrder, items: mergedItems };
                   const onView = () => { setDetailOrder(mergedOrder); setActiveModal("detail"); };
+                  const clientData = clients.find((c) => c.id === firstOrder.clientId);
+                  const deuda = clientData?.currentBalance || 0;
+                  const clasificacion = clientData?.debtClassification;
 
                   return (
                     <tr key={client} className="hover:bg-muted/30 transition-colors text-sm cursor-pointer" onClick={onView}>
@@ -1163,6 +1167,22 @@ export default function PedidosPage() {
                         </p>
                         {displayOrder.city && <p className="text-[10px] text-muted-foreground/70">{displayOrder.city}</p>}
                       </td>
+                      <td className="px-4 py-2.5 text-center">
+                        {deuda > 0 ? (
+                          <div>
+                            <p className={`text-xs font-semibold ${clasificacion === "moroso" ? "text-red-600" : clasificacion === "incobrable" ? "text-red-800" : "text-amber-600"}`}>
+                              {formatPrice(deuda)}
+                            </p>
+                            {clasificacion && clasificacion !== "normal" && (
+                              <span className={`text-[10px] font-medium ${clasificacion === "moroso" ? "text-red-500" : "text-red-700"}`}>
+                                {clasificacion === "moroso" ? "Moroso" : "Incobrable"}
+                              </span>
+                            )}
+                          </div>
+                        ) : (
+                          <span className="text-[10px] text-green-600">Al día</span>
+                        )}
+                      </td>
                       <td className="px-4 py-2.5">
                         <div className="flex items-center justify-center gap-2">
                           <div className={`inline-flex items-center gap-1.5 px-2 py-1 rounded-full text-xs font-semibold shrink-0 ${config.bgColor} border ${config.borderColor}`}>
@@ -1184,8 +1204,9 @@ export default function PedidosPage() {
 
           {/* Mobile: lista con header fijo */}
           <div className="lg:hidden">
-            <div className="grid grid-cols-[1fr_auto] gap-2 px-3 py-1.5 text-[10px] font-semibold text-muted-foreground uppercase tracking-wider border-b">
+            <div className="grid grid-cols-[1fr_auto_auto] gap-2 px-3 py-1.5 text-[10px] font-semibold text-muted-foreground uppercase tracking-wider border-b">
               <span>Cliente / Productos</span>
+              <span>Deuda</span>
               <span>Estado</span>
             </div>
             <div className="divide-y">
@@ -1210,9 +1231,12 @@ export default function PedidosPage() {
                 };
                 const mergedOrder: Order = { ...firstOrder, items: mergedItems };
                 const onView = () => { setDetailOrder(mergedOrder); setActiveModal("detail"); };
+                const clientData = clients.find((c) => c.id === firstOrder.clientId);
+                const deuda = clientData?.currentBalance || 0;
+                const clasificacion = clientData?.debtClassification;
 
                 return (
-                  <div key={client} className="grid grid-cols-[1fr_auto] gap-2 px-3 py-2.5 cursor-pointer hover:bg-muted/20 transition-colors" onClick={onView}>
+                  <div key={client} className="grid grid-cols-[1fr_auto_auto] gap-2 px-3 py-2.5 cursor-pointer hover:bg-muted/20 transition-colors items-center" onClick={onView}>
                     <div className="min-w-0">
                       <div className="flex items-center gap-1">
                         <p className="text-xs font-semibold text-foreground truncate">{client}</p>
@@ -1221,6 +1245,15 @@ export default function PedidosPage() {
                         )}
                       </div>
                       <p className="text-[11px] text-muted-foreground">{mergedItems.length} {mergedItems.length === 1 ? "producto" : "productos"}</p>
+                    </div>
+                    <div className="shrink-0 text-center">
+                      {deuda > 0 ? (
+                        <p className={`text-[10px] font-semibold ${clasificacion === "moroso" ? "text-red-600" : clasificacion === "incobrable" ? "text-red-800" : "text-amber-600"}`}>
+                          {formatPrice(deuda)}
+                        </p>
+                      ) : (
+                        <span className="text-[10px] text-green-600">—</span>
+                      )}
                     </div>
                     <div className="flex items-center shrink-0">
                       <div className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold ${config.bgColor} border ${config.borderColor}`}>
