@@ -774,24 +774,11 @@ export default function PedidosPage() {
           if (col === "A") ws[ref].t = "s"; // código como texto
 
           ws[ref].s = {
-            font: { sz: 10, ...(isFaltante ? { color: { rgb: "9C0006" }, bold: true } : {}) },
-            fill: isFaltante ? { fgColor: { rgb: "F8CBAD" } } : {},
+            font: { sz: 10 },
+            fill: isFaltante ? { fgColor: { rgb: "F8CBAD" } } : { fgColor: { rgb: "FFFFFF" } },
             alignment: col === "B" ? { vertical: "center" as const } : { horizontal: "center" as const, vertical: "center" as const },
             border: cellBorder,
           };
-        }
-
-        // Celda faltante en rojo fuerte
-        if (isFaltante) {
-          const ref = `E${r}`;
-          if (ws[ref]) {
-            ws[ref].s = {
-              font: { bold: true, sz: 10, color: { rgb: "FFFFFF" } },
-              fill: { fgColor: { rgb: "C00000" } },
-              alignment: { horizontal: "center" as const, vertical: "center" as const },
-              border: cellBorder,
-            };
-          }
         }
       }
 
