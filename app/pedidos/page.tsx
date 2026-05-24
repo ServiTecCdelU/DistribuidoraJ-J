@@ -302,15 +302,10 @@ export default function PedidosPage() {
     return () => { active = false; };
   }, [loadData]);
 
-  // Suscripción real-time: recarga cuando hay INSERT o UPDATE en pedidos
+  // Polling cada 30 segundos para detectar pedidos nuevos
   useEffect(() => {
-    const channel = supabase
-      .channel("pedidos-realtime")
-      .on("postgres_changes", { event: "*", schema: "public", table: "pedidos" }, () => {
-        loadData();
-      })
-      .subscribe();
-    return () => { supabase.removeChannel(channel); };
+    const interval = setInterval(() => { loadData(); }, 30000);
+    return () => clearInterval(interval);
   }, [loadData]);
 
   useEffect(() => {
