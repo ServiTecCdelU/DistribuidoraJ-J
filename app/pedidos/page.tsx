@@ -317,14 +317,32 @@ export default function PedidosPage() {
     if (newStatus === "completed") {
       const order = orders.find((o) => o.id === orderId);
       if (order) {
-        // Guardar todos los pedidos del mismo cliente para completarlos juntos
+        // Todos los pedidos no completados del mismo cliente
         const clientOrders = orders.filter(
           (o) => o.status !== "completed" && (o.clientName === order.clientName || (o.clientId && o.clientId === order.clientId))
         );
-        setSelectedClientOrders(clientOrders.length > 0 ? clientOrders : [order]);
+        const ordersForClient = clientOrders.length > 0 ? clientOrders : [order];
+        setSelectedClientOrders(ordersForClient);
+
+        // Construir merged order con items combinados (igual que en la lista)
+        const itemMap = new Map<string, Order["items"][0]>();
+        ordersForClient.forEach((o) => {
+          o.items.forEach((item) => {
+            const key = item.productId || item.name;
+            const existing = itemMap.get(key);
+            if (existing) {
+              itemMap.set(key, { ...existing, quantity: existing.quantity + item.quantity });
+            } else {
+              itemMap.set(key, { ...item });
+            }
+          });
+        });
+        const mergedItems = Array.from(itemMap.values());
+        const mergedOrder: Order = { ...order, items: mergedItems };
+
         setActiveModal(null);
         setDetailOrder(null);
-        setSelectedOrder(order);
+        setSelectedOrder(mergedOrder);
         setActiveModal("payment");
       }
       return;
