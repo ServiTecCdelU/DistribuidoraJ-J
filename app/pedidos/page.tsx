@@ -6,11 +6,10 @@ import { MainLayout } from "@/components/layout/main-layout";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { DataTableSkeleton } from "@/components/ui/data-table-skeleton";
-import { Input } from "@/components/ui/input";
 import { ClientModal } from "@/components/clientes/client-modal";
 import { ordersApi, salesApi, clientsApi, sellersApi, productsApi } from "@/lib/api";
 import type { Order, OrderStatus, Client, Seller } from "@/lib/types";
-import { Package, Search, User, Filter, X, Loader2, Navigation, ClipboardList, ShoppingCart, FileSpreadsheet, Eye } from "lucide-react";
+import { Package, Filter, Loader2, Navigation, ClipboardList, FileSpreadsheet, Eye } from "lucide-react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { toast } from "sonner";
 import { useAuth } from "@/hooks/use-auth";
@@ -63,8 +62,6 @@ export default function PedidosPage() {
 
   // Filtros
   const [filterStatus, setFilterStatus] = useState<string>("all");
-  const [filterDateFrom, setFilterDateFrom] = useState<string>("");
-  const [filterDateTo, setFilterDateTo] = useState<string>("");
   const [filterClient, setFilterClient] = useState<string>("");
   const [filterSeller, setFilterSeller] = useState<string>("");
   const [filterTransportista, setFilterTransportista] = useState<string>("");
@@ -826,8 +823,6 @@ export default function PedidosPage() {
 
   const clearFilters = useCallback(() => {
     setFilterStatus("all");
-    setFilterDateFrom("");
-    setFilterDateTo("");
     setFilterClient("");
     setFilterSeller("");
     setFilterTransportista("");
@@ -837,8 +832,6 @@ export default function PedidosPage() {
   const hasActiveFilters = useMemo(() => {
     return (
       filterStatus !== "all" ||
-      filterDateFrom ||
-      filterDateTo ||
       filterClient ||
       filterSeller ||
       filterTransportista ||
@@ -846,8 +839,6 @@ export default function PedidosPage() {
     );
   }, [
     filterStatus,
-    filterDateFrom,
-    filterDateTo,
     filterClient,
     filterSeller,
     filterTransportista,
@@ -893,18 +884,6 @@ export default function PedidosPage() {
       }
     }
 
-    if (filterDateFrom) {
-      const fromDate = new Date(filterDateFrom);
-      fromDate.setHours(0, 0, 0, 0);
-      filtered = filtered.filter((o) => new Date(o.createdAt) >= fromDate);
-    }
-
-    if (filterDateTo) {
-      const toDate = new Date(filterDateTo);
-      toDate.setHours(23, 59, 59, 999);
-      filtered = filtered.filter((o) => new Date(o.createdAt) <= toDate);
-    }
-
     return filtered;
   }, [
     orders,
@@ -913,10 +892,7 @@ export default function PedidosPage() {
     searchQuery,
     filterClient,
     filterSeller,
-    filterDateFrom,
-    filterDateTo,
     filterTransportista,
-    user,
   ]);
 
 
@@ -1068,28 +1044,7 @@ export default function PedidosPage() {
     <MainLayout allowedRoles={['admin', 'seller']} title="Pedidos" description="Seguimiento de pedidos y entregas">
       <div className="space-y-4">
       <div className="mb-6 space-y-4">
-        <div className="flex flex-col lg:flex-row gap-3 justify-between items-start lg:items-center">
-          <div className="flex items-center gap-2 w-full lg:w-auto">
-            <div className="relative flex-1 lg:w-80">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-              <Input
-                placeholder="Buscar por cliente, vendedor o ID..."
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                className="pl-9"
-              />
-              {searchQuery && (
-                <button
-                  onClick={() => setSearchQuery("")}
-                  className="absolute right-3 top-1/2 -translate-y-1/2"
-                >
-                  <X className="h-4 w-4 text-muted-foreground hover:text-foreground" />
-                </button>
-              )}
-            </div>
-          </div>
-
-          <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 justify-end">
             {hasActiveFilters && (
               <Button
                 variant="ghost"
@@ -1101,55 +1056,58 @@ export default function PedidosPage() {
                 Limpiar filtros
               </Button>
             )}
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => setRouteModalOpen(true)}
-              disabled={filteredOrders.filter(o => o.address && o.city && o.status !== "completed").length === 0}
-              className="gap-2"
-            >
-              <Navigation className="h-4 w-4" />
-              <span className="hidden sm:inline">Iniciar Recorrido</span>
-              <span className="sm:hidden">Ruta</span>
-            </Button>
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={handlePrintCargo}
-              disabled={filteredOrders.length === 0}
-              className="gap-2"
-            >
-              <ClipboardList className="h-4 w-4" />
-              <span className="hidden sm:inline">Listado de Carga</span>
-              <span className="sm:hidden">Carga</span>
-            </Button>
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={handleDescargarExcel}
-              disabled={generandoExcel}
-              className="gap-2 border-emerald-300 text-emerald-700 hover:bg-emerald-50"
-            >
-              {generandoExcel ? <Loader2 className="h-4 w-4 animate-spin" /> : <FileSpreadsheet className="h-4 w-4" />}
-              <span className="hidden sm:inline">Descargar Pedido</span>
-              <span className="sm:hidden">Excel</span>
-            </Button>
-          </div>
+            {filterStatus !== "pending" && filterStatus !== "delivery" && (
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setRouteModalOpen(true)}
+                disabled={filteredOrders.filter(o => o.address && o.city && o.status !== "completed").length === 0}
+                className="gap-2"
+              >
+                <Navigation className="h-4 w-4" />
+                <span className="hidden sm:inline">Iniciar Recorrido</span>
+                <span className="sm:hidden">Ruta</span>
+              </Button>
+            )}
+            {filterStatus !== "pending" && (
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={handlePrintCargo}
+                disabled={filteredOrders.length === 0}
+                className="gap-2"
+              >
+                <ClipboardList className="h-4 w-4" />
+                <span className="hidden sm:inline">Listado de Carga</span>
+                <span className="sm:hidden">Carga</span>
+              </Button>
+            )}
+            {filterStatus !== "preparation" && filterStatus !== "delivery" && (
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={handleDescargarExcel}
+                disabled={generandoExcel}
+                className="gap-2 border-emerald-300 text-emerald-700 hover:bg-emerald-50"
+              >
+                {generandoExcel ? <Loader2 className="h-4 w-4 animate-spin" /> : <FileSpreadsheet className="h-4 w-4" />}
+                <span className="hidden sm:inline">Descargar Pedido</span>
+                <span className="sm:hidden">Excel</span>
+              </Button>
+            )}
         </div>
 
         <OrdersFilters
           filterStatus={filterStatus}
           setFilterStatus={setFilterStatus}
-          filterDateFrom={filterDateFrom}
-          setFilterDateFrom={setFilterDateFrom}
-          filterDateTo={filterDateTo}
-          setFilterDateTo={setFilterDateTo}
           filterClient={filterClient}
           setFilterClient={setFilterClient}
           filterSeller={filterSeller}
           setFilterSeller={setFilterSeller}
           filterTransportista={filterTransportista}
           setFilterTransportista={setFilterTransportista}
+          searchQuery={searchQuery}
+          setSearchQuery={setSearchQuery}
           clients={clients}
           sellers={uniqueSellers}
           transportistas={transportistas}
