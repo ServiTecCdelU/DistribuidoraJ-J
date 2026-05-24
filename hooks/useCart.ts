@@ -935,7 +935,7 @@ export function useCart(role: UserRole, userEmail?: string, externalProducts?: P
     setClientDni("");
     setClientCuit("");
     setClientTaxCategory("consumidor_final");
-    setLookupType("dni");
+    setLookupType("search");
     setDniLookup("");
     setDniFound(false);
     setDniNotFound(false);
