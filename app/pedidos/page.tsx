@@ -496,6 +496,12 @@ export default function PedidosPage() {
         deliveryAddress: selectedOrder.address,
       });
 
+      // Guardar desglose efectivo/transferencia
+      supabase.from("ventas").update({
+        efectivo_amount: efectivo > 0 ? efectivo : null,
+        transferencia_amount: transferencia > 0 ? transferencia : null,
+      }).eq("id", sale.id).then(() => {}).catch(() => {});
+
       // Completar TODOS los pedidos del cliente (incluido el principal y los adicionales)
       const ordersToComplete = selectedClientOrders.length > 0 ? selectedClientOrders : [selectedOrder];
       const completedOrders = await Promise.all(

@@ -23,6 +23,7 @@ No hay tests en este proyecto.
 - Mantener la arquitectura actual.
 - No romper estilos ni componentes existentes.
 - Revisar estilos existentes antes de tocar cualquier componente visual para mantener consistencia.
+- **Si el cambio requiere columnas o tablas nuevas en Supabase**: informar el SQL exacto (`ALTER TABLE` / `CREATE TABLE`) ANTES de escribir el código que las usa. El usuario ejecuta el SQL primero y después se implementa el código.
 
 ### Despues de hacer cambios — commit y push automaticamente
 Hacer UN SOLO commit y push cuando el usuario confirme que todo funciona o cuando se terminen TODOS los cambios pedidos en un mensaje. NO hacer commit por cada cambio intermedio ni por cada fix.
