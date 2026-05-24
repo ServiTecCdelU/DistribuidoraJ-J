@@ -851,9 +851,11 @@ export default function PedidosPage() {
     searchQuery,
   ]);
 
+  const activeOrders = useMemo(() => orders.filter((o) => o.status !== "completed"), [orders]);
+
   const filteredOrders = useMemo(() => {
     // Completados van a Ventas — no aparecen en Pedidos
-    let filtered = orders.filter((o) => o.status !== "completed");
+    let filtered = activeOrders;
 
     if (filterStatus !== "all") {
       filtered = filtered.filter((o) => o.status === filterStatus);
@@ -892,7 +894,7 @@ export default function PedidosPage() {
 
     return filtered;
   }, [
-    orders,
+    activeOrders,
     clients,
     filterStatus,
     searchQuery,
@@ -1107,7 +1109,7 @@ th.center,td.center{text-align:center}
         clients={clients}
         sellers={uniqueSellers}
         transportistas={transportistas}
-        orders={orders}
+        orders={activeOrders}
       >
         {hasActiveFilters && (
           <Button
