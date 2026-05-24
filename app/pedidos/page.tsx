@@ -302,6 +302,17 @@ export default function PedidosPage() {
     return () => { active = false; };
   }, [loadData]);
 
+  // Suscripción real-time: recarga cuando hay INSERT o UPDATE en pedidos
+  useEffect(() => {
+    const channel = supabase
+      .channel("pedidos-realtime")
+      .on("postgres_changes", { event: "*", schema: "public", table: "pedidos" }, () => {
+        loadData();
+      })
+      .subscribe();
+    return () => { supabase.removeChannel(channel); };
+  }, [loadData]);
+
   useEffect(() => {
     if (selectedOrder?.clientId) {
       setSelectedClientId(selectedOrder.clientId);
