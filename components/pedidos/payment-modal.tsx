@@ -21,7 +21,7 @@ import {
 } from "@/components/ui/select";
 import { formatPrice } from "@/lib/utils/format";
 import type { Order, Client } from "@/lib/types";
-import { Banknote, CreditCard, UserPlus, Loader2, Wallet, ArrowLeftRight, AlertTriangle, PackageX, ChevronDown, ChevronUp, ShieldAlert, Package } from "lucide-react";
+import { Banknote, CreditCard, UserPlus, Loader2, Wallet, ArrowLeftRight, AlertTriangle, PackageX, ChevronDown, ChevronUp, ShieldAlert, Package, Upload, ImageIcon, X as XIcon } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 const generateOrderNumber = (createdAt: Date | string, index: number) => {
@@ -84,7 +84,7 @@ interface PaymentModalProps {
   setPaymentMethod: (value: "efectivo" | "transferencia") => void;
   cashAmount: string;
   setCashAmount: (value: string) => void;
-  onComplete: (adjustments: ItemAdjustment[]) => void;
+  onComplete: (adjustments: ItemAdjustment[], comprobanteFile?: File) => void;
   processing: boolean;
   onNewClient: () => void;
 }
@@ -110,11 +110,24 @@ export function PaymentModal({
 }: PaymentModalProps) {
   const [adjustments, setAdjustments] = useState<Record<string, ItemAdj>>({});
   const [adjustOpen, setAdjustOpen] = useState(false);
+  const [comprobanteFile, setComprobanteFile] = useState<File | null>(null);
+  const [comprobantePreview, setComprobantePreview] = useState<string>("");
 
   useEffect(() => {
     setAdjustments({});
     setAdjustOpen(false);
+    setComprobanteFile(null);
+    setComprobantePreview("");
   }, [order?.id]);
+
+  const handleComprobanteChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setComprobanteFile(file);
+    const reader = new FileReader();
+    reader.onload = (ev) => setComprobantePreview(ev.target?.result as string);
+    reader.readAsDataURL(file);
+  };
 
   const adjustmentsList = useMemo(() => {
     if (!order) return [];
@@ -318,21 +331,55 @@ export function PaymentModal({
           {/* Split amount */}
           {paymentType === "split" && (
             <div className="space-y-3 p-3 bg-amber-50 rounded-xl border border-amber-200">
-              <Label htmlFor="cashAmount" className="text-sm font-semibold text-amber-900">Monto en efectivo</Label>
+              {/* Monto efectivo */}
+              <Label htmlFor="cashAmount" className="text-sm font-semibold text-amber-900 flex items-center gap-1.5">
+                <Banknote className="h-3.5 w-3.5" /> Monto en efectivo
+              </Label>
               <div className="relative">
                 <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500 font-semibold">$</span>
                 <Input id="cashAmount" type="number" min="1" max={total - 1} value={cashAmount}
                   onChange={(e) => setCashAmount(e.target.value)} placeholder="0"
                   className="pl-8 bg-white border-amber-300 focus:border-amber-500" />
               </div>
-              <div className="flex justify-between text-sm">
-                <span className="text-amber-700">Efectivo:</span>
-                <span className="font-semibold text-amber-900">{formatPrice(cashAmountNum)}</span>
+
+              {/* Desglose */}
+              <div className="rounded-lg bg-white border border-amber-200 divide-y divide-amber-100">
+                <div className="flex justify-between items-center px-3 py-2 text-sm">
+                  <span className="flex items-center gap-1.5 text-amber-700"><Banknote className="h-3.5 w-3.5" /> Efectivo</span>
+                  <span className="font-semibold text-amber-900">{formatPrice(cashAmountNum)}</span>
+                </div>
+                <div className="flex justify-between items-center px-3 py-2 text-sm">
+                  <span className="flex items-center gap-1.5 text-violet-700"><ArrowLeftRight className="h-3.5 w-3.5" /> Transferencia</span>
+                  <span className="font-semibold text-violet-900">{formatPrice(remainingAmount)}</span>
+                </div>
               </div>
-              <div className="flex justify-between text-sm">
-                <span className="text-amber-700">A cuenta:</span>
-                <span className="font-semibold text-amber-900">{formatPrice(remainingAmount)}</span>
-              </div>
+
+              {/* Comprobante de transferencia */}
+              {remainingAmount > 0 && (
+                <div className="space-y-2">
+                  <Label className="text-xs font-semibold text-violet-800 flex items-center gap-1.5">
+                    <Upload className="h-3.5 w-3.5" /> Comprobante de transferencia
+                  </Label>
+                  {comprobantePreview ? (
+                    <div className="relative rounded-lg overflow-hidden border border-violet-200">
+                      <img src={comprobantePreview} alt="Comprobante" className="w-full max-h-48 object-contain bg-gray-50" />
+                      <button
+                        type="button"
+                        onClick={() => { setComprobanteFile(null); setComprobantePreview(""); }}
+                        className="absolute top-1.5 right-1.5 h-6 w-6 rounded-full bg-black/60 flex items-center justify-center hover:bg-black/80"
+                      >
+                        <XIcon className="h-3.5 w-3.5 text-white" />
+                      </button>
+                    </div>
+                  ) : (
+                    <label className="flex flex-col items-center gap-1.5 p-3 border-2 border-dashed border-violet-300 rounded-xl cursor-pointer bg-white hover:bg-violet-50 transition-colors">
+                      <ImageIcon className="h-6 w-6 text-violet-400" />
+                      <span className="text-xs text-violet-600 font-medium">Tocá para subir la foto del comprobante</span>
+                      <input type="file" accept="image/*" capture="environment" onChange={handleComprobanteChange} className="sr-only" />
+                    </label>
+                  )}
+                </div>
+              )}
             </div>
           )}
 
@@ -475,7 +522,7 @@ export function PaymentModal({
             <Button variant="outline" className="flex-1 h-11" onClick={onClose} disabled={processing}>
               Cancelar
             </Button>
-            <Button className="flex-1 h-11 font-semibold" onClick={() => onComplete(adjustmentsList)}
+            <Button className="flex-1 h-11 font-semibold" onClick={() => onComplete(adjustmentsList, comprobanteFile ?? undefined)}
               disabled={processing || !isValid()}>
               {processing ? (
                 <><Loader2 className="h-4 w-4 mr-2 animate-spin" />Procesando...</>

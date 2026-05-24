@@ -340,7 +340,7 @@ export default function PedidosPage() {
     }
   }, [orders, detailOrder]);
 
-  const handleCompleteOrder = useCallback(async (adjustments: ItemAdjustment[] = []) => {
+  const handleCompleteOrder = useCallback(async (adjustments: ItemAdjustment[] = [], comprobanteFile?: File) => {
     if (!selectedOrder) return;
     setProcessingPayment(true);
 
@@ -513,6 +513,24 @@ export default function PedidosPage() {
           selectedOrder.remitoNumber,
           selectedOrder.remitoPdfBase64,
         );
+      }
+
+      // Subir comprobante de transferencia (pago mixto) si se adjuntó
+      if (comprobanteFile) {
+        try {
+          const ext = comprobanteFile.name.split(".").pop() || "jpg";
+          const fileName = `comprobante_${sale.id}_${Date.now()}.${ext}`;
+          const { data: uploadData } = await supabase.storage
+            .from("facturas")
+            .upload(fileName, comprobanteFile, { contentType: comprobanteFile.type, upsert: true });
+          if (uploadData) {
+            const { data: { publicUrl } } = supabase.storage.from("facturas").getPublicUrl(uploadData.path);
+            await supabase.from("ventas").update({ comprobante_transferencia: publicUrl }).eq("id", sale.id);
+          }
+        } catch {
+          // No bloquea el flujo si falla
+          toast.info("Venta completada — comprobante no pudo guardarse");
+        }
       }
 
       // Calcular info de descuento para mostrar en el modal
