@@ -10,14 +10,6 @@ import {
 } from "@/components/ui/select";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
-import { Label } from "@/components/ui/label";
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-  DialogFooter,
-} from "@/components/ui/dialog";
 import type { Client, Order } from "@/lib/types";
 import {
   User,
@@ -26,6 +18,7 @@ import {
   Truck,
   Search,
   X,
+  SlidersHorizontal,
 } from "lucide-react";
 import { statusConfig, statusFlow } from "@/lib/order-constants";
 
@@ -62,12 +55,7 @@ export function OrdersFilters({
   transportistas,
   orders,
 }: OrdersFiltersProps) {
-  const [mobileOpen, setMobileOpen] = useState(false);
-  const [tmp, setTmp] = useState({
-    client: filterClient,
-    seller: filterSeller,
-    transportista: filterTransportista || "",
-  });
+  const [filtersOpen, setFiltersOpen] = useState(false);
 
   const statusCounts = useMemo(() => {
     const counts: Record<string, number> = { all: orders.length };
@@ -87,31 +75,15 @@ export function OrdersFilters({
     return count;
   }, [filterClient, filterSeller, filterTransportista]);
 
-  const handleOpenModal = () => {
-    setTmp({
-      client: filterClient,
-      seller: filterSeller,
-      transportista: filterTransportista || "",
-    });
-    setMobileOpen(true);
-  };
-
-  const handleApply = () => {
-    setFilterClient(tmp.client);
-    setFilterSeller(tmp.seller);
-    if (setFilterTransportista) {
-      setFilterTransportista(tmp.transportista === "all-transportistas" ? "" : tmp.transportista);
-    }
-    setMobileOpen(false);
-  };
-
-  const handleClearTmp = () => {
-    setTmp({ client: "", seller: "", transportista: "" });
+  const handleClearFilters = () => {
+    setFilterClient("");
+    setFilterSeller("");
+    if (setFilterTransportista) setFilterTransportista("");
   };
 
   return (
     <div className="space-y-3">
-      {/* Status tabs + buscador */}
+      {/* Status tabs + buscador + filtro toggle */}
       <div className="flex flex-col sm:flex-row gap-2">
         <div className="flex gap-2 overflow-x-auto pb-1 scrollbar-hide flex-1">
           <button
@@ -154,240 +126,139 @@ export function OrdersFilters({
           })}
         </div>
 
-        {/* Buscador */}
-        <div className="relative shrink-0 w-full sm:w-64">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-          <Input
-            placeholder="Buscar cliente, vendedor..."
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            className="pl-9 pr-8"
-          />
-          {searchQuery && (
-            <button
-              onClick={() => setSearchQuery("")}
-              className="absolute right-3 top-1/2 -translate-y-1/2"
-            >
-              <X className="h-4 w-4 text-muted-foreground hover:text-foreground" />
-            </button>
-          )}
+        <div className="flex gap-2 shrink-0">
+          {/* Buscador */}
+          <div className="relative flex-1 sm:w-56 sm:flex-none">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+            <Input
+              placeholder="Buscar cliente, vendedor..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              className="pl-9 pr-8"
+            />
+            {searchQuery && (
+              <button
+                onClick={() => setSearchQuery("")}
+                className="absolute right-3 top-1/2 -translate-y-1/2"
+              >
+                <X className="h-4 w-4 text-muted-foreground hover:text-foreground" />
+              </button>
+            )}
+          </div>
+
+          {/* Botón toggle filtros */}
+          <Button
+            variant={filtersOpen ? "default" : "outline"}
+            size="icon"
+            className={`shrink-0 h-10 w-10 relative ${filtersOpen ? "bg-teal-600 hover:bg-teal-700 text-white" : ""}`}
+            onClick={() => setFiltersOpen(!filtersOpen)}
+          >
+            <SlidersHorizontal className="h-4 w-4" />
+            {activeFilterCount > 0 && !filtersOpen && (
+              <span className="absolute -top-1.5 -right-1.5 flex h-4 w-4 items-center justify-center rounded-full bg-red-500 text-[10px] font-bold text-white leading-none">
+                {activeFilterCount}
+              </span>
+            )}
+          </Button>
         </div>
       </div>
 
-      {/* Mobile: "Filtros" button */}
-      <div className="md:hidden">
-        <Button
-          variant="outline"
-          size="sm"
-          className="flex items-center gap-2 relative"
-          onClick={handleOpenModal}
-        >
-          <Filter className="h-4 w-4" />
-          Filtros
-          {activeFilterCount > 0 && (
-            <span className="absolute -top-1.5 -right-1.5 flex h-4 w-4 items-center justify-center rounded-full bg-red-500 text-[10px] font-bold text-white leading-none">
-              {activeFilterCount}
-            </span>
-          )}
-        </Button>
-      </div>
-
-      {/* Desktop: filter grid */}
-      <div className="hidden md:grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 p-4 bg-gray-50/80 rounded-xl border border-gray-200">
-        <div className="space-y-1.5">
-          <label className="text-xs font-medium text-gray-600 flex items-center gap-1.5">
-            <User className="h-3.5 w-3.5" />
-            Cliente
-          </label>
-          <Select
-            value={filterClient || "all-clients"}
-            onValueChange={(value) =>
-              setFilterClient(value === "all-clients" ? "" : value)
-            }
-          >
-            <SelectTrigger className="bg-white">
-              <SelectValue placeholder="Todos los clientes" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all-clients">Todos los clientes</SelectItem>
-              {clients.map((client) => (
-                <SelectItem key={client.id} value={client.id}>
-                  {client.name}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </div>
-
-        <div className="space-y-1.5">
-          <label className="text-xs font-medium text-gray-600 flex items-center gap-1.5">
-            <Store className="h-3.5 w-3.5" />
-            Vendedor
-          </label>
-          <Select
-            value={filterSeller || "all-sellers"}
-            onValueChange={(value) =>
-              setFilterSeller(value === "all-sellers" ? "" : value)
-            }
-          >
-            <SelectTrigger className="bg-white">
-              <SelectValue placeholder="Todos los vendedores" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all-sellers">Todos los vendedores</SelectItem>
-              {sellers.map((seller) => (
-                <SelectItem key={seller.id} value={seller.id}>
-                  {seller.name}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </div>
-
-        {transportistas && setFilterTransportista && (
+      {/* Panel de filtros colapsable */}
+      {filtersOpen && (
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 p-4 bg-gray-50/80 rounded-2xl border border-gray-200 animate-in fade-in slide-in-from-top-2 duration-200">
           <div className="space-y-1.5">
             <label className="text-xs font-medium text-gray-600 flex items-center gap-1.5">
-              <Truck className="h-3.5 w-3.5" />
-              Transportista
+              <User className="h-3.5 w-3.5" />
+              Cliente
             </label>
             <Select
-              value={filterTransportista || "all-transportistas"}
+              value={filterClient || "all-clients"}
               onValueChange={(value) =>
-                setFilterTransportista(value === "all-transportistas" ? "" : value)
+                setFilterClient(value === "all-clients" ? "" : value)
               }
             >
               <SelectTrigger className="bg-white">
-                <SelectValue placeholder="Todos" />
+                <SelectValue placeholder="Todos los clientes" />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="all-transportistas">Todos</SelectItem>
-                <SelectItem value="unassigned">Sin asignar</SelectItem>
-                {transportistas.map((t) => (
-                  <SelectItem key={t.id} value={t.id}>
-                    {t.name}
+                <SelectItem value="all-clients">Todos los clientes</SelectItem>
+                {clients.map((client) => (
+                  <SelectItem key={client.id} value={client.id}>
+                    {client.name}
                   </SelectItem>
                 ))}
               </SelectContent>
             </Select>
           </div>
-        )}
-      </div>
 
-      {/* Mobile filter modal */}
-      <Dialog open={mobileOpen} onOpenChange={setMobileOpen}>
-        <DialogContent className="w-[calc(100vw-1rem)] max-w-sm max-h-[90vh] flex flex-col p-0 gap-0 overflow-hidden">
-          <DialogHeader className="px-4 pt-4 pb-3 border-b border-gray-100 shrink-0">
-            <DialogTitle className="flex items-center gap-2 text-base">
-              <Filter className="h-4 w-4" />
-              Filtros
-            </DialogTitle>
-          </DialogHeader>
-
-          <div className="flex-1 overflow-y-auto px-4 py-3 space-y-4">
-            {/* Cliente */}
-            <div className="space-y-1.5">
-              <Label className="text-xs font-medium text-gray-600 flex items-center gap-1.5">
-                <User className="h-3.5 w-3.5" />
-                Cliente
-              </Label>
-              <Select
-                value={tmp.client || "all-clients"}
-                onValueChange={(value) =>
-                  setTmp((p) => ({ ...p, client: value === "all-clients" ? "" : value }))
-                }
-              >
-                <SelectTrigger className="bg-white">
-                  <SelectValue placeholder="Todos los clientes" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all-clients">Todos los clientes</SelectItem>
-                  {clients.map((client) => (
-                    <SelectItem key={client.id} value={client.id}>
-                      {client.name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-
-            {/* Vendedor */}
-            <div className="space-y-1.5">
-              <Label className="text-xs font-medium text-gray-600 flex items-center gap-1.5">
-                <Store className="h-3.5 w-3.5" />
-                Vendedor
-              </Label>
-              <Select
-                value={tmp.seller || "all-sellers"}
-                onValueChange={(value) =>
-                  setTmp((p) => ({ ...p, seller: value === "all-sellers" ? "" : value }))
-                }
-              >
-                <SelectTrigger className="bg-white">
-                  <SelectValue placeholder="Todos los vendedores" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all-sellers">Todos los vendedores</SelectItem>
-                  {sellers.map((seller) => (
-                    <SelectItem key={seller.id} value={seller.id}>
-                      {seller.name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-
-            {/* Transportista */}
-            {transportistas && setFilterTransportista && (
-              <div className="space-y-1.5">
-                <Label className="text-xs font-medium text-gray-600 flex items-center gap-1.5">
-                  <Truck className="h-3.5 w-3.5" />
-                  Transportista
-                </Label>
-                <Select
-                  value={tmp.transportista || "all-transportistas"}
-                  onValueChange={(value) =>
-                    setTmp((p) => ({
-                      ...p,
-                      transportista: value === "all-transportistas" ? "" : value,
-                    }))
-                  }
-                >
-                  <SelectTrigger className="bg-white">
-                    <SelectValue placeholder="Todos" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="all-transportistas">Todos</SelectItem>
-                    <SelectItem value="unassigned">Sin asignar</SelectItem>
-                    {transportistas.map((t) => (
-                      <SelectItem key={t.id} value={t.id}>
-                        {t.name}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-            )}
+          <div className="space-y-1.5">
+            <label className="text-xs font-medium text-gray-600 flex items-center gap-1.5">
+              <Store className="h-3.5 w-3.5" />
+              Vendedor
+            </label>
+            <Select
+              value={filterSeller || "all-sellers"}
+              onValueChange={(value) =>
+                setFilterSeller(value === "all-sellers" ? "" : value)
+              }
+            >
+              <SelectTrigger className="bg-white">
+                <SelectValue placeholder="Todos los vendedores" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all-sellers">Todos los vendedores</SelectItem>
+                {sellers.map((seller) => (
+                  <SelectItem key={seller.id} value={seller.id}>
+                    {seller.name}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
           </div>
 
-          <DialogFooter className="px-4 py-3 border-t border-gray-100 shrink-0 flex flex-row gap-2">
-            <Button
-              variant="ghost"
-              size="sm"
-              className="flex-1 text-gray-500"
-              onClick={handleClearTmp}
-            >
-              Limpiar todos
-            </Button>
-            <Button
-              size="sm"
-              className="flex-1 bg-teal-600 hover:bg-teal-700 text-white"
-              onClick={handleApply}
-            >
-              Aplicar
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+          {transportistas && setFilterTransportista && (
+            <div className="space-y-1.5">
+              <label className="text-xs font-medium text-gray-600 flex items-center gap-1.5">
+                <Truck className="h-3.5 w-3.5" />
+                Transportista
+              </label>
+              <Select
+                value={filterTransportista || "all-transportistas"}
+                onValueChange={(value) =>
+                  setFilterTransportista(value === "all-transportistas" ? "" : value)
+                }
+              >
+                <SelectTrigger className="bg-white">
+                  <SelectValue placeholder="Todos" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all-transportistas">Todos</SelectItem>
+                  <SelectItem value="unassigned">Sin asignar</SelectItem>
+                  {transportistas.map((t) => (
+                    <SelectItem key={t.id} value={t.id}>
+                      {t.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          )}
+
+          {activeFilterCount > 0 && (
+            <div className="sm:col-span-2 lg:col-span-3 flex justify-end">
+              <Button
+                variant="ghost"
+                size="sm"
+                className="text-gray-500 hover:text-gray-700"
+                onClick={handleClearFilters}
+              >
+                <X className="h-3.5 w-3.5 mr-1.5" />
+                Limpiar filtros
+              </Button>
+            </div>
+          )}
+        </div>
+      )}
     </div>
   );
 }

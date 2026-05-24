@@ -22,7 +22,6 @@ import { SuccessModal } from "@/components/pedidos/success-modal";
 import { RouteMapModal } from "@/components/pedidos/route-map-modal";
 import { StockCheckModal, type StockCheckItem } from "@/components/pedidos/stock-check-modal";
 import { statusConfig } from "@/lib/order-constants";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { formatCurrency as formatPrice } from "@/lib/utils/format";
 
 export const generateOrderNumber = (date: Date, index: number) => {
@@ -88,18 +87,6 @@ export default function PedidosPage() {
   const [stockCheckItems, setStockCheckItems] = useState<StockCheckItem[]>([]);
   const [stockCheckOrder, setStockCheckOrder] = useState<Order | null>(null);
 
-  // Selección masiva
-  const [selectedOrderIds, setSelectedOrderIds] = useState<Set<string>>(new Set());
-  const [bulkTransportistaId, setBulkTransportistaId] = useState<string>("");
-
-  // Autoseleccionar transportista si hay uno solo
-  useEffect(() => {
-    const t = sellers.filter(s => s.employeeType === "transportista" || s.employeeType === "ambos");
-    if (t.length === 1 && !bulkTransportistaId) {
-      setBulkTransportistaId(t[0].id);
-    }
-  }, [sellers, bulkTransportistaId]);
-  const [bulkAssigning, setBulkAssigning] = useState(false);
 
   // Success state
   const [lastSaleResult, setLastSaleResult] = useState<{
@@ -959,16 +946,6 @@ export default function PedidosPage() {
     });
   }, []);
 
-  const toggleGroup = useCallback((groupOrders: Order[]) => {
-    setSelectedOrderIds(prev => {
-      const allSelected = groupOrders.every(o => prev.has(o.id));
-      const next = new Set(prev);
-      if (allSelected) groupOrders.forEach(o => next.delete(o.id));
-      else groupOrders.forEach(o => next.add(o.id));
-      return next;
-    });
-  }, []);
-
   const printHtml = useCallback((html: string) => {
     const iframe = document.createElement("iframe");
     iframe.style.cssText = "position:fixed;top:0;left:0;width:0;height:0;border:0;opacity:0;";
@@ -1006,26 +983,6 @@ export default function PedidosPage() {
     printHtml(html);
   }, [cargoList, ordersGroupedByClient, printHtml]);
 
-  const handleBulkAssign = useCallback(async () => {
-    if (!bulkTransportistaId || selectedOrderIds.size === 0) return;
-    const transportista = sellers.find(s => s.id === bulkTransportistaId);
-    if (!transportista) return;
-    setBulkAssigning(true);
-    try {
-      await Promise.all(
-        Array.from(selectedOrderIds).map(id =>
-          ordersApi.assignTransportista(id, transportista.id, transportista.name)
-        )
-      );
-      await loadData();
-      setSelectedOrderIds(new Set());
-      setBulkTransportistaId("");
-    } catch (e) {
-      toast.error("Error al asignar transportistas en lote");
-    } finally {
-      setBulkAssigning(false);
-    }
-  }, [bulkTransportistaId, selectedOrderIds, sellers, loadData]);
 
   if (!mounted) {
     return (
@@ -1113,47 +1070,6 @@ export default function PedidosPage() {
         />
       </div>
 
-      {/* Barra de asignación masiva (admin) */}
-      {user?.role === "admin" && selectedOrderIds.size > 0 && (
-        <div className="mb-4 p-4 rounded-2xl border-2 border-teal-200 bg-teal-50 flex flex-col sm:flex-row items-start sm:items-center gap-4">
-          <div className="flex items-center gap-3 flex-1">
-            <div className="h-10 w-10 rounded-full bg-teal-600 text-white flex items-center justify-center font-bold text-lg shrink-0">
-              {selectedOrderIds.size}
-            </div>
-            <div>
-              <p className="font-semibold text-teal-900 text-base">
-                {selectedOrderIds.size === 1 ? "1 pedido seleccionado" : `${selectedOrderIds.size} pedidos seleccionados`}
-              </p>
-              <button
-                onClick={() => setSelectedOrderIds(new Set())}
-                className="text-xs text-teal-600 hover:text-teal-800 underline"
-              >
-                Limpiar selección
-              </button>
-            </div>
-          </div>
-          <div className="flex items-center gap-2 w-full sm:w-auto">
-            <Select value={bulkTransportistaId} onValueChange={setBulkTransportistaId}>
-              <SelectTrigger className="bg-white border-teal-300 h-10 w-full sm:w-56">
-                <SelectValue placeholder="Elegir transportista..." />
-              </SelectTrigger>
-              <SelectContent>
-                {transportistas.map(t => (
-                  <SelectItem key={t.id} value={t.id}>{t.name}</SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-            <Button
-              disabled={!bulkTransportistaId || bulkAssigning}
-              onClick={handleBulkAssign}
-              className="gap-2 whitespace-nowrap h-10 bg-teal-600 hover:bg-teal-700"
-            >
-              {bulkAssigning ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
-              Asignar
-            </Button>
-          </div>
-        </div>
-      )}
 
       {loading ? (
         <DataTableSkeleton columns={5} rows={5} />
@@ -1171,26 +1087,6 @@ export default function PedidosPage() {
         </Card>
       ) : (
         <div className="space-y-4">
-          {/* Select all */}
-          {user?.role === "admin" && (
-            <div className="flex items-center gap-2 px-1">
-              <input
-                type="checkbox"
-                className="h-4 w-4 rounded border-gray-300 accent-teal-600 cursor-pointer"
-                checked={filteredOrders.length > 0 && filteredOrders.every(o => selectedOrderIds.has(o.id))}
-                onChange={() => {
-                  const allSelected = filteredOrders.every(o => selectedOrderIds.has(o.id));
-                  if (allSelected) {
-                    setSelectedOrderIds(new Set());
-                  } else {
-                    setSelectedOrderIds(new Set(filteredOrders.map(o => o.id)));
-                  }
-                }}
-              />
-              <span className="text-xs text-muted-foreground">Seleccionar todos ({filteredOrders.length})</span>
-            </div>
-          )}
-
           {ordersGroupedByClient.map(({ client, orders: clientOrders }) => {
             // Merge all items across orders (sum quantities for same product)
             const itemMap = new Map<string, Order["items"][0]>();
@@ -1208,7 +1104,6 @@ export default function PedidosPage() {
             const mergedItems = Array.from(itemMap.values());
             const productosResumen = mergedItems.map((i) => `${i.quantity}× ${i.name}`).join(" · ");
             const firstOrder = clientOrders[0];
-            const isGroupSelected = clientOrders.length > 0 && clientOrders.every((o) => selectedOrderIds.has(o.id));
             // Status: most "pending" (first non-completed, else first)
             const displayOrder = clientOrders.find((o) => o.status !== "completed") ?? firstOrder;
             const config = statusConfig[displayOrder.status] || {
@@ -1239,7 +1134,6 @@ export default function PedidosPage() {
                   <table className="w-full table-fixed">
                     <thead className="bg-muted/50 border-b">
                       <tr className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
-                        {user?.role === "admin" && <th className="pl-3 pr-1 py-2 w-8"></th>}
                         <th className="px-3 py-2 text-left w-36">Cliente</th>
                         <th className="px-3 py-2 text-left">Productos</th>
                         <th className="px-3 py-2 text-left w-40 hidden md:table-cell">Dirección</th>
@@ -1251,17 +1145,6 @@ export default function PedidosPage() {
                         className="hover:bg-muted/30 transition-colors text-sm cursor-pointer"
                         onClick={onView}
                       >
-                        {user?.role === "admin" && (
-                          <td className="pl-3 pr-1 py-2.5 w-8">
-                            <input
-                              type="checkbox"
-                              checked={isGroupSelected}
-                              onChange={() => toggleGroup(clientOrders)}
-                              onClick={(e) => e.stopPropagation()}
-                              className="h-4 w-4 rounded border-gray-300 accent-teal-600 cursor-pointer"
-                            />
-                          </td>
-                        )}
                         <td className="px-3 py-2.5">
                           <p className="text-xs font-semibold text-foreground truncate">{client}</p>
                           {clientOrders.length > 1 && (
@@ -1303,15 +1186,6 @@ export default function PedidosPage() {
                       className="flex items-center gap-2 px-3 py-2 cursor-pointer hover:bg-muted/20 transition-colors"
                       onClick={onView}
                     >
-                      {user?.role === "admin" && (
-                        <input
-                          type="checkbox"
-                          checked={isGroupSelected}
-                          onChange={() => toggleGroup(clientOrders)}
-                          onClick={(e) => e.stopPropagation()}
-                          className="h-4 w-4 rounded border-gray-300 accent-teal-600 cursor-pointer shrink-0"
-                        />
-                      )}
                       <div className="flex-1 min-w-0">
                         <div className="flex items-center gap-1 mb-0.5">
                           <p className="text-xs font-semibold text-foreground truncate">{client}</p>
