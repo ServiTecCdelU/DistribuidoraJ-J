@@ -9,7 +9,7 @@ import { DataTableSkeleton } from "@/components/ui/data-table-skeleton";
 import { ClientModal } from "@/components/clientes/client-modal";
 import { ordersApi, salesApi, clientsApi, sellersApi, productsApi } from "@/lib/api";
 import type { Order, OrderStatus, Client, Seller } from "@/lib/types";
-import { Package, Filter, Loader2, Navigation, ClipboardList, FileSpreadsheet, Eye } from "lucide-react";
+import { Package, Filter, Loader2, ClipboardList, FileSpreadsheet, Eye } from "lucide-react";
 import { toast } from "sonner";
 import { useAuth } from "@/hooks/use-auth";
 import { useRouter } from "next/navigation";
@@ -19,7 +19,6 @@ import { OrdersFilters } from "@/components/pedidos/orders-filters";
 import { OrderDetailModal } from "@/components/pedidos/order-detail-modal";
 import { PaymentModal, type ItemAdjustment } from "@/components/pedidos/payment-modal";
 import { SuccessModal } from "@/components/pedidos/success-modal";
-import { RouteMapModal } from "@/components/pedidos/route-map-modal";
 import { StockCheckModal, type StockCheckItem } from "@/components/pedidos/stock-check-modal";
 import { statusConfig } from "@/lib/order-constants";
 import { formatCurrency as formatPrice } from "@/lib/utils/format";
@@ -79,7 +78,6 @@ export default function PedidosPage() {
   // Todos los pedidos del cliente seleccionado para completar juntos
   const [selectedClientOrders, setSelectedClientOrders] = useState<Order[]>([]);
 
-  const [routeModalOpen, setRouteModalOpen] = useState(false);
   const [generandoExcel, setGenerandoExcel] = useState(false);
 
   // Stock check modal
@@ -1025,18 +1023,6 @@ export default function PedidosPage() {
             Limpiar filtros
           </Button>
         )}
-        {filterStatus !== "pending" && filterStatus !== "delivery" && (
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => setRouteModalOpen(true)}
-            disabled={filteredOrders.filter(o => o.address && o.city && o.status !== "completed").length === 0}
-            className="gap-2 sm:gap-2"
-          >
-            <Navigation className="h-4 w-4" />
-            <span className="hidden sm:inline">Iniciar Recorrido</span>
-          </Button>
-        )}
         {filterStatus !== "pending" && (
           <Button
             variant="outline"
@@ -1265,11 +1251,6 @@ export default function PedidosPage() {
 
 
 
-      <RouteMapModal
-        open={routeModalOpen}
-        onOpenChange={setRouteModalOpen}
-        orders={filteredOrders}
-      />
 
       </div>
 
