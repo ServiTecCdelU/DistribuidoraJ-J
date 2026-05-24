@@ -9,7 +9,7 @@ import { DataTableSkeleton } from "@/components/ui/data-table-skeleton";
 import { ClientModal } from "@/components/clientes/client-modal";
 import { ordersApi, salesApi, clientsApi, sellersApi, productsApi } from "@/lib/api";
 import type { Order, OrderStatus, Client, Seller } from "@/lib/types";
-import { Package, Filter, Loader2, ClipboardList, FileSpreadsheet, Eye } from "lucide-react";
+import { Package, Filter, Loader2, ClipboardList, FileSpreadsheet, Eye, ArrowRightCircle } from "lucide-react";
 import { toast } from "sonner";
 import { useAuth } from "@/hooks/use-auth";
 import { useRouter } from "next/navigation";
@@ -944,6 +944,24 @@ export default function PedidosPage() {
     });
   }, []);
 
+  const [movingAll, setMovingAll] = useState(false);
+
+  const handleMoveAll = useCallback(async (from: OrderStatus, to: OrderStatus) => {
+    const toMove = orders.filter((o) => o.status === from);
+    if (toMove.length === 0) return;
+    setMovingAll(true);
+    try {
+      await Promise.all(toMove.map((o) => ordersApi.updateStatus(o.id, to)));
+      await loadData();
+      const label = to === "preparation" ? "preparación" : "reparto";
+      toast.success(`${toMove.length} pedidos pasados a ${label}`);
+    } catch {
+      toast.error("Error al mover pedidos");
+    } finally {
+      setMovingAll(false);
+    }
+  }, [orders, loadData]);
+
   const printHtml = useCallback((html: string) => {
     const iframe = document.createElement("iframe");
     iframe.style.cssText = "position:fixed;top:0;left:0;width:0;height:0;border:0;opacity:0;";
@@ -1047,6 +1065,30 @@ export default function PedidosPage() {
             <span className="hidden sm:inline">Descargar Pedido</span>
           </Button>
         )}
+        {filterStatus === "pending" && filteredOrders.length > 0 && (
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => handleMoveAll("pending", "preparation")}
+            disabled={movingAll}
+            className="gap-2 border-amber-300 text-amber-700 hover:bg-amber-50"
+          >
+            {movingAll ? <Loader2 className="h-4 w-4 animate-spin" /> : <ArrowRightCircle className="h-4 w-4" />}
+            <span className="hidden sm:inline">Todos a preparación</span>
+          </Button>
+        )}
+        {filterStatus === "preparation" && filteredOrders.length > 0 && (
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => handleMoveAll("preparation", "delivery")}
+            disabled={movingAll}
+            className="gap-2 border-blue-300 text-blue-700 hover:bg-blue-50"
+          >
+            {movingAll ? <Loader2 className="h-4 w-4 animate-spin" /> : <ArrowRightCircle className="h-4 w-4" />}
+            <span className="hidden sm:inline">Todos a reparto</span>
+          </Button>
+        )}
       </OrdersFilters>
 
 
@@ -1092,7 +1134,6 @@ export default function PedidosPage() {
                     });
                   });
                   const mergedItems = Array.from(itemMap.values());
-                  const productosResumen = mergedItems.map((i) => `${i.quantity}× ${i.name}`).join(" · ");
                   const firstOrder = clientOrders[0];
                   const displayOrder = clientOrders.find((o) => o.status !== "completed") ?? firstOrder;
                   const config = statusConfig[displayOrder.status] || {
@@ -1110,8 +1151,7 @@ export default function PedidosPage() {
                         )}
                       </td>
                       <td className="px-3 py-2.5">
-                        <p className="text-xs text-foreground truncate" title={productosResumen}>{productosResumen}</p>
-                        <p className="text-[10px] text-muted-foreground mt-0.5">
+                        <p className="text-xs text-foreground">
                           {mergedItems.length} {mergedItems.length === 1 ? "producto" : "productos"}
                         </p>
                       </td>
@@ -1163,7 +1203,6 @@ export default function PedidosPage() {
                   });
                 });
                 const mergedItems = Array.from(itemMap.values());
-                const productosResumen = mergedItems.map((i) => `${i.quantity}× ${i.name}`).join(" · ");
                 const firstOrder = clientOrders[0];
                 const displayOrder = clientOrders.find((o) => o.status !== "completed") ?? firstOrder;
                 const config = statusConfig[displayOrder.status] || {
@@ -1181,7 +1220,7 @@ export default function PedidosPage() {
                           <span className="text-[10px] text-muted-foreground shrink-0">({clientOrders.length})</span>
                         )}
                       </div>
-                      <p className="text-[11px] text-muted-foreground truncate">{productosResumen}</p>
+                      <p className="text-[11px] text-muted-foreground">{mergedItems.length} {mergedItems.length === 1 ? "producto" : "productos"}</p>
                     </div>
                     <div className="flex items-center shrink-0">
                       <div className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold ${config.bgColor} border ${config.borderColor}`}>
