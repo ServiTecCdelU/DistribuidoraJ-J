@@ -1065,135 +1065,136 @@ export default function PedidosPage() {
           </CardContent>
         </Card>
       ) : (
-        <div className="space-y-4">
-          {ordersGroupedByClient.map(({ client, orders: clientOrders }) => {
-            // Merge all items across orders (sum quantities for same product)
-            const itemMap = new Map<string, Order["items"][0]>();
-            clientOrders.forEach((order) => {
-              order.items.forEach((item) => {
-                const key = item.productId || item.name;
-                const existing = itemMap.get(key);
-                if (existing) {
-                  itemMap.set(key, { ...existing, quantity: existing.quantity + item.quantity });
-                } else {
-                  itemMap.set(key, { ...item });
-                }
-              });
-            });
-            const mergedItems = Array.from(itemMap.values());
-            const productosResumen = mergedItems.map((i) => `${i.quantity}× ${i.name}`).join(" · ");
-            const firstOrder = clientOrders[0];
-            // Status: most "pending" (first non-completed, else first)
-            const displayOrder = clientOrders.find((o) => o.status !== "completed") ?? firstOrder;
-            const config = statusConfig[displayOrder.status] || {
-              label: displayOrder.status,
-              color: "text-gray-700",
-              dotColor: "bg-gray-500",
-              bgColor: "bg-gray-50",
-              borderColor: "border-gray-200",
-            };
-            const mergedOrder: Order = { ...firstOrder, items: mergedItems };
+        <>
+          {/* Desktop: tabla única */}
+          <div className="hidden lg:block border rounded-2xl overflow-hidden shadow-sm">
+            <table className="w-full table-fixed">
+              <thead className="bg-muted/50 border-b">
+                <tr className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
+                  <th className="px-3 py-2 text-left w-36">Cliente</th>
+                  <th className="px-3 py-2 text-left">Productos</th>
+                  <th className="px-3 py-2 text-left w-40">Dirección</th>
+                  <th className="px-3 py-2 text-left w-44">Estado</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y">
+                {ordersGroupedByClient.map(({ client, orders: clientOrders }) => {
+                  const itemMap = new Map<string, Order["items"][0]>();
+                  clientOrders.forEach((order) => {
+                    order.items.forEach((item) => {
+                      const key = item.productId || item.name;
+                      const existing = itemMap.get(key);
+                      if (existing) {
+                        itemMap.set(key, { ...existing, quantity: existing.quantity + item.quantity });
+                      } else {
+                        itemMap.set(key, { ...item });
+                      }
+                    });
+                  });
+                  const mergedItems = Array.from(itemMap.values());
+                  const productosResumen = mergedItems.map((i) => `${i.quantity}× ${i.name}`).join(" · ");
+                  const firstOrder = clientOrders[0];
+                  const displayOrder = clientOrders.find((o) => o.status !== "completed") ?? firstOrder;
+                  const config = statusConfig[displayOrder.status] || {
+                    label: displayOrder.status, color: "text-gray-700", dotColor: "bg-gray-500", bgColor: "bg-gray-50", borderColor: "border-gray-200",
+                  };
+                  const mergedOrder: Order = { ...firstOrder, items: mergedItems };
+                  const onView = () => { setDetailOrder(mergedOrder); setActiveModal("detail"); };
 
-            const onView = () => {
-              setDetailOrder(mergedOrder);
-              setActiveModal("detail");
-            };
-
-            const StatusBadge = () => (
-              <div className={`inline-flex items-center gap-1.5 px-2 py-1 rounded-full text-xs font-semibold shrink-0 ${config.bgColor} border ${config.borderColor}`}>
-                <div className={`w-1.5 h-1.5 rounded-full ${config.dotColor}`} />
-                <span className={config.color}>{config.label}</span>
-              </div>
-            );
-
-            return (
-              <div key={client}>
-                {/* Desktop: una fila por cliente */}
-                <div className="hidden lg:block border rounded-xl overflow-hidden shadow-sm mb-2">
-                  <table className="w-full table-fixed">
-                    <thead className="bg-muted/50 border-b">
-                      <tr className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
-                        <th className="px-3 py-2 text-left w-36">Cliente</th>
-                        <th className="px-3 py-2 text-left">Productos</th>
-                        <th className="px-3 py-2 text-left w-40 hidden md:table-cell">Dirección</th>
-                        <th className="px-3 py-2 text-left w-44">Estado</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      <tr
-                        className="hover:bg-muted/30 transition-colors text-sm cursor-pointer"
-                        onClick={onView}
-                      >
-                        <td className="px-3 py-2.5">
-                          <p className="text-xs font-semibold text-foreground truncate">{client}</p>
-                          {clientOrders.length > 1 && (
-                            <p className="text-[10px] text-muted-foreground">{clientOrders.length} pedidos</p>
-                          )}
-                        </td>
-                        <td className="px-3 py-2.5">
-                          <p className="text-xs text-foreground truncate" title={productosResumen}>{productosResumen}</p>
-                          <p className="text-[10px] text-muted-foreground mt-0.5">
-                            {mergedItems.length} {mergedItems.length === 1 ? "producto" : "productos"}
-                          </p>
-                        </td>
-                        <td className="px-3 py-2.5 hidden md:table-cell">
-                          <p className="text-xs text-muted-foreground truncate max-w-[160px]">
-                            {displayOrder.address && displayOrder.address !== "Retiro en local"
-                              ? displayOrder.address
-                              : <span className="italic">Retiro en local</span>}
-                          </p>
-                          {displayOrder.city && <p className="text-[10px] text-muted-foreground/70">{displayOrder.city}</p>}
-                        </td>
-                        <td className="px-3 py-2.5">
-                          <div className="flex items-center gap-2">
-                            <StatusBadge />
-                            <Button variant="ghost" size="sm" onClick={(e) => { e.stopPropagation(); onView(); }} className="h-7 text-xs gap-1 text-primary hover:bg-primary/5 ml-auto">
-                              <Eye className="h-3.5 w-3.5" />
-                              Ver
-                            </Button>
+                  return (
+                    <tr key={client} className="hover:bg-muted/30 transition-colors text-sm cursor-pointer" onClick={onView}>
+                      <td className="px-3 py-2.5">
+                        <p className="text-xs font-semibold text-foreground truncate">{client}</p>
+                        {clientOrders.length > 1 && (
+                          <p className="text-[10px] text-muted-foreground">{clientOrders.length} pedidos</p>
+                        )}
+                      </td>
+                      <td className="px-3 py-2.5">
+                        <p className="text-xs text-foreground truncate" title={productosResumen}>{productosResumen}</p>
+                        <p className="text-[10px] text-muted-foreground mt-0.5">
+                          {mergedItems.length} {mergedItems.length === 1 ? "producto" : "productos"}
+                        </p>
+                      </td>
+                      <td className="px-3 py-2.5">
+                        <p className="text-xs text-muted-foreground truncate max-w-[160px]">
+                          {displayOrder.address && displayOrder.address !== "Retiro en local"
+                            ? displayOrder.address
+                            : <span className="italic">Retiro en local</span>}
+                        </p>
+                        {displayOrder.city && <p className="text-[10px] text-muted-foreground/70">{displayOrder.city}</p>}
+                      </td>
+                      <td className="px-3 py-2.5">
+                        <div className="flex items-center gap-2">
+                          <div className={`inline-flex items-center gap-1.5 px-2 py-1 rounded-full text-xs font-semibold shrink-0 ${config.bgColor} border ${config.borderColor}`}>
+                            <div className={`w-1.5 h-1.5 rounded-full ${config.dotColor}`} />
+                            <span className={config.color}>{config.label}</span>
                           </div>
-                        </td>
-                      </tr>
-                    </tbody>
-                  </table>
-                </div>
-
-                {/* Mobile: una card por cliente */}
-                <div className="lg:hidden mb-1.5">
-                  <Card className="overflow-hidden">
-                    <div
-                      className="flex items-center gap-2 px-3 py-2 cursor-pointer hover:bg-muted/20 transition-colors"
-                      onClick={onView}
-                    >
-                      <div className="flex-1 min-w-0">
-                        <div className="flex items-center gap-1 mb-0.5">
-                          <p className="text-xs font-semibold text-foreground truncate">{client}</p>
-                          {clientOrders.length > 1 && (
-                            <span className="text-[10px] text-muted-foreground shrink-0">({clientOrders.length})</span>
-                          )}
+                          <Button variant="ghost" size="sm" onClick={(e) => { e.stopPropagation(); onView(); }} className="h-7 text-xs gap-1 text-primary hover:bg-primary/5 ml-auto">
+                            <Eye className="h-3.5 w-3.5" />
+                            Ver
+                          </Button>
                         </div>
-                        <p className="text-[11px] text-muted-foreground truncate">{productosResumen}</p>
-                        {displayOrder.address && displayOrder.address !== "Retiro en local" && (
-                          <p className="text-[10px] text-muted-foreground/70 truncate">{displayOrder.address}</p>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+
+          {/* Mobile: lista con header fijo */}
+          <div className="lg:hidden">
+            <div className="grid grid-cols-[1fr_auto] gap-2 px-3 py-1.5 text-[10px] font-semibold text-muted-foreground uppercase tracking-wider border-b">
+              <span>Cliente / Productos</span>
+              <span>Estado</span>
+            </div>
+            <div className="divide-y">
+              {ordersGroupedByClient.map(({ client, orders: clientOrders }) => {
+                const itemMap = new Map<string, Order["items"][0]>();
+                clientOrders.forEach((order) => {
+                  order.items.forEach((item) => {
+                    const key = item.productId || item.name;
+                    const existing = itemMap.get(key);
+                    if (existing) {
+                      itemMap.set(key, { ...existing, quantity: existing.quantity + item.quantity });
+                    } else {
+                      itemMap.set(key, { ...item });
+                    }
+                  });
+                });
+                const mergedItems = Array.from(itemMap.values());
+                const productosResumen = mergedItems.map((i) => `${i.quantity}× ${i.name}`).join(" · ");
+                const firstOrder = clientOrders[0];
+                const displayOrder = clientOrders.find((o) => o.status !== "completed") ?? firstOrder;
+                const config = statusConfig[displayOrder.status] || {
+                  label: displayOrder.status, color: "text-gray-700", dotColor: "bg-gray-500", bgColor: "bg-gray-50", borderColor: "border-gray-200",
+                };
+                const mergedOrder: Order = { ...firstOrder, items: mergedItems };
+                const onView = () => { setDetailOrder(mergedOrder); setActiveModal("detail"); };
+
+                return (
+                  <div key={client} className="grid grid-cols-[1fr_auto] gap-2 px-3 py-2.5 cursor-pointer hover:bg-muted/20 transition-colors" onClick={onView}>
+                    <div className="min-w-0">
+                      <div className="flex items-center gap-1">
+                        <p className="text-xs font-semibold text-foreground truncate">{client}</p>
+                        {clientOrders.length > 1 && (
+                          <span className="text-[10px] text-muted-foreground shrink-0">({clientOrders.length})</span>
                         )}
                       </div>
-                      <div className="flex items-center gap-1.5 shrink-0">
-                        <StatusBadge />
-                        <Button
-                          variant="ghost" size="icon"
-                          onClick={(e) => { e.stopPropagation(); onView(); }}
-                          className="h-6 w-6 text-primary hover:bg-primary/5"
-                        >
-                          <Eye className="h-3.5 w-3.5" />
-                        </Button>
+                      <p className="text-[11px] text-muted-foreground truncate">{productosResumen}</p>
+                    </div>
+                    <div className="flex items-center shrink-0">
+                      <div className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold ${config.bgColor} border ${config.borderColor}`}>
+                        <div className={`w-1.5 h-1.5 rounded-full ${config.dotColor}`} />
+                        <span className={config.color}>{config.label}</span>
                       </div>
                     </div>
-                  </Card>
-                </div>
-              </div>
-            );
-          })}
-        </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        </>
       )}
 
 
