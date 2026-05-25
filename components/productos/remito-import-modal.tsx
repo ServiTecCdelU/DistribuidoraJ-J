@@ -174,23 +174,32 @@ function extractRemitoMeta(text: string): { senor: string; total: number } {
   for (let i = 0; i < lines.length; i++) {
     const lineTrimmed = lines[i].trim();
 
-    // "Señor" / "Sr." / "SEÑOR" — puede estar en la misma línea o en la siguiente
+    // Detectar nombre del destinatario:
+    // Formato León Mayorista: línea previa a "Señor(es):" tiene el nombre
+    //   "01011 J & J DISTRIBUCIONES 2 ("
+    //   "Señor(es): Domicilio: MITRE 745 (3260)"
+    // También busca "DISTRIBUC" en primeras líneas como fallback
     if (!senor) {
-      const matchSenor = lineTrimmed.match(/^(?:se[ñn]or|sr\.?)\s*:?\s*(.*)/i);
-      if (matchSenor) {
-        let value = matchSenor[1].trim();
-        // Si la línea del Señor está vacía o es muy corta, tomar la siguiente
-        if (!value || value.length < 3) {
-          const nextLine = lines[i + 1]?.trim() || "";
-          if (nextLine) value = nextLine;
+      // Si encontramos "Señor(es):", el nombre está en la línea anterior
+      if (/se[ñn]or\(?e?s?\)?/i.test(lineTrimmed) && i > 0) {
+        const prevLine = lines[i - 1]?.trim() || "";
+        if (prevLine) {
+          // "01011 J & J DISTRIBUCIONES 2 (" → "J & J DISTRIBUCIONES 2"
+          const cleaned = prevLine
+            .replace(/^\d+\s+/, "")       // quitar código cliente
+            .replace(/\s*\(.*$/, "")      // quitar paréntesis final
+            .trim();
+          if (cleaned.length > 3) senor = cleaned;
         }
-        // Limpiar: quitar código numérico inicial (ej: "01011 J & J DISTRIBUCIONES")
-        // pero conservar el nombre
-        senor = value.replace(/^\d+\s+/, "").trim();
-        // Si queda algo que parece dirección, ignorar
-        if (/domicilio|direcci[oó]n|localidad|c\.p\./i.test(senor)) {
-          senor = "";
-        }
+      }
+      // Fallback: buscar "DISTRIBUC" en primeras 20 líneas
+      if (!senor && i < 20 && /DISTRIBUC/i.test(lineTrimmed) && !/Raz[oó]n\s*Social/i.test(lineTrimmed)) {
+        const cleaned = lineTrimmed
+          .replace(/^\d+\s+/, "")
+          .replace(/\s*\(.*$/, "")
+          .replace(/\s{2,}.*$/, "")
+          .trim();
+        if (cleaned.length > 3) senor = cleaned;
       }
     }
 
