@@ -389,26 +389,45 @@ export function ModalDetalleVenta({
           </div>
 
           {/* Incidencias del pedido */}
-          {(incidencias.roturas.length > 0 || incidencias.faltantes.length > 0 || incidencias.noQuiere.length > 0) && (
-            <div className="p-4 rounded-xl border border-rose-200 bg-rose-50/50 space-y-1.5">
-              <p className="text-xs font-medium text-rose-700 uppercase tracking-wider">Incidencias del pedido</p>
-              {incidencias.roturas.map((r, i) => (
-                <p key={`r${i}`} className="text-sm text-rose-700">
-                  <span className="font-semibold">Se rompió:</span> {r}
-                </p>
-              ))}
-              {incidencias.faltantes.map((f, i) => (
-                <p key={`f${i}`} className="text-sm text-amber-700">
-                  <span className="font-semibold">Faltó:</span> {f}
-                </p>
-              ))}
-              {incidencias.noQuiere.map((n, i) => (
-                <p key={`n${i}`} className="text-sm text-muted-foreground">
-                  <span className="font-semibold">No quiso:</span> {n}
-                </p>
-              ))}
-            </div>
-          )}
+          {(() => {
+            const rows = [
+              ...incidencias.roturas.map(r => ({ label: "Se rompió", text: r, color: "text-rose-700", dot: "bg-rose-400" })),
+              ...incidencias.faltantes.map(f => ({ label: "Faltó", text: f, color: "text-amber-700", dot: "bg-amber-400" })),
+              ...incidencias.noQuiere.map(n => ({ label: "No quiso", text: n, color: "text-muted-foreground", dot: "bg-muted-foreground/40" })),
+            ];
+            if (rows.length === 0) return null;
+            const [verTodos, setVerTodos] = useState(false);
+            const visibles = verTodos ? rows : rows.slice(0, 3);
+            return (
+              <div className="rounded-xl border border-rose-200 bg-rose-50/50 overflow-hidden">
+                <p className="text-xs font-medium text-rose-700 uppercase tracking-wider px-4 pt-3 pb-2">Incidencias del pedido</p>
+                <table className="w-full text-sm">
+                  <tbody>
+                    {visibles.map((row, i) => (
+                      <tr key={i} className="border-t border-rose-100 first:border-0">
+                        <td className="px-4 py-2 w-28">
+                          <span className={`inline-flex items-center gap-1.5 font-medium ${row.color}`}>
+                            <span className={`h-1.5 w-1.5 rounded-full shrink-0 ${row.dot}`} />
+                            {row.label}
+                          </span>
+                        </td>
+                        <td className={`px-4 py-2 ${row.color}`}>{row.text}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+                {rows.length > 3 && (
+                  <button
+                    type="button"
+                    className="w-full text-xs text-rose-600 hover:text-rose-800 py-2 border-t border-rose-100 font-medium transition-colors"
+                    onClick={() => setVerTodos(v => !v)}
+                  >
+                    {verTodos ? "Mostrar menos" : `Ver todos (${rows.length})`}
+                  </button>
+                )}
+              </div>
+            );
+          })()}
         </div>
       </DialogContent>
     </Dialog>
