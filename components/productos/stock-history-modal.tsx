@@ -243,8 +243,8 @@ export function StockHistoryModal({
                     <tr>
                       <th className="text-left px-2 py-2.5 font-semibold text-muted-foreground text-xs">Fecha</th>
                       <th className="text-left px-2 py-2.5 font-semibold text-muted-foreground text-xs">Tipo</th>
-                      <th className="text-right px-2 py-2.5 font-semibold text-muted-foreground text-xs">Cant.</th>
                       <th className="text-left px-2 py-2.5 font-semibold text-muted-foreground text-xs">Venta</th>
+                      <th className="text-right px-2 py-2.5 font-semibold text-muted-foreground text-xs">Cant.</th>
                       <th className="text-left px-2 py-2.5 font-semibold text-muted-foreground text-xs">Cliente</th>
                       <th className="text-right px-2 py-2.5 font-semibold text-muted-foreground text-xs">Monto</th>
                     </tr>
@@ -358,9 +358,6 @@ function MovimientoRow({ m }: { m: Movimiento }) {
       <td className="px-2 py-2">
         <TipoBadge tipo={m.tipo} />
       </td>
-      <td className="px-2 py-2 text-right">
-        <CantidadBadge cantidad={m.cantidad} />
-      </td>
       <td className="px-2 py-2 text-xs text-muted-foreground">
         {m.tipo === 'venta' ? (
           <div>
@@ -370,6 +367,9 @@ function MovimientoRow({ m }: { m: Movimiento }) {
         ) : m.motivo ? (
           <span className="text-[10px] italic truncate max-w-[140px] block">{m.motivo}</span>
         ) : ''}
+      </td>
+      <td className="px-2 py-2 text-right">
+        <CantidadBadge cantidad={m.cantidad} />
       </td>
       <td className="px-2 py-2 text-xs text-muted-foreground max-w-[130px] truncate">
         {m.clientName ?? (m.tipo === 'venta' ? '—' : '')}
