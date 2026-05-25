@@ -54,11 +54,18 @@ export const registrarMovimiento = async (params: {
     motivo: referencia ?? null,
   })
 
-  // Actualizar stock_local en el producto
+  // Actualizar stock_local en mayorista_productos
   await supabase
     .from('mayorista_productos')
     .update({ stock_local: stockPosterior })
     .eq('id', productoId)
+
+  // Sincronizar stock en productos (prod_mp_XXXX) para que el carrito lo refleje
+  const prodId = productoId.startsWith('mp_') ? `prod_${productoId}` : productoId
+  await supabase
+    .from('productos')
+    .update({ stock: stockPosterior })
+    .eq('id', prodId)
 }
 
 /**
