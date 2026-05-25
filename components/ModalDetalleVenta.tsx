@@ -58,6 +58,7 @@ export function ModalDetalleVenta({
   const [downloading, setDownloading] = useState<"invoice" | "remito" | null>(null);
   const [generandoDoble, setGenerandoDoble] = useState(false);
   const [incidencias, setIncidencias] = useState<{ roturas: string[]; faltantes: string[]; noQuiere: string[] }>({ roturas: [], faltantes: [], noQuiere: [] });
+  const [verTodosIncidencias, setVerTodosIncidencias] = useState(false);
 
   useEffect(() => {
     if (!venta?.id || !abierto) return;
@@ -396,22 +397,21 @@ export function ModalDetalleVenta({
               ...incidencias.noQuiere.map(n => ({ label: "No quiso", text: n, color: "text-muted-foreground", dot: "bg-muted-foreground/40" })),
             ];
             if (rows.length === 0) return null;
-            const [verTodos, setVerTodos] = useState(false);
-            const visibles = verTodos ? rows : rows.slice(0, 3);
+            const visibles = verTodosIncidencias ? rows : rows.slice(0, 3);
             return (
               <div className="rounded-xl border border-rose-200 bg-rose-50/50 overflow-hidden">
                 <p className="text-xs font-medium text-rose-700 uppercase tracking-wider px-4 pt-3 pb-2">Incidencias del pedido</p>
-                <table className="w-full text-sm">
+                <table className="w-full text-xs">
                   <tbody>
                     {visibles.map((row, i) => (
                       <tr key={i} className="border-t border-rose-100 first:border-0">
-                        <td className="px-4 py-2 w-28">
+                        <td className="px-4 py-1.5 w-24">
                           <span className={`inline-flex items-center gap-1.5 font-medium ${row.color}`}>
                             <span className={`h-1.5 w-1.5 rounded-full shrink-0 ${row.dot}`} />
                             {row.label}
                           </span>
                         </td>
-                        <td className={`px-4 py-2 ${row.color}`}>{row.text}</td>
+                        <td className={`px-4 py-1.5 ${row.color}`}>{row.text}</td>
                       </tr>
                     ))}
                   </tbody>
@@ -420,9 +420,9 @@ export function ModalDetalleVenta({
                   <button
                     type="button"
                     className="w-full text-xs text-rose-600 hover:text-rose-800 py-2 border-t border-rose-100 font-medium transition-colors"
-                    onClick={() => setVerTodos(v => !v)}
+                    onClick={() => setVerTodosIncidencias(v => !v)}
                   >
-                    {verTodos ? "Mostrar menos" : `Ver todos (${rows.length})`}
+                    {verTodosIncidencias ? "Mostrar menos" : `Ver todos (${rows.length})`}
                   </button>
                 )}
               </div>
