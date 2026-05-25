@@ -27,6 +27,7 @@ import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import { formatCurrency } from "@/lib/utils/format";
 import { supabase } from "@/lib/supabase";
+import { mayoristaCuentaApi } from "@/lib/api";
 
 interface ParsedItem {
   codigo: string;
@@ -154,6 +155,75 @@ function parseRemitoText(text: string): ParsedItem[] {
   return items;
 }
 
+// Parsea un string numérico argentino ("1.234.567,89" o "1234567.89") a number
+function parseArgNum(raw: string): number {
+  let s = raw.trim().replace(/\s/g, "");
+  // Si tiene coma → formato argentino: puntos son miles, coma es decimal
+  if (s.includes(",")) {
+    s = s.replace(/\./g, "").replace(",", ".");
+  }
+  return parseFloat(s) || 0;
+}
+
+// Extrae metadatos del remito: "Señor" (destinatario) y total
+function extractRemitoMeta(text: string): { senor: string; total: number } {
+  let senor = "";
+  let total = 0;
+  const lines = text.split("\n");
+
+  for (let i = 0; i < lines.length; i++) {
+    const lineTrimmed = lines[i].trim();
+
+    // Detectar nombre del destinatario:
+    // Formato León Mayorista: línea previa a "Señor(es):" tiene el nombre
+    //   "01011 J & J DISTRIBUCIONES 2 ("
+    //   "Señor(es): Domicilio: MITRE 745 (3260)"
+    // También busca "DISTRIBUC" en primeras líneas como fallback
+    if (!senor) {
+      // Si encontramos "Señor(es):", el nombre está en la línea anterior
+      if (/se[ñn]or\(?e?s?\)?/i.test(lineTrimmed) && i > 0) {
+        const prevLine = lines[i - 1]?.trim() || "";
+        if (prevLine) {
+          // "01011 J & J DISTRIBUCIONES 2 (" → "J & J DISTRIBUCIONES 2"
+          const cleaned = prevLine
+            .replace(/^\d+\s+/, "")       // quitar código cliente
+            .replace(/\s*\(.*$/, "")      // quitar paréntesis final
+            .trim();
+          if (cleaned.length > 3) senor = cleaned;
+        }
+      }
+      // Fallback: buscar "DISTRIBUC" en primeras 20 líneas
+      if (!senor && i < 20 && /DISTRIBUC/i.test(lineTrimmed) && !/Raz[oó]n\s*Social/i.test(lineTrimmed)) {
+        const cleaned = lineTrimmed
+          .replace(/^\d+\s+/, "")
+          .replace(/\s*\(.*$/, "")
+          .replace(/\s{2,}.*$/, "")
+          .trim();
+        if (cleaned.length > 3) senor = cleaned;
+      }
+    }
+
+    // Total: busca "TOTAL" (no SUBTOTAL) con número en la misma línea o la siguiente
+    // Acepta: "TOTAL $ 1.234,56", "TOTAL: 1234.56", "TOTAL GENERAL $1.057,56", "TOTAL    1.234.567,89"
+    if (/(?:^|\s)TOTAL(?:\s+GENERAL)?\s*:?\s*/i.test(lineTrimmed) && !/SUB\s*TOTAL/i.test(lineTrimmed)) {
+      // Buscar número en la misma línea
+      const numMatch = lineTrimmed.match(/TOTAL(?:\s+GENERAL)?\s*:?\s*\$?\s*([\d.,]+)/i);
+      let candidate = 0;
+      if (numMatch) {
+        candidate = parseArgNum(numMatch[1]);
+      } else {
+        // Número en la línea siguiente
+        const nextLine = lines[i + 1]?.trim() || "";
+        const nextNum = nextLine.match(/^\$?\s*([\d.,]+)/);
+        if (nextNum) candidate = parseArgNum(nextNum[1]);
+      }
+      if (candidate > total) total = candidate;
+    }
+  }
+
+  return { senor, total };
+}
+
 // Busca producto por código (soporta código mayorista, sin ceros a la izquierda, por ID)
 function findByCode(codigo: string, products: Product[]): Product | null {
   const codigoStripped = codigo.replace(/^0+/, "");
@@ -217,6 +287,8 @@ export function RemitoImportModal({
   const [fileName, setFileName] = useState("");
   const [items, setItems] = useState<MatchedItem[]>([]);
   const [showUnmatched, setShowUnmatched] = useState(true);
+  const [remitoSenor, setRemitoSenor] = useState("");
+  const [remitoTotal, setRemitoTotal] = useState(0);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const resetState = () => {
@@ -226,6 +298,8 @@ export function RemitoImportModal({
     setParsing(false);
     setConfirming(false);
     setProgressMsg("");
+    setRemitoSenor("");
+    setRemitoTotal(0);
   };
 
   const handleClose = () => {
@@ -250,7 +324,12 @@ export function RemitoImportModal({
       setProgressMsg("Analizando texto...");
       console.log("[remito] Texto extraído del PDF:\n", text);
 
-      // 3. Parsear texto
+      // 3. Extraer metadatos y parsear items
+      const meta = extractRemitoMeta(text);
+      setRemitoSenor(meta.senor);
+      setRemitoTotal(meta.total);
+      console.log("[remito] Meta:", meta);
+
       const parsedItems = parseRemitoText(text);
       console.log("[remito] Items parseados:", parsedItems);
 
@@ -419,6 +498,20 @@ export function RemitoImportModal({
       });
 
       await onConfirm(updates);
+
+      // Registrar deuda en cuenta mayorista si hay total
+      if (remitoTotal > 0) {
+        try {
+          const desc = remitoSenor
+            ? `Remito ${fileName} — ${remitoSenor}`
+            : `Remito ${fileName}`;
+          await mayoristaCuentaApi.addDeuda({ amount: remitoTotal, description: desc });
+          toast.success(`Deuda de ${formatCurrency(remitoTotal)} cargada en cuenta mayorista`);
+        } catch {
+          toast.error("Stock actualizado pero no se pudo registrar la deuda mayorista");
+        }
+      }
+
       toast.success(`Stock actualizado para ${updates.length} producto(s)`);
       handleClose();
     } catch (err) {
@@ -499,6 +592,35 @@ export function RemitoImportModal({
         {/* STEP 2: Review */}
         {step === "review" && (
           <div className="flex-1 flex flex-col gap-4 overflow-hidden">
+            {/* Info remito — siempre visible, editable */}
+            <div className="rounded-xl bg-purple-50 dark:bg-purple-900/20 border border-purple-200 dark:border-purple-800 p-3 space-y-3">
+              <div className="flex items-center gap-2">
+                <label className="text-xs font-semibold text-purple-700 dark:text-purple-300 whitespace-nowrap">Señor:</label>
+                <Input
+                  value={remitoSenor}
+                  onChange={(e) => setRemitoSenor(e.target.value)}
+                  placeholder="Nombre del destinatario"
+                  className="h-7 text-xs flex-1 bg-white dark:bg-background"
+                />
+              </div>
+              <div className="flex items-center gap-2">
+                <label className="text-xs font-semibold text-purple-700 dark:text-purple-300 whitespace-nowrap">Total:</label>
+                <div className="relative flex-1">
+                  <span className="absolute left-2 top-1/2 -translate-y-1/2 text-xs text-muted-foreground">$</span>
+                  <Input
+                    type="number"
+                    min="0"
+                    step="0.01"
+                    value={remitoTotal || ""}
+                    onChange={(e) => setRemitoTotal(parseFloat(e.target.value) || 0)}
+                    placeholder="0"
+                    className="h-7 text-xs pl-5 bg-white dark:bg-background"
+                  />
+                </div>
+                <span className="text-[10px] text-purple-600 dark:text-purple-400 whitespace-nowrap">→ cuenta mayorista</span>
+              </div>
+            </div>
+
             {/* Resumen */}
             <div className="flex items-center gap-3 flex-wrap">
               <Badge variant="outline" className="gap-1.5 text-xs">
