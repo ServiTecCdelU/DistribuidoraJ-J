@@ -705,13 +705,13 @@ export default function ProductosPage() {
           const { error: txError } = await supabase.from("transacciones").insert({
             id: docId,
             client_id: null,
-            type: "loss",
+            type: "payment",
             amount: -totalPerdida,
             description: desc,
             date: new Date().toISOString(),
           });
           if (txError) {
-            console.error("Error registrando pérdida en caja:", txError);
+            console.error("Error registrando pérdida en caja:", txError.message, txError.code, txError.details, txError.hint);
             toast.error("Stock actualizado pero no se pudo registrar la pérdida en caja");
           }
         }
