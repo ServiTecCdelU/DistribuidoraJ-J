@@ -166,9 +166,10 @@ function parseArgNum(raw: string): number {
 }
 
 // Extrae metadatos del remito: "Señor" (destinatario) y total
-function extractRemitoMeta(text: string): { senor: string; total: number } {
+function extractRemitoMeta(text: string): { senor: string; total: number; nroComprobante: string } {
   let senor = "";
   let total = 0;
+  let nroComprobante = "";
   const lines = text.split("\n");
 
   for (let i = 0; i < lines.length; i++) {
@@ -203,6 +204,12 @@ function extractRemitoMeta(text: string): { senor: string; total: number } {
       }
     }
 
+    // Número de comprobante: "Compr. Nro: 2007-00091112", "Nro: 0001-00012345", "Comprobante: ..."
+    if (!nroComprobante) {
+      const matchNro = lineTrimmed.match(/(?:Compr\.?\s*Nro|Nro\.?\s*Compr|Comprobante|N[°ºo]\s*:?)\s*:?\s*([\d\-]+)/i);
+      if (matchNro) nroComprobante = matchNro[1].trim();
+    }
+
     // Total: busca "TOTAL" (no SUBTOTAL) con número en la misma línea o la siguiente
     // Acepta: "TOTAL $ 1.234,56", "TOTAL: 1234.56", "TOTAL GENERAL $1.057,56", "TOTAL    1.234.567,89"
     if (/(?:^|\s)TOTAL(?:\s+GENERAL)?\s*:?\s*/i.test(lineTrimmed) && !/SUB\s*TOTAL/i.test(lineTrimmed)) {
@@ -221,7 +228,7 @@ function extractRemitoMeta(text: string): { senor: string; total: number } {
     }
   }
 
-  return { senor, total };
+  return { senor, total, nroComprobante };
 }
 
 // Busca producto por código (soporta código mayorista, sin ceros a la izquierda, por ID)
@@ -289,6 +296,7 @@ export function RemitoImportModal({
   const [showUnmatched, setShowUnmatched] = useState(true);
   const [remitoSenor, setRemitoSenor] = useState("");
   const [remitoTotal, setRemitoTotal] = useState(0);
+  const [remitoNro, setRemitoNro] = useState("");
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const resetState = () => {
@@ -300,6 +308,7 @@ export function RemitoImportModal({
     setProgressMsg("");
     setRemitoSenor("");
     setRemitoTotal(0);
+    setRemitoNro("");
   };
 
   const handleClose = () => {
@@ -328,6 +337,7 @@ export function RemitoImportModal({
       const meta = extractRemitoMeta(text);
       setRemitoSenor(meta.senor);
       setRemitoTotal(meta.total);
+      setRemitoNro(meta.nroComprobante);
       console.log("[remito] Meta:", meta);
 
       const parsedItems = parseRemitoText(text);
@@ -502,9 +512,11 @@ export function RemitoImportModal({
       // Registrar deuda en cuenta mayorista si hay total
       if (remitoTotal > 0) {
         try {
-          const desc = remitoSenor
-            ? `Remito ${fileName} — ${remitoSenor}`
-            : `Remito ${fileName}`;
+          const parts = [
+            remitoNro ? `Boleta ${remitoNro}` : null,
+            remitoSenor || null,
+          ].filter(Boolean);
+          const desc = parts.length > 0 ? parts.join(" — ") : `Remito ${fileName}`;
           await mayoristaCuentaApi.addDeuda({ amount: remitoTotal, description: desc });
           toast.success(`Deuda de ${formatCurrency(remitoTotal)} cargada en cuenta mayorista`);
         } catch {
@@ -593,31 +605,39 @@ export function RemitoImportModal({
         {step === "review" && (
           <div className="flex-1 flex flex-col gap-4 overflow-hidden">
             {/* Info remito — siempre visible, editable */}
-            <div className="rounded-xl bg-purple-50 dark:bg-purple-900/20 border border-purple-200 dark:border-purple-800 p-3 space-y-3">
-              <div className="flex items-center gap-2">
-                <label className="text-xs font-semibold text-purple-700 dark:text-purple-300 whitespace-nowrap">Señor:</label>
+            <div className="rounded-xl bg-purple-50 dark:bg-purple-900/20 border border-purple-200 dark:border-purple-800 p-3 space-y-2">
+              <p className="text-[10px] font-semibold text-purple-600 dark:text-purple-400 uppercase tracking-wide">Datos para cuenta corriente mayorista</p>
+              <div className="grid grid-cols-[auto_1fr] gap-x-2 gap-y-2 items-center">
+                <label className="text-xs font-semibold text-purple-700 dark:text-purple-300 whitespace-nowrap">Nro Boleta:</label>
+                <Input
+                  value={remitoNro}
+                  onChange={(e) => setRemitoNro(e.target.value)}
+                  placeholder="Ej: 2007-00091112"
+                  className="h-7 text-xs bg-white dark:bg-background"
+                />
+                <label className="text-xs font-semibold text-purple-700 dark:text-purple-300 whitespace-nowrap">Nombre:</label>
                 <Input
                   value={remitoSenor}
                   onChange={(e) => setRemitoSenor(e.target.value)}
-                  placeholder="Nombre del destinatario"
-                  className="h-7 text-xs flex-1 bg-white dark:bg-background"
+                  placeholder="Ej: J & J DISTRIBUCIONES 2"
+                  className="h-7 text-xs bg-white dark:bg-background"
                 />
-              </div>
-              <div className="flex items-center gap-2">
-                <label className="text-xs font-semibold text-purple-700 dark:text-purple-300 whitespace-nowrap">Total:</label>
-                <div className="relative flex-1">
-                  <span className="absolute left-2 top-1/2 -translate-y-1/2 text-xs text-muted-foreground">$</span>
-                  <Input
-                    type="number"
-                    min="0"
-                    step="0.01"
-                    value={remitoTotal || ""}
-                    onChange={(e) => setRemitoTotal(parseFloat(e.target.value) || 0)}
-                    placeholder="0"
-                    className="h-7 text-xs pl-5 bg-white dark:bg-background"
-                  />
+                <label className="text-xs font-semibold text-purple-700 dark:text-purple-300 whitespace-nowrap">Monto:</label>
+                <div className="flex items-center gap-2">
+                  <div className="relative flex-1">
+                    <span className="absolute left-2 top-1/2 -translate-y-1/2 text-xs text-muted-foreground">$</span>
+                    <Input
+                      type="number"
+                      min="0"
+                      step="0.01"
+                      value={remitoTotal || ""}
+                      onChange={(e) => setRemitoTotal(parseFloat(e.target.value) || 0)}
+                      placeholder="0"
+                      className="h-7 text-xs pl-5 bg-white dark:bg-background"
+                    />
+                  </div>
+                  <span className="text-[10px] text-purple-600 dark:text-purple-400 whitespace-nowrap">→ cta. mayorista</span>
                 </div>
-                <span className="text-[10px] text-purple-600 dark:text-purple-400 whitespace-nowrap">→ cuenta mayorista</span>
               </div>
             </div>
 
