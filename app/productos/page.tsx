@@ -1569,9 +1569,6 @@ export default function ProductosPage() {
         open={showStockHistory}
         onOpenChange={setShowStockHistory}
         product={selectedProductHistory}
-        history={stockHistory.filter(
-          (h) => h.productId === selectedProductHistory?.id,
-        )}
       />
 
       <InventoryValueHistory
