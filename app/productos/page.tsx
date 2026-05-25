@@ -702,13 +702,18 @@ export default function ProductosPage() {
           const totalPerdida = precioCosto * stockAdjustment.quantity;
           const desc = `[ROTURA] ${stockAdjustment.quantity}x ${editingProduct.name} — ${stockAdjustment.reason}`;
           const docId = await generateReadableId("transacciones", "perdida", editingProduct.name.slice(0, 20));
-          await supabase.from("transacciones").insert({
+          const { error: txError } = await supabase.from("transacciones").insert({
             id: docId,
+            client_id: null,
             type: "loss",
             amount: -totalPerdida,
             description: desc,
             date: new Date().toISOString(),
           });
+          if (txError) {
+            console.error("Error registrando pérdida en caja:", txError);
+            toast.error("Stock actualizado pero no se pudo registrar la pérdida en caja");
+          }
         }
       } else {
         const newProduct = await productsApi.create(productData);
