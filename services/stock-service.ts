@@ -81,6 +81,33 @@ export const descontarStockVenta = async (
 }
 
 /**
+ * Registra un movimiento de stock en stock_movimientos usando los valores de productos.stock.
+ * No falla ni interrumpe el flujo si hay error (FK sin mayorista, etc.).
+ */
+export const registrarMovimientoStock = async (params: {
+  productoId: string
+  tipo: 'venta' | 'apertura_bulto' | 'ajuste' | 'rotura'
+  cantidad: number
+  stockAnterior: number
+  stockPosterior: number
+  motivo?: string
+}): Promise<void> => {
+  const mayoristId = params.productoId.replace(/^prod_/, '')
+  try {
+    await supabase.from('stock_movimientos').insert({
+      mayorista_producto_id: mayoristId,
+      tipo: params.tipo,
+      cantidad: params.cantidad,
+      stock_anterior: params.stockAnterior,
+      stock_posterior: params.stockPosterior,
+      motivo: params.motivo ?? null,
+    })
+  } catch {
+    // no interrumpir el flujo
+  }
+}
+
+/**
  * Actualiza ventas pendientes por orden de fecha (FIFO) cuando llega stock de un producto.
  */
 export const actualizarVentasPendientesFIFO = async (
