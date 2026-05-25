@@ -155,6 +155,16 @@ function parseRemitoText(text: string): ParsedItem[] {
   return items;
 }
 
+// Parsea un string numérico argentino ("1.234.567,89" o "1234567.89") a number
+function parseArgNum(raw: string): number {
+  let s = raw.trim().replace(/\s/g, "");
+  // Si tiene coma → formato argentino: puntos son miles, coma es decimal
+  if (s.includes(",")) {
+    s = s.replace(/\./g, "").replace(",", ".");
+  }
+  return parseFloat(s) || 0;
+}
+
 // Extrae metadatos del remito: "Señor" (destinatario) y total
 function extractRemitoMeta(text: string): { senor: string; total: number } {
   let senor = "";
@@ -177,19 +187,28 @@ function extractRemitoMeta(text: string): { senor: string; total: number } {
         // Limpiar: quitar código numérico inicial (ej: "01011 J & J DISTRIBUCIONES")
         // pero conservar el nombre
         senor = value.replace(/^\d+\s+/, "").trim();
-        // Si después de limpiar queda algo que parece dirección (contiene "domicilio", número de calle largo), ignorar y buscar en la siguiente línea
+        // Si queda algo que parece dirección, ignorar
         if (/domicilio|direcci[oó]n|localidad|c\.p\./i.test(senor)) {
           senor = "";
         }
       }
     }
 
-    // Total: busca líneas con "TOTAL", "IMPORTE TOTAL", "TOTAL GENERAL", etc.
-    const matchTotal = lineTrimmed.match(/(?:TOTAL|IMPORTE\s+TOTAL|TOTAL\s+GENERAL)\s*:?\s*\$?\s*([\d.,]+)/i);
-    if (matchTotal) {
-      let numStr = matchTotal[1].replace(/\./g, "").replace(",", ".");
-      const parsed = parseFloat(numStr);
-      if (!isNaN(parsed) && parsed > total) total = parsed;
+    // Total: busca "TOTAL" (no SUBTOTAL) con número en la misma línea o la siguiente
+    // Acepta: "TOTAL $ 1.234,56", "TOTAL: 1234.56", "TOTAL GENERAL $1.057,56", "TOTAL    1.234.567,89"
+    if (/(?:^|\s)TOTAL(?:\s+GENERAL)?\s*:?\s*/i.test(lineTrimmed) && !/SUB\s*TOTAL/i.test(lineTrimmed)) {
+      // Buscar número en la misma línea
+      const numMatch = lineTrimmed.match(/TOTAL(?:\s+GENERAL)?\s*:?\s*\$?\s*([\d.,]+)/i);
+      let candidate = 0;
+      if (numMatch) {
+        candidate = parseArgNum(numMatch[1]);
+      } else {
+        // Número en la línea siguiente
+        const nextLine = lines[i + 1]?.trim() || "";
+        const nextNum = nextLine.match(/^\$?\s*([\d.,]+)/);
+        if (nextNum) candidate = parseArgNum(nextNum[1]);
+      }
+      if (candidate > total) total = candidate;
     }
   }
 
