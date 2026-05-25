@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import {
   Dialog,
   DialogContent,
@@ -27,6 +27,7 @@ import { toast } from "sonner";
 import { descargarDocumento, enviarWhatsapp } from "@/lib/utils/doc-actions";
 import type { Venta } from "../types";
 import { Scissors } from "lucide-react";
+import { supabase } from "@/lib/supabase";
 
 interface ModalDetalleVentaProps {
   abierto: boolean;
@@ -56,6 +57,33 @@ export function ModalDetalleVenta({
   const [generando, setGenerando] = useState<"boleta" | "remito" | null>(null);
   const [downloading, setDownloading] = useState<"invoice" | "remito" | null>(null);
   const [generandoDoble, setGenerandoDoble] = useState(false);
+  const [incidencias, setIncidencias] = useState<{ roturas: string[]; faltantes: string[]; noQuiere: string[] }>({ roturas: [], faltantes: [], noQuiere: [] });
+
+  useEffect(() => {
+    if (!venta?.id || !abierto) return;
+    setIncidencias({ roturas: [], faltantes: [], noQuiere: [] });
+    supabase
+      .from("transacciones")
+      .select("description")
+      .eq("sale_id", venta.id)
+      .or("description.like.[ROTURA]%,description.like.[FALTANTE]%,description.like.[NO_QUIERE]%")
+      .then(({ data }) => {
+        const roturas: string[] = [];
+        const faltantes: string[] = [];
+        const noQuiere: string[] = [];
+        for (const row of data ?? []) {
+          const desc = row.description || "";
+          if (desc.startsWith("[ROTURA]")) {
+            roturas.push(desc.replace(/^\[ROTURA\]\s*#[\w-]+\s*—\s*/, "").replace(/^\[ROTURA\]\s*/, ""));
+          } else if (desc.startsWith("[FALTANTE]")) {
+            faltantes.push(desc.replace(/^\[FALTANTE\]\s*#[\w-]+\s*—\s*/, "").replace(/^\[FALTANTE\]\s*/, ""));
+          } else if (desc.startsWith("[NO_QUIERE]")) {
+            noQuiere.push(desc.replace(/^\[NO_QUIERE\]\s*#[\w-]+\s*—\s*/, "").replace(/^\[NO_QUIERE\]\s*/, ""));
+          }
+        }
+        setIncidencias({ roturas, faltantes, noQuiere });
+      });
+  }, [venta?.id, abierto]);
 
   const handleBoletaDoble = async () => {
     if (!venta) return;
@@ -359,6 +387,28 @@ export function ModalDetalleVenta({
             <span className="font-medium">Total</span>
             <span className="text-2xl font-bold">{formatearMoneda(venta.total)}</span>
           </div>
+
+          {/* Incidencias del pedido */}
+          {(incidencias.roturas.length > 0 || incidencias.faltantes.length > 0 || incidencias.noQuiere.length > 0) && (
+            <div className="p-4 rounded-xl border border-rose-200 bg-rose-50/50 space-y-1.5">
+              <p className="text-xs font-medium text-rose-700 uppercase tracking-wider">Incidencias del pedido</p>
+              {incidencias.roturas.map((r, i) => (
+                <p key={`r${i}`} className="text-sm text-rose-700">
+                  <span className="font-semibold">Se rompió:</span> {r}
+                </p>
+              ))}
+              {incidencias.faltantes.map((f, i) => (
+                <p key={`f${i}`} className="text-sm text-amber-700">
+                  <span className="font-semibold">Faltó:</span> {f}
+                </p>
+              ))}
+              {incidencias.noQuiere.map((n, i) => (
+                <p key={`n${i}`} className="text-sm text-muted-foreground">
+                  <span className="font-semibold">No quiso:</span> {n}
+                </p>
+              ))}
+            </div>
+          )}
         </div>
       </DialogContent>
     </Dialog>

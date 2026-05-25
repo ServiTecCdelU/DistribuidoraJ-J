@@ -377,6 +377,7 @@ export default function PedidosPage() {
       // Registrar roturas: descontar stock (el insert en transacciones se hace después de crear la venta para tener el saleNumber)
       const roturasAdj = adjustments.filter(a => a.type === "rotura");
       const faltantesAdj = adjustments.filter(a => a.type === "faltante");
+      const noQuiereAdj = adjustments.filter(a => a.type === "no_quiere");
       if (roturasAdj.length > 0) {
         const { registrarMovimiento } = await import("@/services/stock-service");
         const { supabase } = await import("@/lib/supabase");
@@ -517,6 +518,18 @@ export default function PedidosPage() {
           type: "payment",
           amount: 0,
           description: `[FALTANTE] #${sale.saleNumber} — ${productosFaltantes}`,
+          sale_id: sale.id,
+          date: new Date().toISOString(),
+        }).then(() => {}).catch(() => {});
+      }
+      if (noQuiereAdj.length > 0) {
+        const productosNoQuiere = noQuiereAdj.map(r => `${r.productName} x${r.quantity}`).join(", ");
+        supabase.from("transacciones").insert({
+          id: `no_quiere_${sale.id}_${Date.now()}`,
+          client_id: null,
+          type: "payment",
+          amount: 0,
+          description: `[NO_QUIERE] #${sale.saleNumber} — ${productosNoQuiere}`,
           sale_id: sale.id,
           date: new Date().toISOString(),
         }).then(() => {}).catch(() => {});
