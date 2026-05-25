@@ -34,6 +34,12 @@ import {
 } from '@/services/sales-service'
 import { registerCashPayment, registerMayoristaPayment } from '@/services/payments-service'
 import {
+  getTransaccionesMayorista,
+  getBalanceMayorista,
+  addDeudaMayorista,
+  addPagoMayorista,
+} from '@/services/mayorista-cuenta-service'
+import {
   createSeller,
   deleteSeller,
   getAllCommissions,
@@ -214,6 +220,13 @@ export const paymentsApi = {
   }): Promise<Transaction> {
     return registerMayoristaPayment(data)
   },
+}
+
+export const mayoristaCuentaApi = {
+  getTransacciones: getTransaccionesMayorista,
+  getBalance: getBalanceMayorista,
+  addDeuda: addDeudaMayorista,
+  addPago: addPagoMayorista,
 }
 
 export const invoiceApi = {

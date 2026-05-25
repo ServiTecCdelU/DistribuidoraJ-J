@@ -33,7 +33,8 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table'
-import { cobranzasApi, clientsApi, paymentsApi, sellersApi } from '@/lib/api'
+import { cobranzasApi, clientsApi, paymentsApi, sellersApi, mayoristaCuentaApi } from '@/lib/api'
+import type { TransaccionMayorista } from '@/services/mayorista-cuenta-service'
 import { useAuth } from '@/hooks/use-auth'
 import type { Client, ComprobantePago, DebtClassification, Seller, Transaction } from '@/lib/types'
 import { formatCurrency, formatDate } from '@/lib/utils/format'
@@ -84,19 +85,32 @@ export default function CuentaCorrientePage() {
   const [currentPage, setCurrentPage] = useState(1)
   const PAGE_SIZE = 10
 
+  // Mayorista — deuda con proveedor
+  const [mayTxs, setMayTxs] = useState<TransaccionMayorista[]>([])
+  const [mayBalance, setMayBalance] = useState(0)
+  const [mayDeudaDialog, setMayDeudaDialog] = useState(false)
+  const [mayPagoDialog, setMayPagoDialog] = useState(false)
+  const [mayAmount, setMayAmount] = useState('')
+  const [mayDesc, setMayDesc] = useState('')
+  const [mayProcessing, setMayProcessing] = useState(false)
+
   // Preview imagen comprobante
   const [previewUrl, setPreviewUrl] = useState<string | null>(null)
 
   const loadData = useCallback(async () => {
     try {
-      const [clientsData, compData, sellersData] = await Promise.all([
+      const [clientsData, compData, sellersData, mayTxsData] = await Promise.all([
         cobranzasApi.getDebtClients(),
         cobranzasApi.getComprobantes(),
         sellersApi.getAll(),
+        mayoristaCuentaApi.getTransacciones(),
       ])
       setDebtClients(clientsData)
       setComprobantes(compData)
       setSellers(sellersData.filter((s) => s.isActive))
+      setMayTxs(mayTxsData)
+      const bal = mayTxsData.reduce((acc, tx) => tx.type === 'debt' ? acc + tx.amount : acc - tx.amount, 0)
+      setMayBalance(bal)
     } catch { /* silenciado */ }
     finally { setLoading(false) }
   }, [])
@@ -238,6 +252,43 @@ export default function CuentaCorrientePage() {
     } finally {
       setProcessing(false)
     }
+  }
+
+  // Mayorista proveedor — cargar deuda
+  const handleMayAddDeuda = async () => {
+    const amount = parseFloat(mayAmount)
+    if (isNaN(amount) || amount <= 0) { toast.error('Ingresá un monto válido'); return }
+    setMayProcessing(true)
+    try {
+      const tx = await mayoristaCuentaApi.addDeuda({ amount, description: mayDesc || undefined })
+      setMayTxs((prev) => [tx, ...prev])
+      setMayBalance((prev) => prev + amount)
+      setMayDeudaDialog(false)
+      setMayAmount('')
+      setMayDesc('')
+      toast.success(`Deuda de ${formatCurrency(amount)} registrada`)
+    } catch (err: any) {
+      toast.error(err.message || 'Error al registrar deuda')
+    } finally { setMayProcessing(false) }
+  }
+
+  // Mayorista proveedor — registrar pago
+  const handleMayAddPago = async () => {
+    const amount = parseFloat(mayAmount)
+    if (isNaN(amount) || amount <= 0) { toast.error('Ingresá un monto válido'); return }
+    if (amount > mayBalance) { toast.error('El monto no puede superar la deuda actual'); return }
+    setMayProcessing(true)
+    try {
+      const tx = await mayoristaCuentaApi.addPago({ amount, description: mayDesc || undefined })
+      setMayTxs((prev) => [tx, ...prev])
+      setMayBalance((prev) => prev - amount)
+      setMayPagoDialog(false)
+      setMayAmount('')
+      setMayDesc('')
+      toast.success(`Pago de ${formatCurrency(amount)} registrado`)
+    } catch (err: any) {
+      toast.error(err.message || 'Error al registrar pago')
+    } finally { setMayProcessing(false) }
   }
 
   const handleRegisterMayoristaPayment = async () => {
@@ -1007,6 +1058,140 @@ export default function CuentaCorrientePage() {
               )}
             </>
           )}
+
+          {/* ═══ CUENTA CON MAYORISTA (proveedor) ═══ */}
+          <div className="mt-8">
+            <Card className="rounded-2xl border-purple-200 dark:border-purple-800">
+              <CardHeader className="pb-2">
+                <div className="flex items-center justify-between">
+                  <CardTitle className="text-base font-semibold flex items-center gap-2">
+                    <DollarSign className="h-5 w-5 text-purple-600" />
+                    Cuenta con Mayorista
+                  </CardTitle>
+                  <span className={`text-xl font-bold ${mayBalance > 0 ? 'text-red-600' : 'text-green-600'}`}>
+                    {mayBalance > 0 ? formatCurrency(mayBalance) : 'Sin deuda'}
+                  </span>
+                </div>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div className="flex gap-2">
+                  <Button
+                    className="gap-2 rounded-xl bg-red-600 hover:bg-red-700"
+                    size="sm"
+                    onClick={() => { setMayAmount(''); setMayDesc(''); setMayDeudaDialog(true) }}
+                  >
+                    <ArrowUpCircle className="h-4 w-4" />
+                    Cargar deuda
+                  </Button>
+                  <Button
+                    className="gap-2 rounded-xl bg-green-600 hover:bg-green-700"
+                    size="sm"
+                    onClick={() => { setMayAmount(''); setMayDesc(''); setMayPagoDialog(true) }}
+                    disabled={mayBalance <= 0}
+                  >
+                    <ArrowDownCircle className="h-4 w-4" />
+                    Registrar pago
+                  </Button>
+                </div>
+
+                {mayTxs.length === 0 ? (
+                  <p className="text-sm text-muted-foreground text-center py-4">Sin movimientos</p>
+                ) : (
+                  <div className="flex flex-col gap-2 max-h-[400px] overflow-y-auto">
+                    {mayTxs.map((tx) => (
+                      <div key={tx.id} className="flex items-center gap-3 p-3 rounded-xl bg-muted/50">
+                        <div className={`h-8 w-8 rounded-full flex items-center justify-center shrink-0 ${
+                          tx.type === 'payment' ? 'bg-green-100 dark:bg-green-900/30' : 'bg-red-100 dark:bg-red-900/30'
+                        }`}>
+                          {tx.type === 'payment'
+                            ? <ArrowDownCircle className="h-4 w-4 text-green-600" />
+                            : <ArrowUpCircle className="h-4 w-4 text-red-600" />
+                          }
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <p className="text-sm font-medium truncate">{tx.description}</p>
+                          <p className="text-xs text-muted-foreground">{formatDate(tx.date)}</p>
+                        </div>
+                        <p className={`font-bold tabular-nums ${tx.type === 'payment' ? 'text-green-600' : 'text-red-600'}`}>
+                          {tx.type === 'payment' ? '-' : '+'}{formatCurrency(tx.amount)}
+                        </p>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+          </div>
+
+          {/* Dialog cargar deuda mayorista */}
+          <Dialog open={mayDeudaDialog} onOpenChange={(open) => !open && setMayDeudaDialog(false)}>
+            <DialogContent className="sm:max-w-sm">
+              <DialogHeader>
+                <DialogTitle>Cargar deuda con mayorista</DialogTitle>
+              </DialogHeader>
+              <div className="space-y-4">
+                <div className="space-y-2">
+                  <Label>Monto</Label>
+                  <div className="relative">
+                    <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground font-medium">$</span>
+                    <Input
+                      type="number" min="0" step="0.01"
+                      value={mayAmount} onChange={(e) => setMayAmount(e.target.value)}
+                      className="pl-7" placeholder="0" autoFocus
+                    />
+                  </div>
+                </div>
+                <div className="space-y-2">
+                  <Label>Descripción (opcional)</Label>
+                  <Textarea placeholder="Ej: Pedido #123" value={mayDesc} onChange={(e) => setMayDesc(e.target.value)} rows={2} />
+                </div>
+              </div>
+              <DialogFooter>
+                <Button variant="outline" onClick={() => setMayDeudaDialog(false)}>Cancelar</Button>
+                <Button className="bg-red-600 hover:bg-red-700" onClick={handleMayAddDeuda} disabled={mayProcessing || !mayAmount || parseFloat(mayAmount) <= 0}>
+                  {mayProcessing && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
+                  Cargar deuda
+                </Button>
+              </DialogFooter>
+            </DialogContent>
+          </Dialog>
+
+          {/* Dialog pago mayorista */}
+          <Dialog open={mayPagoDialog} onOpenChange={(open) => !open && setMayPagoDialog(false)}>
+            <DialogContent className="sm:max-w-sm">
+              <DialogHeader>
+                <DialogTitle>Registrar pago a mayorista</DialogTitle>
+                <DialogDescription>Deuda actual: {formatCurrency(mayBalance)}</DialogDescription>
+              </DialogHeader>
+              <div className="space-y-4">
+                <div className="space-y-2">
+                  <Label>Monto</Label>
+                  <div className="relative">
+                    <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground font-medium">$</span>
+                    <Input
+                      type="number" min="0" max={mayBalance} step="0.01"
+                      value={mayAmount} onChange={(e) => setMayAmount(e.target.value)}
+                      className="pl-7" placeholder="0" autoFocus
+                    />
+                  </div>
+                  <Button type="button" variant="outline" size="sm" className="text-xs" onClick={() => setMayAmount(String(mayBalance))}>
+                    Cancelar toda la deuda ({formatCurrency(mayBalance)})
+                  </Button>
+                </div>
+                <div className="space-y-2">
+                  <Label>Descripción (opcional)</Label>
+                  <Textarea placeholder="Ej: Transferencia bancaria" value={mayDesc} onChange={(e) => setMayDesc(e.target.value)} rows={2} />
+                </div>
+              </div>
+              <DialogFooter>
+                <Button variant="outline" onClick={() => setMayPagoDialog(false)}>Cancelar</Button>
+                <Button className="bg-green-600 hover:bg-green-700" onClick={handleMayAddPago} disabled={mayProcessing || !mayAmount || parseFloat(mayAmount) <= 0}>
+                  {mayProcessing && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
+                  Registrar pago
+                </Button>
+              </DialogFooter>
+            </DialogContent>
+          </Dialog>
         </>
       )}
     </MainLayout>
