@@ -280,17 +280,28 @@ export default function CuentaCorrientePage() {
     } finally { setMayProcessing(false) }
   }
 
-  // Mayorista proveedor — registrar pago
-  const handleMayAddPago = async () => {
+  // Mayorista proveedor — registrar pago a boleta específica
+  const [maySelectedDebt, setMaySelectedDebt] = useState<TransaccionMayorista | null>(null)
+
+  const handleMayPagarBoleta = async () => {
+    if (!maySelectedDebt) return
     const amount = parseFloat(mayAmount)
     if (isNaN(amount) || amount <= 0) { toast.error('Ingresá un monto válido'); return }
-    if (amount > mayBalance) { toast.error('El monto no puede superar la deuda actual'); return }
+    const saldo = maySelectedDebt.saldo ?? 0
+    if (amount > saldo) { toast.error('El monto no puede superar el saldo de la boleta'); return }
     setMayProcessing(true)
     try {
-      const tx = await mayoristaCuentaApi.addPago({ amount, description: mayDesc || undefined })
-      setMayTxs((prev) => [tx, ...prev])
+      const tx = await mayoristaCuentaApi.pagarBoleta({ debtId: maySelectedDebt.id, amount, description: mayDesc || undefined })
+      // Actualizar saldo de la boleta en la lista local
+      setMayTxs((prev) => {
+        const updated = prev.map((t) =>
+          t.id === maySelectedDebt.id ? { ...t, saldo: Math.max(0, (t.saldo ?? 0) - amount) } : t
+        )
+        return [tx, ...updated]
+      })
       setMayBalance((prev) => prev - amount)
       setMayPagoDialog(false)
+      setMaySelectedDebt(null)
       setMayAmount('')
       setMayDesc('')
       toast.success(`Pago de ${formatCurrency(amount)} registrado`)
@@ -1118,7 +1129,7 @@ export default function CuentaCorrientePage() {
                 <Button
                   className="gap-2 rounded-xl bg-green-600 hover:bg-green-700"
                   size="sm"
-                  onClick={() => { setMayAmount(''); setMayDesc(''); setMayPagoDialog(true) }}
+                  onClick={() => { setMaySelectedDebt(null); setMayAmount(''); setMayDesc(''); setMayPagoDialog(true) }}
                   disabled={mayBalance <= 0}
                 >
                   <ArrowDownCircle className="h-4 w-4" />
@@ -1139,6 +1150,7 @@ export default function CuentaCorrientePage() {
                         <TableHead className="text-xs py-2">Descripción</TableHead>
                         <TableHead className="text-xs py-2 text-right">Debe</TableHead>
                         <TableHead className="text-xs py-2 text-right">Haber</TableHead>
+                        <TableHead className="text-xs py-2 text-center">Estado</TableHead>
                       </TableRow>
                     </TableHeader>
                     <TableBody>
@@ -1151,6 +1163,28 @@ export default function CuentaCorrientePage() {
                           </TableCell>
                           <TableCell className="text-xs py-2 text-right font-semibold text-green-600 tabular-nums">
                             {tx.type === 'payment' ? formatCurrency(tx.amount) : ''}
+                          </TableCell>
+                          <TableCell className="text-xs py-2 text-center">
+                            {tx.type === 'debt' ? (
+                              (tx.saldo ?? tx.amount) > 0 ? (
+                                <Badge variant="secondary" className="text-red-600 bg-red-50 text-[10px] cursor-pointer hover:bg-red-100"
+                                  onClick={() => {
+                                    setMaySelectedDebt(tx)
+                                    setMayAmount(String(tx.saldo ?? tx.amount))
+                                    setMayDesc('')
+                                    setMayPagoDialog(true)
+                                  }}
+                                >
+                                  Debe {formatCurrency(tx.saldo ?? tx.amount)}
+                                </Badge>
+                              ) : (
+                                <Badge variant="secondary" className="text-green-600 bg-green-50 text-[10px]">
+                                  <CheckCircle2 className="h-3 w-3 mr-0.5" />Pagado
+                                </Badge>
+                              )
+                            ) : (
+                              <span className="text-muted-foreground">—</span>
+                            )}
                           </TableCell>
                         </TableRow>
                       ))}
@@ -1194,39 +1228,77 @@ export default function CuentaCorrientePage() {
             </DialogContent>
           </Dialog>
 
-          {/* Dialog pago mayorista */}
-          <Dialog open={mayPagoDialog} onOpenChange={(open) => !open && setMayPagoDialog(false)}>
-            <DialogContent className="sm:max-w-sm">
+          {/* Dialog pago mayorista — selector de boleta */}
+          <Dialog open={mayPagoDialog} onOpenChange={(open) => { if (!open) { setMayPagoDialog(false); setMaySelectedDebt(null) } }}>
+            <DialogContent className="sm:max-w-md">
               <DialogHeader>
                 <DialogTitle>Registrar pago a mayorista</DialogTitle>
-                <DialogDescription>Deuda actual: {formatCurrency(mayBalance)}</DialogDescription>
+                <DialogDescription>
+                  {maySelectedDebt
+                    ? `Boleta: ${maySelectedDebt.description} — Saldo: ${formatCurrency(maySelectedDebt.saldo ?? 0)}`
+                    : 'Seleccioná una boleta para pagar'}
+                </DialogDescription>
               </DialogHeader>
-              <div className="space-y-4">
-                <div className="space-y-2">
-                  <Label>Monto</Label>
-                  <div className="relative">
-                    <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground font-medium">$</span>
-                    <Input
-                      type="number" min="0" max={mayBalance} step="0.01"
-                      value={mayAmount} onChange={(e) => setMayAmount(e.target.value)}
-                      className="pl-7" placeholder="0" autoFocus
-                    />
+              {!maySelectedDebt ? (
+                <div className="space-y-2 max-h-[300px] overflow-y-auto">
+                  {mayTxs.filter((tx) => tx.type === 'debt' && (tx.saldo ?? tx.amount) > 0).length === 0 ? (
+                    <p className="text-sm text-muted-foreground text-center py-4">No hay boletas pendientes</p>
+                  ) : (
+                    mayTxs.filter((tx) => tx.type === 'debt' && (tx.saldo ?? tx.amount) > 0).map((tx) => (
+                      <div
+                        key={tx.id}
+                        className="flex items-center justify-between p-3 rounded-xl border cursor-pointer hover:bg-muted/50 transition-colors"
+                        onClick={() => {
+                          setMaySelectedDebt(tx)
+                          setMayAmount(String(tx.saldo ?? tx.amount))
+                          setMayDesc('')
+                        }}
+                      >
+                        <div className="min-w-0 flex-1">
+                          <p className="text-sm font-medium truncate">{tx.description}</p>
+                          <p className="text-xs text-muted-foreground">{formatDate(tx.date)}</p>
+                        </div>
+                        <span className="text-sm font-bold text-red-600 shrink-0 ml-3">
+                          {formatCurrency(tx.saldo ?? tx.amount)}
+                        </span>
+                      </div>
+                    ))
+                  )}
+                </div>
+              ) : (
+                <div className="space-y-4">
+                  <div className="space-y-2">
+                    <Label>Monto</Label>
+                    <div className="relative">
+                      <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground font-medium">$</span>
+                      <Input
+                        type="number" min="0" max={maySelectedDebt.saldo ?? 0} step="0.01"
+                        value={mayAmount} onChange={(e) => setMayAmount(e.target.value)}
+                        className="pl-7" placeholder="0" autoFocus
+                      />
+                    </div>
+                    <Button type="button" variant="outline" size="sm" className="text-xs" onClick={() => setMayAmount(String(maySelectedDebt.saldo ?? 0))}>
+                      Pagar todo ({formatCurrency(maySelectedDebt.saldo ?? 0)})
+                    </Button>
                   </div>
-                  <Button type="button" variant="outline" size="sm" className="text-xs" onClick={() => setMayAmount(String(mayBalance))}>
-                    Cancelar toda la deuda ({formatCurrency(mayBalance)})
-                  </Button>
+                  <div className="space-y-2">
+                    <Label>Descripción (opcional)</Label>
+                    <Textarea placeholder="Ej: Transferencia bancaria" value={mayDesc} onChange={(e) => setMayDesc(e.target.value)} rows={2} />
+                  </div>
                 </div>
-                <div className="space-y-2">
-                  <Label>Descripción (opcional)</Label>
-                  <Textarea placeholder="Ej: Transferencia bancaria" value={mayDesc} onChange={(e) => setMayDesc(e.target.value)} rows={2} />
-                </div>
-              </div>
+              )}
               <DialogFooter>
-                <Button variant="outline" onClick={() => setMayPagoDialog(false)}>Cancelar</Button>
-                <Button className="bg-green-600 hover:bg-green-700" onClick={handleMayAddPago} disabled={mayProcessing || !mayAmount || parseFloat(mayAmount) <= 0}>
-                  {mayProcessing && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
-                  Registrar pago
-                </Button>
+                {maySelectedDebt ? (
+                  <>
+                    <Button variant="outline" onClick={() => setMaySelectedDebt(null)}>Volver</Button>
+                    <Button className="bg-green-600 hover:bg-green-700" onClick={handleMayPagarBoleta} disabled={mayProcessing || !mayAmount || parseFloat(mayAmount) <= 0}>
+                      {mayProcessing && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
+                      Registrar pago
+                    </Button>
+                  </>
+                ) : (
+                  <Button variant="outline" onClick={() => setMayPagoDialog(false)}>Cerrar</Button>
+                )}
               </DialogFooter>
             </DialogContent>
           </Dialog>
