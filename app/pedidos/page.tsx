@@ -374,8 +374,9 @@ export default function PedidosPage() {
         })
         .filter(item => item.quantity > 0);
 
-      // Registrar roturas: descontar stock + registrar pérdida en transacciones
+      // Registrar roturas: descontar stock (el insert en transacciones se hace después de crear la venta para tener el saleNumber)
       const roturasAdj = adjustments.filter(a => a.type === "rotura");
+      const faltantesAdj = adjustments.filter(a => a.type === "faltante");
       if (roturasAdj.length > 0) {
         const { registrarMovimiento } = await import("@/services/stock-service");
         const { supabase } = await import("@/lib/supabase");
@@ -393,15 +394,6 @@ export default function PedidosPage() {
             await supabase.from('productos').update({ stock: Math.max(0, (prod.stock || 0) - r.quantity) }).eq('id', prodId);
           }
         }
-        const totalPerdida = roturasAdj.reduce((acc, r) => acc + r.unitPrice * r.quantity, 0);
-        const productosRotos = roturasAdj.map(r => `${r.productName} x${r.quantity}`).join(", ");
-        await supabase.from("transacciones").insert({
-          id: `perdida_${selectedOrder.id}_${Date.now()}`,
-          type: "payment",
-          amount: -totalPerdida,
-          description: `[ROTURA] Pedido #${selectedOrder.id}: ${productosRotos}`,
-          date: new Date().toISOString(),
-        });
       }
 
       // Si no quedan items para vender (todo rotura), solo completar el pedido sin venta
@@ -410,6 +402,21 @@ export default function PedidosPage() {
         setOrders((prev) =>
           prev.map((o) => (o.id === selectedOrder.id ? updated : o)),
         );
+
+        // Registrar pérdida en caja usando ID de pedido (sin número de venta)
+        if (roturasAdj.length > 0) {
+          const { supabase: sb } = await import("@/lib/supabase");
+          const totalPerdida = roturasAdj.reduce((acc, r) => acc + r.unitPrice * r.quantity, 0);
+          const productosRotos = roturasAdj.map(r => `${r.productName} x${r.quantity}`).join(", ");
+          sb.from("transacciones").insert({
+            id: `perdida_${selectedOrder.id}_${Date.now()}`,
+            client_id: null,
+            type: "payment",
+            amount: -totalPerdida,
+            description: `[ROTURA] Pedido #${selectedOrder.id} — ${productosRotos}`,
+            date: new Date().toISOString(),
+          }).then(() => {}).catch(() => {});
+        }
 
         toast.success("Pedido cerrado — roturas registradas como pérdida");
         setActiveModal(null);
@@ -487,6 +494,33 @@ export default function PedidosPage() {
         efectivo_amount: efectivo > 0 ? efectivo : null,
         transferencia_amount: transferencia > 0 ? transferencia : null,
       }).eq("id", sale.id).then(() => {}).catch(() => {});
+
+      // Registrar roturas y faltantes en transacciones usando el saleNumber
+      if (roturasAdj.length > 0) {
+        const totalPerdida = roturasAdj.reduce((acc, r) => acc + r.unitPrice * r.quantity, 0);
+        const productosRotos = roturasAdj.map(r => `${r.productName} x${r.quantity}`).join(", ");
+        supabase.from("transacciones").insert({
+          id: `perdida_${sale.id}_${Date.now()}`,
+          client_id: null,
+          type: "payment",
+          amount: -totalPerdida,
+          description: `[ROTURA] #${sale.saleNumber} — ${productosRotos}`,
+          sale_id: sale.id,
+          date: new Date().toISOString(),
+        }).then(() => {}).catch(() => {});
+      }
+      if (faltantesAdj.length > 0) {
+        const productosFaltantes = faltantesAdj.map(r => `${r.productName} x${r.quantity}`).join(", ");
+        supabase.from("transacciones").insert({
+          id: `faltante_${sale.id}_${Date.now()}`,
+          client_id: null,
+          type: "payment",
+          amount: 0,
+          description: `[FALTANTE] #${sale.saleNumber} — ${productosFaltantes}`,
+          sale_id: sale.id,
+          date: new Date().toISOString(),
+        }).then(() => {}).catch(() => {});
+      }
 
       // Completar TODOS los pedidos del cliente (incluido el principal y los adicionales)
       const ordersToComplete = selectedClientOrders.length > 0 ? selectedClientOrders : [selectedOrder];

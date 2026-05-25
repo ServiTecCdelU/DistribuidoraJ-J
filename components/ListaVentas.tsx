@@ -40,7 +40,8 @@ import Link from "next/link";
 import type { ListaVentasProps } from "../types";
 import { formatDate, formatTime, formatCurrency } from "@/lib/utils/format";
 import { toDate } from "@/services/supabase-helpers";
-import { useMemo, useState, useCallback } from "react";
+import { useMemo, useState, useCallback, useEffect } from "react";
+import { supabase } from "@/lib/supabase";
 import {
   Dialog,
   DialogContent,
@@ -132,6 +133,35 @@ export function ListaVentas({
   const fmt = formatCurrency;
   const fmtDate = formatDate;
   const fmtTime = formatTime;
+
+  // Incidencias (roturas/faltantes) por venta
+  const [incidencias, setIncidencias] = useState<Map<string, { roturas: string[]; faltantes: string[] }>>(new Map());
+  useEffect(() => {
+    if (!ventas || ventas.length === 0) return;
+    const saleIds = ventas.map((v) => v.id);
+    supabase
+      .from("transacciones")
+      .select("sale_id, description")
+      .in("sale_id", saleIds)
+      .or("description.like.[ROTURA]%,description.like.[FALTANTE]%")
+      .then(({ data }) => {
+        const map = new Map<string, { roturas: string[]; faltantes: string[] }>();
+        for (const row of data ?? []) {
+          if (!row.sale_id) continue;
+          const entry = map.get(row.sale_id) ?? { roturas: [], faltantes: [] };
+          const desc = row.description || "";
+          if (desc.startsWith("[ROTURA]")) {
+            const text = desc.replace(/^\[ROTURA\]\s*#[\w-]+\s*—\s*/, "").replace(/^\[ROTURA\]\s*/, "");
+            entry.roturas.push(text);
+          } else if (desc.startsWith("[FALTANTE]")) {
+            const text = desc.replace(/^\[FALTANTE\]\s*#[\w-]+\s*—\s*/, "").replace(/^\[FALTANTE\]\s*/, "");
+            entry.faltantes.push(text);
+          }
+          map.set(row.sale_id, entry);
+        }
+        setIncidencias(map);
+      });
+  }, [ventas]);
 
   const uniqueCities = useMemo(() => {
     const cities = clients.map((c) => c.city).filter((c): c is string => !!c);
@@ -485,6 +515,36 @@ export function ListaVentas({
                     <span className="hidden lg:inline text-xs">Ver</span>
                   </Button>
                 </div>
+
+                {/* Mini-lista de incidencias */}
+                {incidencias.has(venta.id) && (() => {
+                  const inc = incidencias.get(venta.id)!;
+                  return (
+                    <div className="col-span-12 flex flex-wrap items-center gap-x-4 gap-y-0.5 px-1 pb-1">
+                      {inc.roturas.map((r, i) => (
+                        <span key={`r${i}`} className="text-[11px] text-rose-600 font-medium">
+                          se rompió: {r}
+                        </span>
+                      ))}
+                      {inc.faltantes.map((f, i) => (
+                        <span key={`f${i}`} className="text-[11px] text-amber-600 font-medium">
+                          faltó: {f}
+                        </span>
+                      ))}
+                      {onEmitirDocumento && (
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          className="h-6 px-2 text-[11px] text-muted-foreground hover:text-foreground gap-1 ml-auto"
+                          onClick={(e) => { e.stopPropagation(); onEmitirDocumento(venta); }}
+                        >
+                          <FileText className="h-3 w-3" />
+                          Regenerar remito
+                        </Button>
+                      )}
+                    </div>
+                  );
+                })()}
               </div>
             ))}
           </div>
