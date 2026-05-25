@@ -27,6 +27,7 @@ import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import { formatCurrency } from "@/lib/utils/format";
 import { supabase } from "@/lib/supabase";
+import { mayoristaCuentaApi } from "@/lib/api";
 
 interface ParsedItem {
   codigo: string;
@@ -154,6 +155,35 @@ function parseRemitoText(text: string): ParsedItem[] {
   return items;
 }
 
+// Extrae metadatos del remito: "Señor" (destinatario) y total
+function extractRemitoMeta(text: string): { senor: string; total: number } {
+  let senor = "";
+  let total = 0;
+  const lines = text.split("\n");
+
+  for (const line of lines) {
+    const lineTrimmed = line.trim();
+
+    // "Señor" / "Sr." / "SEÑOR" — captura el nombre después
+    if (!senor) {
+      const matchSenor = lineTrimmed.match(/^(?:se[ñn]or|sr\.?)\s*:?\s*(.+)/i);
+      if (matchSenor) {
+        senor = matchSenor[1].trim();
+      }
+    }
+
+    // Total: busca líneas con "TOTAL", "IMPORTE TOTAL", "TOTAL GENERAL", etc.
+    const matchTotal = lineTrimmed.match(/(?:TOTAL|IMPORTE\s+TOTAL|TOTAL\s+GENERAL)\s*:?\s*\$?\s*([\d.,]+)/i);
+    if (matchTotal) {
+      let numStr = matchTotal[1].replace(/\./g, "").replace(",", ".");
+      const parsed = parseFloat(numStr);
+      if (!isNaN(parsed) && parsed > total) total = parsed;
+    }
+  }
+
+  return { senor, total };
+}
+
 // Busca producto por código (soporta código mayorista, sin ceros a la izquierda, por ID)
 function findByCode(codigo: string, products: Product[]): Product | null {
   const codigoStripped = codigo.replace(/^0+/, "");
@@ -217,6 +247,8 @@ export function RemitoImportModal({
   const [fileName, setFileName] = useState("");
   const [items, setItems] = useState<MatchedItem[]>([]);
   const [showUnmatched, setShowUnmatched] = useState(true);
+  const [remitoSenor, setRemitoSenor] = useState("");
+  const [remitoTotal, setRemitoTotal] = useState(0);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const resetState = () => {
@@ -226,6 +258,8 @@ export function RemitoImportModal({
     setParsing(false);
     setConfirming(false);
     setProgressMsg("");
+    setRemitoSenor("");
+    setRemitoTotal(0);
   };
 
   const handleClose = () => {
@@ -250,7 +284,12 @@ export function RemitoImportModal({
       setProgressMsg("Analizando texto...");
       console.log("[remito] Texto extraído del PDF:\n", text);
 
-      // 3. Parsear texto
+      // 3. Extraer metadatos y parsear items
+      const meta = extractRemitoMeta(text);
+      setRemitoSenor(meta.senor);
+      setRemitoTotal(meta.total);
+      console.log("[remito] Meta:", meta);
+
       const parsedItems = parseRemitoText(text);
       console.log("[remito] Items parseados:", parsedItems);
 
@@ -419,6 +458,20 @@ export function RemitoImportModal({
       });
 
       await onConfirm(updates);
+
+      // Registrar deuda en cuenta mayorista si hay total
+      if (remitoTotal > 0) {
+        try {
+          const desc = remitoSenor
+            ? `Remito ${fileName} — ${remitoSenor}`
+            : `Remito ${fileName}`;
+          await mayoristaCuentaApi.addDeuda({ amount: remitoTotal, description: desc });
+          toast.success(`Deuda de ${formatCurrency(remitoTotal)} cargada en cuenta mayorista`);
+        } catch {
+          toast.error("Stock actualizado pero no se pudo registrar la deuda mayorista");
+        }
+      }
+
       toast.success(`Stock actualizado para ${updates.length} producto(s)`);
       handleClose();
     } catch (err) {
@@ -499,6 +552,23 @@ export function RemitoImportModal({
         {/* STEP 2: Review */}
         {step === "review" && (
           <div className="flex-1 flex flex-col gap-4 overflow-hidden">
+            {/* Info remito */}
+            {(remitoSenor || remitoTotal > 0) && (
+              <div className="rounded-xl bg-purple-50 dark:bg-purple-900/20 border border-purple-200 dark:border-purple-800 p-3 space-y-1">
+                {remitoSenor && (
+                  <p className="text-xs text-purple-700 dark:text-purple-300">
+                    <span className="font-semibold">Señor:</span> {remitoSenor}
+                  </p>
+                )}
+                {remitoTotal > 0 && (
+                  <p className="text-sm font-bold text-purple-700 dark:text-purple-300">
+                    Total del remito: {formatCurrency(remitoTotal)}
+                    <span className="text-xs font-normal ml-2">→ se cargará como deuda en cuenta mayorista</span>
+                  </p>
+                )}
+              </div>
+            )}
+
             {/* Resumen */}
             <div className="flex items-center gap-3 flex-wrap">
               <Badge variant="outline" className="gap-1.5 text-xs">
