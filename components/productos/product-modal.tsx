@@ -23,7 +23,8 @@ import { Badge } from "@/components/ui/badge";
 import { Switch } from "@/components/ui/switch";
 import { Separator } from "@/components/ui/separator";
 import type { Product } from "@/lib/types";
-import { Loader2, Upload, ImageIcon, X, Plus, PackagePlus } from "lucide-react";
+import { cn } from "@/lib/utils";
+import { Loader2, Upload, ImageIcon, X, Plus, PackagePlus, PackageMinus } from "lucide-react";
 
 const DEFAULT_IMAGE = "/logo.png";
 
@@ -41,11 +42,17 @@ const DEFAULT_MARCAS = [
   "Sin identificar",
 ];
 
+export interface StockAdjustment {
+  type: "add" | "remove";
+  quantity: number;
+  reason: string;
+}
+
 interface ProductModalProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   product: Product | null;
-  onSave: (product: Omit<Product, "id" | "createdAt">) => Promise<void>;
+  onSave: (product: Omit<Product, "id" | "createdAt">, stockAdjustment?: StockAdjustment) => Promise<void>;
   availableCategories?: string[];
   availableMarcas?: string[];
 }
@@ -70,8 +77,10 @@ export function ProductModal({
   const [showNewMarcaInput, setShowNewMarcaInput] = useState(false);
   const [newMarcaInput, setNewMarcaInput] = useState("");
 
-  // Stock aditivo (solo en edición)
-  const [stockToAdd, setStockToAdd] = useState(0);
+  // Ajuste de stock (solo en edición)
+  const [stockAdjustType, setStockAdjustType] = useState<"add" | "remove">("add");
+  const [stockAdjustQty, setStockAdjustQty] = useState(0);
+  const [stockAdjustReason, setStockAdjustReason] = useState("");
 
   // Lote (solo para productos de mayorista: id empieza con "prod_")
   const [lote, setLote] = useState<string>("");
@@ -105,7 +114,9 @@ export function ProductModal({
       setShowNewMarcaInput(false);
       setNewCategoryInput("");
       setNewMarcaInput("");
-      setStockToAdd(0);
+      setStockAdjustType("add");
+      setStockAdjustQty(0);
+      setStockAdjustReason("");
       setLote("");
     }
   }, [open]);
@@ -123,7 +134,9 @@ export function ProductModal({
         sinTacc: (product as any).sinTacc || false,
       });
       setImagePreview(product.imageUrl || null);
-      setStockToAdd(0);
+      setStockAdjustType("add");
+      setStockAdjustQty(0);
+      setStockAdjustReason("");
       setLote((product as any).unidadesPorBulto ? String((product as any).unidadesPorBulto) : "");
     } else {
       setFormData({
@@ -137,7 +150,9 @@ export function ProductModal({
         sinTacc: false,
       });
       setImagePreview(null);
-      setStockToAdd(0);
+      setStockAdjustType("add");
+      setStockAdjustQty(0);
+      setStockAdjustReason("");
       setLote("");
     }
   }, [product, open]);
@@ -180,18 +195,25 @@ export function ProductModal({
     try {
       const loteNum = parseInt(lote) || 0;
       const isMayorista = !!product?.id?.startsWith("prod_");
-      // El stock se gestiona manualmente — nunca se calcula desde lote
-      const finalStock = isEditing ? formData.stock + stockToAdd : formData.stock;
+      const adjustDelta = stockAdjustQty > 0
+        ? (stockAdjustType === "add" ? stockAdjustQty : -stockAdjustQty)
+        : 0;
+      const finalStock = isEditing ? formData.stock + adjustDelta : formData.stock;
+
+      const adjustment: StockAdjustment | undefined =
+        isEditing && stockAdjustQty > 0
+          ? { type: stockAdjustType, quantity: stockAdjustQty, reason: stockAdjustReason }
+          : undefined;
+
       await onSave({
         ...formData,
         description: formData.description || "",
         imageUrl: formData.imageUrl || "",
         stock: finalStock,
-        // Campos extra para mayorista — se guardan directamente en productos
         ...(isMayorista && loteNum > 0
           ? { unidadesPorBulto: loteNum }
           : {}),
-      } as any);
+      } as any, adjustment);
     } finally {
       setLoading(false);
     }
@@ -209,9 +231,11 @@ export function ProductModal({
   const isEditing = !!product;
   const isMayorista = !!product?.id?.startsWith("prod_");
   const loteNum = parseInt(lote) || 0;
-  const isValid = isMayorista && isEditing
+  const needsReason = stockAdjustType === "remove" && stockAdjustQty > 0 && !stockAdjustReason.trim();
+  const exceedsStock = stockAdjustType === "remove" && stockAdjustQty > formData.stock;
+  const isValid = (isMayorista && isEditing
     ? formData.name.trim() && formData.price > 0
-    : formData.name.trim() && formData.category && formData.price > 0;
+    : formData.name.trim() && formData.category && formData.price > 0) && !needsReason && !exceedsStock;
 
   const displayImage = imagePreview || DEFAULT_IMAGE;
 
@@ -324,6 +348,99 @@ export function ProductModal({
                     onChange={(e) => setLote(e.target.value)}
                     className="h-10"
                   />
+                </div>
+              </div>
+
+              {/* Stock actual + Ajuste */}
+              <div className="space-y-3">
+                <div className="flex items-center gap-3">
+                  <Label className="text-sm font-medium">Stock actual:</Label>
+                  <span className="text-sm font-semibold">{formData.stock} uds</span>
+                </div>
+                <div className={cn(
+                  "p-3 rounded-lg border space-y-3",
+                  stockAdjustType === "remove" ? "border-red-300 bg-red-50/50" : "border-border bg-muted/20"
+                )}>
+                  <div className="flex items-center gap-2">
+                    <div className="flex rounded-lg border border-border overflow-hidden">
+                      <button
+                        type="button"
+                        className={cn(
+                          "px-3 py-1.5 text-xs font-medium flex items-center gap-1.5 transition-colors",
+                          stockAdjustType === "add"
+                            ? "bg-emerald-500 text-white"
+                            : "bg-muted/50 text-muted-foreground hover:bg-muted"
+                        )}
+                        onClick={() => { setStockAdjustType("add"); setStockAdjustQty(0); setStockAdjustReason(""); }}
+                      >
+                        <PackagePlus className="h-3.5 w-3.5" />
+                        Agregar
+                      </button>
+                      <button
+                        type="button"
+                        className={cn(
+                          "px-3 py-1.5 text-xs font-medium flex items-center gap-1.5 transition-colors",
+                          stockAdjustType === "remove"
+                            ? "bg-red-500 text-white"
+                            : "bg-muted/50 text-muted-foreground hover:bg-muted"
+                        )}
+                        onClick={() => { setStockAdjustType("remove"); setStockAdjustQty(0); setStockAdjustReason(""); }}
+                      >
+                        <PackageMinus className="h-3.5 w-3.5" />
+                        Quitar
+                      </button>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-3">
+                    <Input
+                      type="number"
+                      min="0"
+                      max={stockAdjustType === "remove" ? formData.stock : undefined}
+                      value={stockAdjustQty || ""}
+                      onChange={(e) => setStockAdjustQty(Math.max(0, Number(e.target.value)))}
+                      className="h-9 w-28"
+                      placeholder="0"
+                    />
+                    {stockAdjustQty > 0 && (
+                      <span className="text-sm text-muted-foreground">
+                        → Nuevo total:{" "}
+                        <span className={cn("font-semibold", stockAdjustType === "remove" ? "text-red-600" : "text-foreground")}>
+                          {stockAdjustType === "add" ? formData.stock + stockAdjustQty : formData.stock - stockAdjustQty} uds
+                        </span>
+                      </span>
+                    )}
+                  </div>
+                  {stockAdjustType === "remove" && stockAdjustQty > 0 && (
+                    <div className="space-y-1.5">
+                      <Label className="text-xs text-red-600 font-medium">
+                        Motivo (obligatorio) — se registra como pérdida en caja
+                      </Label>
+                      <Input
+                        value={stockAdjustReason}
+                        onChange={(e) => setStockAdjustReason(e.target.value)}
+                        placeholder='Ej: "Se rompieron al traerlos"'
+                        className="h-9 text-sm border-red-300 focus-visible:ring-red-400"
+                      />
+                    </div>
+                  )}
+                  {stockAdjustType === "add" && stockAdjustQty > 0 && (
+                    <div className="space-y-1.5">
+                      <Label className="text-xs text-muted-foreground font-medium">
+                        Motivo (opcional)
+                      </Label>
+                      <Input
+                        value={stockAdjustReason}
+                        onChange={(e) => setStockAdjustReason(e.target.value)}
+                        placeholder='Ej: "Reposición de mercadería"'
+                        className="h-9 text-sm"
+                      />
+                    </div>
+                  )}
+                  {exceedsStock && (
+                    <p className="text-xs text-red-600 font-medium">
+                      No podés quitar más de {formData.stock} unidades
+                    </p>
+                  )}
                 </div>
               </div>
             </div>
@@ -615,33 +732,99 @@ export function ProductModal({
                   </div>
                 </div>
 
-                {/* Agregar stock (solo en edición) */}
+                {/* Ajuste de stock (solo en edición) */}
                 {isEditing && (
-                  <div className="p-3 rounded-lg border border-border bg-muted/20 space-y-2">
-                    <Label className="text-xs font-medium flex items-center gap-1.5 text-muted-foreground">
-                      <PackagePlus className="h-3.5 w-3.5" />
-                      Agregar más stock
-                    </Label>
+                  <div className={cn(
+                    "p-3 rounded-lg border space-y-3",
+                    stockAdjustType === "remove" ? "border-red-300 bg-red-50/50" : "border-border bg-muted/20"
+                  )}>
+                    <div className="flex items-center gap-2">
+                      <div className="flex rounded-lg border border-border overflow-hidden">
+                        <button
+                          type="button"
+                          className={cn(
+                            "px-3 py-1.5 text-xs font-medium flex items-center gap-1.5 transition-colors",
+                            stockAdjustType === "add"
+                              ? "bg-emerald-500 text-white"
+                              : "bg-muted/50 text-muted-foreground hover:bg-muted"
+                          )}
+                          onClick={() => { setStockAdjustType("add"); setStockAdjustQty(0); setStockAdjustReason(""); }}
+                        >
+                          <PackagePlus className="h-3.5 w-3.5" />
+                          Agregar
+                        </button>
+                        <button
+                          type="button"
+                          className={cn(
+                            "px-3 py-1.5 text-xs font-medium flex items-center gap-1.5 transition-colors",
+                            stockAdjustType === "remove"
+                              ? "bg-red-500 text-white"
+                              : "bg-muted/50 text-muted-foreground hover:bg-muted"
+                          )}
+                          onClick={() => { setStockAdjustType("remove"); setStockAdjustQty(0); setStockAdjustReason(""); }}
+                        >
+                          <PackageMinus className="h-3.5 w-3.5" />
+                          Quitar
+                        </button>
+                      </div>
+                    </div>
                     <div className="flex items-center gap-3">
                       <Input
                         type="number"
                         min="0"
-                        value={stockToAdd || ""}
+                        max={stockAdjustType === "remove" ? formData.stock : undefined}
+                        value={stockAdjustQty || ""}
                         onChange={(e) =>
-                          setStockToAdd(Math.max(0, Number(e.target.value)))
+                          setStockAdjustQty(Math.max(0, Number(e.target.value)))
                         }
                         className="h-9 w-28"
                         placeholder="0"
                       />
-                      {stockToAdd > 0 && (
+                      {stockAdjustQty > 0 && (
                         <span className="text-sm text-muted-foreground">
                           → Nuevo total:{" "}
-                          <span className="font-semibold text-foreground">
-                            {formData.stock + stockToAdd} uds
+                          <span className={cn(
+                            "font-semibold",
+                            stockAdjustType === "remove" ? "text-red-600" : "text-foreground"
+                          )}>
+                            {stockAdjustType === "add"
+                              ? formData.stock + stockAdjustQty
+                              : formData.stock - stockAdjustQty} uds
                           </span>
                         </span>
                       )}
                     </div>
+                    {stockAdjustType === "remove" && stockAdjustQty > 0 && (
+                      <div className="space-y-1.5">
+                        <Label className="text-xs text-red-600 font-medium">
+                          Motivo (obligatorio) — se registra como pérdida en caja
+                        </Label>
+                        <Input
+                          value={stockAdjustReason}
+                          onChange={(e) => setStockAdjustReason(e.target.value)}
+                          placeholder='Ej: "Se rompieron al traerlos"'
+                          className="h-9 text-sm border-red-300 focus-visible:ring-red-400"
+                        />
+                      </div>
+                    )}
+                    {stockAdjustType === "add" && stockAdjustQty > 0 && (
+                      <div className="space-y-1.5">
+                        <Label className="text-xs text-muted-foreground font-medium">
+                          Motivo (opcional)
+                        </Label>
+                        <Input
+                          value={stockAdjustReason}
+                          onChange={(e) => setStockAdjustReason(e.target.value)}
+                          placeholder='Ej: "Reposición de mercadería"'
+                          className="h-9 text-sm"
+                        />
+                      </div>
+                    )}
+                    {exceedsStock && (
+                      <p className="text-xs text-red-600 font-medium">
+                        No podés quitar más de {formData.stock} unidades
+                      </p>
+                    )}
                   </div>
                 )}
               </div>

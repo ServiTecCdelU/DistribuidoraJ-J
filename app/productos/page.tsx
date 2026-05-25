@@ -14,7 +14,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { ProductModal } from "@/components/productos/product-modal";
+import { ProductModal, type StockAdjustment } from "@/components/productos/product-modal";
 import { StockHistoryModal } from "@/components/productos/stock-history-modal";
 import { InventoryValueHistory } from "@/components/productos/inventory-value-history";
 import { RemitoImportModal } from "@/components/productos/remito-import-modal";
@@ -26,6 +26,9 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { productsApi } from "@/lib/api";
+import { supabase } from "@/lib/supabase";
+import { generateReadableId } from "@/services/supabase-helpers";
+import { registrarMovimiento } from "@/services/stock-service";
 import type { Product, MayoristaProducto } from "@/lib/types";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { formatCurrency, formatCompactNumber } from "@/lib/utils/format";
@@ -637,38 +640,76 @@ export default function ProductosPage() {
     }
   };
 
-  const handleSave = async (productData: Omit<Product, "id" | "createdAt">) => {
+  const handleSave = async (productData: Omit<Product, "id" | "createdAt">, stockAdjustment?: StockAdjustment) => {
     try {
       if (editingProduct) {
         // Detectar cambio de stock
         if (productData.stock !== editingProduct.stock) {
           const change = productData.stock - editingProduct.stock;
+          const reason = stockAdjustment?.reason || "Edición desde modal";
           if (change > 0) {
-            logManualAdd(
-              editingProduct,
-              change,
-              undefined,
-              "Edición desde modal",
-            );
+            logManualAdd(editingProduct, change, undefined, reason);
           } else if (change < 0) {
-            logManualRemove(
-              editingProduct,
-              Math.abs(change),
-              undefined,
-              "Edición desde modal",
-            );
+            logManualRemove(editingProduct, Math.abs(change), undefined, reason);
           }
         }
 
+        const isMayorista = editingProduct.id.startsWith("prod_");
+
+        // Para mayorista con ajuste, no pasar stock a productsApi.update — registrarMovimiento lo maneja
+        const updateData = (isMayorista && stockAdjustment && stockAdjustment.quantity > 0)
+          ? { ...productData, stock: editingProduct.stock } // mantener stock original, registrarMovimiento lo cambia
+          : productData;
+
         const updated = await productsApi.update(
           editingProduct.id,
-          productData,
+          updateData,
         );
+
+        // Si es mayorista, registrar movimiento en stock_movimientos (esto actualiza stock en ambas tablas)
+        if (isMayorista && stockAdjustment && stockAdjustment.quantity > 0) {
+          const mpId = editingProduct.id.replace("prod_", "");
+          await registrarMovimiento({
+            productoId: mpId,
+            tipo: stockAdjustment.type === "remove" ? "rotura" : "apertura_bulto",
+            cantidad: stockAdjustment.type === "remove" ? -stockAdjustment.quantity : stockAdjustment.quantity,
+            referencia: stockAdjustment.reason || undefined,
+          });
+          // Re-leer stock actualizado
+          updated.stock = productData.stock;
+        }
+
         setProducts(
           products.map((p) => (p.id === editingProduct.id ? updated : p)),
         );
 
-        // unidadesPorBulto y seDivideEn ya se guardan directamente en productos vía productsApi.update
+        // Si es "quitar", registrar pérdida en caja (tabla transacciones)
+        if (stockAdjustment?.type === "remove" && stockAdjustment.quantity > 0) {
+          // Obtener precio mayorista (costo) para calcular la pérdida
+          let precioCosto = 0;
+          if (isMayorista) {
+            const mpId = editingProduct.id.replace("prod_", "");
+            const { data: mpData } = await supabase
+              .from("mayorista_productos")
+              .select("precio_lista")
+              .eq("id", mpId)
+              .single();
+            precioCosto = Number(mpData?.precio_lista) || 0;
+          } else {
+            precioCosto = editingProduct.price;
+          }
+
+          const totalPerdida = precioCosto * stockAdjustment.quantity;
+          const desc = `[ROTURA] ${stockAdjustment.quantity}x ${editingProduct.name} — ${stockAdjustment.reason}`;
+          const docId = await generateReadableId("transacciones", "perdida", editingProduct.name.slice(0, 20));
+          await supabase.from("transacciones").insert({
+            id: docId,
+            type: "loss",
+            amount: -totalPerdida,
+            description: desc,
+            date: new Date().toISOString(),
+          });
+        }
       } else {
         const newProduct = await productsApi.create(productData);
         setProducts([...products, newProduct]);
