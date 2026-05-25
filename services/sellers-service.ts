@@ -94,7 +94,21 @@ export const updateSeller = async (id: string, updates: Partial<Seller>): Promis
 }
 
 export const deleteSeller = async (id: string): Promise<void> => {
-  await supabase.from('vendedores').delete().eq('id', id)
+  // Desvincular referencias antes de borrar
+  await Promise.all([
+    supabase.from('usuarios').update({ seller_id: null }).eq('seller_id', id),
+    supabase.from('clientes').update({ seller_id: null }).eq('seller_id', id),
+  ])
+
+  const { error } = await supabase.from('vendedores').delete().eq('id', id)
+  if (error) {
+    // Si hay FKs que impiden borrar, hacer soft-delete
+    const { error: softErr } = await supabase
+      .from('vendedores')
+      .update({ is_active: false })
+      .eq('id', id)
+    if (softErr) throw new Error('No se pudo eliminar el vendedor')
+  }
 }
 
 export { getCommissionsBySeller as getSellerCommissions } from '@/services/commissions-service'

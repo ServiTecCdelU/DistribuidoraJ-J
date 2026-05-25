@@ -184,8 +184,8 @@ export default function EmpleadosPage() {
       await sellersApi.delete(sellerToDelete.id)
       setSellers(sellers.filter(s => s.id !== sellerToDelete.id))
       toast.success('Empleado eliminado correctamente')
-    } catch (error) {
-      toast.error('Error al eliminar empleado')
+    } catch (error: any) {
+      toast.error(error.message || 'Error al eliminar empleado')
     } finally {
       setDeleteDialogOpen(false)
       setSellerToDelete(null)
