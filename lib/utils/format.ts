@@ -32,6 +32,7 @@ const dateTimeFormatter = new Intl.DateTimeFormat("es-AR", {
 const timeFormatter = new Intl.DateTimeFormat("es-AR", {
   hour: "2-digit",
   minute: "2-digit",
+  hour12: false,
 });
 
 export const formatCurrency = (amount: number): string => {

@@ -76,7 +76,7 @@ const formatDateLong = (d: Date) =>
   }).format(d);
 
 const formatTimeStr = (d: Date) =>
-  d.toLocaleTimeString("es-AR", { hour: "2-digit", minute: "2-digit" });
+  d.toLocaleTimeString("es-AR", { hour: "2-digit", minute: "2-digit", hour12: false });
 
 const mapRegister = (data: any): CashRegister => ({
   id: data.id,
@@ -121,14 +121,15 @@ const cajaPdfStyles = StyleSheet.create({
   diffNegative: { color: "#dc2626" },
   diffNeutral: { color: "#059669" },
   saleRow: { flexDirection: "row", justifyContent: "space-between", paddingVertical: 3, borderBottom: "0.5px solid #f0f0f0", alignItems: "center" },
-  saleClient: { fontSize: 8, fontWeight: "bold", maxWidth: "40%" },
-  saleTime: { fontSize: 7, color: "#888", width: "12%" },
-  saleSeller: { fontSize: 7, color: "#888", width: "18%" },
-  saleAmount: { fontSize: 8, fontWeight: "bold", textAlign: "right", width: "15%" },
+  saleClient: { fontSize: 8, fontWeight: "bold", width: "30%" },
+  saleNumber: { fontSize: 7, color: "#888", width: "12%" },
+  saleTime: { fontSize: 7, color: "#888", width: "10%" },
+  saleAmount: { fontSize: 8, fontWeight: "bold", textAlign: "right", width: "18%" },
   saleBadge: { fontSize: 6, textAlign: "center", width: "15%", padding: "2px 4px", borderRadius: 3 },
   cashBadge: { backgroundColor: "#d1fae5", color: "#065f46" },
+  transferBadge: { backgroundColor: "#ede9fe", color: "#5b21b6" },
   creditBadge: { backgroundColor: "#dbeafe", color: "#1e40af" },
-  mixedBadge: { backgroundColor: "#fef3c7", color: "#92400e" },
+  mixedBadge: { backgroundColor: "#fef9c3", color: "#92400e" },
   notesBox: { backgroundColor: "#f9fafb", border: "1px solid #e5e7eb", borderRadius: 4, padding: 8, marginTop: 6 },
   notesText: { fontSize: 8, color: "#555", fontStyle: "italic" },
   footer: { marginTop: "auto", paddingTop: 8, borderTop: "1px solid #e5e7eb", flexDirection: "row", justifyContent: "space-between", fontSize: 7, color: "#aaa" },
@@ -278,32 +279,32 @@ const CajaPdfDocument = ({ register, sales, losses = [], pagos = [] }: { registe
             <Text style={cajaPdfStyles.sectionTitle}>Detalle de ventas ({sales.length})</Text>
             {/* Header de tabla */}
             <View style={[cajaPdfStyles.saleRow, { borderBottom: "1px solid #d1d5db", paddingBottom: 4, marginBottom: 2 }]}>
-              <Text style={[cajaPdfStyles.saleTime, { fontWeight: "bold", color: "#333" }]}>Hora</Text>
               <Text style={[cajaPdfStyles.saleClient, { fontWeight: "bold", color: "#333" }]}>Cliente</Text>
-              <Text style={[cajaPdfStyles.saleSeller, { fontWeight: "bold", color: "#333" }]}>Vendedor</Text>
+              <Text style={[cajaPdfStyles.saleNumber, { fontWeight: "bold", color: "#333" }]}>#Venta</Text>
+              <Text style={[cajaPdfStyles.saleTime, { fontWeight: "bold", color: "#333" }]}>Hora</Text>
               <Text style={[cajaPdfStyles.saleBadge, { fontWeight: "bold", color: "#333" }]}>Pago</Text>
               <Text style={[cajaPdfStyles.saleAmount, { fontWeight: "bold", color: "#333" }]}>Monto</Text>
             </View>
-            {sales.map((sale, i) => (
-              <View key={i} style={cajaPdfStyles.saleRow}>
-                <Text style={cajaPdfStyles.saleTime}>{formatTimeStr(new Date(sale.createdAt))}</Text>
-                <Text style={cajaPdfStyles.saleClient}>{sale.clientName || "Cons. Final"}</Text>
-                <Text style={cajaPdfStyles.saleSeller}>{sale.sellerName || "-"}</Text>
-                <Text style={[
-                  cajaPdfStyles.saleBadge,
-                  sale.paymentType === "cash"
-                    ? cajaPdfStyles.cashBadge
-                    : sale.paymentType === "credit"
-                      ? cajaPdfStyles.creditBadge
-                      : cajaPdfStyles.mixedBadge,
-                ]}>
-                  {sale.paymentType === "cash"
-                    ? ((sale as any).paymentMethod === "transferencia" ? "Transf." : "Efectivo")
-                    : sale.paymentType === "credit" ? "Cta.Cte." : "Mixto"}
-                </Text>
-                <Text style={cajaPdfStyles.saleAmount}>{formatCurrency(sale.total || 0)}</Text>
-              </View>
-            ))}
+            {sales.map((sale, i) => {
+              const badgeStyle = sale.paymentType === "cash"
+                ? ((sale as any).paymentMethod === "transferencia" ? cajaPdfStyles.transferBadge : cajaPdfStyles.cashBadge)
+                : sale.paymentType === "credit"
+                  ? cajaPdfStyles.creditBadge
+                  : cajaPdfStyles.mixedBadge;
+              return (
+                <View key={i} style={cajaPdfStyles.saleRow}>
+                  <Text style={cajaPdfStyles.saleClient}>{sale.clientName || "Cons. Final"}</Text>
+                  <Text style={cajaPdfStyles.saleNumber}>{sale.saleNumber ? `#${sale.saleNumber}` : "-"}</Text>
+                  <Text style={cajaPdfStyles.saleTime}>{formatTimeStr(new Date(sale.createdAt))}</Text>
+                  <Text style={[cajaPdfStyles.saleBadge, badgeStyle]}>
+                    {sale.paymentType === "cash"
+                      ? ((sale as any).paymentMethod === "transferencia" ? "Transf." : "Efectivo")
+                      : sale.paymentType === "credit" ? "Cta.Cte." : "Mixto"}
+                  </Text>
+                  <Text style={cajaPdfStyles.saleAmount}>{formatCurrency(sale.total || 0)}</Text>
+                </View>
+              );
+            })}
           </View>
         )}
 
@@ -1142,23 +1143,23 @@ export default function CajaPage() {
                               className="flex items-center justify-between py-1.5 border-b border-border/50 last:border-0 gap-2"
                             >
                               <div className="flex items-center gap-2 min-w-0 flex-1">
-                                <span className="text-xs text-muted-foreground shrink-0 w-14">
-                                  {formatTime(new Date(sale.createdAt))}
+                                <span className="text-sm font-medium truncate">
+                                  {sale.clientName || "Consumidor Final"}
                                 </span>
                                 {sale.saleNumber && (
                                   <span className="text-xs text-muted-foreground shrink-0">
                                     #{sale.saleNumber}
                                   </span>
                                 )}
-                                <span className="text-sm font-medium truncate">
-                                  {sale.clientName || "Consumidor Final"}
+                                <span className="text-xs text-muted-foreground shrink-0">
+                                  {formatTimeStr(new Date(sale.createdAt))}
                                 </span>
                               </div>
                               <div className="flex items-center gap-2 shrink-0">
                                 <Badge className={`text-[10px] border-0 ${badgeClass}`}>
                                   {paymentLabel}
                                 </Badge>
-                                <span className="text-sm font-semibold w-24 text-right">
+                                <span className="text-sm font-semibold text-right tabular-nums">
                                   {formatCurrency(sale.total || 0)}
                                 </span>
                               </div>
@@ -1319,17 +1320,17 @@ export default function CajaPage() {
                               return (
                                 <div key={sale.id} className="flex items-center justify-between py-1.5 border-b border-border/30 last:border-0 text-sm gap-2">
                                   <div className="flex items-center gap-2 min-w-0 flex-1">
-                                    <span className="text-xs text-muted-foreground shrink-0 w-12">{formatTimeStr(new Date(sale.createdAt))}</span>
+                                    <span className="font-medium truncate">{sale.clientName || "Cons. Final"}</span>
                                     {sale.saleNumber && (
                                       <span className="text-xs text-muted-foreground shrink-0">#{sale.saleNumber}</span>
                                     )}
-                                    <span className="font-medium truncate">{sale.clientName || "Cons. Final"}</span>
+                                    <span className="text-xs text-muted-foreground shrink-0">{formatTimeStr(new Date(sale.createdAt))}</span>
                                   </div>
                                   <div className="flex items-center gap-2 shrink-0">
                                     <Badge className={`text-[10px] border-0 ${badgeClass}`}>
                                       {paymentLabel}
                                     </Badge>
-                                    <span className="font-semibold w-24 text-right">{formatCurrency(sale.total || 0)}</span>
+                                    <span className="font-semibold text-right tabular-nums">{formatCurrency(sale.total || 0)}</span>
                                   </div>
                                 </div>
                               );
