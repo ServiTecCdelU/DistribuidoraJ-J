@@ -100,20 +100,27 @@ export default function CuentaCorrientePage() {
 
   const loadData = useCallback(async () => {
     try {
-      const [clientsData, compData, sellersData, mayTxsData] = await Promise.all([
+      const [clientsData, compData, sellersData] = await Promise.all([
         cobranzasApi.getDebtClients(),
         cobranzasApi.getComprobantes(),
         sellersApi.getAll(),
-        mayoristaCuentaApi.getTransacciones(),
       ])
       setDebtClients(clientsData)
       setComprobantes(compData)
       setSellers(sellersData.filter((s) => s.isActive))
+    } catch { /* silenciado */ }
+
+    // Mayorista aparte para que no rompa la carga principal
+    try {
+      const mayTxsData = await mayoristaCuentaApi.getTransacciones()
       setMayTxs(mayTxsData)
       const bal = mayTxsData.reduce((acc, tx) => tx.type === 'debt' ? acc + tx.amount : acc - tx.amount, 0)
       setMayBalance(bal)
-    } catch { /* silenciado */ }
-    finally { setLoading(false) }
+    } catch (err) {
+      console.error('[cuenta-corriente] Error cargando mayorista:', err)
+    }
+
+    setLoading(false)
   }, [])
 
   useEffect(() => { loadData() }, [loadData])
@@ -1090,67 +1097,68 @@ export default function CuentaCorrientePage() {
           {activeTab === 'mayorista' && (
           <>
           {/* ═══ CUENTA CON MAYORISTA (proveedor) ═══ */}
-          <div>
-            <Card className="rounded-2xl border-purple-200 dark:border-purple-800">
-              <CardHeader className="pb-2">
-                <div className="flex items-center justify-between">
-                  <CardTitle className="text-base font-semibold flex items-center gap-2">
-                    <DollarSign className="h-5 w-5 text-purple-600" />
-                    Cuenta con Mayorista
-                  </CardTitle>
-                  <span className={`text-xl font-bold ${mayBalance > 0 ? 'text-red-600' : 'text-green-600'}`}>
-                    {mayBalance > 0 ? formatCurrency(mayBalance) : 'Sin deuda'}
-                  </span>
-                </div>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                <div className="flex gap-2">
-                  <Button
-                    className="gap-2 rounded-xl bg-red-600 hover:bg-red-700"
-                    size="sm"
-                    onClick={() => { setMayAmount(''); setMayDesc(''); setMayDeudaDialog(true) }}
-                  >
-                    <ArrowUpCircle className="h-4 w-4" />
-                    Cargar deuda
-                  </Button>
-                  <Button
-                    className="gap-2 rounded-xl bg-green-600 hover:bg-green-700"
-                    size="sm"
-                    onClick={() => { setMayAmount(''); setMayDesc(''); setMayPagoDialog(true) }}
-                    disabled={mayBalance <= 0}
-                  >
-                    <ArrowDownCircle className="h-4 w-4" />
-                    Registrar pago
-                  </Button>
-                </div>
+          <div className="space-y-4">
+            {/* Balance y botones */}
+            <div className="flex items-center justify-between flex-wrap gap-3">
+              <div className="flex items-center gap-3">
+                <span className={`text-2xl font-bold ${mayBalance > 0 ? 'text-red-600' : 'text-green-600'}`}>
+                  {mayBalance > 0 ? formatCurrency(mayBalance) : 'Sin deuda'}
+                </span>
+                <span className="text-sm text-muted-foreground">deuda total</span>
+              </div>
+              <div className="flex gap-2">
+                <Button
+                  className="gap-2 rounded-xl bg-red-600 hover:bg-red-700"
+                  size="sm"
+                  onClick={() => { setMayAmount(''); setMayDesc(''); setMayDeudaDialog(true) }}
+                >
+                  <ArrowUpCircle className="h-4 w-4" />
+                  Cargar deuda
+                </Button>
+                <Button
+                  className="gap-2 rounded-xl bg-green-600 hover:bg-green-700"
+                  size="sm"
+                  onClick={() => { setMayAmount(''); setMayDesc(''); setMayPagoDialog(true) }}
+                  disabled={mayBalance <= 0}
+                >
+                  <ArrowDownCircle className="h-4 w-4" />
+                  Registrar pago
+                </Button>
+              </div>
+            </div>
 
-                {mayTxs.length === 0 ? (
-                  <p className="text-sm text-muted-foreground text-center py-4">Sin movimientos</p>
-                ) : (
-                  <div className="flex flex-col gap-2 max-h-[400px] overflow-y-auto">
-                    {mayTxs.map((tx) => (
-                      <div key={tx.id} className="flex items-center gap-3 p-3 rounded-xl bg-muted/50">
-                        <div className={`h-8 w-8 rounded-full flex items-center justify-center shrink-0 ${
-                          tx.type === 'payment' ? 'bg-green-100 dark:bg-green-900/30' : 'bg-red-100 dark:bg-red-900/30'
-                        }`}>
-                          {tx.type === 'payment'
-                            ? <ArrowDownCircle className="h-4 w-4 text-green-600" />
-                            : <ArrowUpCircle className="h-4 w-4 text-red-600" />
-                          }
-                        </div>
-                        <div className="flex-1 min-w-0">
-                          <p className="text-sm font-medium truncate">{tx.description}</p>
-                          <p className="text-xs text-muted-foreground">{formatDate(tx.date)}</p>
-                        </div>
-                        <p className={`font-bold tabular-nums ${tx.type === 'payment' ? 'text-green-600' : 'text-red-600'}`}>
-                          {tx.type === 'payment' ? '-' : '+'}{formatCurrency(tx.amount)}
-                        </p>
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </CardContent>
-            </Card>
+            {mayTxs.length === 0 ? (
+              <p className="text-sm text-muted-foreground text-center py-4">Sin movimientos</p>
+            ) : (
+              <Card className="p-0">
+                <CardContent className="p-0">
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead className="text-xs py-2">Fecha</TableHead>
+                        <TableHead className="text-xs py-2">Descripción</TableHead>
+                        <TableHead className="text-xs py-2 text-right">Debe</TableHead>
+                        <TableHead className="text-xs py-2 text-right">Haber</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {mayTxs.map((tx) => (
+                        <TableRow key={tx.id}>
+                          <TableCell className="text-xs py-2 whitespace-nowrap">{formatDate(tx.date)}</TableCell>
+                          <TableCell className="text-xs py-2">{tx.description}</TableCell>
+                          <TableCell className="text-xs py-2 text-right font-semibold text-red-600 tabular-nums">
+                            {tx.type === 'debt' ? formatCurrency(tx.amount) : ''}
+                          </TableCell>
+                          <TableCell className="text-xs py-2 text-right font-semibold text-green-600 tabular-nums">
+                            {tx.type === 'payment' ? formatCurrency(tx.amount) : ''}
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                </CardContent>
+              </Card>
+            )}
           </div>
 
           {/* Dialog cargar deuda mayorista */}
