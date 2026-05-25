@@ -148,25 +148,25 @@ export function StockHistoryModal({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="w-[98vw] sm:max-w-4xl max-h-[95vh] p-0 gap-0 flex flex-col overflow-hidden">
+      <DialogContent className="w-[98vw] max-w-[98vw] sm:max-w-4xl max-h-[90vh] sm:max-h-[95vh] p-0 gap-0 flex flex-col overflow-hidden rounded-xl sm:rounded-2xl">
 
         {/* Header */}
-        <DialogHeader className="px-4 sm:px-6 pt-4 pb-3 border-b shrink-0">
+        <DialogHeader className="px-3 sm:px-6 pt-3 sm:pt-4 pb-2 sm:pb-3 border-b shrink-0">
           <DialogTitle className="flex items-center gap-2">
-            <div className="h-8 w-8 rounded-full bg-primary/10 flex items-center justify-center shrink-0">
-              <Archive className="h-4 w-4 text-primary" />
+            <div className="h-7 w-7 sm:h-8 sm:w-8 rounded-full bg-primary/10 flex items-center justify-center shrink-0">
+              <Archive className="h-3.5 w-3.5 sm:h-4 sm:w-4 text-primary" />
             </div>
             <div className="min-w-0">
-              <p className="font-semibold text-sm sm:text-base truncate">
+              <p className="font-semibold text-sm truncate">
                 Historial de Movimientos
               </p>
-              <p className="text-xs text-muted-foreground truncate">{product?.name}</p>
+              <p className="text-[11px] text-muted-foreground truncate">{product?.name}</p>
             </div>
           </DialogTitle>
         </DialogHeader>
 
         {/* Stats */}
-        <div className="grid grid-cols-3 sm:grid-cols-6 gap-1.5 p-3 sm:p-4 bg-muted/30 border-b shrink-0">
+        <div className="grid grid-cols-3 sm:grid-cols-6 gap-1 sm:gap-1.5 p-2 sm:p-4 bg-muted/30 border-b shrink-0">
           <StatCard
             value={stats?.unitsSold}
             label="Unid. Vendidas"
@@ -202,14 +202,14 @@ export function StockHistoryModal({
         </div>
 
         {/* Filtros */}
-        <div className="flex gap-1.5 p-3 border-b overflow-x-auto shrink-0">
-          <Filter className="h-4 w-4 text-muted-foreground shrink-0 mt-0.5" />
+        <div className="flex gap-1 sm:gap-1.5 px-2 sm:px-3 py-2 border-b overflow-x-auto shrink-0">
+          <Filter className="h-3.5 w-3.5 sm:h-4 sm:w-4 text-muted-foreground shrink-0 mt-0.5" />
           {FILTER_OPTIONS.map((opt) => (
             <Button
               key={opt.id}
               variant={tipoFilter === opt.id ? 'default' : 'outline'}
               size="sm"
-              className="text-xs h-7 px-2.5 whitespace-nowrap"
+              className="text-[10px] sm:text-xs h-6 sm:h-7 px-2 sm:px-2.5 whitespace-nowrap"
               onClick={() => handleFilterChange(opt.id)}
             >
               {opt.label}
@@ -244,8 +244,8 @@ export function StockHistoryModal({
                       <th className="text-left px-2 py-2.5 font-semibold text-muted-foreground text-xs">Fecha</th>
                       <th className="text-left px-2 py-2.5 font-semibold text-muted-foreground text-xs">Tipo</th>
                       <th className="text-left px-2 py-2.5 font-semibold text-muted-foreground text-xs">Venta</th>
-                      <th className="text-right px-2 py-2.5 font-semibold text-muted-foreground text-xs">Cant.</th>
                       <th className="text-left px-2 py-2.5 font-semibold text-muted-foreground text-xs">Cliente</th>
+                      <th className="text-right px-2 py-2.5 font-semibold text-muted-foreground text-xs">Cant.</th>
                       <th className="text-right px-2 py-2.5 font-semibold text-muted-foreground text-xs">Monto</th>
                     </tr>
                   </thead>
@@ -269,8 +269,8 @@ export function StockHistoryModal({
 
         {/* Paginación */}
         {totalMovs > 0 && (
-          <div className="flex items-center justify-between px-4 py-3 border-t shrink-0 bg-background">
-            <span className="text-xs text-muted-foreground">
+          <div className="flex items-center justify-between px-2.5 sm:px-4 py-2 sm:py-3 border-t shrink-0 bg-background">
+            <span className="text-[10px] sm:text-xs text-muted-foreground">
               {from}–{to} de {totalMovs}
             </span>
             <div className="flex items-center gap-2">
@@ -319,11 +319,11 @@ function StatCard({
   span?: boolean
 }) {
   return (
-    <div className={cn('text-center p-2 rounded-lg', colorClass.split(' ')[0], span && 'col-span-3 sm:col-span-1')}>
-      <p className={cn('font-bold truncate', colorClass.split(' ')[1], small ? 'text-sm sm:text-base' : 'text-lg sm:text-xl')}>
+    <div className={cn('text-center p-1.5 sm:p-2 rounded-lg', colorClass.split(' ')[0], span && 'col-span-3 sm:col-span-1')}>
+      <p className={cn('font-bold truncate', colorClass.split(' ')[1], small ? 'text-xs sm:text-base' : 'text-sm sm:text-xl')}>
         {value ?? '—'}
       </p>
-      <p className="text-[10px] text-muted-foreground leading-tight">{label}</p>
+      <p className="text-[9px] sm:text-[10px] text-muted-foreground leading-tight">{label}</p>
     </div>
   )
 }
@@ -368,11 +368,11 @@ function MovimientoRow({ m }: { m: Movimiento }) {
           <span className="text-[10px] italic truncate max-w-[140px] block">{m.motivo}</span>
         ) : ''}
       </td>
-      <td className="px-2 py-2 text-right">
-        <CantidadBadge cantidad={m.cantidad} />
-      </td>
       <td className="px-2 py-2 text-xs text-muted-foreground max-w-[130px] truncate">
         {m.clientName ?? (m.tipo === 'venta' ? '—' : '')}
+      </td>
+      <td className="px-2 py-2 text-right">
+        <CantidadBadge cantidad={m.cantidad} />
       </td>
       <td className="px-2 py-2 text-right text-xs font-medium text-foreground whitespace-nowrap">
         {m.ventaTotal != null ? formatCurrency(m.ventaTotal) : (m.tipo === 'venta' ? '—' : '')}
@@ -382,48 +382,52 @@ function MovimientoRow({ m }: { m: Movimiento }) {
 }
 
 function MovimientoCard({ m }: { m: Movimiento }) {
+  const d = new Date(m.fecha)
+  const fecha = d.toLocaleDateString('es-AR', { day: '2-digit', month: '2-digit' })
+  const hora = d.toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit' })
   return (
-    <div className="px-3 py-2.5 space-y-1">
-      {/* Fila 1: tipo + fecha + cantidad */}
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-2">
+    <div className="px-2.5 py-2 space-y-0.5">
+      {/* Fila 1: badge + fecha/hora | cant + monto */}
+      <div className="flex items-center justify-between gap-1">
+        <div className="flex items-center gap-1.5 min-w-0">
           <TipoBadge tipo={m.tipo} />
-          <span className="text-[10px] text-muted-foreground">
-            {formatDateShort(new Date(m.fecha))}
-          </span>
+          <span className="text-[10px] text-muted-foreground whitespace-nowrap">{fecha} {hora}</span>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 shrink-0">
           <CantidadBadge cantidad={m.cantidad} />
           {m.ventaTotal != null && (
-            <span className="text-xs font-semibold text-foreground">
+            <span className="text-[11px] font-semibold text-foreground tabular-nums">
               {formatCurrency(m.ventaTotal)}
             </span>
           )}
         </div>
       </div>
 
-      {/* Fila 2: info de venta */}
-      {(m.saleNumber || m.sellerName || m.clientName) && (
-        <div className="flex flex-wrap gap-x-3 gap-y-0.5 text-[10px] text-muted-foreground">
+      {/* Fila 2: vendedor · cliente · #venta */}
+      {(m.sellerName || m.clientName || m.saleNumber) && (
+        <div className="flex items-center gap-1 text-[10px] text-muted-foreground truncate pl-0.5">
           {m.sellerName && (
-            <span className="flex items-center gap-0.5">
-              <User className="h-2.5 w-2.5" />
-              {m.sellerName}
+            <span className="flex items-center gap-0.5 shrink-0">
+              <User className="h-2.5 w-2.5 shrink-0" />
+              <span className="max-w-[80px] truncate">{m.sellerName}</span>
             </span>
           )}
+          {m.sellerName && m.clientName && <span className="text-muted-foreground/40">·</span>}
           {m.clientName && (
-            <span className="flex items-center gap-0.5">
-              <Store className="h-2.5 w-2.5" />
-              {m.clientName}
+            <span className="flex items-center gap-0.5 min-w-0">
+              <Store className="h-2.5 w-2.5 shrink-0" />
+              <span className="truncate">{m.clientName}</span>
             </span>
           )}
-          {m.saleNumber && <span className="text-muted-foreground/70">#{m.saleNumber}</span>}
+          {m.saleNumber && (
+            <span className="text-muted-foreground/60 shrink-0 ml-auto">#{m.saleNumber}</span>
+          )}
         </div>
       )}
 
       {/* Motivo libre (ajustes/roturas/ingresos) */}
       {!m.sellerName && !m.clientName && m.motivo && m.tipo !== 'venta' && (
-        <p className="text-[10px] text-muted-foreground italic">{m.motivo}</p>
+        <p className="text-[10px] text-muted-foreground italic pl-0.5">{m.motivo}</p>
       )}
     </div>
   )
