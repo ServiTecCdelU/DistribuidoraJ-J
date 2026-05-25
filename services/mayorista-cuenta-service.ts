@@ -24,7 +24,11 @@ export const getTransaccionesMayorista = async (): Promise<TransaccionMayorista[
     .from('transacciones_mayorista')
     .select('*')
     .order('date', { ascending: false })
-  if (error) throw error
+  if (error) {
+    console.error('[mayorista-cuenta] Error leyendo transacciones:', error)
+    return []
+  }
+  console.log('[mayorista-cuenta] Transacciones cargadas:', data?.length ?? 0)
   return (data ?? []).map(mapRow)
 }
 

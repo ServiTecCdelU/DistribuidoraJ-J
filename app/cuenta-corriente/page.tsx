@@ -100,20 +100,27 @@ export default function CuentaCorrientePage() {
 
   const loadData = useCallback(async () => {
     try {
-      const [clientsData, compData, sellersData, mayTxsData] = await Promise.all([
+      const [clientsData, compData, sellersData] = await Promise.all([
         cobranzasApi.getDebtClients(),
         cobranzasApi.getComprobantes(),
         sellersApi.getAll(),
-        mayoristaCuentaApi.getTransacciones(),
       ])
       setDebtClients(clientsData)
       setComprobantes(compData)
       setSellers(sellersData.filter((s) => s.isActive))
+    } catch { /* silenciado */ }
+
+    // Mayorista aparte para que no rompa la carga principal
+    try {
+      const mayTxsData = await mayoristaCuentaApi.getTransacciones()
       setMayTxs(mayTxsData)
       const bal = mayTxsData.reduce((acc, tx) => tx.type === 'debt' ? acc + tx.amount : acc - tx.amount, 0)
       setMayBalance(bal)
-    } catch { /* silenciado */ }
-    finally { setLoading(false) }
+    } catch (err) {
+      console.error('[cuenta-corriente] Error cargando mayorista:', err)
+    }
+
+    setLoading(false)
   }, [])
 
   useEffect(() => { loadData() }, [loadData])
