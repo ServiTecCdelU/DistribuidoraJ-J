@@ -564,22 +564,34 @@ export function RemitoImportModal({
         {/* STEP 2: Review */}
         {step === "review" && (
           <div className="flex-1 flex flex-col gap-4 overflow-hidden">
-            {/* Info remito */}
-            {(remitoSenor || remitoTotal > 0) && (
-              <div className="rounded-xl bg-purple-50 dark:bg-purple-900/20 border border-purple-200 dark:border-purple-800 p-3 space-y-1">
-                {remitoSenor && (
-                  <p className="text-xs text-purple-700 dark:text-purple-300">
-                    <span className="font-semibold">Señor:</span> {remitoSenor}
-                  </p>
-                )}
-                {remitoTotal > 0 && (
-                  <p className="text-sm font-bold text-purple-700 dark:text-purple-300">
-                    Total del remito: {formatCurrency(remitoTotal)}
-                    <span className="text-xs font-normal ml-2">→ se cargará como deuda en cuenta mayorista</span>
-                  </p>
-                )}
+            {/* Info remito — siempre visible, editable */}
+            <div className="rounded-xl bg-purple-50 dark:bg-purple-900/20 border border-purple-200 dark:border-purple-800 p-3 space-y-3">
+              <div className="flex items-center gap-2">
+                <label className="text-xs font-semibold text-purple-700 dark:text-purple-300 whitespace-nowrap">Señor:</label>
+                <Input
+                  value={remitoSenor}
+                  onChange={(e) => setRemitoSenor(e.target.value)}
+                  placeholder="Nombre del destinatario"
+                  className="h-7 text-xs flex-1 bg-white dark:bg-background"
+                />
               </div>
-            )}
+              <div className="flex items-center gap-2">
+                <label className="text-xs font-semibold text-purple-700 dark:text-purple-300 whitespace-nowrap">Total:</label>
+                <div className="relative flex-1">
+                  <span className="absolute left-2 top-1/2 -translate-y-1/2 text-xs text-muted-foreground">$</span>
+                  <Input
+                    type="number"
+                    min="0"
+                    step="0.01"
+                    value={remitoTotal || ""}
+                    onChange={(e) => setRemitoTotal(parseFloat(e.target.value) || 0)}
+                    placeholder="0"
+                    className="h-7 text-xs pl-5 bg-white dark:bg-background"
+                  />
+                </div>
+                <span className="text-[10px] text-purple-600 dark:text-purple-400 whitespace-nowrap">→ cuenta mayorista</span>
+              </div>
+            </div>
 
             {/* Resumen */}
             <div className="flex items-center gap-3 flex-wrap">
