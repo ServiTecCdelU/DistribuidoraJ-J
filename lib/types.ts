@@ -50,6 +50,7 @@ export interface Client {
     | "no_responsable";
   creditLimit: number;
   currentBalance: number;
+  currentBalanceMayorista?: number;
   sellerId?: string;
   sellerName?: string;
   debtClassification?: 'normal' | 'moroso' | 'incobrable';
@@ -67,6 +68,7 @@ export interface Transaction {
   description: string;
   date: Date;
   saleId?: string;
+  cuenta?: 'minorista' | 'mayorista';
 }
 
 export interface CartItem {

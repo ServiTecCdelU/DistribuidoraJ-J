@@ -66,6 +66,7 @@ export const getDebtClients = async (sellerId?: string): Promise<(Client & { sel
     taxCategory: d.tax_category ?? 'consumidor_final',
     creditLimit: Number(d.credit_limit) || 0,
     currentBalance: Number(d.current_balance) || 0,
+    currentBalanceMayorista: Number(d.current_balance_mayorista) || 0,
     sellerId: d.seller_id ?? undefined,
     sellerName: d.seller_id ? (sellerMap[d.seller_id] || undefined) : undefined,
     debtClassification: d.debt_classification ?? 'normal',

@@ -32,7 +32,7 @@ import {
   updateSaleInvoice,
   updateSaleRemito,
 } from '@/services/sales-service'
-import { registerCashPayment } from '@/services/payments-service'
+import { registerCashPayment, registerMayoristaPayment } from '@/services/payments-service'
 import {
   createSeller,
   deleteSeller,
@@ -206,6 +206,13 @@ export const paymentsApi = {
     description?: string
   }): Promise<Transaction> {
     return registerCashPayment(data)
+  },
+  async registerMayoristaPayment(data: {
+    clientId: string
+    amount: number
+    description?: string
+  }): Promise<Transaction> {
+    return registerMayoristaPayment(data)
   },
 }
 

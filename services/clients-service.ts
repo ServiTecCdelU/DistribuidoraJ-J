@@ -17,6 +17,7 @@ function mapClient(d: Record<string, any>): Client {
     taxCategory: d.tax_category ?? 'consumidor_final',
     creditLimit: Number(d.credit_limit) || 0,
     currentBalance: Number(d.current_balance) || 0,
+    currentBalanceMayorista: Number(d.current_balance_mayorista) || 0,
     sellerId: d.seller_id ?? undefined,
     debtClassification: d.debt_classification ?? 'normal',
     notes: d.notes ?? '',
@@ -80,6 +81,7 @@ export const updateClient = async (id: string, updates: Partial<Client>): Promis
   if (updates.taxCategory !== undefined) mapped.tax_category = updates.taxCategory
   if (updates.creditLimit !== undefined) mapped.credit_limit = updates.creditLimit
   if (updates.currentBalance !== undefined) mapped.current_balance = updates.currentBalance
+  if (updates.currentBalanceMayorista !== undefined) mapped.current_balance_mayorista = updates.currentBalanceMayorista
   if (updates.address !== undefined) mapped.address = updates.address
   if (updates.addresses !== undefined) mapped.addresses = updates.addresses
   if (updates.notes !== undefined) mapped.notes = updates.notes
@@ -130,5 +132,6 @@ export const getClientTransactions = async (clientId: string): Promise<Transacti
     description: d.description ?? '',
     date: new Date(d.date),
     saleId: d.sale_id ?? undefined,
+    cuenta: (d.cuenta as 'minorista' | 'mayorista') ?? 'minorista',
   }))
 }

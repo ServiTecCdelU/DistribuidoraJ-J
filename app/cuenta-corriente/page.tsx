@@ -68,11 +68,17 @@ export default function CuentaCorrientePage() {
   const [rejectReason, setRejectReason] = useState('')
   const [processing, setProcessing] = useState(false)
 
-  // Registrar pago manual
+  // Registrar pago manual (minorista)
   const [payDialog, setPayDialog] = useState(false)
   const [payAmount, setPayAmount] = useState('')
   const [payMethod, setPayMethod] = useState<string>('efectivo')
   const [payNotes, setPayNotes] = useState('')
+
+  // Registrar pago manual (mayorista)
+  const [payMayoristaDialog, setPayMayoristaDialog] = useState(false)
+  const [payMayoristaAmount, setPayMayoristaAmount] = useState('')
+  const [payMayoristaMethod, setPayMayoristaMethod] = useState<string>('efectivo')
+  const [payMayoristaNotes, setPayMayoristaNotes] = useState('')
 
   // Paginación lista deudores
   const [currentPage, setCurrentPage] = useState(1)
@@ -234,6 +240,57 @@ export default function CuentaCorrientePage() {
     }
   }
 
+  const handleRegisterMayoristaPayment = async () => {
+    if (!selectedClient || !payMayoristaAmount || !user) return
+    const amount = parseFloat(payMayoristaAmount)
+    if (isNaN(amount) || amount <= 0) {
+      toast.error('Ingresá un monto válido')
+      return
+    }
+    const balanceMayorista = selectedClient.currentBalanceMayorista ?? 0
+    if (amount > balanceMayorista) {
+      toast.error('El monto no puede superar la deuda mayorista actual')
+      return
+    }
+    setProcessing(true)
+    try {
+      const methods: Record<string, string> = {
+        efectivo: 'Pago en efectivo',
+        transferencia: 'Pago por transferencia bancaria',
+        otro: 'Pago registrado manualmente',
+      }
+      const desc = payMayoristaNotes
+        ? `${methods[payMayoristaMethod] || methods.otro} — ${payMayoristaNotes}`
+        : methods[payMayoristaMethod] || methods.otro
+
+      await paymentsApi.registerMayoristaPayment({
+        clientId: selectedClient.id,
+        amount,
+        description: desc,
+      })
+
+      const newBalance = Math.max(0, balanceMayorista - amount)
+      setSelectedClient((prev) => prev ? { ...prev, currentBalanceMayorista: newBalance } : prev)
+      setDebtClients((prev) =>
+        prev.map((c) =>
+          c.id === selectedClient.id ? { ...c, currentBalanceMayorista: newBalance } : c
+        )
+      )
+      const txs = await clientsApi.getTransactions(selectedClient.id)
+      setClientTransactions(txs)
+
+      setPayMayoristaDialog(false)
+      setPayMayoristaAmount('')
+      setPayMayoristaMethod('efectivo')
+      setPayMayoristaNotes('')
+      toast.success(`Pago mayorista de ${formatCurrency(amount)} registrado`)
+    } catch (err: any) {
+      toast.error(err.message || 'Error al registrar pago mayorista')
+    } finally {
+      setProcessing(false)
+    }
+  }
+
   // Cambiar clasificación de deuda
   const handleChangeClassification = async (clientId: string, classification: DebtClassification) => {
     try {
@@ -255,6 +312,9 @@ export default function CuentaCorrientePage() {
   if (selectedClient) {
     const clientPending = clientComprobantes.filter((c) => c.status === 'pending')
     const clientHistory = clientComprobantes.filter((c) => c.status !== 'pending')
+    const txMinorista = clientTransactions.filter((tx) => !tx.cuenta || tx.cuenta === 'minorista')
+    const txMayorista = clientTransactions.filter((tx) => tx.cuenta === 'mayorista')
+    const balanceMayorista = selectedClient.currentBalanceMayorista ?? 0
 
     return (
       <MainLayout allowedRoles={['admin']} title="Cuenta Corriente" description="Detalle de cliente">
@@ -267,11 +327,19 @@ export default function CuentaCorrientePage() {
             <h2 className="text-lg font-bold truncate">{selectedClient.name}</h2>
             <p className="text-sm text-muted-foreground">{selectedClient.sellerName || 'Sin vendedor asignado'}</p>
           </div>
-          <div className="text-right">
-            <p className="text-xs text-muted-foreground">Deuda actual</p>
-            <p className={`text-xl font-bold ${selectedClient.currentBalance > 0 ? 'text-red-600' : 'text-green-600'}`}>
-              {selectedClient.currentBalance > 0 ? formatCurrency(selectedClient.currentBalance) : 'Cancelada'}
-            </p>
+          <div className="text-right flex gap-4">
+            <div>
+              <p className="text-xs text-muted-foreground">Minorista</p>
+              <p className={`text-lg font-bold ${selectedClient.currentBalance > 0 ? 'text-red-600' : 'text-green-600'}`}>
+                {selectedClient.currentBalance > 0 ? formatCurrency(selectedClient.currentBalance) : 'Cancelada'}
+              </p>
+            </div>
+            {balanceMayorista > 0 && (
+              <div>
+                <p className="text-xs text-muted-foreground">Mayorista</p>
+                <p className="text-lg font-bold text-red-600">{formatCurrency(balanceMayorista)}</p>
+              </div>
+            )}
           </div>
         </div>
 
@@ -361,39 +429,86 @@ export default function CuentaCorrientePage() {
               </div>
             )}
 
-            {/* Acción: Registrar pago manual */}
-            <div>
+            {/* ── CUENTA MINORISTA ── */}
+            <div className="rounded-2xl border p-4 space-y-4">
+              <div className="flex items-center justify-between">
+                <h3 className="text-sm font-semibold flex items-center gap-2">
+                  <DollarSign className="h-4 w-4 text-teal-600" />
+                  Cuenta Minorista
+                </h3>
+                <span className={`text-base font-bold ${selectedClient.currentBalance > 0 ? 'text-red-600' : 'text-green-600'}`}>
+                  {selectedClient.currentBalance > 0 ? formatCurrency(selectedClient.currentBalance) : 'Cancelada'}
+                </span>
+              </div>
+
               <Button
                 className="w-full sm:w-auto gap-2 rounded-xl"
                 onClick={() => setPayDialog(true)}
                 disabled={selectedClient.currentBalance <= 0}
               >
                 <Banknote className="h-4 w-4" />
-                Registrar pago manual
+                Registrar pago
               </Button>
-            </div>
 
-            {/* Historial de movimientos */}
-            <div>
-              <h3 className="text-sm font-semibold mb-3 flex items-center gap-2">
-                <FileCheck className="h-4 w-4 text-muted-foreground" />
-                Historial de movimientos
-              </h3>
-              {clientTransactions.length === 0 ? (
-                <Card>
-                  <CardContent className="py-8 text-center text-muted-foreground text-sm">
-                    No hay movimientos registrados
-                  </CardContent>
-                </Card>
+              {txMinorista.length === 0 ? (
+                <p className="text-sm text-muted-foreground text-center py-2">Sin movimientos</p>
               ) : (
                 <div className="flex flex-col gap-2">
-                  {clientTransactions.map((tx) => (
+                  {txMinorista.map((tx) => (
                     <Card key={tx.id}>
                       <CardContent className="p-3 flex items-center gap-3">
                         <div className={`h-8 w-8 rounded-full flex items-center justify-center shrink-0 ${
-                          tx.type === 'payment'
-                            ? 'bg-green-100 dark:bg-green-900/30'
-                            : 'bg-red-100 dark:bg-red-900/30'
+                          tx.type === 'payment' ? 'bg-green-100 dark:bg-green-900/30' : 'bg-red-100 dark:bg-red-900/30'
+                        }`}>
+                          {tx.type === 'payment'
+                            ? <ArrowDownCircle className="h-4 w-4 text-green-600" />
+                            : <ArrowUpCircle className="h-4 w-4 text-red-600" />
+                          }
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <p className="text-sm font-medium truncate">{tx.description}</p>
+                          <p className="text-xs text-muted-foreground">{formatDate(tx.date)}</p>
+                        </div>
+                        <p className={`font-bold tabular-nums ${tx.type === 'payment' ? 'text-green-600' : 'text-red-600'}`}>
+                          {tx.type === 'payment' ? '-' : '+'}{formatCurrency(tx.amount)}
+                        </p>
+                      </CardContent>
+                    </Card>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            {/* ── CUENTA MAYORISTA ── */}
+            <div className="rounded-2xl border p-4 space-y-4">
+              <div className="flex items-center justify-between">
+                <h3 className="text-sm font-semibold flex items-center gap-2">
+                  <DollarSign className="h-4 w-4 text-purple-600" />
+                  Cuenta Mayorista
+                </h3>
+                <span className={`text-base font-bold ${balanceMayorista > 0 ? 'text-red-600' : 'text-green-600'}`}>
+                  {balanceMayorista > 0 ? formatCurrency(balanceMayorista) : 'Cancelada'}
+                </span>
+              </div>
+
+              <Button
+                className="w-full sm:w-auto gap-2 rounded-xl bg-purple-600 hover:bg-purple-700"
+                onClick={() => setPayMayoristaDialog(true)}
+                disabled={balanceMayorista <= 0}
+              >
+                <Banknote className="h-4 w-4" />
+                Registrar pago mayorista
+              </Button>
+
+              {txMayorista.length === 0 ? (
+                <p className="text-sm text-muted-foreground text-center py-2">Sin movimientos</p>
+              ) : (
+                <div className="flex flex-col gap-2">
+                  {txMayorista.map((tx) => (
+                    <Card key={tx.id}>
+                      <CardContent className="p-3 flex items-center gap-3">
+                        <div className={`h-8 w-8 rounded-full flex items-center justify-center shrink-0 ${
+                          tx.type === 'payment' ? 'bg-green-100 dark:bg-green-900/30' : 'bg-red-100 dark:bg-red-900/30'
                         }`}>
                           {tx.type === 'payment'
                             ? <ArrowDownCircle className="h-4 w-4 text-green-600" />
@@ -567,6 +682,79 @@ export default function CuentaCorrientePage() {
             <DialogFooter>
               <Button variant="outline" onClick={() => setPayDialog(false)}>Cancelar</Button>
               <Button onClick={handleRegisterPayment} disabled={processing || !payAmount || parseFloat(payAmount) <= 0}>
+                {processing && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
+                Registrar pago
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+
+        {/* Dialog Registrar pago mayorista */}
+        <Dialog open={payMayoristaDialog} onOpenChange={(open) => { if (!open) { setPayMayoristaDialog(false); setPayMayoristaAmount(''); setPayMayoristaNotes(''); } }}>
+          <DialogContent className="sm:max-w-sm">
+            <DialogHeader>
+              <DialogTitle>Registrar pago mayorista</DialogTitle>
+              <DialogDescription>
+                Deuda mayorista: {formatCurrency(balanceMayorista)}
+              </DialogDescription>
+            </DialogHeader>
+            <div className="space-y-4">
+              <div className="space-y-2">
+                <Label>Forma de pago</Label>
+                <Select value={payMayoristaMethod} onValueChange={setPayMayoristaMethod}>
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="efectivo">Efectivo</SelectItem>
+                    <SelectItem value="transferencia">Transferencia</SelectItem>
+                    <SelectItem value="otro">Otro</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-2">
+                <Label>Monto</Label>
+                <div className="relative">
+                  <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground font-medium">$</span>
+                  <Input
+                    type="number"
+                    min="0"
+                    max={balanceMayorista}
+                    step="0.01"
+                    value={payMayoristaAmount}
+                    onChange={(e) => setPayMayoristaAmount(e.target.value)}
+                    className="pl-7"
+                    placeholder="0"
+                    autoFocus
+                  />
+                </div>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  className="text-xs"
+                  onClick={() => setPayMayoristaAmount(String(balanceMayorista))}
+                >
+                  Cancelar toda la deuda ({formatCurrency(balanceMayorista)})
+                </Button>
+              </div>
+              <div className="space-y-2">
+                <Label>Notas (opcional)</Label>
+                <Textarea
+                  placeholder="Ej: Pagó con transferencia"
+                  value={payMayoristaNotes}
+                  onChange={(e) => setPayMayoristaNotes(e.target.value)}
+                  rows={2}
+                />
+              </div>
+            </div>
+            <DialogFooter>
+              <Button variant="outline" onClick={() => setPayMayoristaDialog(false)}>Cancelar</Button>
+              <Button
+                className="bg-purple-600 hover:bg-purple-700"
+                onClick={handleRegisterMayoristaPayment}
+                disabled={processing || !payMayoristaAmount || parseFloat(payMayoristaAmount) <= 0}
+              >
                 {processing && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
                 Registrar pago
               </Button>
