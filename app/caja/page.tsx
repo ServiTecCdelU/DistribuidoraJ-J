@@ -175,7 +175,7 @@ const CajaPdfDocument = ({ register, sales, losses = [], pagos = [] }: { registe
         {/* Header */}
         <View style={cajaPdfStyles.header}>
           <View>
-            <Text style={cajaPdfStyles.title}>Caja Diaria</Text>
+            <Text style={cajaPdfStyles.title}>Caja de Reparto</Text>
             <Text style={cajaPdfStyles.subtitle}>Distribuidora Patricia</Text>
           </View>
           <View style={cajaPdfStyles.headerRight}>
@@ -343,7 +343,7 @@ const CajaPdfDocument = ({ register, sales, losses = [], pagos = [] }: { registe
 
         {/* Footer */}
         <View style={cajaPdfStyles.footer}>
-          <Text>Caja Diaria - Distribuidora Patricia</Text>
+          <Text>Caja de Reparto - Distribuidora Patricia</Text>
           <Text>Generado: {formatDateShort(new Date())} {formatTimeStr(new Date())}</Text>
         </View>
       </PdfPage>
@@ -814,11 +814,11 @@ export default function CajaPage() {
   const isClosed = currentRegister?.status === "closed";
 
   return (
-    <MainLayout allowedRoles={['admin']} title="Caja" description="Apertura y cierre de caja diaria">
+    <MainLayout allowedRoles={['admin']} title="Caja de Reparto" description="Apertura y cierre de caja de reparto">
       <div className="p-4 lg:p-6 space-y-6">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
           <div>
-            <h1 className="text-2xl font-bold">Caja Diaria</h1>
+            <h1 className="text-2xl font-bold">Caja de Reparto</h1>
             <p className="text-muted-foreground text-sm">
               {formatDateLong(new Date())}
             </p>
@@ -1122,41 +1122,49 @@ export default function CajaPage() {
                         No hay ventas hoy
                       </p>
                     ) : (
-                      <div className="space-y-2">
-                        {sales.map((sale) => (
-                          <div
-                            key={sale.id}
-                            className="flex items-center justify-between py-2 border-b border-border/50 last:border-0"
-                          >
-                            <div className="flex items-center gap-3">
-                              <Clock className="h-3.5 w-3.5 text-muted-foreground" />
-                              <div>
-                                <p className="text-sm font-medium">
-                                  {sale.clientName || "Consumidor Final"}
-                                </p>
-                                <p className="text-xs text-muted-foreground">
+                      <div className="space-y-1">
+                        {sales.map((sale) => {
+                          const paymentLabel = sale.paymentType === "cash"
+                            ? ((sale as any).paymentMethod === "transferencia" ? "Transferencia" : "Efectivo")
+                            : sale.paymentType === "credit"
+                              ? "Cta.Cte."
+                              : "Mixto";
+                          const badgeClass = sale.paymentType === "cash"
+                            ? ((sale as any).paymentMethod === "transferencia"
+                              ? "bg-violet-100 text-violet-800"
+                              : "bg-green-100 text-green-800")
+                            : sale.paymentType === "credit"
+                              ? "bg-blue-100 text-blue-800"
+                              : "bg-amber-100 text-amber-800";
+                          return (
+                            <div
+                              key={sale.id}
+                              className="flex items-center justify-between py-1.5 border-b border-border/50 last:border-0 gap-2"
+                            >
+                              <div className="flex items-center gap-2 min-w-0 flex-1">
+                                <span className="text-xs text-muted-foreground shrink-0 w-14">
                                   {formatTime(new Date(sale.createdAt))}
-                                  {sale.sellerName && ` - ${sale.sellerName}`}
-                                </p>
+                                </span>
+                                {sale.saleNumber && (
+                                  <span className="text-xs text-muted-foreground shrink-0">
+                                    #{sale.saleNumber}
+                                  </span>
+                                )}
+                                <span className="text-sm font-medium truncate">
+                                  {sale.clientName || "Consumidor Final"}
+                                </span>
+                              </div>
+                              <div className="flex items-center gap-2 shrink-0">
+                                <Badge className={`text-[10px] border-0 ${badgeClass}`}>
+                                  {paymentLabel}
+                                </Badge>
+                                <span className="text-sm font-semibold w-24 text-right">
+                                  {formatCurrency(sale.total || 0)}
+                                </span>
                               </div>
                             </div>
-                            <div className="text-right">
-                              <p className="text-sm font-semibold">
-                                {formatCurrency(sale.total || 0)}
-                              </p>
-                              <Badge
-                                variant={sale.paymentType === "cash" ? "default" : "secondary"}
-                                className="text-[10px]"
-                              >
-                                {sale.paymentType === "cash"
-                                  ? ((sale as any).paymentMethod === "transferencia" ? "Transferencia" : "Efectivo")
-                                  : sale.paymentType === "credit"
-                                    ? "Cta.Cte."
-                                    : "Mixto"}
-                              </Badge>
-                            </div>
-                          </div>
-                        ))}
+                          );
+                        })}
                       </div>
                     )}
                   </CardContent>
@@ -1297,22 +1305,35 @@ export default function CajaPage() {
                         <div>
                           <p className="text-sm font-medium mb-2">Ventas ({selectedSales.length})</p>
                           <div className="space-y-1 max-h-60 overflow-y-auto">
-                            {selectedSales.map((sale) => (
-                              <div key={sale.id} className="flex items-center justify-between py-1.5 border-b border-border/30 last:border-0 text-sm">
-                                <div className="flex items-center gap-2">
-                                  <span className="text-xs text-muted-foreground w-12">{formatTimeStr(new Date(sale.createdAt))}</span>
-                                  <span className="font-medium">{sale.clientName || "Cons. Final"}</span>
+                            {selectedSales.map((sale) => {
+                              const paymentLabel = sale.paymentType === "cash"
+                                ? ((sale as any).paymentMethod === "transferencia" ? "Transf." : "Efectivo")
+                                : sale.paymentType === "credit" ? "Cta.Cte." : "Mixto";
+                              const badgeClass = sale.paymentType === "cash"
+                                ? ((sale as any).paymentMethod === "transferencia"
+                                  ? "bg-violet-100 text-violet-800"
+                                  : "bg-green-100 text-green-800")
+                                : sale.paymentType === "credit"
+                                  ? "bg-blue-100 text-blue-800"
+                                  : "bg-amber-100 text-amber-800";
+                              return (
+                                <div key={sale.id} className="flex items-center justify-between py-1.5 border-b border-border/30 last:border-0 text-sm gap-2">
+                                  <div className="flex items-center gap-2 min-w-0 flex-1">
+                                    <span className="text-xs text-muted-foreground shrink-0 w-12">{formatTimeStr(new Date(sale.createdAt))}</span>
+                                    {sale.saleNumber && (
+                                      <span className="text-xs text-muted-foreground shrink-0">#{sale.saleNumber}</span>
+                                    )}
+                                    <span className="font-medium truncate">{sale.clientName || "Cons. Final"}</span>
+                                  </div>
+                                  <div className="flex items-center gap-2 shrink-0">
+                                    <Badge className={`text-[10px] border-0 ${badgeClass}`}>
+                                      {paymentLabel}
+                                    </Badge>
+                                    <span className="font-semibold w-24 text-right">{formatCurrency(sale.total || 0)}</span>
+                                  </div>
                                 </div>
-                                <div className="flex items-center gap-2">
-                                  <Badge variant={sale.paymentType === "cash" ? "default" : "secondary"} className="text-[10px]">
-                                    {sale.paymentType === "cash"
-                                      ? ((sale as any).paymentMethod === "transferencia" ? "Transf." : "Efectivo")
-                                      : sale.paymentType === "credit" ? "Cta.Cte." : "Mixto"}
-                                  </Badge>
-                                  <span className="font-semibold">{formatCurrency(sale.total || 0)}</span>
-                                </div>
-                              </div>
-                            ))}
+                              );
+                            })}
                           </div>
                         </div>
                       )}
