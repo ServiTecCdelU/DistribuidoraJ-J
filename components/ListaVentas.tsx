@@ -531,17 +531,6 @@ export function ListaVentas({
                           faltó: {f}
                         </span>
                       ))}
-                      {onEmitirDocumento && (
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          className="h-6 px-2 text-[11px] text-muted-foreground hover:text-foreground gap-1 ml-auto"
-                          onClick={(e) => { e.stopPropagation(); onEmitirDocumento(venta); }}
-                        >
-                          <FileText className="h-3 w-3" />
-                          Regenerar remito
-                        </Button>
-                      )}
                     </div>
                   );
                 })()}
