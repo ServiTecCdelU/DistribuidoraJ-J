@@ -1127,26 +1127,31 @@ export default function CuentaCorrientePage() {
                 {mayTxs.length === 0 ? (
                   <p className="text-sm text-muted-foreground text-center py-4">Sin movimientos</p>
                 ) : (
-                  <div className="flex flex-col gap-2 max-h-[400px] overflow-y-auto">
-                    {mayTxs.map((tx) => (
-                      <div key={tx.id} className="flex items-center gap-3 p-3 rounded-xl bg-muted/50">
-                        <div className={`h-8 w-8 rounded-full flex items-center justify-center shrink-0 ${
-                          tx.type === 'payment' ? 'bg-green-100 dark:bg-green-900/30' : 'bg-red-100 dark:bg-red-900/30'
-                        }`}>
-                          {tx.type === 'payment'
-                            ? <ArrowDownCircle className="h-4 w-4 text-green-600" />
-                            : <ArrowUpCircle className="h-4 w-4 text-red-600" />
-                          }
-                        </div>
-                        <div className="flex-1 min-w-0">
-                          <p className="text-sm font-medium truncate">{tx.description}</p>
-                          <p className="text-xs text-muted-foreground">{formatDate(tx.date)}</p>
-                        </div>
-                        <p className={`font-bold tabular-nums ${tx.type === 'payment' ? 'text-green-600' : 'text-red-600'}`}>
-                          {tx.type === 'payment' ? '-' : '+'}{formatCurrency(tx.amount)}
-                        </p>
-                      </div>
-                    ))}
+                  <div className="overflow-x-auto">
+                    <Table>
+                      <TableHeader>
+                        <TableRow>
+                          <TableHead className="text-xs py-1.5">Fecha</TableHead>
+                          <TableHead className="text-xs py-1.5">Descripción</TableHead>
+                          <TableHead className="text-xs py-1.5 text-right">Debe</TableHead>
+                          <TableHead className="text-xs py-1.5 text-right">Haber</TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {mayTxs.map((tx) => (
+                          <TableRow key={tx.id} className="text-xs">
+                            <TableCell className="py-1.5 whitespace-nowrap">{formatDate(tx.date)}</TableCell>
+                            <TableCell className="py-1.5 max-w-[250px] truncate">{tx.description}</TableCell>
+                            <TableCell className="py-1.5 text-right font-semibold text-red-600 tabular-nums">
+                              {tx.type === 'debt' ? formatCurrency(tx.amount) : ''}
+                            </TableCell>
+                            <TableCell className="py-1.5 text-right font-semibold text-green-600 tabular-nums">
+                              {tx.type === 'payment' ? formatCurrency(tx.amount) : ''}
+                            </TableCell>
+                          </TableRow>
+                        ))}
+                      </TableBody>
+                    </Table>
                   </div>
                 )}
               </CardContent>
