@@ -49,6 +49,7 @@ type ClientWithSeller = Client & { sellerName?: string }
 
 export default function CuentaCorrientePage() {
   const { user } = useAuth()
+  const [activeTab, setActiveTab] = useState<'clientes' | 'mayorista'>('clientes')
   const [debtClients, setDebtClients] = useState<ClientWithSeller[]>([])
   const [comprobantes, setComprobantes] = useState<ComprobantePago[]>([])
   const [sellers, setSellers] = useState<Seller[]>([])
@@ -850,6 +851,31 @@ export default function CuentaCorrientePage() {
         </div>
       ) : (
         <>
+          {/* Tabs Clientes / Mayorista */}
+          <div className="flex gap-2 mb-6">
+            <Button
+              variant={activeTab === 'clientes' ? 'default' : 'outline'}
+              className="rounded-xl gap-2"
+              onClick={() => setActiveTab('clientes')}
+            >
+              <Users className="h-4 w-4" />
+              Clientes
+            </Button>
+            <Button
+              variant={activeTab === 'mayorista' ? 'default' : 'outline'}
+              className={`rounded-xl gap-2 ${activeTab === 'mayorista' ? 'bg-purple-600 hover:bg-purple-700' : ''}`}
+              onClick={() => setActiveTab('mayorista')}
+            >
+              <DollarSign className="h-4 w-4" />
+              Mayorista
+              {mayBalance > 0 && (
+                <Badge variant="secondary" className="ml-1 text-[10px] bg-red-100 text-red-700">{formatCurrency(mayBalance)}</Badge>
+              )}
+            </Button>
+          </div>
+
+          {activeTab === 'clientes' && (
+          <>
           {/* Cards resumen */}
           <div className="grid grid-cols-2 md:grid-cols-3 gap-3 mb-6">
             <Card>
@@ -1058,9 +1084,13 @@ export default function CuentaCorrientePage() {
               )}
             </>
           )}
+          </>
+          )}
 
+          {activeTab === 'mayorista' && (
+          <>
           {/* ═══ CUENTA CON MAYORISTA (proveedor) ═══ */}
-          <div className="mt-8">
+          <div>
             <Card className="rounded-2xl border-purple-200 dark:border-purple-800">
               <CardHeader className="pb-2">
                 <div className="flex items-center justify-between">
@@ -1192,6 +1222,8 @@ export default function CuentaCorrientePage() {
               </DialogFooter>
             </DialogContent>
           </Dialog>
+          </>
+          )}
         </>
       )}
     </MainLayout>
