@@ -161,14 +161,26 @@ function extractRemitoMeta(text: string): { senor: string; total: number } {
   let total = 0;
   const lines = text.split("\n");
 
-  for (const line of lines) {
-    const lineTrimmed = line.trim();
+  for (let i = 0; i < lines.length; i++) {
+    const lineTrimmed = lines[i].trim();
 
-    // "Señor" / "Sr." / "SEÑOR" — captura el nombre después
+    // "Señor" / "Sr." / "SEÑOR" — puede estar en la misma línea o en la siguiente
     if (!senor) {
-      const matchSenor = lineTrimmed.match(/^(?:se[ñn]or|sr\.?)\s*:?\s*(.+)/i);
+      const matchSenor = lineTrimmed.match(/^(?:se[ñn]or|sr\.?)\s*:?\s*(.*)/i);
       if (matchSenor) {
-        senor = matchSenor[1].trim();
+        let value = matchSenor[1].trim();
+        // Si la línea del Señor está vacía o es muy corta, tomar la siguiente
+        if (!value || value.length < 3) {
+          const nextLine = lines[i + 1]?.trim() || "";
+          if (nextLine) value = nextLine;
+        }
+        // Limpiar: quitar código numérico inicial (ej: "01011 J & J DISTRIBUCIONES")
+        // pero conservar el nombre
+        senor = value.replace(/^\d+\s+/, "").trim();
+        // Si después de limpiar queda algo que parece dirección (contiene "domicilio", número de calle largo), ignorar y buscar en la siguiente línea
+        if (/domicilio|direcci[oó]n|localidad|c\.p\./i.test(senor)) {
+          senor = "";
+        }
       }
     }
 
