@@ -241,14 +241,12 @@ export function StockHistoryModal({
                 <table className="w-full text-sm">
                   <thead className="bg-muted/50 border-b">
                     <tr>
-                      <th className="text-left px-3 py-2.5 font-semibold text-muted-foreground text-xs whitespace-nowrap">Fecha</th>
-                      <th className="text-left px-3 py-2.5 font-semibold text-muted-foreground text-xs">Tipo</th>
-                      <th className="text-right px-3 py-2.5 font-semibold text-muted-foreground text-xs">Cantidad</th>
-                      <th className="text-center px-3 py-2.5 font-semibold text-muted-foreground text-xs whitespace-nowrap">Stock ant → post</th>
-                      <th className="text-left px-3 py-2.5 font-semibold text-muted-foreground text-xs">Venta #</th>
-                      <th className="text-left px-3 py-2.5 font-semibold text-muted-foreground text-xs">Vendedor</th>
-                      <th className="text-left px-3 py-2.5 font-semibold text-muted-foreground text-xs">Cliente</th>
-                      <th className="text-right px-3 py-2.5 font-semibold text-muted-foreground text-xs">Monto</th>
+                      <th className="text-left px-2 py-2.5 font-semibold text-muted-foreground text-xs">Fecha</th>
+                      <th className="text-left px-2 py-2.5 font-semibold text-muted-foreground text-xs">Tipo</th>
+                      <th className="text-right px-2 py-2.5 font-semibold text-muted-foreground text-xs">Cant.</th>
+                      <th className="text-left px-2 py-2.5 font-semibold text-muted-foreground text-xs">Venta</th>
+                      <th className="text-left px-2 py-2.5 font-semibold text-muted-foreground text-xs">Cliente</th>
+                      <th className="text-right px-2 py-2.5 font-semibold text-muted-foreground text-xs">Monto</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y">
@@ -348,30 +346,35 @@ function CantidadBadge({ cantidad }: { cantidad: number }) {
 }
 
 function MovimientoRow({ m }: { m: Movimiento }) {
+  const d = new Date(m.fecha)
+  const fecha = d.toLocaleDateString('es-AR', { day: '2-digit', month: '2-digit', year: '2-digit' })
+  const hora = d.toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit' })
   return (
     <tr className="hover:bg-muted/20 transition-colors">
-      <td className="px-3 py-2.5 text-xs text-muted-foreground whitespace-nowrap">
-        {formatDateTime(new Date(m.fecha))}
+      <td className="px-2 py-2 text-xs text-muted-foreground">
+        <div className="leading-tight">{fecha}</div>
+        <div className="leading-tight text-[10px]">{hora}</div>
       </td>
-      <td className="px-3 py-2.5">
+      <td className="px-2 py-2">
         <TipoBadge tipo={m.tipo} />
       </td>
-      <td className="px-3 py-2.5 text-right">
+      <td className="px-2 py-2 text-right">
         <CantidadBadge cantidad={m.cantidad} />
       </td>
-      <td className="px-3 py-2.5 text-center text-xs font-mono text-muted-foreground whitespace-nowrap">
-        {m.stockAnterior} → {m.stockPosterior}
+      <td className="px-2 py-2 text-xs text-muted-foreground">
+        {m.tipo === 'venta' ? (
+          <div>
+            <div className="truncate max-w-[140px]">{m.sellerName ?? '—'}</div>
+            {m.saleNumber && <div className="text-[10px] text-muted-foreground/70">#{m.saleNumber}</div>}
+          </div>
+        ) : m.motivo ? (
+          <span className="text-[10px] italic truncate max-w-[140px] block">{m.motivo}</span>
+        ) : ''}
       </td>
-      <td className="px-3 py-2.5 text-xs text-muted-foreground whitespace-nowrap">
-        {m.saleNumber ?? (m.tipo === 'venta' ? '—' : '')}
-      </td>
-      <td className="px-3 py-2.5 text-xs text-muted-foreground max-w-[130px] truncate">
-        {m.sellerName ?? (m.tipo === 'venta' ? '—' : '')}
-      </td>
-      <td className="px-3 py-2.5 text-xs text-muted-foreground max-w-[140px] truncate">
+      <td className="px-2 py-2 text-xs text-muted-foreground max-w-[130px] truncate">
         {m.clientName ?? (m.tipo === 'venta' ? '—' : '')}
       </td>
-      <td className="px-3 py-2.5 text-right text-xs font-medium text-foreground whitespace-nowrap">
+      <td className="px-2 py-2 text-right text-xs font-medium text-foreground whitespace-nowrap">
         {m.ventaTotal != null ? formatCurrency(m.ventaTotal) : (m.tipo === 'venta' ? '—' : '')}
       </td>
     </tr>
@@ -380,7 +383,7 @@ function MovimientoRow({ m }: { m: Movimiento }) {
 
 function MovimientoCard({ m }: { m: Movimiento }) {
   return (
-    <div className="px-3 py-3 space-y-1.5">
+    <div className="px-3 py-2.5 space-y-1">
       {/* Fila 1: tipo + fecha + cantidad */}
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-2">
@@ -389,25 +392,19 @@ function MovimientoCard({ m }: { m: Movimiento }) {
             {formatDateShort(new Date(m.fecha))}
           </span>
         </div>
-        <CantidadBadge cantidad={m.cantidad} />
+        <div className="flex items-center gap-2">
+          <CantidadBadge cantidad={m.cantidad} />
+          {m.ventaTotal != null && (
+            <span className="text-xs font-semibold text-foreground">
+              {formatCurrency(m.ventaTotal)}
+            </span>
+          )}
+        </div>
       </div>
 
-      {/* Fila 2: stock ant→post + monto */}
-      <div className="flex items-center justify-between">
-        <span className="text-[10px] font-mono text-muted-foreground">
-          {m.stockAnterior} → {m.stockPosterior}
-        </span>
-        {m.ventaTotal != null && (
-          <span className="text-xs font-semibold text-foreground">
-            {formatCurrency(m.ventaTotal)}
-          </span>
-        )}
-      </div>
-
-      {/* Fila 3: info de venta */}
+      {/* Fila 2: info de venta */}
       {(m.saleNumber || m.sellerName || m.clientName) && (
         <div className="flex flex-wrap gap-x-3 gap-y-0.5 text-[10px] text-muted-foreground">
-          {m.saleNumber && <span className="font-medium">#{m.saleNumber}</span>}
           {m.sellerName && (
             <span className="flex items-center gap-0.5">
               <User className="h-2.5 w-2.5" />
@@ -420,6 +417,7 @@ function MovimientoCard({ m }: { m: Movimiento }) {
               {m.clientName}
             </span>
           )}
+          {m.saleNumber && <span className="text-muted-foreground/70">#{m.saleNumber}</span>}
         </div>
       )}
 
