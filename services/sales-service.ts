@@ -214,12 +214,16 @@ export const processSale = async (data: {
   if (insertErr) throw new Error(`Error al crear venta: ${insertErr.message}`)
 
   // Descontar stock
+  const { registrarMovimientoStock } = await import('@/services/stock-service')
   for (const item of data.items) {
     // Los pedidos usan IDs de mayorista_productos (mp_XXXX); stock vive en productos (prod_mp_XXXX)
     const prodId = item.product.id?.startsWith('mp_') ? `prod_${item.product.id}` : item.product.id
     const { data: prod } = await supabase.from('productos').select('stock').eq('id', prodId).single()
     if (prod) {
-      await supabase.from('productos').update({ stock: Math.max(0, (prod.stock || 0) - item.quantity) }).eq('id', prodId)
+      const stockAnterior = prod.stock || 0
+      const stockPosterior = Math.max(0, stockAnterior - item.quantity)
+      await supabase.from('productos').update({ stock: stockPosterior }).eq('id', prodId)
+      await registrarMovimientoStock({ productoId: prodId, tipo: 'venta', cantidad: -item.quantity, stockAnterior, stockPosterior, motivo: saleId })
     }
   }
 

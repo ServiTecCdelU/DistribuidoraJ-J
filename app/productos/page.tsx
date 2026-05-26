@@ -357,6 +357,23 @@ export default function ProductosPage() {
     setInventoryHistory(updated);
   };
 
+  const registrarEnSupabase = async (
+    productId: string,
+    tipo: 'venta' | 'apertura_bulto' | 'ajuste' | 'rotura',
+    cantidad: number,
+    stockAnterior: number,
+    stockPosterior: number,
+    motivo?: string
+  ) => {
+    try {
+      await fetch(`/api/productos/${productId}/movimiento`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ tipo, cantidad, stockAnterior, stockPosterior, motivo }),
+      })
+    } catch { /* no interrumpir el flujo */ }
+  }
+
   const logStockMovement = (movement: Omit<StockMovement, "id" | "date">) => {
     const newMovement: StockMovement = {
       ...movement,
@@ -502,6 +519,7 @@ export default function ProductosPage() {
         reason: "Importación de remito proveedor",
         details: `Stock actualizado via remito: ${product.stock} → ${update.newStock}`,
       });
+      registrarEnSupabase(product.id, 'apertura_bulto', change, product.stock, update.newStock, 'Ingreso por remito proveedor');
     }
 
     // Actualizar precio_lista en mayorista_productos
@@ -649,8 +667,10 @@ export default function ProductosPage() {
           const reason = stockAdjustment?.reason || "Edición desde modal";
           if (change > 0) {
             logManualAdd(editingProduct, change, undefined, reason);
+            registrarEnSupabase(editingProduct.id, 'apertura_bulto', change, editingProduct.stock, productData.stock, reason);
           } else if (change < 0) {
             logManualRemove(editingProduct, Math.abs(change), undefined, reason);
+            registrarEnSupabase(editingProduct.id, 'ajuste', change, editingProduct.stock, productData.stock, reason);
           }
         }
 
