@@ -9,7 +9,7 @@ import { DataTableSkeleton } from "@/components/ui/data-table-skeleton";
 import { ClientModal } from "@/components/clientes/client-modal";
 import { ordersApi, salesApi, clientsApi, sellersApi, productsApi } from "@/lib/api";
 import type { Order, OrderStatus, Client, Seller } from "@/lib/types";
-import { Package, Filter, Loader2, ClipboardList, FileSpreadsheet, Eye, ArrowRightCircle } from "lucide-react";
+import { Package, Filter, Loader2, ClipboardList, FileSpreadsheet, Eye, ArrowRightCircle, Ban } from "lucide-react";
 import { toast } from "sonner";
 import { useAuth } from "@/hooks/use-auth";
 import { useRouter } from "next/navigation";
@@ -57,7 +57,7 @@ export default function PedidosPage() {
   const [generatingDoc, setGeneratingDoc] = useState(false);
 
   // Filtros
-  const [filterStatus, setFilterStatus] = useState<string>("all");
+  const [filterStatus, setFilterStatus] = useState<string>("pending");
   const [filterClient, setFilterClient] = useState<string>("");
   const [filterSeller, setFilterSeller] = useState<string>("");
   const [filterTransportista, setFilterTransportista] = useState<string>("");
@@ -79,6 +79,17 @@ export default function PedidosPage() {
   const [selectedClientOrders, setSelectedClientOrders] = useState<Order[]>([]);
 
   const [generandoExcel, setGenerandoExcel] = useState(false);
+
+  // Pedidos retenidos (no avanzan con "Todos a...")
+  const [heldClients, setHeldClients] = useState<Set<string>>(new Set());
+
+  const toggleHeldClient = useCallback((clientName: string) => {
+    setHeldClients(prev => {
+      const next = new Set(prev);
+      if (next.has(clientName)) next.delete(clientName); else next.add(clientName);
+      return next;
+    });
+  }, []);
 
   // Stock check modal
   const [stockCheckOpen, setStockCheckOpen] = useState(false);
@@ -1019,20 +1030,27 @@ export default function PedidosPage() {
   const [movingAll, setMovingAll] = useState(false);
 
   const handleMoveAll = useCallback(async (from: OrderStatus, to: OrderStatus) => {
-    const toMove = orders.filter((o) => o.status === from);
-    if (toMove.length === 0) return;
+    const toMove = orders.filter((o) => o.status === from && !heldClients.has(o.clientName || "Sin cliente"));
+    if (toMove.length === 0) {
+      toast.info("No hay pedidos para mover (algunos pueden estar retenidos)");
+      return;
+    }
     setMovingAll(true);
     try {
       await Promise.all(toMove.map((o) => ordersApi.updateStatus(o.id, to)));
       await loadData();
       const label = to === "preparation" ? "preparación" : "reparto";
-      toast.success(`${toMove.length} pedidos pasados a ${label}`);
+      const heldCount = orders.filter((o) => o.status === from && heldClients.has(o.clientName || "Sin cliente")).length;
+      const msg = heldCount > 0
+        ? `${toMove.length} pedidos pasados a ${label} (${heldCount} retenidos)`
+        : `${toMove.length} pedidos pasados a ${label}`;
+      toast.success(msg);
     } catch {
       toast.error("Error al mover pedidos");
     } finally {
       setMovingAll(false);
     }
-  }, [orders, loadData]);
+  }, [orders, heldClients, loadData]);
 
   const printHtml = useCallback((html: string) => {
     const iframe = document.createElement("iframe");
@@ -1241,6 +1259,7 @@ th.center,td.center{text-align:center}
             <table className="w-full">
               <thead className="bg-muted/50 border-b">
                 <tr className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
+                  <th className="px-2 py-2 text-center w-10"></th>
                   <th className="px-4 py-2 text-left">Cliente</th>
                   <th className="px-4 py-2 text-center w-24">Productos</th>
                   <th className="px-4 py-2 text-left">Dirección</th>
@@ -1274,10 +1293,21 @@ th.center,td.center{text-align:center}
                   const deuda = clientData?.currentBalance || 0;
                   const clasificacion = clientData?.debtClassification;
 
+                  const isHeld = heldClients.has(client);
+
                   return (
-                    <tr key={client} className="hover:bg-muted/30 transition-colors text-sm cursor-pointer" onClick={onView}>
+                    <tr key={client} className={`transition-colors text-sm cursor-pointer ${isHeld ? "bg-red-50/60 opacity-60" : "hover:bg-muted/30"}`} onClick={onView}>
+                      <td className="px-2 py-2.5 text-center" onClick={(e) => e.stopPropagation()}>
+                        <button
+                          onClick={() => toggleHeldClient(client)}
+                          className={`p-1 rounded-full transition-colors ${isHeld ? "text-red-500 bg-red-100 hover:bg-red-200" : "text-muted-foreground/40 hover:text-red-400 hover:bg-red-50"}`}
+                          title={isHeld ? "Quitar retención" : "Retener pedido"}
+                        >
+                          <Ban className="h-4 w-4" />
+                        </button>
+                      </td>
                       <td className="px-4 py-2.5">
-                        <p className="text-xs font-semibold text-foreground truncate">{client}</p>
+                        <p className={`text-xs font-semibold truncate ${isHeld ? "text-red-400 line-through" : "text-foreground"}`}>{client}</p>
                         {clientOrders.length > 1 && (
                           <p className="text-[10px] text-muted-foreground">{clientOrders.length} pedidos</p>
                         )}
@@ -1332,7 +1362,8 @@ th.center,td.center{text-align:center}
 
           {/* Mobile: lista con header fijo */}
           <div className="lg:hidden">
-            <div className="grid grid-cols-[1fr_auto_auto] gap-2 px-3 py-1.5 text-[10px] font-semibold text-muted-foreground uppercase tracking-wider border-b">
+            <div className="grid grid-cols-[auto_1fr_auto_auto] gap-2 px-3 py-1.5 text-[10px] font-semibold text-muted-foreground uppercase tracking-wider border-b">
+              <span></span>
               <span>Cliente / Productos</span>
               <span>Deuda</span>
               <span>Estado</span>
@@ -1363,11 +1394,21 @@ th.center,td.center{text-align:center}
                 const deuda = clientData?.currentBalance || 0;
                 const clasificacion = clientData?.debtClassification;
 
+                const isHeld = heldClients.has(client);
+
                 return (
-                  <div key={client} className="grid grid-cols-[1fr_auto_auto] gap-2 px-3 py-2.5 cursor-pointer hover:bg-muted/20 transition-colors items-center" onClick={onView}>
+                  <div key={client} className={`grid grid-cols-[auto_1fr_auto_auto] gap-2 px-3 py-2.5 cursor-pointer transition-colors items-center ${isHeld ? "bg-red-50/60 opacity-60" : "hover:bg-muted/20"}`} onClick={onView}>
+                    <div className="shrink-0" onClick={(e) => e.stopPropagation()}>
+                      <button
+                        onClick={() => toggleHeldClient(client)}
+                        className={`p-1 rounded-full transition-colors ${isHeld ? "text-red-500 bg-red-100" : "text-muted-foreground/40 hover:text-red-400"}`}
+                      >
+                        <Ban className="h-3.5 w-3.5" />
+                      </button>
+                    </div>
                     <div className="min-w-0">
                       <div className="flex items-center gap-1">
-                        <p className="text-xs font-semibold text-foreground truncate">{client}</p>
+                        <p className={`text-xs font-semibold truncate ${isHeld ? "text-red-400 line-through" : "text-foreground"}`}>{client}</p>
                         {clientOrders.length > 1 && (
                           <span className="text-[10px] text-muted-foreground shrink-0">({clientOrders.length})</span>
                         )}
