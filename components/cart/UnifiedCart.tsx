@@ -181,6 +181,8 @@ export function UnifiedCart({ role, state, actions, onConfirmSale, allowDiscount
   const hasItemDiscounts = cart.some((item) => (item.itemDiscount ?? 0) > 0);
   // ¿Hay descuento general activo?
   const hasGeneralDiscount = discountValue > 0;
+  // Descuento máximo permitido según el vendedor seleccionado
+  const maxDiscountAllowed = state.selectedSellerData?.maxDiscount ?? 30;
 
   return (
     <div className="flex flex-col h-full">
@@ -291,12 +293,12 @@ export function UnifiedCart({ role, state, actions, onConfirmSale, allowDiscount
                     <div className="flex items-center gap-1.5">
                       <span className="text-[10px] text-muted-foreground">Dto.:</span>
                       <Input
-                        type="number" min="0" max="30" placeholder="0"
+                        type="number" min="0" max={maxDiscountAllowed} placeholder="0"
                         value={item.itemDiscount || ""}
                         onChange={(e) => actions.setItemDiscount(item.product.id, Number(e.target.value) || 0)}
                         className="h-5 w-10 text-center text-[10px] px-0.5"
                         disabled={hasGeneralDiscount}
-                        title={hasGeneralDiscount ? "Quitá el descuento general para aplicar por producto" : ""}
+                        title={hasGeneralDiscount ? "Quitá el descuento general para aplicar por producto" : `Máximo ${maxDiscountAllowed}%`}
                       />
                       <span className="text-[10px] text-muted-foreground">%</span>
                       {item.itemDiscount ? (
@@ -337,14 +339,14 @@ export function UnifiedCart({ role, state, actions, onConfirmSale, allowDiscount
           {discountOpen && !hasItemDiscounts && (
             <div className="p-3 rounded-lg bg-primary/5 border border-primary/20 space-y-2">
               <Input
-                type="number" min="0" max="30"
+                type="number" min="0" max={maxDiscountAllowed}
                 value={discountValue || ""}
                 onChange={(e) => {
                   actions.setDiscountType("percent");
                   const val = Number(e.target.value) || 0;
-                  actions.setDiscountValue(Math.min(30, val));
+                  actions.setDiscountValue(Math.min(maxDiscountAllowed, val));
                 }}
-                placeholder="Ej: 10 (% máx 30)"
+                placeholder={`Ej: 10 (% máx ${maxDiscountAllowed})`}
                 className="h-8 text-sm"
               />
             </div>

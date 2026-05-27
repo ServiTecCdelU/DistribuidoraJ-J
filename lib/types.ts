@@ -160,6 +160,7 @@ export interface Seller {
   employeeType: EmployeeType;
   commissionRate: number;
   transportistaCommissionRate?: number;
+  maxDiscount: number;
   isActive: boolean;
   totalSales: number;
   totalCommission: number;

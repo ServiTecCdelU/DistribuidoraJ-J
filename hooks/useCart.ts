@@ -530,11 +530,12 @@ export function useCart(role: UserRole, userEmail?: string, externalProducts?: P
   }, []);
 
   const setItemDiscount = useCallback((productId: string, discount: number) => {
-    const clamped = Math.max(0, Math.min(30, discount));
+    const maxAllowed = selectedSellerData?.maxDiscount ?? 30;
+    const clamped = Math.max(0, Math.min(maxAllowed, discount));
     setCart((prev) => prev.map((item) =>
       item.product.id === productId ? { ...item, itemDiscount: clamped || undefined } : item
     ));
-  }, []);
+  }, [selectedSellerData]);
 
   // --- Payment actions ---
   const handleCashAmountChange = useCallback(

@@ -12,6 +12,7 @@ function mapSeller(d: Record<string, any>): Seller {
     employeeType: d.employee_type ?? 'vendedor',
     commissionRate: Number(d.commission_rate) || 10,
     transportistaCommissionRate: d.transportista_commission_rate ? Number(d.transportista_commission_rate) : undefined,
+    maxDiscount: d.descuento_maximo != null ? Number(d.descuento_maximo) : 30,
     isActive: d.is_active ?? true,
     totalSales: Number(d.total_sales) || 0,
     totalCommission: Number(d.total_commission) || 0,
@@ -52,6 +53,7 @@ export const createSeller = async (
     employee_type: seller.employeeType,
     commission_rate: seller.commissionRate,
     transportista_commission_rate: seller.transportistaCommissionRate ?? null,
+    descuento_maximo: seller.maxDiscount ?? 30,
     is_active: seller.isActive,
     total_sales: 0,
     total_commission: 0,
@@ -74,6 +76,7 @@ export const updateSeller = async (id: string, updates: Partial<Seller>): Promis
   if (updates.employeeType !== undefined) mapped.employee_type = updates.employeeType
   if (updates.commissionRate !== undefined) mapped.commission_rate = updates.commissionRate
   if (updates.transportistaCommissionRate !== undefined) mapped.transportista_commission_rate = updates.transportistaCommissionRate
+  if (updates.maxDiscount !== undefined) mapped.descuento_maximo = updates.maxDiscount
   if (updates.isActive !== undefined) mapped.is_active = updates.isActive
   if (updates.totalSales !== undefined) mapped.total_sales = updates.totalSales
   if (updates.totalCommission !== undefined) mapped.total_commission = updates.totalCommission
