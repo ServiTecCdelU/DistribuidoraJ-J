@@ -62,6 +62,7 @@ export interface CartState {
   selectedSeller: string;
   selectedSellerData: Seller | undefined;
   sellerMatchName: string | null;
+  sellerMaxDiscount: number;
 
   // Payment
   paymentType: PaymentType;
@@ -202,6 +203,7 @@ export function useCart(role: UserRole, userEmail?: string, externalProducts?: P
   // Seller
   const [selectedSeller, setSelectedSeller] = useState("");
   const [sellerMatchName, setSellerMatchName] = useState<string | null>(null);
+  const [sellerMaxDiscount, setSellerMaxDiscount] = useState<number>(role === "admin" ? 100 : 30);
 
   // Payment
   const [paymentType, setPaymentType] = useState<PaymentType>("cash");
@@ -362,6 +364,7 @@ export function useCart(role: UserRole, userEmail?: string, externalProducts?: P
         if (data.found) {
           setSellerMatchName(data.sellerName);
           setSelectedSeller(data.sellerId);
+          setSellerMaxDiscount(data.sellerMaxDiscount ?? 30);
         } else {
           setSellerMatchName(null);
         }
@@ -535,12 +538,11 @@ export function useCart(role: UserRole, userEmail?: string, externalProducts?: P
   }, []);
 
   const setItemDiscount = useCallback((productId: string, discount: number) => {
-    const maxAllowed = selectedSellerData?.maxDiscount ?? (role === "admin" ? 100 : 30);
-    const clamped = Math.max(0, Math.min(maxAllowed, discount));
+    const clamped = Math.max(0, Math.min(sellerMaxDiscount, discount));
     setCart((prev) => prev.map((item) =>
       item.product.id === productId ? { ...item, itemDiscount: clamped || undefined } : item
     ));
-  }, [selectedSellerData, role]);
+  }, [sellerMaxDiscount]);
 
   // --- Payment actions ---
   const handleCashAmountChange = useCallback(
@@ -1034,7 +1036,7 @@ export function useCart(role: UserRole, userEmail?: string, externalProducts?: P
     lookupType, selectedClient, selectedClientData,
     dniLookup, dniLoading, dniFound, dniNotFound, dniClientId,
     clientName, clientEmail, clientPhone, clientAddress, clientDni, clientCuit, clientTaxCategory, clientCreditLimit,
-    selectedSeller, selectedSellerData, sellerMatchName,
+    selectedSeller, selectedSellerData, sellerMatchName, sellerMaxDiscount,
     paymentType, paymentMethod, cashAmount, creditAmountInput,
     selectedCity, deliveryMethod, deliveryAddress, newAddress,
     deliveryLat, deliveryLng, selectedSavedAddress,
@@ -1047,7 +1049,13 @@ export function useCart(role: UserRole, userEmail?: string, externalProducts?: P
     setLookupType, setSelectedClient, setDniLookup, selectClientFromSearch,
     setClientName, setClientEmail, setClientPhone, setClientAddress,
     setClientDni, setClientCuit, setClientTaxCategory,
-    setSelectedSeller,
+    setSelectedSeller: (id: string) => {
+      setSelectedSeller(id);
+      if (role === "admin") {
+        const seller = sellers.find((s) => s.id === id);
+        setSellerMaxDiscount(seller?.maxDiscount ?? 100);
+      }
+    },
     setPaymentType, setPaymentMethod, handleCashAmountChange, handleCreditAmountChange,
     setSelectedCity: (city: City | "") => {
       setSelectedCity(city);
