@@ -359,7 +359,12 @@ export function useCart(role: UserRole, userEmail?: string, externalProducts?: P
       try {
         const res = await fetch(`/api/public/vendedores?email=${encodeURIComponent(userEmail)}`);
         const data = await res.json();
-        setSellerMatchName(data.found ? data.sellerName : null);
+        if (data.found) {
+          setSellerMatchName(data.sellerName);
+          setSelectedSeller(data.sellerId);
+        } else {
+          setSellerMatchName(null);
+        }
       } catch {}
     })();
   }, [role, userEmail]);
@@ -530,12 +535,12 @@ export function useCart(role: UserRole, userEmail?: string, externalProducts?: P
   }, []);
 
   const setItemDiscount = useCallback((productId: string, discount: number) => {
-    const maxAllowed = selectedSellerData?.maxDiscount ?? 30;
+    const maxAllowed = selectedSellerData?.maxDiscount ?? (role === "admin" ? 100 : 30);
     const clamped = Math.max(0, Math.min(maxAllowed, discount));
     setCart((prev) => prev.map((item) =>
       item.product.id === productId ? { ...item, itemDiscount: clamped || undefined } : item
     ));
-  }, [selectedSellerData]);
+  }, [selectedSellerData, role]);
 
   // --- Payment actions ---
   const handleCashAmountChange = useCallback(

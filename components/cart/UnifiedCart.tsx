@@ -181,8 +181,8 @@ export function UnifiedCart({ role, state, actions, onConfirmSale, allowDiscount
   const hasItemDiscounts = cart.some((item) => (item.itemDiscount ?? 0) > 0);
   // ¿Hay descuento general activo?
   const hasGeneralDiscount = discountValue > 0;
-  // Descuento máximo permitido según el vendedor seleccionado
-  const maxDiscountAllowed = state.selectedSellerData?.maxDiscount ?? 30;
+  // Descuento máximo: usa el del vendedor seleccionado; admin sin vendedor = sin límite (100)
+  const maxDiscountAllowed = state.selectedSellerData?.maxDiscount ?? (role === "admin" ? 100 : 30);
 
   return (
     <div className="flex flex-col h-full">
