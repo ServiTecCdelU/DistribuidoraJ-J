@@ -247,12 +247,14 @@ export function useCart(role: UserRole, userEmail?: string, externalProducts?: P
     () => cart.reduce((acc, item) => acc + item.quantity, 0),
     [cart],
   );
-  const discountAmount = useMemo(() => {
-    if (discountValue <= 0) return 0;
-    return discountType === "percent"
-      ? (cartTotal * discountValue) / 100
-      : discountValue;
-  }, [discountValue, discountType, cartTotal]);
+  // Descuento general comentado — solo descuento por producto
+  // const discountAmount = useMemo(() => {
+  //   if (discountValue <= 0) return 0;
+  //   return discountType === "percent"
+  //     ? (cartTotal * discountValue) / 100
+  //     : discountValue;
+  // }, [discountValue, discountType, cartTotal]);
+  const discountAmount = 0;
   const finalTotal = useMemo(
     () => Math.max(0, cartTotal - discountAmount),
     [cartTotal, discountAmount],
@@ -538,6 +540,9 @@ export function useCart(role: UserRole, userEmail?: string, externalProducts?: P
   }, []);
 
   const setItemDiscount = useCallback((productId: string, discount: number) => {
+    if (discount > sellerMaxDiscount) {
+      toast.error(`Descuento máximo autorizado: ${sellerMaxDiscount}%`);
+    }
     const clamped = Math.max(0, Math.min(sellerMaxDiscount, discount));
     setCart((prev) => prev.map((item) =>
       item.product.id === productId ? { ...item, itemDiscount: clamped || undefined } : item

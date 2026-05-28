@@ -296,8 +296,7 @@ export function UnifiedCart({ role, state, actions, onConfirmSale, allowDiscount
                         value={item.itemDiscount || ""}
                         onChange={(e) => actions.setItemDiscount(item.product.id, Number(e.target.value) || 0)}
                         className="h-5 w-10 text-center text-[10px] px-0.5"
-                        disabled={hasGeneralDiscount}
-                        title={hasGeneralDiscount ? "Quitá el descuento general para aplicar por producto" : `Máximo ${maxDiscountAllowed}%`}
+                        title={`Máximo ${maxDiscountAllowed}%`}
                       />
                       <span className="text-[10px] text-muted-foreground">%</span>
                       {item.itemDiscount ? (
@@ -317,8 +316,8 @@ export function UnifiedCart({ role, state, actions, onConfirmSale, allowDiscount
 
       {/* Checkout section */}
       <div className="border-t border-border pt-3 mt-auto space-y-3">
-        {/* Discount - admin/seller siempre; público solo si allowDiscount (vendedor logueado) */}
-        {(role === null || cartStep === "products") && (role !== null || allowDiscount) && (
+        {/* Descuento general comentado — solo descuento por producto */}
+        {/* {(role === null || cartStep === "products") && (role !== null || allowDiscount) && (
         <div className="space-y-2">
           <button
             type="button"
@@ -351,7 +350,7 @@ export function UnifiedCart({ role, state, actions, onConfirmSale, allowDiscount
             </div>
           )}
         </div>
-        )}
+        )} */}
 
         {/* Summary */}
         {(role === null || cartStep === "products") && (
@@ -370,15 +369,15 @@ export function UnifiedCart({ role, state, actions, onConfirmSale, allowDiscount
               <span className="text-sm text-emerald-600">-{actions.formatCurrency(cartSubtotal - cartTotal)}</span>
             </div>
           )}
-          {/* Descuento general de venta */}
-          {discountAmount > 0 && (
+          {/* Descuento general de venta — comentado */}
+          {/* {discountAmount > 0 && (
             <div className="flex justify-between items-center">
               <span className="text-xs text-emerald-600">
                 Dto. venta {discountType === "percent" ? `(${discountValue}%)` : ""}
               </span>
               <span className="text-sm text-emerald-600">-{actions.formatCurrency(discountAmount)}</span>
             </div>
-          )}
+          )} */}
           <div className="flex justify-between items-center pt-1 border-t border-border/40">
             <span className="text-sm font-medium text-muted-foreground">Total</span>
             <span className="text-2xl font-bold text-foreground">
