@@ -1,21 +1,13 @@
 // app/api/afip/test/route.ts
 // Test de conexión con AFIP via Bit Ingeniería
 import { NextRequest, NextResponse } from "next/server";
-import { supabaseAdmin } from "@/lib/supabase-admin";
 import { obtenerUltimoNumero } from "@/lib/bitingenieria";
+import { requireAuth } from "@/lib/api-auth";
 
 export async function GET(request: NextRequest) {
   try {
-    const authHeader = request.headers.get("Authorization");
-    if (!authHeader?.startsWith("Bearer ")) {
-      return NextResponse.json({ error: "No autorizado" }, { status: 401 });
-    }
-    try {
-      const { error: authError } = await supabaseAdmin.auth.getUser(authHeader.substring(7));
-      if (authError) throw authError;
-    } catch {
-      return NextResponse.json({ error: "Token inválido" }, { status: 401 });
-    }
+    const auth = await requireAuth(request);
+    if (!auth.ok) return auth.response;
 
     // Consultar último comprobante tipo Factura B (6) como test de conectividad
     const ultimo = await obtenerUltimoNumero(6);

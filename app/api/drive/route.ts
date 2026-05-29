@@ -1,21 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
-import { supabaseAdmin } from "@/lib/supabase-admin";
 import { google } from "googleapis";
 import { Readable } from "stream";
+import { requireAuth } from "@/lib/api-auth";
 
 export async function POST(req: NextRequest) {
   try {
-    // Verificar auth
-    const authHeader = req.headers.get("Authorization");
-    if (!authHeader?.startsWith("Bearer ")) {
-      return NextResponse.json({ error: "No autorizado" }, { status: 401 });
-    }
-    try {
-      const { error: authError } = await supabaseAdmin.auth.getUser(authHeader.substring(7));
-      if (authError) throw authError;
-    } catch {
-      return NextResponse.json({ error: "Token invalido" }, { status: 401 });
-    }
+    const authResult = await requireAuth(req);
+    if (!authResult.ok) return authResult.response;
 
     const { base64, filename } = await req.json();
 

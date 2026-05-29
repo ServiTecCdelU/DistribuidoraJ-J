@@ -1,10 +1,17 @@
 // app/api/public/productos/route.ts
 import { NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabase-admin";
+import { rateLimit } from "@/lib/rate-limit";
 
 export const runtime = "nodejs";
 
-export async function GET() {
+export async function GET(request: Request) {
+  const ip = request.headers.get("x-forwarded-for") || "unknown";
+  const { allowed } = rateLimit(ip, { maxRequests: 60, windowMs: 60_000 });
+  if (!allowed) {
+    return NextResponse.json({ error: "Demasiadas solicitudes" }, { status: 429 });
+  }
+
   const { data: rows, error } = await supabaseAdmin
     .from("productos")
     .select("*");

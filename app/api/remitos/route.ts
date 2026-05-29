@@ -1,15 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabase-admin";
+import { requireAuth } from "@/lib/api-auth";
 
 export async function POST(request: NextRequest) {
   try {
-    const authHeader = request.headers.get("Authorization");
-    if (!authHeader?.startsWith("Bearer ")) {
-      return NextResponse.json({ message: "No autorizado" }, { status: 401 });
-    }
-
-    const token = authHeader.substring(7);
-    await supabaseAdmin.auth.getUser(token);
+    const auth = await requireAuth(request);
+    if (!auth.ok) return auth.response;
 
     const body = await request.json();
     const { saleId } = body;

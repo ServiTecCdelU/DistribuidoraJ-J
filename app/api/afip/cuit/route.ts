@@ -1,19 +1,11 @@
 // app/api/afip/cuit/route.ts
 import { NextRequest, NextResponse } from "next/server";
 import { consultarCUIT } from "@/lib/afip-direct";
-import { supabaseAdmin } from "@/lib/supabase-admin";
+import { requireAuth } from "@/lib/api-auth";
 
 export async function GET(req: NextRequest) {
-  const authHeader = req.headers.get("Authorization");
-  if (!authHeader?.startsWith("Bearer ")) {
-    return NextResponse.json({ error: "No autorizado" }, { status: 401 });
-  }
-  try {
-    const { error: authError } = await supabaseAdmin.auth.getUser(authHeader.substring(7));
-    if (authError) throw authError;
-  } catch {
-    return NextResponse.json({ error: "Token inválido" }, { status: 401 });
-  }
+  const auth = await requireAuth(req);
+  if (!auth.ok) return auth.response;
 
   const cuit = req.nextUrl.searchParams.get("cuit");
   if (!cuit) return NextResponse.json({ error: "CUIT requerido" }, { status: 400 });

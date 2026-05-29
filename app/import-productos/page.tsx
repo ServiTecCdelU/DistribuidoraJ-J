@@ -4,6 +4,7 @@ import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { MainLayout } from "@/components/layout/main-layout";
+import { getAuthToken } from "@/services/auth-service";
 import { toast } from "sonner";
 
 interface ParsedProduct {
@@ -69,9 +70,11 @@ export default function ImportProductosPage() {
 
     setLoading(true);
     try {
+      const token = await getAuthToken();
+      if (!token) throw new Error("No autenticado");
       const res = await fetch("/api/import-productos", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
         body: JSON.stringify({ productos: parsed }),
       });
 

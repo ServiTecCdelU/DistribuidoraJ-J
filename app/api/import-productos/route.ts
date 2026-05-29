@@ -1,8 +1,12 @@
 import { NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabase-admin";
+import { requireAuth } from "@/lib/api-auth";
 
 export async function POST(req: Request) {
   try {
+    const auth = await requireAuth(req, { roles: ["admin"] });
+    if (!auth.ok) return auth.response;
+
     const { productos } = await req.json();
 
     if (!Array.isArray(productos) || productos.length === 0) {

@@ -28,6 +28,7 @@ import {
 import { productsApi } from "@/lib/api";
 import { supabase } from "@/lib/supabase";
 import { generateReadableId } from "@/services/supabase-helpers";
+import { getAuthToken } from "@/services/auth-service";
 import { registrarMovimiento } from "@/services/stock-service";
 import type { Product, MayoristaProducto } from "@/lib/types";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
@@ -591,9 +592,11 @@ tr.cat td{border:none}
     if (isNaN(porc) || porc < 0) { toast.error("Ingresá un porcentaje válido"); return; }
     setApplyingGlobal(true);
     try {
+      const token = await getAuthToken();
+      if (!token) throw new Error("No autenticado");
       const res = await fetch("/api/apply-ganancia", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
         body: JSON.stringify({ porcentaje: porc }),
       });
       const data = await res.json();

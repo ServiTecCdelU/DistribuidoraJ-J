@@ -1,19 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
-import { supabaseAdmin } from "@/lib/supabase-admin";
 import { procesarEmision } from "@/lib/facturacion-helper";
+import { requireAuth } from "@/lib/api-auth";
 
 export async function POST(request: NextRequest) {
   try {
-    const authHeader = request.headers.get("Authorization");
-    if (!authHeader?.startsWith("Bearer ")) {
-      return NextResponse.json({ message: "No autorizado" }, { status: 401 });
-    }
-    try {
-      const { error: authError } = await supabaseAdmin.auth.getUser(authHeader.substring(7));
-      if (authError) throw authError;
-    } catch {
-      return NextResponse.json({ message: "Token invalido" }, { status: 401 });
-    }
+    const auth = await requireAuth(request);
+    if (!auth.ok) return auth.response;
 
     const { saleId, client, emitirAfip } = await request.json();
     if (!saleId) {
