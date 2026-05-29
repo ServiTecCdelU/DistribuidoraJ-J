@@ -755,10 +755,12 @@ export function useCart(role: UserRole, userEmail?: string, externalProducts?: P
         resolvedClientId = dniClientId || undefined;
         resolvedClientName = clientName;
         resolvedClientPhone = clientPhone;
-        // seller: match by email
+        // seller: usar el sellerId ya resuelto por email (selectedSeller), robusto ante
+        // vendedores inactivos que no figuran en la lista. Fallback: match por nombre.
         if (role === "seller" && sellerMatchName) {
-          const matchedSeller = sellers.find((s) => s.name === sellerMatchName);
-          resolvedSellerId = matchedSeller?.id;
+          resolvedSellerId = (selectedSeller && selectedSeller !== "none")
+            ? selectedSeller
+            : sellers.find((s) => s.name === sellerMatchName)?.id;
           resolvedSellerName = sellerMatchName;
         }
       }
