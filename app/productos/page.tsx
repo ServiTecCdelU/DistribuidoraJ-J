@@ -323,7 +323,8 @@ tr.cat td{background:#0f172a;color:#fff;font-weight:700;font-size:11px;text-tran
 tr.cat .cat-count{font-weight:400;color:#94a3b8}
 tr.cat td{border:none}
 .footer{margin-top:18px;text-align:center;font-size:10px;color:#9ca3af;border-top:1px solid #e5e7eb;padding-top:8px}
-@media print{body{padding:14px}tr.cat{page-break-after:avoid}tr{page-break-inside:avoid}}
+@page{margin:0}
+@media print{body{padding:14mm}tr.cat{page-break-after:avoid}tr{page-break-inside:avoid}}
 </style></head><body>
 <div class="header"><div><h1>Distribuidora J&J</h1><div class="sub">Lista de Precios</div></div><div class="meta"><div>${fecha}</div><div>${lista.length} productos</div></div></div>
 <div class="legend">Precios de venta vigentes por unidad.</div>
