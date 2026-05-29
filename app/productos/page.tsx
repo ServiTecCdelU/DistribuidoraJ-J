@@ -257,14 +257,20 @@ export default function ProductosPage() {
     const toastId = "export-pdf";
     toast.loading("Generando lista de precios...", { id: toastId });
     try {
-      const result = await productsApi.search({
+      const PAGE = 1000;
+      const baseParams = {
         search: searchQuery || undefined,
         category: categoryFilter !== "all" ? categoryFilter : undefined,
         stockFilter: stockFilter as any,
-        page: 1,
-        pageSize: 100000,
-      });
-      let lista = result.data.filter((p) => !(p as any).disabled && p.price > 0);
+        pageSize: PAGE,
+      };
+      const first = await productsApi.search({ ...baseParams, page: 1 });
+      const acumulado: Product[] = [...first.data];
+      for (let page = 2; page <= first.totalPages; page++) {
+        const r = await productsApi.search({ ...baseParams, page });
+        acumulado.push(...r.data);
+      }
+      let lista = acumulado.filter((p) => !(p as any).disabled && p.price > 0);
       lista = lista.filter((p) => {
         switch (priceFilter) {
           case "0-5000": return p.price <= 5000;
