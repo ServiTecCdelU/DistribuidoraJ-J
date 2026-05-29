@@ -308,7 +308,6 @@ export default function ProductosPage() {
         }
       }
 
-      const ganancia = stats.gananciaActual != null ? `Ganancia aplicada: ${stats.gananciaActual}%` : "";
       const html = `<!DOCTYPE html><html><head><meta charset="utf-8"><title>Lista de Precios</title><style>
 *{margin:0;padding:0;box-sizing:border-box}
 body{font-family:-apple-system,Segoe UI,Roboto,sans-serif;padding:28px;font-size:12px;color:#1f2937}
@@ -331,10 +330,10 @@ tr.cat td{border:none}
 .footer{margin-top:18px;text-align:center;font-size:10px;color:#9ca3af;border-top:1px solid #e5e7eb;padding-top:8px}
 @media print{body{padding:14px}tr.cat{page-break-after:avoid}tr{page-break-inside:avoid}}
 </style></head><body>
-<div class="header"><div><h1>Lista de Precios</h1><div class="sub">Distribuidora Patricia</div></div><div class="meta"><div>${fecha}</div><div>${lista.length} productos</div>${ganancia ? `<div>${ganancia}</div>` : ""}</div></div>
-<div class="legend">Precios de venta vigentes (con ganancia aplicada). Productos divisibles se muestran por lote.</div>
+<div class="header"><div><h1>Distribuidora J&J</h1><div class="sub">Lista de Precios</div></div><div class="meta"><div>${fecha}</div><div>${lista.length} productos</div></div></div>
+<div class="legend">Precios de venta vigentes. Productos divisibles se muestran por lote.</div>
 <table><thead><tr><th>Código</th><th>Producto</th><th class="right">Precio</th></tr></thead><tbody>${body}</tbody></table>
-<div class="footer">Generado el ${fecha} · Distribuidora Patricia</div>
+<div class="footer">Generado el ${fecha} · Distribuidora J&J</div>
 </body></html>`;
 
       printHtml(html);
