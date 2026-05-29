@@ -154,6 +154,9 @@ export default function ProductosPage() {
   const [applyingGlobal, setApplyingGlobal] = useState(false);
   const [progressGanancia, setProgressGanancia] = useState({ done: 0, total: 0 });
 
+  // Exportar lista de precios a PDF
+  const [exportandoPdf, setExportandoPdf] = useState(false);
+
   // Estados para historiales
   const [stockHistory, setStockHistory] = useState<StockMovement[]>([]);
   const [inventoryHistory, setInventoryHistory] = useState<InventorySnapshot[]>(
@@ -226,6 +229,115 @@ export default function ProductosPage() {
     a.click();
     URL.revokeObjectURL(url);
     toast.success(`Planilla descargada con ${rows.length} productos`);
+  };
+
+  // --- PDF: Exportar lista de precios ---
+  const precioMostrar = (p: Product): number => {
+    if (p.unidadesPorBulto && p.seDivideEn && p.unidadesPorBulto > 0) {
+      return Math.round((p.price * p.seDivideEn / p.unidadesPorBulto) * 100) / 100;
+    }
+    return p.price;
+  };
+
+  const printHtml = (html: string) => {
+    const iframe = document.createElement("iframe");
+    iframe.style.cssText = "position:fixed;top:0;left:0;width:0;height:0;border:0;opacity:0;";
+    document.body.appendChild(iframe);
+    const doc = iframe.contentWindow?.document;
+    if (!doc) { document.body.removeChild(iframe); return; }
+    doc.open(); doc.write(html); doc.close();
+    iframe.onload = () => {
+      iframe.contentWindow?.print();
+      setTimeout(() => document.body.removeChild(iframe), 1000);
+    };
+  };
+
+  const exportarListaPdf = async () => {
+    setExportandoPdf(true);
+    const toastId = "export-pdf";
+    toast.loading("Generando lista de precios...", { id: toastId });
+    try {
+      const result = await productsApi.search({
+        search: searchQuery || undefined,
+        category: categoryFilter !== "all" ? categoryFilter : undefined,
+        stockFilter: stockFilter as any,
+        page: 1,
+        pageSize: 100000,
+      });
+      let lista = result.data.filter((p) => !(p as any).disabled && p.price > 0);
+      lista = lista.filter((p) => {
+        switch (priceFilter) {
+          case "0-5000": return p.price <= 5000;
+          case "5001-10000": return p.price > 5000 && p.price <= 10000;
+          case "10001-20000": return p.price > 10000 && p.price <= 20000;
+          case "20001+": return p.price > 20000;
+          default: return true;
+        }
+      });
+      if (lista.length === 0) {
+        toast.error("No hay productos para exportar", { id: toastId });
+        return;
+      }
+
+      const grupos = new Map<string, Product[]>();
+      lista.forEach((p) => {
+        const cat = p.category || "Sin categoría";
+        if (!grupos.has(cat)) grupos.set(cat, []);
+        grupos.get(cat)!.push(p);
+      });
+      const cats = [...grupos.keys()].sort((a, b) => a.localeCompare(b, "es"));
+      cats.forEach((c) => grupos.get(c)!.sort((a, b) => a.name.localeCompare(b.name, "es")));
+
+      const fecha = new Intl.DateTimeFormat("es-AR", { day: "2-digit", month: "long", year: "numeric" }).format(new Date());
+      const fmt = (n: number) => new Intl.NumberFormat("es-AR", { style: "currency", currency: "ARS" }).format(n);
+      const esc = (s: string) => (s || "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+
+      let body = "";
+      for (const cat of cats) {
+        const items = grupos.get(cat)!;
+        body += `<tr class="cat"><td colspan="3">${esc(cat)} <span class="cat-count">(${items.length})</span></td></tr>`;
+        for (const p of items) {
+          const divide = !!(p.unidadesPorBulto && p.seDivideEn && p.unidadesPorBulto > 0);
+          body += `<tr><td class="cod">${esc(p.codigo || p.description || "")}</td><td class="nom">${esc(p.name)}</td><td class="precio">${fmt(precioMostrar(p))}${divide ? '<span class="unit"> /lote</span>' : ''}</td></tr>`;
+        }
+      }
+
+      const ganancia = stats.gananciaActual != null ? `Ganancia aplicada: ${stats.gananciaActual}%` : "";
+      const html = `<!DOCTYPE html><html><head><meta charset="utf-8"><title>Lista de Precios</title><style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:-apple-system,Segoe UI,Roboto,sans-serif;padding:28px;font-size:12px;color:#1f2937}
+.header{display:flex;justify-content:space-between;align-items:flex-end;border-bottom:3px solid #0d9488;padding-bottom:12px;margin-bottom:6px}
+.header h1{font-size:20px;color:#0f172a}
+.header .sub{font-size:13px;color:#0d9488;font-weight:600;margin-top:2px}
+.header .meta{text-align:right;font-size:11px;color:#6b7280;line-height:1.5}
+.legend{font-size:10px;color:#9ca3af;margin-bottom:14px}
+table{width:100%;border-collapse:collapse}
+th{font-size:10px;text-transform:uppercase;letter-spacing:.05em;color:#6b7280;text-align:left;padding:6px 10px;border-bottom:1px solid #e5e7eb;background:#f9fafb}
+th.right,td.precio{text-align:right}
+td{padding:5px 10px;border-bottom:1px solid #f3f4f6;vertical-align:top}
+td.cod{font-family:ui-monospace,monospace;font-size:10px;color:#9ca3af;white-space:nowrap;width:90px}
+td.nom{font-weight:500}
+td.precio{font-weight:700;color:#0d9488;white-space:nowrap}
+td.precio .unit{font-size:9px;font-weight:400;color:#9ca3af}
+tr.cat td{background:#0f172a;color:#fff;font-weight:700;font-size:11px;text-transform:uppercase;letter-spacing:.04em;padding:7px 10px}
+tr.cat .cat-count{font-weight:400;color:#94a3b8}
+tr.cat td{border:none}
+.footer{margin-top:18px;text-align:center;font-size:10px;color:#9ca3af;border-top:1px solid #e5e7eb;padding-top:8px}
+@media print{body{padding:14px}tr.cat{page-break-after:avoid}tr{page-break-inside:avoid}}
+</style></head><body>
+<div class="header"><div><h1>Lista de Precios</h1><div class="sub">Distribuidora Patricia</div></div><div class="meta"><div>${fecha}</div><div>${lista.length} productos</div>${ganancia ? `<div>${ganancia}</div>` : ""}</div></div>
+<div class="legend">Precios de venta vigentes (con ganancia aplicada). Productos divisibles se muestran por lote.</div>
+<table><thead><tr><th>Código</th><th>Producto</th><th class="right">Precio</th></tr></thead><tbody>${body}</tbody></table>
+<div class="footer">Generado el ${fecha} · Distribuidora Patricia</div>
+</body></html>`;
+
+      printHtml(html);
+      toast.success(`Lista generada con ${lista.length} productos`, { id: toastId });
+    } catch {
+      toast.error("Error al generar la lista", { id: toastId });
+    } finally {
+      setExportandoPdf(false);
+    }
   };
 
   // --- CSV: Subir planilla ---
@@ -962,6 +1074,18 @@ export default function ProductosPage() {
             >
               <FileUp className="h-3.5 w-3.5" />
               <span className="hidden sm:inline text-xs">Remito</span>
+            </Button>
+
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={exportarListaPdf}
+              disabled={exportandoPdf}
+              className="gap-1.5 h-7 px-2"
+              title="Exportar lista de precios a PDF"
+            >
+              {exportandoPdf ? <RefreshCw className="h-3.5 w-3.5 animate-spin" /> : <FileDown className="h-3.5 w-3.5" />}
+              <span className="hidden sm:inline text-xs">PDF</span>
             </Button>
 
             <Button
