@@ -9,7 +9,7 @@ import { DataTableSkeleton } from "@/components/ui/data-table-skeleton";
 import { ClientModal } from "@/components/clientes/client-modal";
 import { ordersApi, salesApi, clientsApi, sellersApi, productsApi } from "@/lib/api";
 import type { Order, OrderStatus, Client, Seller } from "@/lib/types";
-import { Package, Filter, Loader2, ClipboardList, FileSpreadsheet, Eye, ArrowRightCircle, Ban } from "lucide-react";
+import { Package, Filter, Loader2, ClipboardList, FileSpreadsheet, Eye, ArrowRightCircle, Ban, TrendingUp } from "lucide-react";
 import { toast } from "sonner";
 import { useAuth } from "@/hooks/use-auth";
 import { useRouter } from "next/navigation";
@@ -52,6 +52,9 @@ export default function PedidosPage() {
   const [orders, setOrders] = useState<Order[]>([]);
   const [clients, setClients] = useState<Client[]>([]);
   const [sellers, setSellers] = useState<Seller[]>([]);
+  // Precio de venta actual por id de producto (para detectar pedidos con precios viejos)
+  const [priceMap, setPriceMap] = useState<Map<string, number>>(new Map());
+  const [syncingPrices, setSyncingPrices] = useState(false);
   const [loading, setLoading] = useState(true);
   const [mounted, setMounted] = useState(false);
   const [generatingDoc, setGeneratingDoc] = useState(false);
@@ -111,10 +114,11 @@ export default function PedidosPage() {
 
   const loadData = useCallback(async (isMounted?: () => boolean) => {
     try {
-      const [ordersData, clientsData, sellersData] = await Promise.all([
+      const [ordersData, clientsData, sellersData, productsData] = await Promise.all([
         ordersApi.getAll(),
         clientsApi.getAll(),
         sellersApi.getAll(),
+        productsApi.getAll(),
       ]);
       if (isMounted && !isMounted()) return;
       const sortedOrders = ordersData.sort(
@@ -124,6 +128,15 @@ export default function PedidosPage() {
       setOrders(sortedOrders);
       setClients(clientsData);
       setSellers(sellersData);
+      // Mapa de precio actual: indexado por id de producto (prod_mp_XXX) y su alias mayorista (mp_XXX)
+      const pm = new Map<string, number>();
+      productsData.forEach((p) => {
+        const precio = Number(p.price) || 0;
+        if (precio <= 0) return;
+        pm.set(p.id, precio);
+        if (p.id.startsWith("prod_")) pm.set(p.id.slice(5), precio);
+      });
+      setPriceMap(pm);
     } catch (error) {
       if (isMounted && !isMounted()) return;
       toast.error("Error al cargar pedidos");
@@ -1029,6 +1042,56 @@ export default function PedidosPage() {
 
   const [movingAll, setMovingAll] = useState(false);
 
+  // Precio actual de un item segun el mapa (soporta ids mayorista mp_ y prod_mp_)
+  const getCurrentPrice = useCallback((productId?: string): number | null => {
+    if (!productId) return null;
+    const p = priceMap.get(productId) ?? priceMap.get(`prod_${productId}`);
+    return p != null && p > 0 ? p : null;
+  }, [priceMap]);
+
+  // Pedidos no completados con items por debajo del precio de venta actual
+  const outdatedPriceOrders = useMemo(() => {
+    if (priceMap.size === 0) return [] as Order[];
+    return orders.filter((o) =>
+      o.status !== "completed" &&
+      o.items.some((it) => {
+        // No tocar items vendidos por unidad fraccionada (precio distinto al de bulto)
+        if (it.precioUnitarioMayorista != null) return false;
+        const current = getCurrentPrice(it.productId);
+        return current != null && current - (Number(it.price) || 0) > 0.5;
+      })
+    );
+  }, [orders, priceMap, getCurrentPrice]);
+
+  const handleSyncPrices = useCallback(async () => {
+    if (outdatedPriceOrders.length === 0) return;
+    setSyncingPrices(true);
+    try {
+      let itemsActualizados = 0;
+      const updatedOrders: Order[] = [];
+      for (const order of outdatedPriceOrders) {
+        const newItems = order.items.map((it) => {
+          if (it.precioUnitarioMayorista != null) return it;
+          const current = getCurrentPrice(it.productId);
+          if (current != null && current - (Number(it.price) || 0) > 0.5) {
+            itemsActualizados++;
+            return { ...it, price: current };
+          }
+          return it;
+        });
+        const { error } = await supabase.from("pedidos").update({ items: newItems }).eq("id", order.id);
+        if (error) throw error;
+        updatedOrders.push({ ...order, items: newItems });
+      }
+      setOrders((prev) => prev.map((o) => updatedOrders.find((u) => u.id === o.id) ?? o));
+      toast.success(`${itemsActualizados} producto(s) actualizados al precio actual en ${updatedOrders.length} pedido(s)`);
+    } catch {
+      toast.error("Error al actualizar precios");
+    } finally {
+      setSyncingPrices(false);
+    }
+  }, [outdatedPriceOrders, getCurrentPrice]);
+
   const handleMoveAll = useCallback(async (from: OrderStatus, to: OrderStatus) => {
     const toMove = orders.filter((o) => o.status === from && !heldClients.has(o.clientName || "Sin cliente"));
     if (toMove.length === 0) {
@@ -1185,6 +1248,19 @@ th.center,td.center{text-align:center}
           >
             <Filter className="h-4 w-4 mr-2" />
             Limpiar filtros
+          </Button>
+        )}
+        {outdatedPriceOrders.length > 0 && (
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={handleSyncPrices}
+            disabled={syncingPrices}
+            className="gap-2 border-red-300 bg-red-50 text-red-700 hover:bg-red-100 animate-pulse"
+            title="Hay pedidos con precios por debajo del precio de venta actual"
+          >
+            {syncingPrices ? <Loader2 className="h-4 w-4 animate-spin" /> : <TrendingUp className="h-4 w-4" />}
+            <span>Actualizar precios ({outdatedPriceOrders.length})</span>
           </Button>
         )}
         {filterStatus !== "pending" && (
