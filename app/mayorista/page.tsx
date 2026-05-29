@@ -191,18 +191,6 @@ export default function MayoristaPage() {
                 </div>
                 <div className="flex items-center gap-2">
                   <Checkbox
-                    id="show-codbar"
-                    checked={prefs.showCodigoBarras}
-                    onCheckedChange={(v) =>
-                      handlePrefsChange({ ...prefs, showCodigoBarras: !!v })
-                    }
-                  />
-                  <Label htmlFor="show-codbar" className="text-xs cursor-pointer">
-                    Código de barras
-                  </Label>
-                </div>
-                <div className="flex items-center gap-2">
-                  <Checkbox
                     id="show-rubro"
                     checked={prefs.showRubro}
                     onCheckedChange={(v) =>
@@ -434,11 +422,6 @@ function ListaPrecios({
             <table className="w-full text-sm">
               <thead className="bg-muted/50 border-b">
                 <tr>
-                  {prefs.showCodigoBarras && (
-                    <th className="text-left px-3 py-3 font-semibold text-muted-foreground whitespace-nowrap">
-                      Cód. barras
-                    </th>
-                  )}
                   <th className="text-left px-3 py-3 font-semibold text-muted-foreground">Código</th>
                   <th className="text-left px-3 py-3 font-semibold text-muted-foreground">Descripción</th>
                   <th className="text-right px-3 py-3 font-semibold text-muted-foreground whitespace-nowrap">
@@ -465,11 +448,6 @@ function ListaPrecios({
                       key={p.id}
                       className={`hover:bg-muted/20 transition-colors ${p.habilitado ? "bg-teal-50/30 dark:bg-teal-950/10" : ""}`}
                     >
-                      {prefs.showCodigoBarras && (
-                        <td className="px-3 py-2.5 font-mono text-xs text-muted-foreground whitespace-nowrap">
-                          {p.codigoBarras || "—"}
-                        </td>
-                      )}
                       <td className="px-3 py-2.5 font-mono text-xs text-muted-foreground">
                         {p.codigo}
                       </td>
@@ -709,7 +687,7 @@ function EditarProductoModal({
             Editar producto
           </DialogTitle>
           <DialogDescription className="font-mono text-xs">
-            {producto.codigo} {producto.codigoBarras ? `· ${producto.codigoBarras}` : ""}
+            {producto.codigo}
           </DialogDescription>
         </DialogHeader>
 
