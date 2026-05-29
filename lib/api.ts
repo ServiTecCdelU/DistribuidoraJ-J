@@ -57,6 +57,7 @@ import {
   getOrders,
   getOrdersPaginated,
   getOrdersByTransportista,
+  getOrdersBySeller,
   updateOrderStatus,
   completeOrder,
   createOrder,
@@ -257,6 +258,9 @@ export const ordersApi = {
   },
   async getByTransportista(transportistaId: string): Promise<Order[]> {
     return getOrdersByTransportista(transportistaId)
+  },
+  async getBySeller(sellerId: string): Promise<Order[]> {
+    return getOrdersBySeller(sellerId)
   },
   async updateStatus(id: string, status: OrderStatus): Promise<Order> {
     return updateOrderStatus(id, status)

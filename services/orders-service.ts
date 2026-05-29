@@ -50,6 +50,16 @@ export const getOrdersByTransportista = async (transportistaId: string): Promise
   return (data ?? []).map(mapOrder)
 }
 
+export const getOrdersBySeller = async (sellerId: string): Promise<Order[]> => {
+  const { data } = await supabase
+    .from('pedidos')
+    .select('*')
+    .eq('seller_id', sellerId)
+    .order('created_at', { ascending: false })
+
+  return (data ?? []).map(mapOrder)
+}
+
 export const updateOrderStatus = async (id: string, status: OrderStatus): Promise<Order> => {
   const { data } = await supabase
     .from('pedidos')
