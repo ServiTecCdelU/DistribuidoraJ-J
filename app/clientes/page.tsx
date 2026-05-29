@@ -48,6 +48,11 @@ import {
   StickyNote,
   X,
   Loader2,
+  AlertTriangle,
+  Ban,
+  CheckCircle2,
+  User,
+  Wallet,
 } from 'lucide-react'
 import { toast } from 'sonner'
 import { getAuthToken } from '@/services/auth-service'
@@ -245,6 +250,21 @@ export default function ClientesPage() {
       icon: TrendingDown,
       label: 'Deuda alta' 
     }
+  }
+
+  // Estado de cuenta del cliente: combina clasificación de deuda y saldo
+  const getAccountStatus = (client: Client) => {
+    const balance = client.currentBalance || 0
+    if (client.debtClassification === 'incobrable') {
+      return { label: 'Incobrable', icon: Ban, className: 'bg-red-200 text-red-900 dark:bg-red-900/40 dark:text-red-300 border border-red-300 dark:border-red-800' }
+    }
+    if (client.debtClassification === 'moroso') {
+      return { label: 'Moroso', icon: AlertTriangle, className: 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400 border border-red-200 dark:border-red-800' }
+    }
+    if (balance > 0) {
+      return { label: 'Con deuda', icon: TrendingUp, className: 'bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400 border border-amber-200 dark:border-amber-800' }
+    }
+    return { label: 'Al día', icon: CheckCircle2, className: 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-800' }
   }
 
   // Stats
@@ -637,12 +657,28 @@ export default function ClientesPage() {
           
           {selectedClient && (
             <div className="space-y-4 pt-2">
-              {/* Category Badge */}
-              <div>
+              {/* Badges: categoría, estado de cuenta y cuenta corriente */}
+              <div className="flex flex-wrap gap-2">
                 <span className={`inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium ${getCategoryColor(selectedClient.taxCategory)}`}>
                   <Building2 className="h-3 w-3 mr-1" />
                   {formatTaxCategory(selectedClient.taxCategory)}
                 </span>
+                {(() => {
+                  const st = getAccountStatus(selectedClient)
+                  const StIcon = st.icon
+                  return (
+                    <span className={`inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium ${st.className}`}>
+                      <StIcon className="h-3 w-3 mr-1" />
+                      {st.label}
+                    </span>
+                  )
+                })()}
+                {(selectedClient.creditLimit || 0) > 0 && (
+                  <span className="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400 border border-blue-200 dark:border-blue-800">
+                    <Wallet className="h-3 w-3 mr-1" />
+                    En cuenta corriente
+                  </span>
+                )}
               </div>
 
               {/* Contact Info */}
@@ -709,9 +745,24 @@ export default function ClientesPage() {
                         />
                       </div>
                     )}
+                    {(selectedClient.currentBalanceMayorista || 0) > 0 && (
+                      <div className="flex items-center justify-between mt-3 pt-3 border-t border-border/50">
+                        <p className="text-xs text-muted-foreground">Saldo mayorista</p>
+                        <p className="font-semibold text-foreground">{formatCurrency(selectedClient.currentBalanceMayorista || 0)}</p>
+                      </div>
+                    )}
                   </div>
                 )
               })()}
+
+              {/* Vendedor asignado */}
+              {selectedClient.sellerName && (
+                <div className="flex items-center gap-3 text-sm p-2 rounded-lg bg-muted/40">
+                  <User className="h-4 w-4 text-muted-foreground shrink-0" />
+                  <span className="text-muted-foreground">Vendedor:</span>
+                  <span className="font-medium text-foreground">{selectedClient.sellerName}</span>
+                </div>
+              )}
 
               {/* Private Notes */}
               {selectedClient.notes && (
