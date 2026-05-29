@@ -140,7 +140,7 @@ export default function MisPedidosPage() {
             </CardContent>
           </Card>
         ) : (
-          <div className="space-y-3">
+          <div className="divide-y rounded-2xl border overflow-hidden">
             {filteredOrders.map((order) => {
               const cfg = statusConfig[order.status];
               const Icon = cfg?.icon;
@@ -148,45 +148,47 @@ export default function MisPedidosPage() {
               const total = orderTotal(order);
               const itemCount = order.items.reduce((a, it) => a + (it.quantity || 0), 0);
               return (
-                <Card key={order.id} className="overflow-hidden">
+                <div key={order.id}>
                   <button
                     onClick={() => toggleExpand(order.id)}
-                    className="flex w-full items-center gap-3 p-4 text-left hover:bg-muted/30"
+                    className="flex w-full items-center gap-2 px-3 py-2 text-left hover:bg-muted/30"
                   >
+                    <span className={`h-2 w-2 shrink-0 rounded-full ${cfg?.dotColor}`} title={cfg?.label} />
+                    <span className="min-w-0 flex-1 truncate text-sm font-medium">
+                      {order.clientName || "Sin cliente"}
+                    </span>
+                    <span className="hidden shrink-0 text-xs text-muted-foreground sm:inline">
+                      {order.items.length} prod · {itemCount} u.
+                    </span>
+                    <span className="hidden shrink-0 text-xs text-muted-foreground sm:inline">
+                      {orderDateTime(order.createdAt)}
+                    </span>
+                    <span className={`shrink-0 text-xs font-medium ${cfg?.color}`}>{cfg?.label}</span>
+                    <span className="w-24 shrink-0 text-right text-sm font-bold text-teal-700 tabular-nums">
+                      {formatCurrency(total)}
+                    </span>
                     {isOpen ? (
                       <ChevronDown className="h-4 w-4 shrink-0 text-muted-foreground" />
                     ) : (
                       <ChevronRight className="h-4 w-4 shrink-0 text-muted-foreground" />
                     )}
-                    <div className="min-w-0 flex-1">
-                      <div className="flex items-center gap-2">
-                        <span className="truncate font-semibold">{order.clientName || "Sin cliente"}</span>
-                        <span
-                          className={`inline-flex shrink-0 items-center gap-1 rounded-full border px-2 py-0.5 text-xs font-medium ${cfg?.bgColor} ${cfg?.color} ${cfg?.borderColor}`}
-                        >
-                          {Icon ? <Icon className="h-3 w-3" /> : null}
-                          {cfg?.label}
-                        </span>
-                      </div>
-                      <div className="mt-0.5 flex items-center gap-3 text-xs text-muted-foreground">
-                        <span>{orderDateTime(order.createdAt)}</span>
-                        <span>·</span>
-                        <span>{order.items.length} productos ({itemCount} u.)</span>
-                      </div>
-                    </div>
-                    <div className="shrink-0 text-right">
-                      <div className="font-bold text-teal-700">{formatCurrency(total)}</div>
-                    </div>
                   </button>
 
                   {isOpen && (
                     <div className="border-t bg-muted/20 px-4 py-3">
-                      {order.address && order.address !== "Retiro en local" && (
-                        <div className="mb-2 flex items-center gap-1.5 text-xs text-muted-foreground">
-                          <MapPin className="h-3.5 w-3.5" />
-                          <span>{order.address}</span>
-                        </div>
-                      )}
+                      <div className="mb-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground">
+                        <span className="inline-flex items-center gap-1">
+                          {Icon ? <Icon className="h-3.5 w-3.5" /> : null}
+                          {cfg?.label}
+                        </span>
+                        <span>{orderDateTime(order.createdAt)}</span>
+                        {order.address && order.address !== "Retiro en local" && (
+                          <span className="inline-flex items-center gap-1">
+                            <MapPin className="h-3.5 w-3.5" />
+                            {order.address}
+                          </span>
+                        )}
+                      </div>
                       <div className="space-y-1.5">
                         {order.items.map((it, idx) => {
                           const base = (it.quantity || 0) * (it.price || 0);
@@ -210,7 +212,7 @@ export default function MisPedidosPage() {
                       </div>
                     </div>
                   )}
-                </Card>
+                </div>
               );
             })}
           </div>
