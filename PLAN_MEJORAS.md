@@ -8,13 +8,58 @@
 
 ## 1. SEGURIDAD (crítico — hacer primero)
 
-### 1.1 Verificar y blindar RLS en Supabase
-- [ ] Auditar que TODAS las tablas tengan Row Level Security (RLS) activado con políticas por rol.
-- [ ] Confirmar que la `anon key` no permite leer/escribir datos sensibles sin política.
+### 1.1 Verificar y blindar RLS en Supabase ⚠️ APLICAR EL LUNES 2026-06-01
+- [ ] **CONFIRMADO 2026-05-29: RLS está DESHABILITADO en todas las tablas.** Riesgo crítico abierto en producción.
+- [ ] Aplicar RLS con políticas por rol (ver plan de ejecución abajo).
+- [ ] Testear login admin + seller inmediatamente después. Tener rollback a mano.
 
-**Por qué:** Todos los `services/*.ts` consultan Supabase desde el navegador con la `NEXT_PUBLIC_SUPABASE_ANON_KEY`, que es pública y visible en el bundle del cliente. La seguridad de los datos depende 100% de las políticas RLS. Si RLS está desactivado o es permisivo, cualquiera con esa key (la tiene cualquier visitante) puede leer/modificar `ventas`, `clientes`, `caja`, `comisiones`, etc. directamente contra la API de Supabase, sin pasar por la app.
+**Por qué:** Todos los `services/*.ts` consultan Supabase desde el navegador con la `NEXT_PUBLIC_SUPABASE_ANON_KEY`, que es pública y visible en el bundle del cliente. Con RLS deshabilitado, cualquiera que abra devtools, copie la anon key y pegue al endpoint REST de Supabase puede hacer `select * from clientes / ventas / caja / comisiones` y también modificar/borrar datos, sin pasar por la app ni loguearse.
 
 **En qué afecta:** Evita fuga total de datos del negocio (clientes, deudas, facturación, caja) y manipulación de stock/ventas. Es el riesgo más grave del proyecto.
+
+#### Contexto relevado (para ejecutar seguro)
+- Solo `admin` y `seller` entran a la app — `app/page.tsx` manda cualquier otro rol a `/login`. El rol `customer` no se usa en el código.
+- La tienda es 100% pública vía `/api/public/*` (service_role en el server) → no usa la anon key.
+- Las rutas API usan `supabaseAdmin` (service_role) → **RLS no las afecta**, siguen funcionando.
+- El cliente (admin/seller) lee/escribe con la anon key + su JWT de sesión → en políticas se puede usar `auth.uid()`.
+- **Punto delicado:** el login (`services/users-service.ts` → `ensureUserProfile`/`getUserProfile`) escribe/lee `usuarios` y `vendedores` con la anon key durante el bootstrap (primer admin, vinculación de seller). Si RLS lo bloquea mal, **se rompe el login para todos**.
+
+#### Decisión pendiente (elegir el lunes)
+- **Opción A (robusta):** mover `getUserProfile`/`ensureUserProfile` a una ruta API con service_role (el cliente deja de escribir `usuarios` con anon key). Luego RLS con `is_staff()` queda limpio. Más trabajo, menor riesgo de agujeros.
+- **Opción B (rápida):** activar RLS con `is_staff()` y políticas permisivas en `usuarios`/`vendedores` para no tocar el código del login. Más veloz, cierra el agujero anónimo, pero `usuarios` queda algo más laxa (auto-provisionamiento posible).
+
+#### SQL base propuesto (borrador — revisar antes de correr)
+```sql
+-- 1) Función helper: ¿el usuario actual es staff activo?
+create or replace function public.is_staff()
+returns boolean language sql security definer stable as $$
+  select exists (
+    select 1 from public.usuarios u
+    where (u.id = auth.uid()::text or u.auth_uid = auth.uid()::text)
+      and u.role in ('admin','seller')
+      and coalesce(u.is_active, true) = true
+  );
+$$;
+
+-- 2) Por cada tabla de negocio (ventas, clientes, productos, vendedores,
+--    pedidos, comisiones, caja, auditoria, listas_precios, mayorista_productos,
+--    stock_movimientos, transacciones, pedidos_mayorista, configuracion):
+alter table public.<tabla> enable row level security;
+create policy staff_all on public.<tabla>
+  for all to authenticated
+  using (public.is_staff()) with check (public.is_staff());
+
+-- 3) usuarios: requiere política especial para el bootstrap de login
+--    (definir según Opción A o B antes de correr).
+
+-- ROLLBACK de emergencia (si se rompe el login / la app):
+-- alter table public.<tabla> disable row level security;
+```
+
+**Notas:**
+- `usuarios.id`/`auth_uid` son TEXT; `auth.uid()` es UUID → castear a `::text`.
+- service_role (rutas API y tienda pública) ignora RLS, no se rompe.
+- Aplicar tabla por tabla y probar la app después de cada bloque.
 
 ### 1.2 Validación de entrada en API routes (zod)
 - [ ] Agregar validación con `zod` (ya está en deps) en `app/api/ventas/emitir`, `app/api/facturacion/*`, `app/api/public/pedidos`, `app/api/import-productos`, `app/api/remitos`.
