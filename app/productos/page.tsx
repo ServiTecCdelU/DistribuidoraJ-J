@@ -232,9 +232,10 @@ export default function ProductosPage() {
   };
 
   // --- PDF: Exportar lista de precios ---
+  // Precio por unidad: el price guardado es el del bulto
   const precioMostrar = (p: Product): number => {
-    if (p.unidadesPorBulto && p.seDivideEn && p.unidadesPorBulto > 0) {
-      return Math.round((p.price * p.seDivideEn / p.unidadesPorBulto) * 100) / 100;
+    if (p.unidadesPorBulto && p.unidadesPorBulto > 0) {
+      return Math.round((p.price / p.unidadesPorBulto) * 100) / 100;
     }
     return p.price;
   };
@@ -303,8 +304,7 @@ export default function ProductosPage() {
         const items = grupos.get(cat)!;
         body += `<tr class="cat"><td colspan="3">${esc(cat)} <span class="cat-count">(${items.length})</span></td></tr>`;
         for (const p of items) {
-          const divide = !!(p.unidadesPorBulto && p.seDivideEn && p.unidadesPorBulto > 0);
-          body += `<tr><td class="cod">${esc(p.codigo || p.description || "")}</td><td class="nom">${esc(p.name)}</td><td class="precio">${fmt(precioMostrar(p))}${divide ? '<span class="unit"> /lote</span>' : ''}</td></tr>`;
+          body += `<tr><td class="cod">${esc(p.codigo || p.description || "")}</td><td class="nom">${esc(p.name)}</td><td class="precio">${fmt(precioMostrar(p))}<span class="unit"> /u</span></td></tr>`;
         }
       }
 
@@ -331,7 +331,7 @@ tr.cat td{border:none}
 @media print{body{padding:14px}tr.cat{page-break-after:avoid}tr{page-break-inside:avoid}}
 </style></head><body>
 <div class="header"><div><h1>Distribuidora J&J</h1><div class="sub">Lista de Precios</div></div><div class="meta"><div>${fecha}</div><div>${lista.length} productos</div></div></div>
-<div class="legend">Precios de venta vigentes. Productos divisibles se muestran por lote.</div>
+<div class="legend">Precios de venta vigentes por unidad.</div>
 <table><thead><tr><th>Código</th><th>Producto</th><th class="right">Precio</th></tr></thead><tbody>${body}</tbody></table>
 <div class="footer">Generado el ${fecha} · Distribuidora J&J</div>
 </body></html>`;
