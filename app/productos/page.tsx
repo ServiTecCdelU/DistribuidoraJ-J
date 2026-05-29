@@ -232,13 +232,8 @@ export default function ProductosPage() {
   };
 
   // --- PDF: Exportar lista de precios ---
-  // Precio por unidad: el price guardado es el del bulto
-  const precioMostrar = (p: Product): number => {
-    if (p.unidadesPorBulto && p.unidadesPorBulto > 0) {
-      return Math.round((p.price / p.unidadesPorBulto) * 100) / 100;
-    }
-    return p.price;
-  };
+  // El price guardado ya es el precio por unidad
+  const precioMostrar = (p: Product): number => p.price;
 
   const printHtml = (html: string) => {
     const iframe = document.createElement("iframe");
