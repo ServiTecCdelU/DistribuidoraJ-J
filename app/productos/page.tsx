@@ -777,20 +777,29 @@ tr.cat td{border:none}
   const handleSave = async (productData: Omit<Product, "id" | "createdAt">, stockAdjustment?: StockAdjustment) => {
     try {
       if (editingProduct) {
+        const isMayorista = editingProduct.id.startsWith("prod_");
+
         // Detectar cambio de stock
         if (productData.stock !== editingProduct.stock) {
           const change = productData.stock - editingProduct.stock;
           const reason = stockAdjustment?.reason || "Edición desde modal";
           if (change > 0) {
             logManualAdd(editingProduct, change, undefined, reason);
-            registrarEnSupabase(editingProduct.id, 'apertura_bulto', change, editingProduct.stock, productData.stock, reason);
           } else if (change < 0) {
             logManualRemove(editingProduct, Math.abs(change), undefined, reason);
-            registrarEnSupabase(editingProduct.id, 'ajuste', change, editingProduct.stock, productData.stock, reason);
+          }
+          // En BD el historial del mayorista lo registra registrarMovimiento; acá solo el resto
+          if (!isMayorista) {
+            registrarEnSupabase(
+              editingProduct.id,
+              change > 0 ? 'apertura_bulto' : 'ajuste',
+              change,
+              editingProduct.stock,
+              productData.stock,
+              reason
+            );
           }
         }
-
-        const isMayorista = editingProduct.id.startsWith("prod_");
 
         // Para mayorista con ajuste, no pasar stock a productsApi.update — registrarMovimiento lo maneja
         const updateData = (isMayorista && stockAdjustment && stockAdjustment.quantity > 0)

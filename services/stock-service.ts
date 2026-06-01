@@ -34,19 +34,35 @@ export const registrarMovimiento = async (params: {
 }): Promise<void> => {
   const { productoId, tipo, cantidad, referencia } = params
 
-  // Leer stock actual
-  const { data: prod } = await supabase
-    .from('mayorista_productos')
-    .select('stock_local')
-    .eq('id', productoId)
-    .single()
+  // Aceptar tanto "mp_XXXX" como "prod_mp_XXXX" y normalizar ambos IDs.
+  const prodId = productoId.startsWith('prod_') ? productoId : `prod_${productoId}`
+  const mpId = productoId.startsWith('prod_') ? productoId.slice('prod_'.length) : productoId
 
-  const stockAnterior = prod?.stock_local ?? 0
+  // Fuente de verdad = productos.stock (lo que ve la UI y el carrito).
+  // Se cae a stock_local solo si el producto no existe en `productos`.
+  const { data: prod } = await supabase
+    .from('productos')
+    .select('stock')
+    .eq('id', prodId)
+    .maybeSingle()
+
+  let stockAnterior: number
+  if (prod && prod.stock != null) {
+    stockAnterior = Number(prod.stock)
+  } else {
+    const { data: mp } = await supabase
+      .from('mayorista_productos')
+      .select('stock_local')
+      .eq('id', mpId)
+      .maybeSingle()
+    stockAnterior = Number(mp?.stock_local ?? 0)
+  }
+
   const stockPosterior = stockAnterior + cantidad
 
   // Registrar movimiento
   await supabase.from('stock_movimientos').insert({
-    mayorista_producto_id: productoId,
+    mayorista_producto_id: mpId,
     tipo,
     cantidad,
     stock_anterior: stockAnterior,
@@ -54,14 +70,11 @@ export const registrarMovimiento = async (params: {
     motivo: referencia ?? null,
   })
 
-  // Actualizar stock_local en mayorista_productos
+  // Mantener ambas tablas sincronizadas con el mismo valor
   await supabase
     .from('mayorista_productos')
     .update({ stock_local: stockPosterior })
-    .eq('id', productoId)
-
-  // Sincronizar stock en productos (prod_mp_XXXX) para que el carrito lo refleje
-  const prodId = productoId.startsWith('mp_') ? `prod_${productoId}` : productoId
+    .eq('id', mpId)
   await supabase
     .from('productos')
     .update({ stock: stockPosterior })
