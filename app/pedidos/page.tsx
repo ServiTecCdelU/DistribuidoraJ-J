@@ -9,7 +9,7 @@ import { DataTableSkeleton } from "@/components/ui/data-table-skeleton";
 import { ClientModal } from "@/components/clientes/client-modal";
 import { ordersApi, salesApi, clientsApi, sellersApi, productsApi } from "@/lib/api";
 import type { Order, OrderStatus, Client, Seller } from "@/lib/types";
-import { Package, Filter, Loader2, ClipboardList, FileSpreadsheet, Eye, ArrowRightCircle, Ban, TrendingUp } from "lucide-react";
+import { Package, Filter, Loader2, ClipboardList, FileSpreadsheet, Eye, ArrowRightCircle, Ban, TrendingUp, ChevronDown, ChevronRight } from "lucide-react";
 import { toast } from "sonner";
 import { useAuth } from "@/hooks/use-auth";
 import { useRouter } from "next/navigation";
@@ -21,7 +21,7 @@ import { PaymentModal, type ItemAdjustment } from "@/components/pedidos/payment-
 import { SuccessModal } from "@/components/pedidos/success-modal";
 import { StockCheckModal, type StockCheckItem } from "@/components/pedidos/stock-check-modal";
 import { statusConfig } from "@/lib/order-constants";
-import { formatCurrency as formatPrice, formatDate } from "@/lib/utils/format";
+import { formatCurrency as formatPrice } from "@/lib/utils/format";
 
 export const generateOrderNumber = (date: Date, index: number) => {
   const d = new Date(date);
@@ -89,6 +89,17 @@ export default function PedidosPage() {
 
   const toggleHeldClient = useCallback((clientName: string) => {
     setHeldClients(prev => {
+      const next = new Set(prev);
+      if (next.has(clientName)) next.delete(clientName); else next.add(clientName);
+      return next;
+    });
+  }, []);
+
+  // Selección de clientes para acciones en lote
+  const [selectedClients, setSelectedClients] = useState<Set<string>>(new Set());
+
+  const toggleSelectedClient = useCallback((clientName: string) => {
+    setSelectedClients(prev => {
       const next = new Set(prev);
       if (next.has(clientName)) next.delete(clientName); else next.add(clientName);
       return next;
@@ -1028,6 +1039,39 @@ export default function PedidosPage() {
     return sortedClients.map((client) => ({ client, orders: groups[client] }));
   }, [filteredOrders]);
 
+  // Agrupar los grupos de cliente por día del pedido (para secciones colapsables)
+  const ordersGroupedByDate = useMemo(() => {
+    const dayLabelFmt = new Intl.DateTimeFormat("es-AR", { weekday: "long", day: "numeric", month: "long" });
+    const dayMap = new Map<string, { key: string; label: string; time: number; groups: { client: string; orders: Order[] }[] }>();
+    for (const g of ordersGroupedByClient) {
+      const o = g.orders[0];
+      const d = new Date(o?.createdAt as any);
+      const valid = !isNaN(d.getTime());
+      const key = valid
+        ? `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`
+        : "sin-fecha";
+      if (!dayMap.has(key)) {
+        dayMap.set(key, {
+          key,
+          label: valid ? dayLabelFmt.format(d) : "Sin fecha",
+          time: valid ? new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime() : Number.MAX_SAFE_INTEGER,
+          groups: [],
+        });
+      }
+      dayMap.get(key)!.groups.push(g);
+    }
+    return Array.from(dayMap.values()).sort((a, b) => a.time - b.time);
+  }, [ordersGroupedByClient]);
+
+  const [expandedDays, setExpandedDays] = useState<Set<string>>(new Set());
+  const toggleDay = useCallback((key: string) => {
+    setExpandedDays(prev => {
+      const next = new Set(prev);
+      if (next.has(key)) next.delete(key); else next.add(key);
+      return next;
+    });
+  }, []);
+
   const cargoList = useMemo(() => {
     const productMap = new Map<string, { name: string; quantity: number }>();
     filteredOrders.forEach((order) => {
@@ -1138,6 +1182,28 @@ export default function PedidosPage() {
     }
   }, [orders, heldClients, loadData]);
 
+  const handleMoveSelected = useCallback(async (from: OrderStatus, to: OrderStatus) => {
+    const toMove = orders.filter(
+      (o) => o.status === from && selectedClients.has(o.clientName || "Sin cliente")
+    );
+    if (toMove.length === 0) {
+      toast.info("No hay pedidos seleccionados para mover");
+      return;
+    }
+    setMovingAll(true);
+    try {
+      await Promise.all(toMove.map((o) => ordersApi.updateStatus(o.id, to)));
+      await loadData();
+      const label = to === "preparation" ? "preparación" : to === "delivery" ? "reparto" : to;
+      toast.success(`${toMove.length} pedido(s) pasados a ${label}`);
+      setSelectedClients(new Set());
+    } catch {
+      toast.error("Error al mover pedidos");
+    } finally {
+      setMovingAll(false);
+    }
+  }, [orders, selectedClients, loadData]);
+
   const printHtml = useCallback((html: string) => {
     const iframe = document.createElement("iframe");
     iframe.style.cssText = "position:fixed;top:0;left:0;width:0;height:0;border:0;opacity:0;";
@@ -1243,6 +1309,47 @@ th.center,td.center{text-align:center}
     );
   }
 
+  // Selección en lote: transición según el estado filtrado
+  const selMove = filterStatus === "preparation"
+    ? { from: "preparation" as OrderStatus, to: "delivery" as OrderStatus, label: "reparto" }
+    : { from: "pending" as OrderStatus, to: "preparation" as OrderStatus, label: "preparación" };
+
+  const toggleDaySelection = (dayGroups: { client: string }[]) => {
+    const clientsOfDay = dayGroups.map((g) => g.client);
+    const allSel = clientsOfDay.every((c) => selectedClients.has(c));
+    setSelectedClients((prev) => {
+      const next = new Set(prev);
+      if (allSel) clientsOfDay.forEach((c) => next.delete(c));
+      else clientsOfDay.forEach((c) => next.add(c));
+      return next;
+    });
+  };
+
+  // Calcula los datos derivados de un grupo de cliente (para fila desktop/mobile)
+  const computeRow = (clientOrders: Order[]) => {
+    const itemMap = new Map<string, Order["items"][0]>();
+    clientOrders.forEach((order) => {
+      order.items.forEach((item) => {
+        const key = item.productId || item.name;
+        const existing = itemMap.get(key);
+        if (existing) itemMap.set(key, { ...existing, quantity: existing.quantity + item.quantity });
+        else itemMap.set(key, { ...item });
+      });
+    });
+    const mergedItems = Array.from(itemMap.values());
+    const firstOrder = clientOrders[0];
+    const displayOrder = clientOrders.find((o) => o.status !== "completed") ?? firstOrder;
+    const config = statusConfig[displayOrder.status] || {
+      label: displayOrder.status, color: "text-gray-700", dotColor: "bg-gray-500", bgColor: "bg-gray-50", borderColor: "border-gray-200",
+    };
+    const mergedOrder: Order = { ...firstOrder, items: mergedItems };
+    const onView = () => { setDetailOrder(mergedOrder); setActiveModal("detail"); };
+    const clientData = clients.find((c) => c.id === firstOrder.clientId);
+    const deuda = clientData?.currentBalance || 0;
+    const clasificacion = clientData?.debtClassification;
+    return { mergedItems, firstOrder, displayOrder, config, onView, deuda, clasificacion };
+  };
+
   return (
     <MainLayout allowedRoles={['admin', 'seller']} title="Pedidos" description="Seguimiento de pedidos y entregas">
       <div className="space-y-4">
@@ -1312,7 +1419,18 @@ th.center,td.center{text-align:center}
             <span className="hidden sm:inline">Descargar Pedido</span>
           </Button>
         )}
-        {filterStatus === "pending" && filteredOrders.length > 0 && (
+        {selectedClients.size > 0 && (
+          <Button
+            size="sm"
+            onClick={() => handleMoveSelected(selMove.from, selMove.to)}
+            disabled={movingAll}
+            className="gap-2 bg-teal-600 hover:bg-teal-700 text-white"
+          >
+            {movingAll ? <Loader2 className="h-4 w-4 animate-spin" /> : <ArrowRightCircle className="h-4 w-4" />}
+            <span>Pasar {selectedClients.size} a {selMove.label}</span>
+          </Button>
+        )}
+        {filterStatus === "pending" && filteredOrders.length > 0 && selectedClients.size === 0 && (
           <Button
             variant="outline"
             size="sm"
@@ -1324,7 +1442,7 @@ th.center,td.center{text-align:center}
             <span className="hidden sm:inline">Todos a preparación</span>
           </Button>
         )}
-        {filterStatus === "preparation" && filteredOrders.length > 0 && (
+        {filterStatus === "preparation" && filteredOrders.length > 0 && selectedClients.size === 0 && (
           <Button
             variant="outline"
             size="sm"
@@ -1354,199 +1472,195 @@ th.center,td.center{text-align:center}
           </CardContent>
         </Card>
       ) : (
-        <>
-          {/* Desktop: tabla única */}
-          <div className="hidden lg:block border rounded-2xl overflow-hidden shadow-sm">
-            <table className="w-full">
-              <thead className="bg-muted/50 border-b">
-                <tr className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
-                  <th className="px-2 py-2 text-center w-10"></th>
-                  <th className="px-4 py-2 text-left">Cliente</th>
-                  <th className="px-4 py-2 text-center w-28">Fecha</th>
-                  <th className="px-4 py-2 text-center w-24">Productos</th>
-                  <th className="px-4 py-2 text-left">Dirección</th>
-                  <th className="px-4 py-2 text-center w-32">Deuda</th>
-                  <th className="px-4 py-2 text-center w-36">Estado</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y">
-                {ordersGroupedByClient.map(({ client, orders: clientOrders }) => {
-                  const itemMap = new Map<string, Order["items"][0]>();
-                  clientOrders.forEach((order) => {
-                    order.items.forEach((item) => {
-                      const key = item.productId || item.name;
-                      const existing = itemMap.get(key);
-                      if (existing) {
-                        itemMap.set(key, { ...existing, quantity: existing.quantity + item.quantity });
-                      } else {
-                        itemMap.set(key, { ...item });
-                      }
-                    });
-                  });
-                  const mergedItems = Array.from(itemMap.values());
-                  const firstOrder = clientOrders[0];
-                  const displayOrder = clientOrders.find((o) => o.status !== "completed") ?? firstOrder;
-                  const config = statusConfig[displayOrder.status] || {
-                    label: displayOrder.status, color: "text-gray-700", dotColor: "bg-gray-500", bgColor: "bg-gray-50", borderColor: "border-gray-200",
-                  };
-                  const mergedOrder: Order = { ...firstOrder, items: mergedItems };
-                  const onView = () => { setDetailOrder(mergedOrder); setActiveModal("detail"); };
-                  const clientData = clients.find((c) => c.id === firstOrder.clientId);
-                  const deuda = clientData?.currentBalance || 0;
-                  const clasificacion = clientData?.debtClassification;
+        <div className="space-y-3">
+          {ordersGroupedByDate.map((day) => {
+            const isExpanded = expandedDays.has(day.key) || ordersGroupedByDate.length === 1;
+            const dayClients = day.groups.map((g) => g.client);
+            const daySelectedCount = dayClients.filter((c) => selectedClients.has(c)).length;
+            const dayAllSelected = dayClients.length > 0 && daySelectedCount === dayClients.length;
+            const totalPedidos = day.groups.reduce((s, g) => s + g.orders.length, 0);
 
-                  const isHeld = heldClients.has(client);
+            return (
+              <div key={day.key} className="border rounded-2xl overflow-hidden shadow-sm">
+                {/* Header del día (colapsable) */}
+                <div
+                  className="flex items-center gap-3 px-4 py-3 bg-muted/40 hover:bg-muted/60 cursor-pointer select-none"
+                  onClick={() => toggleDay(day.key)}
+                >
+                  <input
+                    type="checkbox"
+                    checked={dayAllSelected}
+                    onChange={() => toggleDaySelection(day.groups)}
+                    onClick={(e) => e.stopPropagation()}
+                    className="h-4 w-4 accent-teal-600 cursor-pointer"
+                    title="Seleccionar todo el día"
+                  />
+                  {isExpanded ? <ChevronDown className="h-4 w-4 text-muted-foreground" /> : <ChevronRight className="h-4 w-4 text-muted-foreground" />}
+                  <span className="text-sm font-semibold capitalize">{day.label}</span>
+                  <span className="text-xs text-muted-foreground">
+                    {day.groups.length} {day.groups.length === 1 ? "cliente" : "clientes"} · {totalPedidos} {totalPedidos === 1 ? "pedido" : "pedidos"}
+                  </span>
+                  {daySelectedCount > 0 && (
+                    <span className="ml-auto text-xs font-medium text-teal-600">{daySelectedCount} seleccionado(s)</span>
+                  )}
+                </div>
 
-                  return (
-                    <tr key={client} className={`transition-colors text-sm cursor-pointer ${isHeld ? "bg-red-50/60 opacity-60" : "hover:bg-muted/30"}`} onClick={onView}>
-                      <td className="px-2 py-2.5 text-center" onClick={(e) => e.stopPropagation()}>
-                        <button
-                          onClick={() => toggleHeldClient(client)}
-                          className={`p-1 rounded-full transition-colors ${isHeld ? "text-red-500 bg-red-100 hover:bg-red-200" : "text-muted-foreground/40 hover:text-red-400 hover:bg-red-50"}`}
-                          title={isHeld ? "Quitar retención" : "Retener pedido"}
-                        >
-                          <Ban className="h-4 w-4" />
-                        </button>
-                      </td>
-                      <td className="px-4 py-2.5">
-                        <p className={`text-xs font-semibold truncate ${isHeld ? "text-red-400 line-through" : "text-foreground"}`}>{client}</p>
-                        {clientOrders.length > 1 && (
-                          <p className="text-[10px] text-muted-foreground">{clientOrders.length} pedidos</p>
-                        )}
-                      </td>
-                      <td className="px-4 py-2.5 text-center">
-                        <span className="text-xs text-muted-foreground whitespace-nowrap">
-                          {formatDate(displayOrder.createdAt)}
-                        </span>
-                      </td>
-                      <td className="px-4 py-2.5 text-center">
-                        <span className="text-xs text-foreground">
-                          {mergedItems.length}
-                        </span>
-                      </td>
-                      <td className="px-4 py-2.5">
-                        <p className="text-xs text-muted-foreground truncate">
-                          {displayOrder.address && displayOrder.address !== "Retiro en local"
-                            ? displayOrder.address
-                            : <span className="italic">Retiro en local</span>}
-                        </p>
-                        {displayOrder.city && <p className="text-[10px] text-muted-foreground/70">{displayOrder.city}</p>}
-                      </td>
-                      <td className="px-4 py-2.5 text-center">
-                        {deuda > 0 ? (
-                          <div>
-                            <p className={`text-xs font-semibold ${clasificacion === "moroso" ? "text-red-600" : clasificacion === "incobrable" ? "text-red-800" : "text-amber-600"}`}>
-                              {formatPrice(deuda)}
-                            </p>
-                            {clasificacion && clasificacion !== "normal" && (
-                              <span className={`text-[10px] font-medium ${clasificacion === "moroso" ? "text-red-500" : "text-red-700"}`}>
-                                {clasificacion === "moroso" ? "Moroso" : "Incobrable"}
-                              </span>
-                            )}
+                {isExpanded && (
+                  <>
+                    {/* Desktop: tabla */}
+                    <div className="hidden lg:block border-t">
+                      <table className="w-full">
+                        <thead className="bg-muted/30 border-b">
+                          <tr className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
+                            <th className="px-2 py-2 text-center w-10"></th>
+                            <th className="px-2 py-2 text-center w-10"></th>
+                            <th className="px-4 py-2 text-left">Cliente</th>
+                            <th className="px-4 py-2 text-center w-24">Productos</th>
+                            <th className="px-4 py-2 text-left">Dirección</th>
+                            <th className="px-4 py-2 text-center w-32">Deuda</th>
+                            <th className="px-4 py-2 text-center w-36">Estado</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y">
+                          {day.groups.map(({ client, orders: clientOrders }) => {
+                            const { mergedItems, displayOrder, config, onView, deuda, clasificacion } = computeRow(clientOrders);
+                            const isHeld = heldClients.has(client);
+                            const isSelected = selectedClients.has(client);
+
+                            return (
+                              <tr key={client} className={`transition-colors text-sm cursor-pointer ${isHeld ? "bg-red-50/60 opacity-60" : isSelected ? "bg-teal-50/60" : "hover:bg-muted/30"}`} onClick={onView}>
+                                <td className="px-2 py-2.5 text-center" onClick={(e) => e.stopPropagation()}>
+                                  <input
+                                    type="checkbox"
+                                    checked={isSelected}
+                                    onChange={() => toggleSelectedClient(client)}
+                                    className="h-4 w-4 accent-teal-600 cursor-pointer align-middle"
+                                    title="Seleccionar"
+                                  />
+                                </td>
+                                <td className="px-2 py-2.5 text-center" onClick={(e) => e.stopPropagation()}>
+                                  <button
+                                    onClick={() => toggleHeldClient(client)}
+                                    className={`p-1 rounded-full transition-colors ${isHeld ? "text-red-500 bg-red-100 hover:bg-red-200" : "text-muted-foreground/40 hover:text-red-400 hover:bg-red-50"}`}
+                                    title={isHeld ? "Quitar retención" : "Retener pedido"}
+                                  >
+                                    <Ban className="h-4 w-4" />
+                                  </button>
+                                </td>
+                                <td className="px-4 py-2.5">
+                                  <p className={`text-xs font-semibold truncate ${isHeld ? "text-red-400 line-through" : "text-foreground"}`}>{client}</p>
+                                  {clientOrders.length > 1 && (
+                                    <p className="text-[10px] text-muted-foreground">{clientOrders.length} pedidos</p>
+                                  )}
+                                </td>
+                                <td className="px-4 py-2.5 text-center">
+                                  <span className="text-xs text-foreground">{mergedItems.length}</span>
+                                </td>
+                                <td className="px-4 py-2.5">
+                                  <p className="text-xs text-muted-foreground truncate">
+                                    {displayOrder.address && displayOrder.address !== "Retiro en local"
+                                      ? displayOrder.address
+                                      : <span className="italic">Retiro en local</span>}
+                                  </p>
+                                  {displayOrder.city && <p className="text-[10px] text-muted-foreground/70">{displayOrder.city}</p>}
+                                </td>
+                                <td className="px-4 py-2.5 text-center">
+                                  {deuda > 0 ? (
+                                    <div>
+                                      <p className={`text-xs font-semibold ${clasificacion === "moroso" ? "text-red-600" : clasificacion === "incobrable" ? "text-red-800" : "text-amber-600"}`}>
+                                        {formatPrice(deuda)}
+                                      </p>
+                                      {clasificacion && clasificacion !== "normal" && (
+                                        <span className={`text-[10px] font-medium ${clasificacion === "moroso" ? "text-red-500" : "text-red-700"}`}>
+                                          {clasificacion === "moroso" ? "Moroso" : "Incobrable"}
+                                        </span>
+                                      )}
+                                    </div>
+                                  ) : (
+                                    <span className="text-[10px] text-green-600">Al día</span>
+                                  )}
+                                </td>
+                                <td className="px-4 py-2.5">
+                                  <div className="flex items-center justify-center gap-2">
+                                    <div className={`inline-flex items-center gap-1.5 px-2 py-1 rounded-full text-xs font-semibold shrink-0 ${config.bgColor} border ${config.borderColor}`}>
+                                      <div className={`w-1.5 h-1.5 rounded-full ${config.dotColor}`} />
+                                      <span className={config.color}>{config.label}</span>
+                                    </div>
+                                    <Button variant="ghost" size="sm" onClick={(e) => { e.stopPropagation(); onView(); }} className="h-7 text-xs gap-1 text-primary hover:bg-primary/5">
+                                      <Eye className="h-3.5 w-3.5" />
+                                      Ver
+                                    </Button>
+                                  </div>
+                                </td>
+                              </tr>
+                            );
+                          })}
+                        </tbody>
+                      </table>
+                    </div>
+
+                    {/* Mobile: lista */}
+                    <div className="lg:hidden divide-y border-t">
+                      {day.groups.map(({ client, orders: clientOrders }) => {
+                        const { mergedItems, displayOrder, config, onView, deuda, clasificacion } = computeRow(clientOrders);
+                        const isHeld = heldClients.has(client);
+                        const isSelected = selectedClients.has(client);
+
+                        return (
+                          <div key={client} className={`grid grid-cols-[auto_auto_1fr_auto_auto] gap-2 px-3 py-2.5 cursor-pointer transition-colors items-center ${isHeld ? "bg-red-50/60 opacity-60" : isSelected ? "bg-teal-50/60" : "hover:bg-muted/20"}`} onClick={onView}>
+                            <div className="shrink-0" onClick={(e) => e.stopPropagation()}>
+                              <input
+                                type="checkbox"
+                                checked={isSelected}
+                                onChange={() => toggleSelectedClient(client)}
+                                className="h-4 w-4 accent-teal-600 cursor-pointer align-middle"
+                                title="Seleccionar"
+                              />
+                            </div>
+                            <div className="shrink-0" onClick={(e) => e.stopPropagation()}>
+                              <button
+                                onClick={() => toggleHeldClient(client)}
+                                className={`p-1 rounded-full transition-colors ${isHeld ? "text-red-500 bg-red-100" : "text-muted-foreground/40 hover:text-red-400"}`}
+                              >
+                                <Ban className="h-3.5 w-3.5" />
+                              </button>
+                            </div>
+                            <div className="min-w-0">
+                              <div className="flex items-center gap-1">
+                                <p className={`text-xs font-semibold truncate ${isHeld ? "text-red-400 line-through" : "text-foreground"}`}>{client}</p>
+                                {clientOrders.length > 1 && (
+                                  <span className="text-[10px] text-muted-foreground shrink-0">({clientOrders.length})</span>
+                                )}
+                              </div>
+                              <p className="text-[11px] text-muted-foreground">
+                                {mergedItems.length} {mergedItems.length === 1 ? "producto" : "productos"}
+                              </p>
+                            </div>
+                            <div className="shrink-0 text-center">
+                              {deuda > 0 ? (
+                                <p className={`text-[10px] font-semibold ${clasificacion === "moroso" ? "text-red-600" : clasificacion === "incobrable" ? "text-red-800" : "text-amber-600"}`}>
+                                  {formatPrice(deuda)}
+                                </p>
+                              ) : (
+                                <span className="text-[10px] text-green-600">—</span>
+                              )}
+                            </div>
+                            <div className="flex items-center shrink-0">
+                              <div className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold ${config.bgColor} border ${config.borderColor}`}>
+                                <div className={`w-1.5 h-1.5 rounded-full ${config.dotColor}`} />
+                                <span className={config.color}>{config.label}</span>
+                              </div>
+                            </div>
                           </div>
-                        ) : (
-                          <span className="text-[10px] text-green-600">Al día</span>
-                        )}
-                      </td>
-                      <td className="px-4 py-2.5">
-                        <div className="flex items-center justify-center gap-2">
-                          <div className={`inline-flex items-center gap-1.5 px-2 py-1 rounded-full text-xs font-semibold shrink-0 ${config.bgColor} border ${config.borderColor}`}>
-                            <div className={`w-1.5 h-1.5 rounded-full ${config.dotColor}`} />
-                            <span className={config.color}>{config.label}</span>
-                          </div>
-                          <Button variant="ghost" size="sm" onClick={(e) => { e.stopPropagation(); onView(); }} className="h-7 text-xs gap-1 text-primary hover:bg-primary/5">
-                            <Eye className="h-3.5 w-3.5" />
-                            Ver
-                          </Button>
-                        </div>
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
-
-          {/* Mobile: lista con header fijo */}
-          <div className="lg:hidden">
-            <div className="grid grid-cols-[auto_1fr_auto_auto] gap-2 px-3 py-1.5 text-[10px] font-semibold text-muted-foreground uppercase tracking-wider border-b">
-              <span></span>
-              <span>Cliente / Productos</span>
-              <span>Deuda</span>
-              <span>Estado</span>
-            </div>
-            <div className="divide-y">
-              {ordersGroupedByClient.map(({ client, orders: clientOrders }) => {
-                const itemMap = new Map<string, Order["items"][0]>();
-                clientOrders.forEach((order) => {
-                  order.items.forEach((item) => {
-                    const key = item.productId || item.name;
-                    const existing = itemMap.get(key);
-                    if (existing) {
-                      itemMap.set(key, { ...existing, quantity: existing.quantity + item.quantity });
-                    } else {
-                      itemMap.set(key, { ...item });
-                    }
-                  });
-                });
-                const mergedItems = Array.from(itemMap.values());
-                const firstOrder = clientOrders[0];
-                const displayOrder = clientOrders.find((o) => o.status !== "completed") ?? firstOrder;
-                const config = statusConfig[displayOrder.status] || {
-                  label: displayOrder.status, color: "text-gray-700", dotColor: "bg-gray-500", bgColor: "bg-gray-50", borderColor: "border-gray-200",
-                };
-                const mergedOrder: Order = { ...firstOrder, items: mergedItems };
-                const onView = () => { setDetailOrder(mergedOrder); setActiveModal("detail"); };
-                const clientData = clients.find((c) => c.id === firstOrder.clientId);
-                const deuda = clientData?.currentBalance || 0;
-                const clasificacion = clientData?.debtClassification;
-
-                const isHeld = heldClients.has(client);
-
-                return (
-                  <div key={client} className={`grid grid-cols-[auto_1fr_auto_auto] gap-2 px-3 py-2.5 cursor-pointer transition-colors items-center ${isHeld ? "bg-red-50/60 opacity-60" : "hover:bg-muted/20"}`} onClick={onView}>
-                    <div className="shrink-0" onClick={(e) => e.stopPropagation()}>
-                      <button
-                        onClick={() => toggleHeldClient(client)}
-                        className={`p-1 rounded-full transition-colors ${isHeld ? "text-red-500 bg-red-100" : "text-muted-foreground/40 hover:text-red-400"}`}
-                      >
-                        <Ban className="h-3.5 w-3.5" />
-                      </button>
+                        );
+                      })}
                     </div>
-                    <div className="min-w-0">
-                      <div className="flex items-center gap-1">
-                        <p className={`text-xs font-semibold truncate ${isHeld ? "text-red-400 line-through" : "text-foreground"}`}>{client}</p>
-                        {clientOrders.length > 1 && (
-                          <span className="text-[10px] text-muted-foreground shrink-0">({clientOrders.length})</span>
-                        )}
-                      </div>
-                      <p className="text-[11px] text-muted-foreground">
-                        {mergedItems.length} {mergedItems.length === 1 ? "producto" : "productos"}
-                        <span className="mx-1">·</span>
-                        {formatDate(displayOrder.createdAt)}
-                      </p>
-                    </div>
-                    <div className="shrink-0 text-center">
-                      {deuda > 0 ? (
-                        <p className={`text-[10px] font-semibold ${clasificacion === "moroso" ? "text-red-600" : clasificacion === "incobrable" ? "text-red-800" : "text-amber-600"}`}>
-                          {formatPrice(deuda)}
-                        </p>
-                      ) : (
-                        <span className="text-[10px] text-green-600">—</span>
-                      )}
-                    </div>
-                    <div className="flex items-center shrink-0">
-                      <div className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold ${config.bgColor} border ${config.borderColor}`}>
-                        <div className={`w-1.5 h-1.5 rounded-full ${config.dotColor}`} />
-                        <span className={config.color}>{config.label}</span>
-                      </div>
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          </div>
-        </>
+                  </>
+                )}
+              </div>
+            );
+          })}
+        </div>
       )}
 
 
