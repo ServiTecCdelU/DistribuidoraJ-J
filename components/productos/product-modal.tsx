@@ -264,6 +264,8 @@ export function ProductModal({
               precioBase: baseNum,
               gananciaGlobal: gananciaNum,
               precioVenta: effectiveData.price,
+              // Marca individual: evita que "aplicar % a todos" lo pise
+              gananciaIndividual: 1,
             }
           : {};
 
