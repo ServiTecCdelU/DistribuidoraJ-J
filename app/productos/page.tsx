@@ -882,6 +882,7 @@ tr.cat td{border:none}
           details: `Stock inicial: ${newProduct.stock} unidades`,
         });
       }
+      refreshCategories();
       setModalOpen(false);
     } catch (error) {
       toast.error("Error al guardar el producto");
@@ -944,9 +945,13 @@ tr.cat td{border:none}
   // Categorías reales de la BD
   const [availableCategories, setAvailableCategories] = useState<string[]>([]);
 
-  useEffect(() => {
+  const refreshCategories = useCallback(() => {
     productsApi.getCategories().then(setAvailableCategories).catch(() => {});
   }, []);
+
+  useEffect(() => {
+    refreshCategories();
+  }, [refreshCategories]);
 
   const activeFilterCount = [
     categoryFilter !== "all",

@@ -191,6 +191,14 @@ export function ProductModal({
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    // Volcar rubro/marca tipeados que no se confirmaron con OK/Enter
+    const pendingCategory = showNewCategoryInput ? newCategoryInput.trim() : "";
+    const pendingMarca = showNewMarcaInput ? newMarcaInput.trim() : "";
+    const effectiveData = {
+      ...formData,
+      category: pendingCategory || formData.category,
+      marca: pendingMarca || formData.marca,
+    };
     setLoading(true);
     try {
       const loteNum = parseInt(lote) || 0;
@@ -198,7 +206,7 @@ export function ProductModal({
       const adjustDelta = stockAdjustQty > 0
         ? (stockAdjustType === "add" ? stockAdjustQty : -stockAdjustQty)
         : 0;
-      const finalStock = isEditing ? formData.stock + adjustDelta : formData.stock;
+      const finalStock = isEditing ? effectiveData.stock + adjustDelta : effectiveData.stock;
 
       const adjustment: StockAdjustment | undefined =
         isEditing && stockAdjustQty > 0
@@ -206,9 +214,9 @@ export function ProductModal({
           : undefined;
 
       await onSave({
-        ...formData,
-        description: formData.description || "",
-        imageUrl: formData.imageUrl || "",
+        ...effectiveData,
+        description: effectiveData.description || "",
+        imageUrl: effectiveData.imageUrl || "",
         stock: finalStock,
         ...(isMayorista && loteNum > 0
           ? { unidadesPorBulto: loteNum }
@@ -233,9 +241,10 @@ export function ProductModal({
   const loteNum = parseInt(lote) || 0;
   const needsReason = stockAdjustType === "remove" && stockAdjustQty > 0 && !stockAdjustReason.trim();
   const exceedsStock = stockAdjustType === "remove" && stockAdjustQty > formData.stock;
+  const effectiveCategory = (showNewCategoryInput && newCategoryInput.trim()) || formData.category;
   const isValid = (isMayorista && isEditing
     ? formData.name.trim() && formData.price > 0
-    : formData.name.trim() && formData.category && formData.price > 0) && !needsReason && !exceedsStock;
+    : formData.name.trim() && effectiveCategory && formData.price > 0) && !needsReason && !exceedsStock;
 
   const displayImage = imagePreview || DEFAULT_IMAGE;
 
