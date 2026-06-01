@@ -31,6 +31,8 @@ interface OrdersFiltersProps {
   setFilterSeller: (value: string) => void;
   filterTransportista?: string;
   setFilterTransportista?: (value: string) => void;
+  filterDate?: string;
+  setFilterDate?: (value: string) => void;
   searchQuery: string;
   setSearchQuery: (value: string) => void;
   clients: Client[];
@@ -49,6 +51,8 @@ export function OrdersFilters({
   setFilterSeller,
   filterTransportista,
   setFilterTransportista,
+  filterDate,
+  setFilterDate,
   searchQuery,
   setSearchQuery,
   clients,
@@ -74,13 +78,15 @@ export function OrdersFilters({
     if (filterClient) count++;
     if (filterSeller) count++;
     if (filterTransportista && filterTransportista !== "all-transportistas") count++;
+    if (filterDate) count++;
     return count;
-  }, [filterClient, filterSeller, filterTransportista]);
+  }, [filterClient, filterSeller, filterTransportista, filterDate]);
 
   const handleClearFilters = () => {
     setFilterClient("");
     setFilterSeller("");
     if (setFilterTransportista) setFilterTransportista("");
+    if (setFilterDate) setFilterDate("");
   };
 
   return (
@@ -175,6 +181,28 @@ export function OrdersFilters({
             </button>
           )}
         </div>
+
+        {/* Selector de día */}
+        {setFilterDate && (
+          <div className="relative shrink-0">
+            <Input
+              type="date"
+              value={filterDate || ""}
+              onChange={(e) => setFilterDate(e.target.value)}
+              className={`h-10 w-[150px] sm:w-[160px] ${filterDate ? "border-teal-500 ring-1 ring-teal-500/30 pr-8" : ""}`}
+              title="Filtrar por día"
+            />
+            {filterDate && (
+              <button
+                onClick={() => setFilterDate("")}
+                className="absolute right-2 top-1/2 -translate-y-1/2"
+                title="Quitar filtro de día"
+              >
+                <X className="h-4 w-4 text-muted-foreground hover:text-foreground" />
+              </button>
+            )}
+          </div>
+        )}
 
         {/* Botón toggle filtros */}
         <Button

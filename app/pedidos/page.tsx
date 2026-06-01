@@ -64,6 +64,7 @@ export default function PedidosPage() {
   const [filterClient, setFilterClient] = useState<string>("");
   const [filterSeller, setFilterSeller] = useState<string>("");
   const [filterTransportista, setFilterTransportista] = useState<string>("");
+  const [filterDate, setFilterDate] = useState<string>("");
   const [searchQuery, setSearchQuery] = useState<string>("");
 
   // Modales
@@ -903,6 +904,7 @@ export default function PedidosPage() {
     setFilterClient("");
     setFilterSeller("");
     setFilterTransportista("");
+    setFilterDate("");
     setSearchQuery("");
   }, []);
 
@@ -912,6 +914,7 @@ export default function PedidosPage() {
       filterClient ||
       filterSeller ||
       filterTransportista ||
+      filterDate ||
       searchQuery
     );
   }, [
@@ -919,6 +922,7 @@ export default function PedidosPage() {
     filterClient,
     filterSeller,
     filterTransportista,
+    filterDate,
     searchQuery,
   ]);
 
@@ -963,6 +967,18 @@ export default function PedidosPage() {
       }
     }
 
+    if (filterDate) {
+      const toLocalDay = (value: unknown) => {
+        const d = new Date(value as any);
+        if (isNaN(d.getTime())) return "";
+        const y = d.getFullYear();
+        const m = String(d.getMonth() + 1).padStart(2, "0");
+        const day = String(d.getDate()).padStart(2, "0");
+        return `${y}-${m}-${day}`;
+      };
+      filtered = filtered.filter((o) => toLocalDay(o.createdAt) === filterDate);
+    }
+
     return filtered;
   }, [
     activeOrders,
@@ -972,6 +988,7 @@ export default function PedidosPage() {
     filterClient,
     filterSeller,
     filterTransportista,
+    filterDate,
   ]);
 
 
@@ -995,7 +1012,8 @@ export default function PedidosPage() {
       });
     });
 
-    // Ordenar por fecha del pedido activo (más reciente primero), "Sin cliente" último
+    // Ordenar por día del pedido (más antiguo primero): todos los del 29, luego del 30, etc.
+    // "Sin cliente" último.
     const fechaGrupo = (client: string) => {
       const o = groups[client][0]; // ya viene con el pedido activo primero
       const t = o ? new Date(o.createdAt).getTime() : 0;
@@ -1004,7 +1022,7 @@ export default function PedidosPage() {
     const sortedClients = Object.keys(groups).sort((a, b) => {
       if (a === "Sin cliente") return 1;
       if (b === "Sin cliente") return -1;
-      return fechaGrupo(b) - fechaGrupo(a);
+      return fechaGrupo(a) - fechaGrupo(b);
     });
 
     return sortedClients.map((client) => ({ client, orders: groups[client] }));
@@ -1237,6 +1255,8 @@ th.center,td.center{text-align:center}
         setFilterSeller={setFilterSeller}
         filterTransportista={filterTransportista}
         setFilterTransportista={setFilterTransportista}
+        filterDate={filterDate}
+        setFilterDate={setFilterDate}
         searchQuery={searchQuery}
         setSearchQuery={setSearchQuery}
         clients={clients}
