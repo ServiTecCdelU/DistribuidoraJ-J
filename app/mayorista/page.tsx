@@ -818,18 +818,9 @@ function HabilitarModal({
   onConfirm: (changes: Partial<MayoristaProducto>) => void;
 }) {
   const [lote, setLote] = useState(producto.unidadesPorBulto ? String(producto.unidadesPorBulto) : "");
-  const [gananciaPorc, setGananciaPorc] = useState(
-    producto.gananciaGlobal != null ? String(producto.gananciaGlobal) : "30"
-  );
   const [saving, setSaving] = useState(false);
 
   const loteNum = parseInt(lote) || 0;
-
-  const gananciaNum = parseFloat(gananciaPorc);
-  const precioVentaCalc =
-    !isNaN(gananciaNum) && gananciaNum >= 0
-      ? Math.round(producto.precioUnitarioMayorista * (1 + gananciaNum / 100) * 100) / 100
-      : producto.precioVenta;
 
   const handleConfirmar = async () => {
     if (loteNum <= 0) {
@@ -838,19 +829,11 @@ function HabilitarModal({
     }
     setSaving(true);
     try {
-      await habilitarProducto(
-        producto,
-        loteNum,
-        undefined,
-        precioVentaCalc > 0 ? precioVentaCalc : undefined,
-        !isNaN(gananciaNum) ? gananciaNum : undefined
-      );
+      await habilitarProducto(producto, loteNum);
       toast.success(`"${producto.nombre}" habilitado`);
       onConfirm({
         habilitado: true,
         unidadesPorBulto: loteNum,
-        precioVenta: precioVentaCalc > 0 ? precioVentaCalc : producto.precioVenta,
-        gananciaGlobal: !isNaN(gananciaNum) ? gananciaNum : producto.gananciaGlobal,
       });
     } catch {
       toast.error("Error al habilitar el producto");
@@ -880,33 +863,12 @@ function HabilitarModal({
         )}
 
         <div className="space-y-4">
-          {/* Precios */}
-          <div className="rounded-xl border bg-muted/20 p-3 space-y-3">
+          {/* Precio mayorista (la ganancia se aplica global desde Productos) */}
+          <div className="rounded-xl border bg-muted/20 p-3">
             <div className="flex items-center justify-between text-sm">
               <span className="text-muted-foreground">Precio mayorista:</span>
               <span className="font-semibold tabular-nums">
                 {formatCurrency(producto.precioUnitarioMayorista)}
-              </span>
-            </div>
-            <div className="flex items-center justify-between gap-3">
-              <span className="text-sm text-muted-foreground shrink-0">% Ganancia:</span>
-              <div className="flex items-center gap-1.5">
-                <Input
-                  type="number"
-                  min="0"
-                  step="0.5"
-                  placeholder="Ej: 30"
-                  value={gananciaPorc}
-                  onChange={(e) => setGananciaPorc(e.target.value)}
-                  className="rounded-lg h-8 w-24 text-right text-sm"
-                />
-                <span className="text-sm text-muted-foreground">%</span>
-              </div>
-            </div>
-            <div className="flex items-center justify-between text-sm border-t pt-2">
-              <span className="text-muted-foreground">Precio de venta:</span>
-              <span className={`font-bold tabular-nums text-base ${precioVentaCalc > 0 ? "text-teal-600" : "text-muted-foreground"}`}>
-                {precioVentaCalc > 0 ? formatCurrency(precioVentaCalc) : "—"}
               </span>
             </div>
           </div>
