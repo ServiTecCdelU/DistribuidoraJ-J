@@ -48,7 +48,7 @@ interface RemitoImportModalProps {
   open: boolean;
   onClose: () => void;
   products: Product[];
-  onConfirm: (updates: { productId: string; newStock: number; productName: string; precioLista: number }[]) => Promise<void>;
+  onConfirm: (updates: { productId: string; newStock: number; cantidad: number; productName: string; precioLista: number }[]) => Promise<void>;
 }
 
 // Parsea el texto del remito/factura del proveedor y extrae items
@@ -498,10 +498,12 @@ export function RemitoImportModal({
     try {
       const updates = toUpdate.map((item) => {
         const product = item.matchedProduct!;
-        const newStock = product.stock + item.quantity;
+        // El stock real se lee fresco en el server; acá solo informamos la cantidad recibida.
+        const newStock = Math.max(0, product.stock) + item.quantity;
         return {
           productId: product.id,
           newStock,
+          cantidad: item.quantity,
           productName: product.name,
           precioLista: item.parsedItem.precio,
         };

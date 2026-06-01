@@ -616,26 +616,33 @@ tr.cat td{border:none}
   };
 
   const handleRemitoConfirm = async (
-    updates: { productId: string; newStock: number; productName: string; precioLista: number }[],
+    updates: { productId: string; newStock: number; cantidad: number; productName: string; precioLista: number }[],
   ) => {
     for (const update of updates) {
       const product = products.find((p) => p.id === update.productId);
-      if (!product) continue;
+      const cantidad = update.cantidad ?? (update.newStock - (product?.stock ?? 0));
+      if (cantidad <= 0) continue;
 
-      await productsApi.update(update.productId, { stock: update.newStock } as any);
-
-      const change = update.newStock - product.stock;
-      logStockMovement({
-        productId: product.id,
-        productName: product.name,
-        type: "manual_add",
-        previousStock: product.stock,
-        newStock: update.newStock,
-        change,
-        reason: "Importación de remito proveedor",
-        details: `Stock actualizado via remito: ${product.stock} → ${update.newStock}`,
+      // registrarMovimiento lee el stock real de la BD (no el cacheado), suma la cantidad,
+      // sincroniza productos.stock y mayorista_productos.stock_local y nunca deja negativos.
+      const mpId = update.productId.replace(/^prod_/, "");
+      await registrarMovimiento({
+        productoId: mpId,
+        tipo: "apertura_bulto",
+        cantidad,
+        referencia: "Ingreso por remito proveedor",
       });
-      registrarEnSupabase(product.id, 'apertura_bulto', change, product.stock, update.newStock, 'Ingreso por remito proveedor');
+
+      logStockMovement({
+        productId: update.productId,
+        productName: update.productName,
+        type: "manual_add",
+        previousStock: product?.stock ?? 0,
+        newStock: update.newStock,
+        change: cantidad,
+        reason: "Importación de remito proveedor",
+        details: `Ingreso por remito: +${cantidad}`,
+      });
     }
 
     // Actualizar precio_lista en mayorista_productos

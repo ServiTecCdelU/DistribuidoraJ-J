@@ -58,7 +58,8 @@ export const registrarMovimiento = async (params: {
     stockAnterior = Number(mp?.stock_local ?? 0)
   }
 
-  const stockPosterior = stockAnterior + cantidad
+  // El stock físico nunca debe quedar negativo
+  const stockPosterior = Math.max(0, stockAnterior + cantidad)
 
   // Registrar movimiento
   await supabase.from('stock_movimientos').insert({
