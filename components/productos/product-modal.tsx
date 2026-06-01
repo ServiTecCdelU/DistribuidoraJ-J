@@ -24,7 +24,6 @@ import { Switch } from "@/components/ui/switch";
 import { Separator } from "@/components/ui/separator";
 import type { Product } from "@/lib/types";
 import { cn } from "@/lib/utils";
-import { formatCurrency } from "@/lib/utils/format";
 import { Loader2, Upload, ImageIcon, X, Plus, PackagePlus, PackageMinus } from "lucide-react";
 
 const DEFAULT_IMAGE = "/logo.png";
@@ -146,23 +145,17 @@ export function ProductModal({
       setStockAdjustReason("");
       setLote((product as any).unidadesPorBulto ? String((product as any).unidadesPorBulto) : "");
 
-      // Precio base + % ganancia (solo productos manuales, no mayorista)
-      const isMay = product.id?.startsWith("prod_");
-      if (!isMay) {
-        if (product.precioBase != null) {
-          setPrecioBase(String(product.precioBase));
-          setGanancia(product.gananciaGlobal != null ? String(product.gananciaGlobal) : "0");
-        } else if (product.gananciaGlobal != null && product.gananciaGlobal > 0 && product.price > 0) {
-          const baseDerivado = Math.round((product.price / (1 + product.gananciaGlobal / 100)) * 100) / 100;
-          setPrecioBase(String(baseDerivado));
-          setGanancia(String(product.gananciaGlobal));
-        } else if (product.price > 0) {
-          setPrecioBase(String(product.price));
-          setGanancia("0");
-        } else {
-          setPrecioBase("");
-          setGanancia("");
-        }
+      // Precio base + % a aplicar
+      if (product.precioBase != null) {
+        setPrecioBase(String(product.precioBase));
+        setGanancia(product.gananciaGlobal != null ? String(product.gananciaGlobal) : "0");
+      } else if (product.gananciaGlobal != null && product.gananciaGlobal > 0 && product.price > 0) {
+        const baseDerivado = Math.round((product.price / (1 + product.gananciaGlobal / 100)) * 100) / 100;
+        setPrecioBase(String(baseDerivado));
+        setGanancia(String(product.gananciaGlobal));
+      } else if (product.price > 0) {
+        setPrecioBase(String(product.price));
+        setGanancia("0");
       } else {
         setPrecioBase("");
         setGanancia("");
@@ -264,8 +257,9 @@ export function ProductModal({
       // Productos manuales (no mayorista): guardar precio base + % ganancia
       const baseNum = parseFloat(precioBase) || 0;
       const gananciaNum = parseFloat(ganancia) || 0;
+      const usaPrecioBase = !isMayorista || isMedicamento;
       const precioFields =
-        !isMayorista && baseNum > 0
+        usaPrecioBase && baseNum > 0
           ? {
               precioBase: baseNum,
               gananciaGlobal: gananciaNum,
@@ -303,6 +297,7 @@ export function ProductModal({
   const needsReason = stockAdjustType === "remove" && stockAdjustQty > 0 && !stockAdjustReason.trim();
   const exceedsStock = stockAdjustType === "remove" && stockAdjustQty > formData.stock;
   const effectiveCategory = (showNewCategoryInput && newCategoryInput.trim()) || formData.category;
+  const isMedicamento = (effectiveCategory || "").trim().toLowerCase().includes("medicamento");
   const isValid = (isMayorista && isEditing
     ? formData.name.trim() && formData.price > 0
     : formData.name.trim() && effectiveCategory && formData.price > 0) && !needsReason && !exceedsStock;
@@ -390,36 +385,105 @@ export function ProductModal({
                 )}
               </div>
 
-              <div className="grid grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <Label htmlFor="price-may" className="text-sm font-medium">Precio (ARS)</Label>
-                  <div className="relative">
-                    <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground font-medium">$</span>
+              {isMedicamento ? (
+                <>
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="space-y-2">
+                      <Label htmlFor="precio-base-may" className="text-sm font-medium">Precio base</Label>
+                      <div className="relative">
+                        <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground font-medium">$</span>
+                        <Input
+                          id="precio-base-may"
+                          type="number"
+                          min="0"
+                          step="0.01"
+                          value={precioBase}
+                          onChange={(e) => handleBaseChange(e.target.value)}
+                          className="pl-7 h-10"
+                          placeholder="0"
+                        />
+                      </div>
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="ganancia-may" className="text-sm font-medium">% a aplicar</Label>
+                      <div className="relative">
+                        <Input
+                          id="ganancia-may"
+                          type="number"
+                          min="0"
+                          step="0.01"
+                          value={ganancia}
+                          onChange={(e) => handleGananciaChange(e.target.value)}
+                          className="pr-7 h-10"
+                          placeholder="0"
+                        />
+                        <span className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground font-medium">%</span>
+                      </div>
+                    </div>
+                  </div>
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="space-y-2">
+                      <Label htmlFor="precio-final-may" className="text-sm font-medium">Precio final</Label>
+                      <div className="relative">
+                        <span className="absolute left-3 top-1/2 -translate-y-1/2 text-teal-600 font-medium">$</span>
+                        <Input
+                          id="precio-final-may"
+                          type="number"
+                          min="0"
+                          step="0.01"
+                          value={formData.price || ""}
+                          onChange={(e) => setFormData({ ...formData, price: Number(e.target.value) })}
+                          className="pl-7 h-11 text-base font-bold text-teal-700 border-teal-200 bg-teal-50/60 focus-visible:ring-teal-400"
+                          placeholder="0"
+                        />
+                      </div>
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="lote-may" className="text-sm font-medium">Unidades por bulto</Label>
+                      <Input
+                        id="lote-may"
+                        type="number"
+                        min="1"
+                        placeholder="Ej: 12"
+                        value={lote}
+                        onChange={(e) => setLote(e.target.value)}
+                        className="h-10"
+                      />
+                    </div>
+                  </div>
+                </>
+              ) : (
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <Label htmlFor="price-may" className="text-sm font-medium">Precio (ARS)</Label>
+                    <div className="relative">
+                      <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground font-medium">$</span>
+                      <Input
+                        id="price-may"
+                        type="number"
+                        min="0"
+                        step="0.01"
+                        value={formData.price || ""}
+                        onChange={(e) => setFormData({ ...formData, price: Number(e.target.value) })}
+                        className="pl-7 h-10"
+                        placeholder="0"
+                      />
+                    </div>
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="lote-may" className="text-sm font-medium">Unidades por bulto</Label>
                     <Input
-                      id="price-may"
+                      id="lote-may"
                       type="number"
-                      min="0"
-                      step="0.01"
-                      value={formData.price || ""}
-                      onChange={(e) => setFormData({ ...formData, price: Number(e.target.value) })}
-                      className="pl-7 h-10"
-                      placeholder="0"
+                      min="1"
+                      placeholder="Ej: 12"
+                      value={lote}
+                      onChange={(e) => setLote(e.target.value)}
+                      className="h-10"
                     />
                   </div>
                 </div>
-                <div className="space-y-2">
-                  <Label htmlFor="lote-may" className="text-sm font-medium">Unidades por bulto</Label>
-                  <Input
-                    id="lote-may"
-                    type="number"
-                    min="1"
-                    placeholder="Ej: 12"
-                    value={lote}
-                    onChange={(e) => setLote(e.target.value)}
-                    className="h-10"
-                  />
-                </div>
-              </div>
+              )}
 
               {/* Stock actual + Ajuste */}
               <div className="space-y-3">
@@ -749,7 +813,7 @@ export function ProductModal({
                   {/* Precio base (costo) */}
                   <div className="space-y-2">
                     <Label htmlFor="precio-base" className="text-xs text-muted-foreground">
-                      Precio base (costo)
+                      Precio base
                     </Label>
                     <div className="relative">
                       <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground font-medium">
@@ -771,7 +835,7 @@ export function ProductModal({
                   {/* % Ganancia */}
                   <div className="space-y-2">
                     <Label htmlFor="ganancia" className="text-xs text-muted-foreground">
-                      % Ganancia
+                      % a aplicar
                     </Label>
                     <div className="relative">
                       <Input
@@ -791,12 +855,28 @@ export function ProductModal({
                   </div>
                 </div>
 
-                {/* Precio de venta calculado */}
-                <div className="flex items-center justify-between px-4 py-3 rounded-2xl border border-teal-200 bg-teal-50/60">
-                  <span className="text-sm font-medium text-teal-700">Precio de venta</span>
-                  <span className="text-lg font-bold text-teal-700">
-                    {formatCurrency(formData.price || 0)}
-                  </span>
+                {/* Precio final (calculado, editable) */}
+                <div className="space-y-2">
+                  <Label htmlFor="precio-final" className="text-xs text-muted-foreground">
+                    Precio final
+                  </Label>
+                  <div className="relative">
+                    <span className="absolute left-3 top-1/2 -translate-y-1/2 text-teal-600 font-medium">
+                      $
+                    </span>
+                    <Input
+                      id="precio-final"
+                      type="number"
+                      min="0"
+                      step="0.01"
+                      value={formData.price || ""}
+                      onChange={(e) =>
+                        setFormData({ ...formData, price: Number(e.target.value) })
+                      }
+                      className="pl-7 h-11 text-base font-bold text-teal-700 border-teal-200 bg-teal-50/60 focus-visible:ring-teal-400"
+                      placeholder="0"
+                    />
+                  </div>
                 </div>
 
                 {/* Stock */}
