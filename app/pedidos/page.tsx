@@ -995,11 +995,16 @@ export default function PedidosPage() {
       });
     });
 
-    // Sort clients alphabetically, "Sin cliente" last
+    // Ordenar por fecha del pedido activo (más reciente primero), "Sin cliente" último
+    const fechaGrupo = (client: string) => {
+      const o = groups[client][0]; // ya viene con el pedido activo primero
+      const t = o ? new Date(o.createdAt).getTime() : 0;
+      return isNaN(t) ? 0 : t;
+    };
     const sortedClients = Object.keys(groups).sort((a, b) => {
       if (a === "Sin cliente") return 1;
       if (b === "Sin cliente") return -1;
-      return a.localeCompare(b);
+      return fechaGrupo(b) - fechaGrupo(a);
     });
 
     return sortedClients.map((client) => ({ client, orders: groups[client] }));
