@@ -8,6 +8,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
 import { AlertTriangle, CheckCircle, Package } from "lucide-react";
 
 export interface StockCheckItem {
@@ -28,6 +29,25 @@ export function StockCheckModal({ open, onClose, items, onConfirm }: StockCheckM
   const sinStock = items.filter((i) => i.stock < i.quantity);
   const conStock = items.filter((i) => i.stock >= i.quantity);
 
+  // IDs de items sin stock que el usuario marca para incluir igual (sabe que físicamente sí están)
+  const [incluirIgual, setIncluirIgual] = React.useState<Set<string>>(new Set());
+
+  React.useEffect(() => {
+    if (open) setIncluirIgual(new Set());
+  }, [open]);
+
+  const toggleIncluir = (id: string) => {
+    setIncluirIgual((prev) => {
+      const next = new Set(prev);
+      next.has(id) ? next.delete(id) : next.add(id);
+      return next;
+    });
+  };
+
+  // Se excluyen solo los sin stock que NO fueron marcados para incluir
+  const excluidos = sinStock.filter((i) => !incluirIgual.has(i.productId)).map((i) => i.productId);
+  const hayAlgoParaGenerar = conStock.length > 0 || incluirIgual.size > 0;
+
   return (
     <Dialog open={open} onOpenChange={(o) => !o && onClose()}>
       <DialogContent className="sm:max-w-md w-[calc(100vw-1rem)] max-h-[80vh] flex flex-col p-0 gap-0 overflow-hidden">
@@ -47,15 +67,34 @@ export function StockCheckModal({ open, onClose, items, onConfirm }: StockCheckM
                 Sin stock suficiente ({sinStock.length})
               </p>
               <div className="space-y-1.5">
-                {sinStock.map((item) => (
-                  <div key={item.productId} className="flex items-center justify-between px-3 py-2 bg-red-50 border border-red-200 rounded-xl text-sm">
-                    <span className="font-medium text-red-800 truncate mr-2">{item.name}</span>
-                    <span className="text-xs text-red-600 whitespace-nowrap">
-                      {item.stock}/{item.quantity}
-                    </span>
-                  </div>
-                ))}
+                {sinStock.map((item) => {
+                  const marcado = incluirIgual.has(item.productId);
+                  return (
+                    <div
+                      key={item.productId}
+                      className={`flex items-center justify-between gap-2 px-3 py-2 border rounded-xl text-sm transition-colors ${
+                        marcado ? "bg-emerald-50 border-emerald-200" : "bg-red-50 border-red-200"
+                      }`}
+                    >
+                      <label className="flex items-center gap-2 min-w-0 flex-1 cursor-pointer">
+                        <Checkbox
+                          checked={marcado}
+                          onCheckedChange={() => toggleIncluir(item.productId)}
+                        />
+                        <span className={`font-medium truncate ${marcado ? "text-emerald-800" : "text-red-800"}`}>
+                          {item.name}
+                        </span>
+                      </label>
+                      <span className={`text-xs whitespace-nowrap ${marcado ? "text-emerald-600" : "text-red-600"}`}>
+                        {item.stock}/{item.quantity}
+                      </span>
+                    </div>
+                  );
+                })}
               </div>
+              <p className="text-[11px] text-muted-foreground mt-1.5">
+                Tildá el producto si tenés stock físico aunque el sistema no lo registre, para incluirlo en el remito.
+              </p>
             </div>
           )}
 
@@ -81,12 +120,9 @@ export function StockCheckModal({ open, onClose, items, onConfirm }: StockCheckM
         </div>
 
         <div className="p-4 pt-3 border-t space-y-2 shrink-0">
-          {conStock.length > 0 ? (
-            <Button
-              className="w-full"
-              onClick={() => onConfirm(sinStock.map((i) => i.productId))}
-            >
-              Generar remito sin los faltantes
+          {hayAlgoParaGenerar ? (
+            <Button className="w-full" onClick={() => onConfirm(excluidos)}>
+              {excluidos.length > 0 ? "Generar remito sin los faltantes" : "Generar remito"}
             </Button>
           ) : (
             <p className="text-sm text-center text-red-600 font-medium">No hay productos con stock disponible</p>
