@@ -19,6 +19,7 @@ function mapRow(d: Record<string, any>): Product {
     unidadesPorBulto: d.unidades_por_bulto ?? undefined,
     seDivideEn: d.se_divide_en ? Number(d.se_divide_en) : undefined,
     precioVenta: d.precio_venta != null ? Number(d.precio_venta) : undefined,
+    precioBase: d.precio_base != null ? Number(d.precio_base) : undefined,
     gananciaGlobal: d.ganancia_global != null ? Number(d.ganancia_global) : undefined,
     gananciaIndividual: d.ganancia_individual ?? undefined,
     codigo: d.codigo ?? undefined,
@@ -195,6 +196,7 @@ export const createProduct = async (
     unidades_por_bulto: product.unidadesPorBulto ?? null,
     se_divide_en: product.seDivideEn ?? null,
     precio_venta: product.precioVenta ?? null,
+    precio_base: product.precioBase ?? null,
     ganancia_global: product.gananciaGlobal ?? null,
     ganancia_individual: product.gananciaIndividual ?? null,
   }
@@ -218,6 +220,7 @@ export const updateProduct = async (
   if (updates.unidadesPorBulto !== undefined) mapped.unidades_por_bulto = updates.unidadesPorBulto
   if (updates.seDivideEn !== undefined) mapped.se_divide_en = updates.seDivideEn
   if (updates.precioVenta !== undefined) mapped.precio_venta = updates.precioVenta
+  if (updates.precioBase !== undefined) mapped.precio_base = updates.precioBase
   if (updates.gananciaGlobal !== undefined) mapped.ganancia_global = updates.gananciaGlobal
   if (updates.gananciaIndividual !== undefined) mapped.ganancia_individual = updates.gananciaIndividual
   if ((updates as any).base !== undefined) mapped.base = (updates as any).base

@@ -28,6 +28,7 @@ export interface Product {
   unidadesPorBulto?: number;   // Lote total (unidades que entran)
   seDivideEn?: number;         // Unidades por porción
   precioVenta?: number;        // Precio calculado con ganancia
+  precioBase?: number;         // Costo/precio base del proveedor (productos manuales)
   gananciaGlobal?: number;     // % de ganancia aplicado
   gananciaIndividual?: boolean; // true = precio seteado individualmente
   codigo?: string;

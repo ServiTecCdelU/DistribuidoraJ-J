@@ -24,6 +24,7 @@ import { Switch } from "@/components/ui/switch";
 import { Separator } from "@/components/ui/separator";
 import type { Product } from "@/lib/types";
 import { cn } from "@/lib/utils";
+import { formatCurrency } from "@/lib/utils/format";
 import { Loader2, Upload, ImageIcon, X, Plus, PackagePlus, PackageMinus } from "lucide-react";
 
 const DEFAULT_IMAGE = "/logo.png";
@@ -85,6 +86,10 @@ export function ProductModal({
   // Lote (solo para productos de mayorista: id empieza con "prod_")
   const [lote, setLote] = useState<string>("");
 
+  // Precio base (costo) + % ganancia (productos manuales, no mayorista)
+  const [precioBase, setPrecioBase] = useState<string>("");
+  const [ganancia, setGanancia] = useState<string>("");
+
   const [formData, setFormData] = useState({
     name: "",
     description: "",
@@ -118,6 +123,8 @@ export function ProductModal({
       setStockAdjustQty(0);
       setStockAdjustReason("");
       setLote("");
+      setPrecioBase("");
+      setGanancia("");
     }
   }, [open]);
 
@@ -138,6 +145,28 @@ export function ProductModal({
       setStockAdjustQty(0);
       setStockAdjustReason("");
       setLote((product as any).unidadesPorBulto ? String((product as any).unidadesPorBulto) : "");
+
+      // Precio base + % ganancia (solo productos manuales, no mayorista)
+      const isMay = product.id?.startsWith("prod_");
+      if (!isMay) {
+        if (product.precioBase != null) {
+          setPrecioBase(String(product.precioBase));
+          setGanancia(product.gananciaGlobal != null ? String(product.gananciaGlobal) : "0");
+        } else if (product.gananciaGlobal != null && product.gananciaGlobal > 0 && product.price > 0) {
+          const baseDerivado = Math.round((product.price / (1 + product.gananciaGlobal / 100)) * 100) / 100;
+          setPrecioBase(String(baseDerivado));
+          setGanancia(String(product.gananciaGlobal));
+        } else if (product.price > 0) {
+          setPrecioBase(String(product.price));
+          setGanancia("0");
+        } else {
+          setPrecioBase("");
+          setGanancia("");
+        }
+      } else {
+        setPrecioBase("");
+        setGanancia("");
+      }
     } else {
       setFormData({
         name: "",
@@ -154,6 +183,8 @@ export function ProductModal({
       setStockAdjustQty(0);
       setStockAdjustReason("");
       setLote("");
+      setPrecioBase("");
+      setGanancia("");
     }
   }, [product, open]);
 
@@ -173,6 +204,23 @@ export function ProductModal({
     setFormData((prev) => ({ ...prev, marca: trimmed }));
     setNewMarcaInput("");
     setShowNewMarcaInput(false);
+  };
+
+  const calcPrecioVenta = (base: number, pct: number): number =>
+    base > 0 ? Math.round(base * (1 + pct / 100) * 100) / 100 : 0;
+
+  const handleBaseChange = (val: string) => {
+    setPrecioBase(val);
+    const b = parseFloat(val) || 0;
+    const g = parseFloat(ganancia) || 0;
+    setFormData((prev) => ({ ...prev, price: calcPrecioVenta(b, g) }));
+  };
+
+  const handleGananciaChange = (val: string) => {
+    setGanancia(val);
+    const b = parseFloat(precioBase) || 0;
+    const g = parseFloat(val) || 0;
+    setFormData((prev) => ({ ...prev, price: b > 0 ? calcPrecioVenta(b, g) : prev.price }));
   };
 
   const handleImageChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -213,11 +261,24 @@ export function ProductModal({
           ? { type: stockAdjustType, quantity: stockAdjustQty, reason: stockAdjustReason }
           : undefined;
 
+      // Productos manuales (no mayorista): guardar precio base + % ganancia
+      const baseNum = parseFloat(precioBase) || 0;
+      const gananciaNum = parseFloat(ganancia) || 0;
+      const precioFields =
+        !isMayorista && baseNum > 0
+          ? {
+              precioBase: baseNum,
+              gananciaGlobal: gananciaNum,
+              precioVenta: effectiveData.price,
+            }
+          : {};
+
       await onSave({
         ...effectiveData,
         description: effectiveData.description || "",
         imageUrl: effectiveData.imageUrl || "",
         stock: finalStock,
+        ...precioFields,
         ...(isMayorista && loteNum > 0
           ? { unidadesPorBulto: loteNum }
           : {}),
@@ -685,31 +746,61 @@ export function ProductModal({
               <div className="space-y-3">
                 <Label className="text-sm font-medium">Precio y Stock</Label>
                 <div className="grid grid-cols-2 gap-4">
-                  {/* Precio */}
+                  {/* Precio base (costo) */}
                   <div className="space-y-2">
-                    <Label htmlFor="price" className="text-xs text-muted-foreground">
-                      Precio (ARS)
+                    <Label htmlFor="precio-base" className="text-xs text-muted-foreground">
+                      Precio base (costo)
                     </Label>
                     <div className="relative">
                       <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground font-medium">
                         $
                       </span>
                       <Input
-                        id="price"
+                        id="precio-base"
                         type="number"
                         min="0"
                         step="0.01"
-                        value={formData.price || ""}
-                        onChange={(e) =>
-                          setFormData({ ...formData, price: Number(e.target.value) })
-                        }
+                        value={precioBase}
+                        onChange={(e) => handleBaseChange(e.target.value)}
                         className="pl-7 h-10"
                         placeholder="0"
                       />
                     </div>
                   </div>
 
-                  {/* Stock */}
+                  {/* % Ganancia */}
+                  <div className="space-y-2">
+                    <Label htmlFor="ganancia" className="text-xs text-muted-foreground">
+                      % Ganancia
+                    </Label>
+                    <div className="relative">
+                      <Input
+                        id="ganancia"
+                        type="number"
+                        min="0"
+                        step="0.01"
+                        value={ganancia}
+                        onChange={(e) => handleGananciaChange(e.target.value)}
+                        className="pr-7 h-10"
+                        placeholder="0"
+                      />
+                      <span className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground font-medium">
+                        %
+                      </span>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Precio de venta calculado */}
+                <div className="flex items-center justify-between px-4 py-3 rounded-2xl border border-teal-200 bg-teal-50/60">
+                  <span className="text-sm font-medium text-teal-700">Precio de venta</span>
+                  <span className="text-lg font-bold text-teal-700">
+                    {formatCurrency(formData.price || 0)}
+                  </span>
+                </div>
+
+                {/* Stock */}
+                <div className="grid grid-cols-2 gap-4">
                   <div className="space-y-2">
                     {isEditing ? (
                       <>
