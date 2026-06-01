@@ -205,6 +205,7 @@ export default function PedidosPage() {
       const ventaData = {
         id: order.id,
         clientName: order.clientName,
+        sellerName: order.sellerName,
         items: order.items.map((i) => ({ name: i.name, quantity: i.quantity, price: i.price, ...(i.itemDiscount ? { itemDiscount: i.itemDiscount } : {}) })),
         total,
         paymentType: "cash" as const,
