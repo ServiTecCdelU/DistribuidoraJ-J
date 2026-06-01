@@ -93,6 +93,15 @@ export const updateSeller = async (id: string, updates: Partial<Seller>): Promis
       .eq('seller_id', id)
   }
 
+  // Propagar el estado activo/inactivo al usuario de login vinculado:
+  // un vendedor inactivo no debe poder entrar al sistema.
+  if (updates.isActive !== undefined) {
+    await supabase
+      .from('usuarios')
+      .update({ is_active: updates.isActive })
+      .eq('seller_id', id)
+  }
+
   return updated
 }
 
@@ -111,6 +120,8 @@ export const deleteSeller = async (id: string): Promise<void> => {
       .update({ is_active: false })
       .eq('id', id)
     if (softErr) throw new Error('No se pudo eliminar el vendedor')
+    // Bloquear tambien el login del usuario vinculado
+    await supabase.from('usuarios').update({ is_active: false }).eq('seller_id', id)
   }
 }
 
