@@ -21,7 +21,7 @@ import { PaymentModal, type ItemAdjustment } from "@/components/pedidos/payment-
 import { SuccessModal } from "@/components/pedidos/success-modal";
 import { StockCheckModal, type StockCheckItem } from "@/components/pedidos/stock-check-modal";
 import { statusConfig } from "@/lib/order-constants";
-import { formatCurrency as formatPrice } from "@/lib/utils/format";
+import { formatCurrency as formatPrice, formatDate } from "@/lib/utils/format";
 
 export const generateOrderNumber = (date: Date, index: number) => {
   const d = new Date(date);
@@ -1337,6 +1337,7 @@ th.center,td.center{text-align:center}
                 <tr className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
                   <th className="px-2 py-2 text-center w-10"></th>
                   <th className="px-4 py-2 text-left">Cliente</th>
+                  <th className="px-4 py-2 text-center w-28">Fecha</th>
                   <th className="px-4 py-2 text-center w-24">Productos</th>
                   <th className="px-4 py-2 text-left">Dirección</th>
                   <th className="px-4 py-2 text-center w-32">Deuda</th>
@@ -1387,6 +1388,11 @@ th.center,td.center{text-align:center}
                         {clientOrders.length > 1 && (
                           <p className="text-[10px] text-muted-foreground">{clientOrders.length} pedidos</p>
                         )}
+                      </td>
+                      <td className="px-4 py-2.5 text-center">
+                        <span className="text-xs text-muted-foreground whitespace-nowrap">
+                          {formatDate(displayOrder.createdAt)}
+                        </span>
                       </td>
                       <td className="px-4 py-2.5 text-center">
                         <span className="text-xs text-foreground">
@@ -1489,7 +1495,11 @@ th.center,td.center{text-align:center}
                           <span className="text-[10px] text-muted-foreground shrink-0">({clientOrders.length})</span>
                         )}
                       </div>
-                      <p className="text-[11px] text-muted-foreground">{mergedItems.length} {mergedItems.length === 1 ? "producto" : "productos"}</p>
+                      <p className="text-[11px] text-muted-foreground">
+                        {mergedItems.length} {mergedItems.length === 1 ? "producto" : "productos"}
+                        <span className="mx-1">·</span>
+                        {formatDate(displayOrder.createdAt)}
+                      </p>
                     </div>
                     <div className="shrink-0 text-center">
                       {deuda > 0 ? (
