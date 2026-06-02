@@ -19,7 +19,7 @@ import { OrdersFilters } from "@/components/pedidos/orders-filters";
 import { OrderDetailModal } from "@/components/pedidos/order-detail-modal";
 import { PaymentModal, type ItemAdjustment } from "@/components/pedidos/payment-modal";
 import { SuccessModal } from "@/components/pedidos/success-modal";
-import { StockCheckModal, type StockCheckItem } from "@/components/pedidos/stock-check-modal";
+import { StockCheckModal, type StockCheckItem, type ReplacementOption } from "@/components/pedidos/stock-check-modal";
 import { statusConfig } from "@/lib/order-constants";
 import { formatCurrency as formatPrice } from "@/lib/utils/format";
 
@@ -158,20 +158,28 @@ export default function PedidosPage() {
     }
   }, []);
 
-  const generateRemitoForOrder = useCallback(async (order: Order, excludeProductIds: string[] = []) => {
+  const generateRemitoForOrder = useCallback(async (order: Order, excludeProductIds: string[] = [], replacements: Record<string, ReplacementOption> = {}) => {
     setGeneratingDoc(true);
     try {
+      // Aplicar reemplazos por otra marca (mantiene cantidad, cambia producto/precio)
+      const replacedItems = order.items.map((i: any) => {
+        const r = replacements[i.productId];
+        if (!r) return i;
+        return { ...i, productId: r.productId, name: r.name, price: r.price, codigo: r.codigo, itemDiscount: undefined };
+      });
+
       const filteredItems = excludeProductIds.length > 0
-        ? order.items.filter((i) => !excludeProductIds.includes(i.productId))
-        : order.items;
+        ? replacedItems.filter((i: any) => !excludeProductIds.includes(i.productId))
+        : replacedItems;
 
       if (filteredItems.length === 0) {
         toast.error("No quedan productos para generar el remito");
         return;
       }
 
-      // Si se excluyeron productos, actualizar el pedido en BD
-      if (excludeProductIds.length > 0) {
+      // Si se excluyeron o reemplazaron productos, actualizar el pedido en BD
+      const huboReemplazos = Object.keys(replacements).length > 0;
+      if (excludeProductIds.length > 0 || huboReemplazos) {
         const { data: updData } = await supabase
           .from("pedidos")
           .update({ items: filteredItems })
@@ -280,14 +288,35 @@ export default function PedidosPage() {
     }
   }, [detailOrder, generateRemitoForOrder]);
 
-  const handleStockCheckConfirm = useCallback(async (excludeProductIds: string[]) => {
+  const handleStockCheckConfirm = useCallback(async (excludeProductIds: string[], replacements: Record<string, ReplacementOption>) => {
     setStockCheckOpen(false);
     if (stockCheckOrder) {
-      await generateRemitoForOrder(stockCheckOrder, excludeProductIds);
+      await generateRemitoForOrder(stockCheckOrder, excludeProductIds, replacements);
     }
     setStockCheckOrder(null);
     setStockCheckItems([]);
   }, [stockCheckOrder, generateRemitoForOrder]);
+
+  // Busca productos del mismo tipo (otra marca) con stock para reemplazar un faltante
+  const findReplacements = useCallback(async (item: StockCheckItem): Promise<ReplacementOption[]> => {
+    const firstWord = (item.name || "").trim().split(/\s+/).find((w) => w.length >= 3) || item.name;
+    const origProd = item.productId.startsWith("mp_") ? `prod_${item.productId}` : item.productId;
+    const { data } = await supabase
+      .from("productos")
+      .select("id, name, price, stock, codigo")
+      .ilike("name", `${firstWord}%`)
+      .gt("stock", 0)
+      .limit(20);
+    return (data ?? [])
+      .filter((p: any) => p.id !== origProd && (p.stock ?? 0) >= item.quantity && Number(p.price) > 0)
+      .map((p: any) => ({
+        productId: p.id,
+        name: p.name,
+        price: Number(p.price) || 0,
+        stock: p.stock ?? 0,
+        codigo: p.codigo ?? undefined,
+      }));
+  }, []);
 
   // handleGenerateInvoice — deshabilitado temporalmente
   const handleGenerateInvoice = useCallback(async (_order: Order) => {}, []);
@@ -1684,6 +1713,7 @@ th.center,td.center{text-align:center}
         onClose={() => { setStockCheckOpen(false); setStockCheckOrder(null); setStockCheckItems([]); }}
         items={stockCheckItems}
         onConfirm={handleStockCheckConfirm}
+        findReplacements={findReplacements}
       />
 
       <PaymentModal

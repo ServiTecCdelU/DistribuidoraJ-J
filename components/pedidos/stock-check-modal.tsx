@@ -9,7 +9,7 @@ import {
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
-import { AlertTriangle, CheckCircle, Package } from "lucide-react";
+import { AlertTriangle, CheckCircle, Package, Repeat, Loader2, X } from "lucide-react";
 
 export interface StockCheckItem {
   productId: string;
@@ -18,22 +18,46 @@ export interface StockCheckItem {
   stock: number;
 }
 
+export interface ReplacementOption {
+  productId: string;
+  name: string;
+  price: number;
+  stock: number;
+  codigo?: string;
+}
+
 interface StockCheckModalProps {
   open: boolean;
   onClose: () => void;
   items: StockCheckItem[];
-  onConfirm: (itemsSinStock: string[]) => void;
+  onConfirm: (
+    excludeProductIds: string[],
+    replacements: Record<string, ReplacementOption>,
+  ) => void;
+  // Busca productos del mismo tipo (otra marca) con stock para reemplazar el faltante
+  findReplacements?: (item: StockCheckItem) => Promise<ReplacementOption[]>;
 }
 
-export function StockCheckModal({ open, onClose, items, onConfirm }: StockCheckModalProps) {
+export function StockCheckModal({ open, onClose, items, onConfirm, findReplacements }: StockCheckModalProps) {
   const sinStock = items.filter((i) => i.stock < i.quantity);
   const conStock = items.filter((i) => i.stock >= i.quantity);
 
-  // IDs de items sin stock que el usuario marca para incluir igual (sabe que físicamente sí están)
+  // Faltantes que el usuario marca para incluir igual (sabe que físicamente sí están)
   const [incluirIgual, setIncluirIgual] = React.useState<Set<string>>(new Set());
+  // Reemplazos elegidos: productId original -> opción de otra marca
+  const [replacements, setReplacements] = React.useState<Record<string, ReplacementOption>>({});
+  // Panel de opciones abierto para un faltante + sus opciones cargadas
+  const [openFor, setOpenFor] = React.useState<string | null>(null);
+  const [options, setOptions] = React.useState<ReplacementOption[]>([]);
+  const [loadingOpts, setLoadingOpts] = React.useState(false);
 
   React.useEffect(() => {
-    if (open) setIncluirIgual(new Set());
+    if (open) {
+      setIncluirIgual(new Set());
+      setReplacements({});
+      setOpenFor(null);
+      setOptions([]);
+    }
   }, [open]);
 
   const toggleIncluir = (id: string) => {
@@ -44,9 +68,52 @@ export function StockCheckModal({ open, onClose, items, onConfirm }: StockCheckM
     });
   };
 
-  // Se excluyen solo los sin stock que NO fueron marcados para incluir
-  const excluidos = sinStock.filter((i) => !incluirIgual.has(i.productId)).map((i) => i.productId);
-  const hayAlgoParaGenerar = conStock.length > 0 || incluirIgual.size > 0;
+  const abrirReemplazo = async (item: StockCheckItem) => {
+    if (openFor === item.productId) {
+      setOpenFor(null);
+      return;
+    }
+    setOpenFor(item.productId);
+    setOptions([]);
+    if (!findReplacements) return;
+    setLoadingOpts(true);
+    try {
+      const opts = await findReplacements(item);
+      setOptions(opts);
+    } catch {
+      setOptions([]);
+    } finally {
+      setLoadingOpts(false);
+    }
+  };
+
+  const elegirReemplazo = (originalId: string, opt: ReplacementOption) => {
+    setReplacements((prev) => ({ ...prev, [originalId]: opt }));
+    // al reemplazar, desmarcar "incluir igual" si lo tenía
+    setIncluirIgual((prev) => {
+      if (!prev.has(originalId)) return prev;
+      const next = new Set(prev);
+      next.delete(originalId);
+      return next;
+    });
+    setOpenFor(null);
+  };
+
+  const quitarReemplazo = (originalId: string) => {
+    setReplacements((prev) => {
+      const next = { ...prev };
+      delete next[originalId];
+      return next;
+    });
+  };
+
+  // Se excluyen los faltantes que NO se incluyen ni se reemplazan
+  const excluidos = sinStock
+    .filter((i) => !incluirIgual.has(i.productId) && !replacements[i.productId])
+    .map((i) => i.productId);
+  const incluidosManual = incluirIgual.size;
+  const reemplazados = Object.keys(replacements).length;
+  const hayAlgoParaGenerar = conStock.length > 0 || incluidosManual > 0 || reemplazados > 0;
 
   return (
     <Dialog open={open} onOpenChange={(o) => !o && onClose()}>
@@ -69,31 +136,95 @@ export function StockCheckModal({ open, onClose, items, onConfirm }: StockCheckM
               <div className="space-y-1.5">
                 {sinStock.map((item) => {
                   const marcado = incluirIgual.has(item.productId);
+                  const reemplazo = replacements[item.productId];
+                  const abierto = openFor === item.productId;
+                  const verde = marcado || !!reemplazo;
                   return (
                     <div
                       key={item.productId}
-                      className={`flex items-center justify-between gap-2 px-3 py-2 border rounded-xl text-sm transition-colors ${
-                        marcado ? "bg-emerald-50 border-emerald-200" : "bg-red-50 border-red-200"
+                      className={`border rounded-xl text-sm transition-colors ${
+                        verde ? "bg-emerald-50 border-emerald-200" : "bg-red-50 border-red-200"
                       }`}
                     >
-                      <label className="flex items-center gap-2 min-w-0 flex-1 cursor-pointer">
-                        <Checkbox
-                          checked={marcado}
-                          onCheckedChange={() => toggleIncluir(item.productId)}
-                        />
-                        <span className={`font-medium truncate ${marcado ? "text-emerald-800" : "text-red-800"}`}>
-                          {item.name}
+                      <div className="flex items-center justify-between gap-2 px-3 py-2">
+                        <label className="flex items-center gap-2 min-w-0 flex-1 cursor-pointer">
+                          <Checkbox
+                            checked={marcado}
+                            onCheckedChange={() => toggleIncluir(item.productId)}
+                            disabled={!!reemplazo}
+                          />
+                          <span className={`font-medium truncate ${verde ? "text-emerald-800" : "text-red-800"}`}>
+                            {item.name}
+                          </span>
+                        </label>
+                        <span className={`text-xs whitespace-nowrap ${verde ? "text-emerald-600" : "text-red-600"}`}>
+                          {item.stock}/{item.quantity}
                         </span>
-                      </label>
-                      <span className={`text-xs whitespace-nowrap ${marcado ? "text-emerald-600" : "text-red-600"}`}>
-                        {item.stock}/{item.quantity}
-                      </span>
+                      </div>
+
+                      {/* Reemplazo elegido */}
+                      {reemplazo ? (
+                        <div className="flex items-center gap-2 px-3 pb-2">
+                          <Repeat className="h-3.5 w-3.5 text-emerald-600 shrink-0" />
+                          <span className="text-xs text-emerald-700 truncate flex-1">
+                            Reemplazado por: <span className="font-semibold">{reemplazo.name}</span>
+                          </span>
+                          <button
+                            onClick={() => quitarReemplazo(item.productId)}
+                            className="text-emerald-600 hover:text-emerald-800"
+                          >
+                            <X className="h-3.5 w-3.5" />
+                          </button>
+                        </div>
+                      ) : (
+                        findReplacements && (
+                          <div className="px-3 pb-2">
+                            <button
+                              onClick={() => abrirReemplazo(item)}
+                              className="text-xs text-cyan-700 hover:text-cyan-900 font-medium flex items-center gap-1"
+                            >
+                              <Repeat className="h-3.5 w-3.5" />
+                              {abierto ? "Cerrar" : "Reemplazar por otra marca"}
+                            </button>
+
+                            {abierto && (
+                              <div className="mt-1.5 border border-cyan-200 rounded-lg bg-white overflow-hidden">
+                                {loadingOpts ? (
+                                  <div className="flex items-center justify-center gap-2 py-3 text-xs text-muted-foreground">
+                                    <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                                    Buscando alternativas…
+                                  </div>
+                                ) : options.length === 0 ? (
+                                  <div className="py-3 text-center text-xs text-muted-foreground">
+                                    Sin alternativas con stock
+                                  </div>
+                                ) : (
+                                  <div className="max-h-40 overflow-y-auto divide-y divide-gray-100">
+                                    {options.map((opt) => (
+                                      <button
+                                        key={opt.productId}
+                                        onClick={() => elegirReemplazo(item.productId, opt)}
+                                        className="w-full flex items-center justify-between gap-2 px-3 py-2 text-left hover:bg-cyan-50"
+                                      >
+                                        <span className="text-xs font-medium text-gray-800 truncate">{opt.name}</span>
+                                        <span className="text-[11px] text-green-600 whitespace-nowrap">
+                                          stock {opt.stock}
+                                        </span>
+                                      </button>
+                                    ))}
+                                  </div>
+                                )}
+                              </div>
+                            )}
+                          </div>
+                        )
+                      )}
                     </div>
                   );
                 })}
               </div>
               <p className="text-[11px] text-muted-foreground mt-1.5">
-                Tildá el producto si tenés stock físico aunque el sistema no lo registre, para incluirlo en el remito.
+                Tildá si tenés stock físico aunque el sistema no lo registre, o reemplazá por otra marca con stock.
               </p>
             </div>
           )}
@@ -121,7 +252,7 @@ export function StockCheckModal({ open, onClose, items, onConfirm }: StockCheckM
 
         <div className="p-4 pt-3 border-t space-y-2 shrink-0">
           {hayAlgoParaGenerar ? (
-            <Button className="w-full" onClick={() => onConfirm(excluidos)}>
+            <Button className="w-full" onClick={() => onConfirm(excluidos, replacements)}>
               {excluidos.length > 0 ? "Generar remito sin los faltantes" : "Generar remito"}
             </Button>
           ) : (
