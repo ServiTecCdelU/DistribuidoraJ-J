@@ -164,7 +164,7 @@ export function PaymentModal({
   };
 
   const originalTotal = calculateOrderTotal(order);
-  const total = Math.max(0, originalTotal - adjustmentDeduction);
+  const total = Math.round(Math.max(0, originalTotal - adjustmentDeduction) * 100) / 100;
   const hasAdjustments = adjustmentsList.length > 0;
 
   // Montos ingresados
@@ -172,7 +172,11 @@ export function PaymentModal({
   const transferencia = Number(transferenciaAmount || 0);
   const cuentaCorriente = Number(cuentaCorrienteAmount || 0);
   const ingresado = efectivo + transferencia + cuentaCorriente;
-  const restante = Math.max(0, total - ingresado);
+  // Tolerancia por redondeo de centavos: se considera cubierto si falta menos de $1
+  const TOLERANCIA_PAGO = 1;
+  const faltante = total - ingresado;
+  const cubierto = faltante <= TOLERANCIA_PAGO;
+  const restante = cubierto ? 0 : Math.round(faltante * 100) / 100;
 
   const filteredClients = clients.filter((client) => {
     const query = clientSearch.trim().toLowerCase();
@@ -187,7 +191,7 @@ export function PaymentModal({
     const soloRoturas = adjustmentsList.length > 0 && adjustmentsList.every(a => a.type === "rotura");
     if (total <= 0 && !soloRoturas) return false;
     if (total <= 0 && soloRoturas) return true;
-    if (restante !== 0) return false;
+    if (!cubierto) return false;
     if (cuentaCorriente > 0 && !selectedClientId && !order.clientId) return false;
     return true;
   };
