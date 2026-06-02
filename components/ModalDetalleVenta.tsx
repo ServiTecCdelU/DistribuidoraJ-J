@@ -246,15 +246,22 @@ export function ModalDetalleVenta({
 
             {/* Remito */}
             {(isAdmin || venta.remitoNumber) && (
-            <div className={`p-4 rounded-xl border ${venta.remitoNumber ? "bg-blue-50/50 border-blue-200" : "bg-muted/50 border-border"}`}>
+            <div className={`p-4 rounded-xl border ${venta.rechazado && venta.remitoNumber ? "bg-red-50/60 border-red-200" : venta.remitoNumber ? "bg-blue-50/50 border-blue-200" : "bg-muted/50 border-border"}`}>
               <div className="flex items-center gap-2 mb-2">
-                <Truck className={`h-4 w-4 ${venta.remitoNumber ? "text-blue-600" : "text-muted-foreground"}`} />
+                <Truck className={`h-4 w-4 ${venta.rechazado && venta.remitoNumber ? "text-red-600" : venta.remitoNumber ? "text-blue-600" : "text-muted-foreground"}`} />
                 <span className="text-xs font-medium text-muted-foreground">Remito</span>
-                {venta.remitoNumber && <CheckCircle className="h-3.5 w-3.5 text-blue-500 ml-auto" />}
+                {venta.rechazado && venta.remitoNumber ? (
+                  <span className="ml-auto text-[10px] font-bold uppercase tracking-wide text-red-600 bg-red-100 px-2 py-0.5 rounded-full">Cancelado</span>
+                ) : venta.remitoNumber ? (
+                  <CheckCircle className="h-3.5 w-3.5 text-blue-500 ml-auto" />
+                ) : null}
               </div>
-              <p className={`font-semibold text-sm ${venta.remitoNumber ? "text-blue-700" : "text-muted-foreground"}`}>
+              <p className={`font-semibold text-sm ${venta.rechazado && venta.remitoNumber ? "text-red-700 line-through" : venta.remitoNumber ? "text-blue-700" : "text-muted-foreground"}`}>
                 {venta.remitoNumber || "Sin remito"}
               </p>
+              {venta.rechazado && venta.remitoNumber && (
+                <p className="text-[11px] text-red-600 mt-0.5">El cliente no recibió el pedido — remito anulado</p>
+              )}
 
               {venta.remitoNumber ? (
                 <div className="flex gap-2 mt-3">

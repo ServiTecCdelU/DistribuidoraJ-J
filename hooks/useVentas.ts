@@ -171,7 +171,8 @@ function mapPedidoRechazado(d: Record<string, any>): Venta {
     items: d.items ?? [],
     total: 0,
     paymentType: "cash",
-    createdAt: d.created_at ? new Date(d.created_at) : new Date(),
+    // Usar la fecha de rechazo (updated_at) para que aparezca arriba en Ventas
+    createdAt: d.updated_at ? new Date(d.updated_at) : d.created_at ? new Date(d.created_at) : new Date(),
     remitoNumber: d.remito_number ?? undefined,
     remitoPdfBase64: d.remito_pdf_base64 ?? undefined,
     sellerName: d.seller_name ?? undefined,
