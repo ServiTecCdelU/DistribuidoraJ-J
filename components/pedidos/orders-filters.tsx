@@ -100,7 +100,6 @@ export function OrdersFilters({
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="all">Todos ({getStatusCount("all")})</SelectItem>
               {statusFlow.filter((s) => s !== "completed").map((status) => {
                 const config = statusConfig[status];
                 return (
@@ -115,18 +114,6 @@ export function OrdersFilters({
 
         {/* Desktop: tabs de estado */}
         <div className="hidden sm:flex gap-2 overflow-x-auto pb-1 scrollbar-hide flex-1">
-          <button
-            onClick={() => setFilterStatus("all")}
-            className={`flex items-center gap-2 px-4 py-2.5 rounded-xl border-2 transition-all whitespace-nowrap min-w-fit text-sm ${
-              filterStatus === "all"
-                ? "border-gray-900 bg-gray-900 text-white shadow-lg"
-                : "bg-white border-gray-200 hover:border-gray-300 text-gray-700"
-            }`}
-          >
-            <span className="font-semibold">{getStatusCount("all")}</span>
-            <span className="opacity-90">Todos</span>
-          </button>
-
           {statusFlow.filter((s) => s !== "completed").map((status) => {
             const count = getStatusCount(status);
             const config = statusConfig[status];
