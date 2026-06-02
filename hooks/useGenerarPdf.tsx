@@ -689,7 +689,7 @@ const RemitoPDF = ({ venta }: { venta: Venta }) => {
 
   const clientName = venta.clientName || venta.clientData?.name || "Consumidor Final";
   const clientAddress = venta.deliveryAddress || venta.clientAddress || venta.clientData?.address || null;
-  const sellerName = venta.sellerName || null;
+  const sellerName = venta.sellerName ? venta.sellerName.trim().split(/\s+/)[0] : null;
   const totalItems = items.length;
   const totalUnidades = items.reduce((acc, item) => acc + (item.quantity || 0), 0);
 
@@ -901,7 +901,7 @@ const RemitoCopia = ({ venta, copia }: { venta: Venta; copia: string }) => {
 
   const clientName = venta.clientName || venta.clientData?.name || "Consumidor Final";
   const clientAddress = venta.deliveryAddress || venta.clientAddress || venta.clientData?.address || null;
-  const sellerName = venta.sellerName || null;
+  const sellerName = venta.sellerName ? venta.sellerName.trim().split(/\s+/)[0] : null;
   const totalItems = items.length;
   const totalUnidades = items.reduce((acc, item) => acc + (item.quantity || 0), 0);
 
