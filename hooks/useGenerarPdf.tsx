@@ -811,6 +811,10 @@ const remitoHalfStyles = StyleSheet.create({
   half: { height: "50%", padding: "8mm 12mm", flexDirection: "column" },
   // Copia que ocupa la hoja completa (cuando hay muchos ítems y no entran 2 por hoja).
   full: { minHeight: "100%", padding: "12mm", flexDirection: "column" },
+  // Página completa con margen de 1.2cm en todos los lados. El padding va en la Page
+  // (no en una View interna) para que al desbordar a una segunda hoja también respete el margen.
+  pageFull: { fontFamily: "Helvetica", backgroundColor: "white", padding: "12mm", flexDirection: "column" },
+  hojaLabel: { fontSize: 7, color: "#888", textAlign: "right", marginBottom: 4 },
   cutLine: { borderBottom: "1px dashed #aaa", marginHorizontal: "12mm" },
   // Header
   header: {
@@ -893,81 +897,71 @@ const remitoHalfStyles = StyleSheet.create({
   },
 });
 
-const RemitoCopia = ({ venta, copia }: { venta: Venta; copia: string }) => {
-  const items = venta.items || [];
-  const emptyRows = Math.max(0, 6 - items.length);
+// ---- Piezas reutilizables del remito (compartidas entre media hoja y hoja completa) ----
+const RemitoHeader = ({ venta, copia }: { venta: Venta; copia: string }) => {
   const nro = venta.remitoNumber || "—";
-
   const clientName = venta.clientName || venta.clientData?.name || "Consumidor Final";
   const clientAddress = venta.deliveryAddress || venta.clientAddress || venta.clientData?.address || null;
   const sellerName = venta.sellerName ? venta.sellerName.trim().split(/\s+/)[0] : null;
-  const totalItems = items.length;
-  const totalUnidades = items.reduce((acc, item) => acc + (item.quantity || 0), 0);
 
   return (
+    <View style={remitoHalfStyles.header}>
+      <View style={remitoHalfStyles.headerLeft}>
+        <Text style={remitoHalfStyles.remitoTitle}>REMITO</Text>
+        <Text style={remitoHalfStyles.remitoNro}>N° {nro}</Text>
+        <Text style={remitoHalfStyles.remitoFecha}>{safeFormatDate(venta.createdAt)}  {safeFormatTime(venta.createdAt)}</Text>
+        <Text style={remitoHalfStyles.copiaLabel}>{copia}</Text>
+      </View>
+      <View style={remitoHalfStyles.headerRight}>
+        <Text style={remitoHalfStyles.clienteLabel}>CLIENTE</Text>
+        <Text style={remitoHalfStyles.clienteNombre}>{clientName}</Text>
+        {clientAddress && <Text style={remitoHalfStyles.clienteDireccion}>{clientAddress}</Text>}
+        {sellerName && (
+          <>
+            <Text style={remitoHalfStyles.vendedorLabel}>VENDEDOR</Text>
+            <Text style={remitoHalfStyles.vendedorNombre}>{sellerName}</Text>
+          </>
+        )}
+      </View>
+    </View>
+  );
+};
+
+const RemitoTableHeadRow = () => (
+  <View style={remitoHalfStyles.tableHeader}>
+    <Text style={remitoHalfStyles.colCodigo}>Cod.</Text>
+    <Text style={remitoHalfStyles.colCant}>Cant.</Text>
+    <Text style={remitoHalfStyles.colDesc}>Descripcion</Text>
+    <Text style={remitoHalfStyles.colPrecioUnit}>P. Unitario</Text>
+    <Text style={remitoHalfStyles.colDto}>Dto.%</Text>
+    <Text style={remitoHalfStyles.colUnitDto}>P. Unit. c/Dto</Text>
+    <Text style={remitoHalfStyles.colFinal}>Precio Final</Text>
+  </View>
+);
+
+const RemitoItemRow = ({ item, index }: { item: any; index: number }) => {
+  const dto = item.itemDiscount || 0;
+  const unitConDto = item.price * (1 - dto / 100);
+  const precioFinal = unitConDto * item.quantity;
+  return (
+    <View style={remitoHalfStyles.tableRow} wrap={false}>
+      <Text style={remitoHalfStyles.colCodigo}>{item.codigo || String(index + 1).padStart(4, "0")}</Text>
+      <Text style={remitoHalfStyles.colCant}>{item.quantity}</Text>
+      <Text style={remitoHalfStyles.colDesc}>{item.name}</Text>
+      <Text style={remitoHalfStyles.colPrecioUnit}>{formatCurrency(item.price)}</Text>
+      <Text style={remitoHalfStyles.colDto}>{dto > 0 ? `${dto.toFixed(0)}%` : "-"}</Text>
+      <Text style={remitoHalfStyles.colUnitDto}>{formatCurrency(unitConDto)}</Text>
+      <Text style={remitoHalfStyles.colFinal}>{formatCurrency(precioFinal)}</Text>
+    </View>
+  );
+};
+
+const RemitoSummary = ({ venta }: { venta: Venta }) => {
+  const items = venta.items || [];
+  const totalItems = items.length;
+  const totalUnidades = items.reduce((acc, item) => acc + (item.quantity || 0), 0);
+  return (
     <>
-      {/* Header */}
-      <View style={remitoHalfStyles.header}>
-        <View style={remitoHalfStyles.headerLeft}>
-          <Text style={remitoHalfStyles.remitoTitle}>REMITO</Text>
-          <Text style={remitoHalfStyles.remitoNro}>N° {nro}</Text>
-          <Text style={remitoHalfStyles.remitoFecha}>{safeFormatDate(venta.createdAt)}  {safeFormatTime(venta.createdAt)}</Text>
-          <Text style={remitoHalfStyles.copiaLabel}>{copia}</Text>
-        </View>
-        <View style={remitoHalfStyles.headerRight}>
-          <Text style={remitoHalfStyles.clienteLabel}>CLIENTE</Text>
-          <Text style={remitoHalfStyles.clienteNombre}>{clientName}</Text>
-          {clientAddress && <Text style={remitoHalfStyles.clienteDireccion}>{clientAddress}</Text>}
-          {sellerName && (
-            <>
-              <Text style={remitoHalfStyles.vendedorLabel}>VENDEDOR</Text>
-              <Text style={remitoHalfStyles.vendedorNombre}>{sellerName}</Text>
-            </>
-          )}
-        </View>
-      </View>
-
-      {/* Tabla */}
-      <View style={remitoHalfStyles.table}>
-        <View style={remitoHalfStyles.tableHeader}>
-          <Text style={remitoHalfStyles.colCodigo}>Cod.</Text>
-          <Text style={remitoHalfStyles.colCant}>Cant.</Text>
-          <Text style={remitoHalfStyles.colDesc}>Descripcion</Text>
-          <Text style={remitoHalfStyles.colPrecioUnit}>P. Unitario</Text>
-          <Text style={remitoHalfStyles.colDto}>Dto.%</Text>
-          <Text style={remitoHalfStyles.colUnitDto}>P. Unit. c/Dto</Text>
-          <Text style={remitoHalfStyles.colFinal}>Precio Final</Text>
-        </View>
-        {items.map((item, i) => {
-          const dto = item.itemDiscount || 0;
-          const unitConDto = item.price * (1 - dto / 100);
-          const precioFinal = unitConDto * item.quantity;
-          return (
-            <View key={i} style={remitoHalfStyles.tableRow}>
-              <Text style={remitoHalfStyles.colCodigo}>{item.codigo || String(i + 1).padStart(4, "0")}</Text>
-              <Text style={remitoHalfStyles.colCant}>{item.quantity}</Text>
-              <Text style={remitoHalfStyles.colDesc}>{item.name}</Text>
-              <Text style={remitoHalfStyles.colPrecioUnit}>{formatCurrency(item.price)}</Text>
-              <Text style={remitoHalfStyles.colDto}>{dto > 0 ? `${dto.toFixed(0)}%` : "-"}</Text>
-              <Text style={remitoHalfStyles.colUnitDto}>{formatCurrency(unitConDto)}</Text>
-              <Text style={remitoHalfStyles.colFinal}>{formatCurrency(precioFinal)}</Text>
-            </View>
-          );
-        })}
-        {Array.from({ length: emptyRows }).map((_, i) => (
-          <View key={`e${i}`} style={remitoHalfStyles.tableRow}>
-            <Text style={remitoHalfStyles.colCodigo}> </Text>
-            <Text style={remitoHalfStyles.colCant}> </Text>
-            <Text style={remitoHalfStyles.colDesc}> </Text>
-            <Text style={remitoHalfStyles.colPrecioUnit}> </Text>
-            <Text style={remitoHalfStyles.colDto}> </Text>
-            <Text style={remitoHalfStyles.colUnitDto}> </Text>
-            <Text style={remitoHalfStyles.colFinal}> </Text>
-          </View>
-        ))}
-      </View>
-
-      {/* Summary */}
       <View style={remitoHalfStyles.summaryBar}>
         <View style={remitoHalfStyles.summaryItem}>
           <Text><Text style={remitoHalfStyles.summaryLabel}>Items: </Text><Text style={remitoHalfStyles.summaryValue}>{totalItems}</Text></Text>
@@ -980,8 +974,6 @@ const RemitoCopia = ({ venta, copia }: { venta: Venta; copia: string }) => {
           <Text><Text style={remitoHalfStyles.summaryLabel}>Total: </Text><Text style={remitoHalfStyles.summaryValue}>{formatCurrency(venta.total || 0)}</Text></Text>
         </View>
       </View>
-
-      {/* Saldo anterior */}
       {venta.saldoAnterior != null && venta.saldoAnterior !== 0 && (
         <View style={remitoHalfStyles.saldoRow}>
           <Text>
@@ -994,46 +986,113 @@ const RemitoCopia = ({ venta, copia }: { venta: Venta; copia: string }) => {
           </Text>
         </View>
       )}
-
-      {/* Firmas */}
-      <View style={remitoHalfStyles.firmaSection}>
-        <View style={remitoHalfStyles.firmaBox}>
-          <Text style={remitoHalfStyles.firmaLabel}>Firma - Entregó</Text>
-        </View>
-        <View style={remitoHalfStyles.firmaBox}>
-          <Text style={remitoHalfStyles.firmaLabel}>Firma y DNI - Recibió conforme</Text>
-        </View>
-      </View>
-
-      {/* Footer */}
-      <View style={remitoHalfStyles.footer}>
-        <Text>Documento no fiscal</Text>
-        <Text>{copia}</Text>
-      </View>
     </>
   );
+};
+
+const RemitoFirmas = () => (
+  <View style={remitoHalfStyles.firmaSection}>
+    <View style={remitoHalfStyles.firmaBox}>
+      <Text style={remitoHalfStyles.firmaLabel}>Firma - Entregó</Text>
+    </View>
+    <View style={remitoHalfStyles.firmaBox}>
+      <Text style={remitoHalfStyles.firmaLabel}>Firma y DNI - Recibió conforme</Text>
+    </View>
+  </View>
+);
+
+const RemitoFooter = ({ copia }: { copia: string }) => (
+  <View style={remitoHalfStyles.footer}>
+    <Text>Documento no fiscal</Text>
+    <Text>{copia}</Text>
+  </View>
+);
+
+// Media hoja (formato original de 2 copias por A4 para cortar al medio).
+const RemitoCopia = ({ venta, copia }: { venta: Venta; copia: string }) => {
+  const items = venta.items || [];
+  const emptyRows = Math.max(0, 6 - items.length);
+
+  return (
+    <>
+      <RemitoHeader venta={venta} copia={copia} />
+      <View style={remitoHalfStyles.table}>
+        <RemitoTableHeadRow />
+        {items.map((item, i) => (
+          <RemitoItemRow key={i} item={item} index={i} />
+        ))}
+        {Array.from({ length: emptyRows }).map((_, i) => (
+          <View key={`e${i}`} style={remitoHalfStyles.tableRow}>
+            <Text style={remitoHalfStyles.colCodigo}> </Text>
+            <Text style={remitoHalfStyles.colCant}> </Text>
+            <Text style={remitoHalfStyles.colDesc}> </Text>
+            <Text style={remitoHalfStyles.colPrecioUnit}> </Text>
+            <Text style={remitoHalfStyles.colDto}> </Text>
+            <Text style={remitoHalfStyles.colUnitDto}> </Text>
+            <Text style={remitoHalfStyles.colFinal}> </Text>
+          </View>
+        ))}
+      </View>
+      <RemitoSummary venta={venta} />
+      <RemitoFirmas />
+      <RemitoFooter copia={copia} />
+    </>
+  );
+};
+
+// Cantidad de ítems por hoja cuando una copia ocupa páginas completas. Conservador para
+// dejar lugar al membrete repetido, resumen y firmas sin que se pisen los renglones.
+const ITEMS_POR_HOJA = 20;
+
+const chunk = <T,>(arr: T[], size: number): T[][] => {
+  const out: T[][] = [];
+  for (let i = 0; i < arr.length; i += size) out.push(arr.slice(i, i + size));
+  return out;
+};
+
+// Una copia (ORIGINAL o DUPLICADO) repartida en hojas completas A4. Cada hoja repite el
+// membrete, numera "Hoja X de Y" y respeta el margen de 1.2cm (padding en la Page).
+const RemitoCopiaPaginas = ({ venta, copia }: { venta: Venta; copia: string }) => {
+  const items = venta.items || [];
+  const grupos = items.length > 0 ? chunk(items, ITEMS_POR_HOJA) : [[]];
+  const totalHojas = grupos.length;
+
+  return grupos.map((grupo, hojaIdx) => {
+    const esUltima = hojaIdx === totalHojas - 1;
+    const offset = hojaIdx * ITEMS_POR_HOJA;
+    return (
+      <Page key={`${copia}-${hojaIdx}`} size="A4" style={remitoHalfStyles.pageFull}>
+        <Text style={remitoHalfStyles.hojaLabel}>Hoja {hojaIdx + 1} de {totalHojas}</Text>
+        <RemitoHeader venta={venta} copia={copia} />
+        <View style={remitoHalfStyles.table}>
+          <RemitoTableHeadRow />
+          {grupo.map((item, i) => (
+            <RemitoItemRow key={i} item={item} index={offset + i} />
+          ))}
+        </View>
+        {esUltima && (
+          <>
+            <RemitoSummary venta={venta} />
+            <RemitoFirmas />
+          </>
+        )}
+        <RemitoFooter copia={copia} />
+      </Page>
+    );
+  });
 };
 
 const RemitoDoble = ({ venta }: { venta: Venta }) => {
   const itemCount = (venta.items || []).length;
   // Si entran cómodos, dos copias en una hoja (para cortar al medio).
-  // Si hay muchos ítems, cada copia ocupa una hoja completa para que no se pisen las letras:
-  // ORIGINAL en una hoja, DUPLICADO en otra.
+  // Si hay muchos ítems, cada copia ocupa hojas completas (con membrete repetido y numeradas).
   const hojaCompletaCadaUna = itemCount > 6;
 
   if (hojaCompletaCadaUna) {
     return (
       <Document>
-        <Page size="A4" style={remitoHalfStyles.page}>
-          <View style={remitoHalfStyles.full}>
-            <RemitoCopia venta={venta} copia="ORIGINAL - Cliente" />
-          </View>
-        </Page>
-        <Page size="A4" style={remitoHalfStyles.page}>
-          <View style={remitoHalfStyles.full}>
-            <RemitoCopia venta={venta} copia="DUPLICADO - Comercio" />
-          </View>
-        </Page>
+        {RemitoCopiaPaginas({ venta, copia: "ORIGINAL - Cliente" })}
+        {RemitoCopiaPaginas({ venta, copia: "DUPLICADO - Comercio" })}
       </Document>
     );
   }
