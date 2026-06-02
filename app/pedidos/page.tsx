@@ -1301,7 +1301,8 @@ th.center,td.center{text-align:center}
       } else {
         debtHtml = `<span class="debt debt-ok">Al día</span>`;
       }
-      html += `<div class="client-row"><span>${client} — ${clientOrders.length} ${clientOrders.length === 1 ? "pedido" : "pedidos"}</span>${debtHtml}</div>`;
+      const codCli = clientData?.codigo ? ` (${clientData.codigo})` : "";
+      html += `<div class="client-row"><span>${client}${codCli} — ${clientOrders.length} ${clientOrders.length === 1 ? "pedido" : "pedidos"}</span>${debtHtml}</div>`;
       clientOrders.forEach((order, idx) => {
         const addr = order.address || "Sin dirección";
         const city = order.city ? ` · ${order.city}` : "";
@@ -1362,7 +1363,8 @@ th.center,td.center{text-align:center}
     const clientData = clients.find((c) => c.id === firstOrder.clientId);
     const deuda = clientData?.currentBalance || 0;
     const clasificacion = clientData?.debtClassification;
-    return { mergedItems, firstOrder, displayOrder, config, onView, deuda, clasificacion };
+    const codigo = clientData?.codigo;
+    return { mergedItems, firstOrder, displayOrder, config, onView, deuda, clasificacion, codigo };
   };
 
   return (
@@ -1538,7 +1540,7 @@ th.center,td.center{text-align:center}
                         </thead>
                         <tbody className="divide-y">
                           {day.groups.map(({ client, orders: clientOrders }) => {
-                            const { mergedItems, displayOrder, config, onView, deuda, clasificacion } = computeRow(clientOrders);
+                            const { mergedItems, displayOrder, config, onView, deuda, clasificacion, codigo } = computeRow(clientOrders);
                             const isHeld = heldClients.has(client);
                             const isSelected = selectedClients.has(client);
 
@@ -1563,7 +1565,9 @@ th.center,td.center{text-align:center}
                                   </button>
                                 </td>
                                 <td className="px-4 py-2.5">
-                                  <p className={`text-xs font-semibold truncate ${isHeld ? "text-red-400 line-through" : "text-foreground"}`}>{client}</p>
+                                  <p className={`text-xs font-semibold truncate ${isHeld ? "text-red-400 line-through" : "text-foreground"}`}>
+                                    {client}{codigo && <span className="ml-1 font-normal text-muted-foreground">({codigo})</span>}
+                                  </p>
                                   {clientOrders.length > 1 && (
                                     <p className="text-[10px] text-muted-foreground">{clientOrders.length} pedidos</p>
                                   )}
@@ -1617,7 +1621,7 @@ th.center,td.center{text-align:center}
                     {/* Mobile: lista */}
                     <div className="lg:hidden divide-y border-t">
                       {day.groups.map(({ client, orders: clientOrders }) => {
-                        const { mergedItems, displayOrder, config, onView, deuda, clasificacion } = computeRow(clientOrders);
+                        const { mergedItems, displayOrder, config, onView, deuda, clasificacion, codigo } = computeRow(clientOrders);
                         const isHeld = heldClients.has(client);
                         const isSelected = selectedClients.has(client);
 
@@ -1643,8 +1647,9 @@ th.center,td.center{text-align:center}
                             <div className="min-w-0">
                               <div className="flex items-center gap-1">
                                 <p className={`text-xs font-semibold truncate ${isHeld ? "text-red-400 line-through" : "text-foreground"}`}>{client}</p>
+                                {codigo && <span className="text-[10px] font-normal text-muted-foreground shrink-0">({codigo})</span>}
                                 {clientOrders.length > 1 && (
-                                  <span className="text-[10px] text-muted-foreground shrink-0">({clientOrders.length})</span>
+                                  <span className="text-[10px] text-muted-foreground shrink-0">·{clientOrders.length}</span>
                                 )}
                               </div>
                               <p className="text-[11px] text-muted-foreground">

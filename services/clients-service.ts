@@ -5,6 +5,7 @@ import { generateReadableId } from '@/services/supabase-helpers'
 function mapClient(d: Record<string, any>): Client {
   return {
     id: d.id,
+    codigo: d.codigo ?? undefined,
     name: d.name,
     dni: d.dni ?? '',
     cuit: d.cuit ?? '',

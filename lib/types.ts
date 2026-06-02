@@ -36,6 +36,7 @@ export interface Product {
 
 export interface Client {
   id: string;
+  codigo?: string;
   name: string;
   dni?: string;
   cuit: string;

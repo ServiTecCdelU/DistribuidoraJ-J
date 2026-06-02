@@ -451,6 +451,9 @@ export default function ClientesPage() {
                                 <div className="min-w-0">
                                   <div className="flex items-center gap-2">
                                     <p className="font-medium text-foreground truncate">{client.name}</p>
+                                    {client.codigo && (
+                                      <span className="text-xs font-mono text-muted-foreground shrink-0">{client.codigo}</span>
+                                    )}
                                     {client.notes && (
                                       <StickyNote className="h-3.5 w-3.5 text-amber-500" />
                                     )}
@@ -567,6 +570,7 @@ export default function ClientesPage() {
                       <div className="flex-1 min-w-0">
                         <div className="flex items-center gap-1.5">
                           <p className="font-medium text-sm text-foreground truncate">{client.name}</p>
+                          {client.codigo && <span className="text-[11px] font-mono text-muted-foreground shrink-0">{client.codigo}</span>}
                           {client.notes && <StickyNote className="h-3 w-3 text-amber-500 shrink-0" />}
                         </div>
                         <p className="text-xs text-muted-foreground font-mono">{client.id}</p>
@@ -647,7 +651,10 @@ export default function ClientesPage() {
                     </span>
                   </div>
                   <div>
-                    <p className="font-semibold">{selectedClient.name}</p>
+                    <p className="font-semibold">
+                      {selectedClient.name}
+                      {selectedClient.codigo && <span className="ml-2 text-sm font-mono font-normal text-muted-foreground">{selectedClient.codigo}</span>}
+                    </p>
                     <p className="text-sm font-normal text-muted-foreground">{selectedClient.cuit}</p>
                   </div>
                 </>
