@@ -865,16 +865,38 @@ export default function PedidosPage() {
         }
       }
 
-      // Paso 2: con los códigos, buscar producto_id en mayorista_productos
+      // Paso 2: con los códigos, buscar producto_id, rubro y subrubro en mayorista_productos
       const codigos = allItems.map((f) => f.codigo).filter(Boolean);
       const codigoToProductoId = new Map<string, string>();
+      const codigoToRubro = new Map<string, string>();
+      const codigoToSubrubro = new Map<string, string>();
       if (codigos.length > 0) {
         for (let i = 0; i < codigos.length; i += 500) {
           const chunk = codigos.slice(i, i + 500);
-          const { data } = await supabase.from("mayorista_productos").select("codigo, producto_id").in("codigo", chunk);
-          (data ?? []).forEach((r: any) => { if (r.producto_id) codigoToProductoId.set(r.codigo, r.producto_id); });
+          const { data } = await supabase.from("mayorista_productos").select("codigo, producto_id, rubro, subrubro").in("codigo", chunk);
+          (data ?? []).forEach((r: any) => {
+            if (r.producto_id) codigoToProductoId.set(r.codigo, r.producto_id);
+            if (r.rubro) codigoToRubro.set(r.codigo, r.rubro);
+            if (r.subrubro) codigoToSubrubro.set(r.codigo, r.subrubro);
+          });
         }
       }
+
+      // Clasificación en secciones (subtítulos) según rubro/subrubro.
+      // Todo lo no comestible/bebible cae en LIMPIEZA (perfumería, bazar, ferretería, etc.).
+      const SECCIONES = ["LIMPIEZA", "GALLETITAS", "ALFAJORES", "SNACKS", "CARAMELOS", "COMESTIBLES", "BEBIDAS", "ALIMENTOS BALANCEADOS"];
+      const sectionFor = (codigo: string): string => {
+        const r = (codigoToRubro.get(codigo) || "").toUpperCase();
+        const s = (codigoToSubrubro.get(codigo) || "").toUpperCase();
+        if (r.includes("BEBIDA") || r.includes("VINO") || s.includes("CERVEZA") || s.includes("GASEOSA") || s.includes("JUGO") || s.includes("AGUA") || s.includes("VINO")) return "BEBIDAS";
+        if (r.includes("BALANCEAD")) return "ALIMENTOS BALANCEADOS";
+        if (r.includes("GALLETITA")) return "GALLETITAS";
+        if (r.includes("GOLOSINA") || r.includes("ALFAJOR")) return s.includes("ALFAJOR") ? "ALFAJORES" : "CARAMELOS";
+        if (r.includes("SNACK") || r.includes("PANIFICAD")) return "SNACKS";
+        if (r.includes("ALMACEN") || r.includes("CEREAL") || r.includes("FRESCO")) return "COMESTIBLES";
+        // Resto (perfumería, bazar, ferretería, iluminación, librería, navidad, juguetes, polirubros, medicamento, sin rubro)
+        return "LIMPIEZA";
+      };
 
       // Paso 3: buscar stock en productos por producto_id
       const productoIds = [...new Set(codigoToProductoId.values())];
@@ -893,7 +915,7 @@ export default function PedidosPage() {
           const productoId = codigoToProductoId.get(f.codigo);
           const stockDisponible = productoId ? (stockMap.get(productoId) ?? 0) : 0;
           const faltante = Math.max(0, f.cantidad - stockDisponible);
-          return { codigo: f.codigo, nombre: f.nombre, cantidad: f.cantidad, stockDisponible, faltante };
+          return { codigo: f.codigo, nombre: f.nombre, cantidad: f.cantidad, stockDisponible, faltante, seccion: sectionFor(f.codigo) };
         });
 
       const totalUnidades = filas.reduce((s, r) => s + r.cantidad, 0);
@@ -904,10 +926,19 @@ export default function PedidosPage() {
       const esc = (s: string) =>
         (s ?? "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
 
-      const rowsHtml = filas
-        .map((f) => {
-          const cls = f.faltante > 0 ? ' class="faltante"' : "";
-          return `<tr${cls}><td class="cod">${esc(f.codigo || "—")}</td><td>${esc(f.nombre)}</td><td class="num">${f.cantidad}</td><td class="num">${f.stockDisponible}</td><td class="num">${f.faltante}</td></tr>`;
+      // Agrupar por sección en el orden definido; cada sección con su subtítulo visible.
+      const rowsHtml = SECCIONES
+        .map((sec) => {
+          const items = filas.filter((f) => f.seccion === sec).sort((a, b) => a.nombre.localeCompare(b.nombre, "es"));
+          if (items.length === 0) return "";
+          const subtitulo = `<tr class="seccion"><td colspan="5">${esc(sec)}</td></tr>`;
+          const body = items
+            .map((f) => {
+              const cls = f.faltante > 0 ? ' class="faltante"' : "";
+              return `<tr${cls}><td class="cod">${esc(f.codigo || "—")}</td><td>${esc(f.nombre)}</td><td class="num">${f.cantidad}</td><td class="num">${f.stockDisponible}</td><td class="num">${f.faltante}</td></tr>`;
+            })
+            .join("");
+          return subtitulo + body;
         })
         .join("");
 
@@ -927,6 +958,7 @@ th.num,td.num{width:14.66%;text-align:center}
 td td:nth-child(2){text-align:left}
 tbody tr:nth-child(even){background:#f9fafb}
 tr.faltante td{background:#f8cbad}
+tr.seccion td{background:#0f766e;color:#fff;font-weight:800;font-size:11px;text-align:left;letter-spacing:.6px;text-transform:uppercase;padding:5px 6px}
 tfoot td{border-top:2px solid #1f4e78;background:#f2f2f2;font-weight:700;font-size:11px}
 *{-webkit-print-color-adjust:exact;print-color-adjust:exact}
 </style></head><body>
