@@ -101,6 +101,7 @@ export interface Sale {
   paymentMethod?: "efectivo" | "transferencia";
   cashAmount?: number;
   creditAmount?: number;
+  comprobanteTransferencia?: string;
   status: "completed" | "pending" | "listo" | "pendiente";
   invoiceNumber?: string;
   remitoNumber?: string;

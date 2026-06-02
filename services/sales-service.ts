@@ -39,6 +39,7 @@ function mapSale(d: Record<string, any>): Sale {
     paymentMethod: d.payment_method ?? 'efectivo',
     cashAmount: d.cash_amount ? Number(d.cash_amount) : undefined,
     creditAmount: d.credit_amount ? Number(d.credit_amount) : undefined,
+    comprobanteTransferencia: d.comprobante_transferencia ?? undefined,
     status: d.status ?? 'completed',
     invoiceEmitted: d.invoice_emitted ?? false,
     invoiceNumber: d.invoice_number ?? undefined,

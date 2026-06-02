@@ -33,6 +33,7 @@ import {
   ChevronLeft,
   ChevronRight,
   AlertTriangle,
+  Receipt,
 } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
 import { salesApi, auditApi } from "@/lib/api";
@@ -385,6 +386,9 @@ export default function CajaPage() {
 
   const [saving, setSaving] = useState(false);
   const [generatingPdf, setGeneratingPdf] = useState(false);
+
+  // Comprobante de transferencia (visor)
+  const [comprobanteUrl, setComprobanteUrl] = useState<string | null>(null);
 
   // Historial
   const [historialRegisters, setHistorialRegisters] = useState<CashRegister[]>([]);
@@ -1156,6 +1160,16 @@ export default function CajaPage() {
                                 </span>
                               </div>
                               <div className="flex items-center gap-2 shrink-0">
+                                {(sale as any).comprobanteTransferencia && (
+                                  <button
+                                    type="button"
+                                    onClick={() => setComprobanteUrl((sale as any).comprobanteTransferencia)}
+                                    className="text-violet-600 hover:text-violet-800"
+                                    title="Ver comprobante de transferencia"
+                                  >
+                                    <Receipt className="h-4 w-4" />
+                                  </button>
+                                )}
                                 <Badge className={`text-[10px] border-0 ${badgeClass}`}>
                                   {paymentLabel}
                                 </Badge>
@@ -1327,6 +1341,16 @@ export default function CajaPage() {
                                     <span className="text-xs text-muted-foreground shrink-0">{formatTimeStr(new Date(sale.createdAt))}</span>
                                   </div>
                                   <div className="flex items-center gap-2 shrink-0">
+                                    {(sale as any).comprobanteTransferencia && (
+                                      <button
+                                        type="button"
+                                        onClick={() => setComprobanteUrl((sale as any).comprobanteTransferencia)}
+                                        className="text-violet-600 hover:text-violet-800"
+                                        title="Ver comprobante de transferencia"
+                                      >
+                                        <Receipt className="h-4 w-4" />
+                                      </button>
+                                    )}
                                     <Badge className={`text-[10px] border-0 ${badgeClass}`}>
                                       {paymentLabel}
                                     </Badge>
@@ -1606,6 +1630,35 @@ export default function CajaPage() {
                 Cerrar Caja
               </Button>
             </DialogFooter>
+          </DialogContent>
+        </Dialog>
+
+        {/* Visor de comprobante de transferencia */}
+        <Dialog open={!!comprobanteUrl} onOpenChange={(open) => !open && setComprobanteUrl(null)}>
+          <DialogContent className="sm:max-w-lg">
+            <DialogHeader>
+              <DialogTitle className="flex items-center gap-2">
+                <Receipt className="h-4 w-4 text-violet-600" />
+                Comprobante de transferencia
+              </DialogTitle>
+            </DialogHeader>
+            {comprobanteUrl && (
+              <div className="space-y-3">
+                <img
+                  src={comprobanteUrl}
+                  alt="Comprobante de transferencia"
+                  className="w-full max-h-[70vh] object-contain rounded-lg border border-border bg-muted/30"
+                />
+                <a
+                  href={comprobanteUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-xs text-violet-600 hover:underline"
+                >
+                  Abrir en pestaña nueva
+                </a>
+              </div>
+            )}
           </DialogContent>
         </Dialog>
       </div>
