@@ -302,6 +302,7 @@ export const ordersApi = {
     lng?: number
     status: OrderStatus
     source?: string
+    notes?: string
   }): Promise<Order> {
     return createOrder(data)
   },

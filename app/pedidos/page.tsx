@@ -761,7 +761,12 @@ export default function PedidosPage() {
     try {
       const XLSX = await import("xlsx-js-style");
 
-      const activos = orders.filter((o) => o.status !== "completed");
+      // Si hay selección (ej: tildar un día), exportar solo esos clientes; si no, todos los activos
+      const activos = orders.filter(
+        (o) =>
+          o.status !== "completed" &&
+          (selectedClients.size === 0 || selectedClients.has(o.clientName || "Sin cliente")),
+      );
 
       // Consolidar items por nombre
       type AcumItem = {
@@ -795,7 +800,7 @@ export default function PedidosPage() {
       }
 
       if (acum.size === 0) {
-        toast.info("No hay pedidos activos para descargar");
+        toast.info(selectedClients.size > 0 ? "No hay pedidos en la selección" : "No hay pedidos activos para descargar");
         return;
       }
 
@@ -971,7 +976,7 @@ export default function PedidosPage() {
     } finally {
       setGenerandoExcel(false);
     }
-  }, [orders]);
+  }, [orders, selectedClients]);
 
 
   const clearFilters = useCallback(() => {
@@ -1623,6 +1628,14 @@ th.center,td.center{text-align:center}
                                 </td>
                                 <td className="px-4 py-2.5">
                                   <span className="text-xs text-foreground truncate">{displayOrder.sellerName || "—"}</span>
+                                  {(() => {
+                                    const notas = clientOrders.map((o) => o.notes?.trim()).filter(Boolean);
+                                    return notas.length > 0 ? (
+                                      <p className="text-[10px] text-amber-700 italic mt-0.5 line-clamp-2" title={notas.join(" · ")}>
+                                        📝 {notas.join(" · ")}
+                                      </p>
+                                    ) : null;
+                                  })()}
                                 </td>
                                 <td className="px-4 py-2.5">
                                   <p className="text-xs text-muted-foreground truncate">
@@ -1704,6 +1717,14 @@ th.center,td.center{text-align:center}
                               <p className="text-[11px] text-muted-foreground truncate">
                                 {displayOrder.sellerName || "Sin vendedor"}
                               </p>
+                              {(() => {
+                                const notas = clientOrders.map((o) => o.notes?.trim()).filter(Boolean);
+                                return notas.length > 0 ? (
+                                  <p className="text-[10px] text-amber-700 italic truncate" title={notas.join(" · ")}>
+                                    📝 {notas.join(" · ")}
+                                  </p>
+                                ) : null;
+                              })()}
                             </div>
                             <div className="shrink-0 text-center">
                               {deuda > 0 ? (

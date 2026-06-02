@@ -672,6 +672,20 @@ export function UnifiedCart({ role, state, actions, onConfirmSale, allowDiscount
           </div>
         )}
 
+        {/* Nota / observaciones del pedido (admin/vendedor) */}
+        {role !== null && (
+          <div className="space-y-2">
+            <Label className="text-xs font-medium text-foreground">Nota / observaciones (opcional)</Label>
+            <Textarea
+              placeholder="Aclaraciones para este pedido..."
+              value={state.orderNotes}
+              onChange={(e) => actions.setOrderNotes(e.target.value)}
+              rows={2}
+              className="text-sm resize-none"
+            />
+          </div>
+        )}
+
         {/* Validation messages */}
         {(() => {
           const missingReqs = getMissingRequirements();

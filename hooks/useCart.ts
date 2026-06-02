@@ -84,6 +84,9 @@ export interface CartState {
   discountValue: number;
   discountOpen: boolean;
 
+  // Nota/observaciones del pedido
+  orderNotes: string;
+
   // Processing
   processing: boolean;
   saleComplete: boolean;
@@ -134,6 +137,9 @@ export interface CartActions {
   setDiscountType: (type: DiscountType) => void;
   setDiscountValue: (value: number) => void;
   setDiscountOpen: (open: boolean) => void;
+
+  // Nota/observaciones del pedido
+  setOrderNotes: (v: string) => void;
 
   // Actions
   canProcessSale: () => boolean;
@@ -224,6 +230,7 @@ export function useCart(role: UserRole, userEmail?: string, externalProducts?: P
   const [discountType, setDiscountType] = useState<DiscountType>("percent");
   const [discountValue, setDiscountValue] = useState(0);
   const [discountOpen, setDiscountOpen] = useState(false);
+  const [orderNotes, setOrderNotes] = useState("");
 
   // Processing
   const [processing, setProcessing] = useState(false);
@@ -824,6 +831,7 @@ export function useCart(role: UserRole, userEmail?: string, externalProducts?: P
           source: "direct_sale",
           discount: discountValue > 0 ? discountValue : undefined,
           discountType: discountValue > 0 ? discountType : undefined,
+          notes: orderNotes,
         });
         toast.success("Pedido creado correctamente");
         resetCart();
@@ -844,6 +852,7 @@ export function useCart(role: UserRole, userEmail?: string, externalProducts?: P
             source: "direct_sale",
             discount: discountValue > 0 ? discountValue : undefined,
             discountType: discountValue > 0 ? discountType : undefined,
+            notes: orderNotes,
           });
 
           // Crear pedido al mayorista automáticamente con los items en déficit
@@ -930,7 +939,7 @@ export function useCart(role: UserRole, userEmail?: string, externalProducts?: P
     clientPhone, clientName, clientAddress, selectedSeller, selectedSellerData,
     sellerMatchName, sellers, cart, paymentType, paymentMethod, cashAmount, creditAmountInput,
     finalTotal, discountValue, discountType, newAddress, dniClientId, selectedCity,
-    deliveryLat, deliveryLng, selectedSavedAddress,
+    deliveryLat, deliveryLng, selectedSavedAddress, orderNotes,
   ]);
 
   // --- Reset ---
@@ -966,6 +975,7 @@ export function useCart(role: UserRole, userEmail?: string, externalProducts?: P
     setDiscountValue(0);
     setDiscountType("percent");
     setDiscountOpen(false);
+    setOrderNotes("");
     setSaleComplete(false);
     setLastSaleId("");
     loadData();
@@ -1048,6 +1058,7 @@ export function useCart(role: UserRole, userEmail?: string, externalProducts?: P
     selectedCity, deliveryMethod, deliveryAddress, newAddress,
     deliveryLat, deliveryLng, selectedSavedAddress,
     discountType, discountValue, discountOpen,
+    orderNotes,
     processing, saleComplete, lastSaleId,
   };
 
@@ -1072,6 +1083,7 @@ export function useCart(role: UserRole, userEmail?: string, externalProducts?: P
     selectSavedAddress, updateClientAddress, deleteClientAddress,
     setDeliveryCoords: (lat: number | null, lng: number | null) => { setDeliveryLat(lat); setDeliveryLng(lng); },
     setDiscountType, setDiscountValue, setDiscountOpen,
+    setOrderNotes,
     canProcessSale, processSale: (modo?: "esperar" | "disponible") => handleProcessSale(modo ?? "disponible"), resetCart, formatCurrency,
     createNewClient, registerClientFromDni, registerClientFromModal, setClientCreditLimit,
     clearClient, refreshClientInList,

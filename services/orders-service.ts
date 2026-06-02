@@ -27,6 +27,7 @@ function mapOrder(d: Record<string, any>): Order {
     invoicePdfBase64: d.invoice_pdf_base64 ?? undefined,
     checkedItems: d.checked_items ?? [],
     held: d.held ?? false,
+    notes: d.notes ?? undefined,
     createdAt: new Date(d.created_at),
     updatedAt: new Date(d.updated_at ?? d.created_at),
   }
@@ -188,6 +189,7 @@ export const createOrder = async (data: {
   source?: string
   discount?: number
   discountType?: 'percent' | 'fixed'
+  notes?: string
 }): Promise<Order> => {
   const docId = await generateReadableId('pedidos', 'pedido', data.clientName)
 
@@ -215,6 +217,7 @@ export const createOrder = async (data: {
     lng: data.lng ?? null,
     status: data.status ?? 'pending',
     source: data.source ?? 'direct',
+    notes: data.notes?.trim() || null,
     sale_id: null,
   })
 
