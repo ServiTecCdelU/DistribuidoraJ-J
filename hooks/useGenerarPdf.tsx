@@ -807,10 +807,233 @@ const RemitoPDF = ({ venta }: { venta: Venta }) => {
   );
 };
 
+// ===================== REMITO DOBLE (dos copias en A4 para cortar) =====================
+const remitoHalfStyles = StyleSheet.create({
+  page: { fontFamily: "Helvetica", backgroundColor: "white" },
+  half: { height: "50%", padding: "8mm 12mm", flexDirection: "column" },
+  cutLine: { borderBottom: "1px dashed #aaa", marginHorizontal: "12mm" },
+  // Header
+  header: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "flex-start",
+    marginBottom: 10,
+    borderBottom: "1.5px solid black",
+    paddingBottom: 8,
+  },
+  headerLeft: { flex: 1 },
+  headerRight: { alignItems: "flex-end" },
+  remitoTitle: { fontSize: 16, fontWeight: "bold", marginBottom: 2 },
+  remitoNro: { fontSize: 9, color: "#555", marginBottom: 1 },
+  remitoFecha: { fontSize: 8, color: "#555" },
+  copiaLabel: { fontSize: 7, color: "#888", marginTop: 3, fontWeight: "bold" },
+  clienteLabel: { fontSize: 7, color: "#888", marginBottom: 1 },
+  clienteNombre: { fontSize: 10, fontWeight: "bold" },
+  clienteDireccion: { fontSize: 7.5, color: "#555", marginTop: 2 },
+  vendedorLabel: { fontSize: 7, color: "#888", marginTop: 3, marginBottom: 1 },
+  vendedorNombre: { fontSize: 8 },
+  bold: { fontWeight: "bold" },
+  // Table
+  table: { border: "1px solid black", marginBottom: 0 },
+  tableHeader: {
+    flexDirection: "row",
+    borderBottom: "1.5px solid black",
+    backgroundColor: "#f5f5f5",
+    padding: "4px 6px",
+    fontWeight: "bold",
+    fontSize: 7,
+  },
+  tableRow: {
+    flexDirection: "row",
+    borderBottom: "0.5px solid #ccc",
+    padding: "3px 6px",
+    fontSize: 7,
+  },
+  colCodigo: { width: "9%", textAlign: "center" },
+  colCant: { width: "7%", textAlign: "center" },
+  colDesc: { width: "26%" },
+  colPrecioUnit: { width: "14%", textAlign: "right" },
+  colDto: { width: "8%", textAlign: "center" },
+  colUnitDto: { width: "14%", textAlign: "right" },
+  colFinal: { width: "14%", textAlign: "right" },
+  // Summary
+  summaryBar: {
+    flexDirection: "row",
+    borderTop: "1.5px solid black",
+    borderLeft: "1px solid black",
+    borderRight: "1px solid black",
+    borderBottom: "1px solid black",
+    padding: "5px 8px",
+    fontSize: 8,
+  },
+  summaryItem: { marginRight: 16 },
+  summaryLabel: { color: "#555" },
+  summaryValue: { fontWeight: "bold" },
+  saldoRow: {
+    flexDirection: "row",
+    justifyContent: "flex-end",
+    paddingTop: 3,
+    paddingRight: 2,
+    fontSize: 8,
+    gap: 20,
+  },
+  // Firma
+  firmaSection: { flexDirection: "row", gap: 10, marginTop: "auto", paddingTop: 14 },
+  firmaBox: { flex: 1, borderTop: "1px solid black", paddingTop: 3 },
+  firmaLabel: { fontSize: 6.5, color: "#888", textAlign: "center" },
+  footer: {
+    paddingTop: 5,
+    borderTop: "0.5px solid #ccc",
+    flexDirection: "row",
+    justifyContent: "space-between",
+    fontSize: 6.5,
+    color: "#bbb",
+    marginTop: 6,
+  },
+});
+
+const RemitoCopia = ({ venta, copia }: { venta: Venta; copia: string }) => {
+  const items = venta.items || [];
+  const emptyRows = Math.max(0, 6 - items.length);
+  const remitoRaw = venta.remitoNumber || "";
+  const nroPart = remitoRaw.includes("-") ? remitoRaw.split("-")[1] : remitoRaw;
+  const nro = String(nroPart || "00000001").padStart(8, "0");
+
+  const clientName = venta.clientName || venta.clientData?.name || "Consumidor Final";
+  const clientAddress = venta.deliveryAddress || venta.clientAddress || venta.clientData?.address || null;
+  const sellerName = venta.sellerName || null;
+  const totalItems = items.length;
+  const totalUnidades = items.reduce((acc, item) => acc + (item.quantity || 0), 0);
+
+  return (
+    <>
+      {/* Header */}
+      <View style={remitoHalfStyles.header}>
+        <View style={remitoHalfStyles.headerLeft}>
+          <Text style={remitoHalfStyles.remitoTitle}>REMITO</Text>
+          <Text style={remitoHalfStyles.remitoNro}>N° {nro}</Text>
+          <Text style={remitoHalfStyles.remitoFecha}>{safeFormatDate(venta.createdAt)}  {safeFormatTime(venta.createdAt)}</Text>
+          <Text style={remitoHalfStyles.copiaLabel}>{copia}</Text>
+        </View>
+        <View style={remitoHalfStyles.headerRight}>
+          <Text style={remitoHalfStyles.clienteLabel}>CLIENTE</Text>
+          <Text style={remitoHalfStyles.clienteNombre}>{clientName}</Text>
+          {clientAddress && <Text style={remitoHalfStyles.clienteDireccion}>{clientAddress}</Text>}
+          {sellerName && (
+            <>
+              <Text style={remitoHalfStyles.vendedorLabel}>VENDEDOR</Text>
+              <Text style={remitoHalfStyles.vendedorNombre}>{sellerName}</Text>
+            </>
+          )}
+        </View>
+      </View>
+
+      {/* Tabla */}
+      <View style={remitoHalfStyles.table}>
+        <View style={remitoHalfStyles.tableHeader}>
+          <Text style={remitoHalfStyles.colCodigo}>Cod.</Text>
+          <Text style={remitoHalfStyles.colCant}>Cant.</Text>
+          <Text style={remitoHalfStyles.colDesc}>Descripcion</Text>
+          <Text style={remitoHalfStyles.colPrecioUnit}>P. Unitario</Text>
+          <Text style={remitoHalfStyles.colDto}>Dto.%</Text>
+          <Text style={remitoHalfStyles.colUnitDto}>P. Unit. c/Dto</Text>
+          <Text style={remitoHalfStyles.colFinal}>Precio Final</Text>
+        </View>
+        {items.map((item, i) => {
+          const dto = item.itemDiscount || 0;
+          const unitConDto = item.price * (1 - dto / 100);
+          const precioFinal = unitConDto * item.quantity;
+          return (
+            <View key={i} style={remitoHalfStyles.tableRow}>
+              <Text style={remitoHalfStyles.colCodigo}>{item.codigo || String(i + 1).padStart(4, "0")}</Text>
+              <Text style={remitoHalfStyles.colCant}>{item.quantity}</Text>
+              <Text style={remitoHalfStyles.colDesc}>{item.name}</Text>
+              <Text style={remitoHalfStyles.colPrecioUnit}>{formatCurrency(item.price)}</Text>
+              <Text style={remitoHalfStyles.colDto}>{dto > 0 ? `${dto.toFixed(0)}%` : "-"}</Text>
+              <Text style={remitoHalfStyles.colUnitDto}>{formatCurrency(unitConDto)}</Text>
+              <Text style={remitoHalfStyles.colFinal}>{formatCurrency(precioFinal)}</Text>
+            </View>
+          );
+        })}
+        {Array.from({ length: emptyRows }).map((_, i) => (
+          <View key={`e${i}`} style={remitoHalfStyles.tableRow}>
+            <Text style={remitoHalfStyles.colCodigo}> </Text>
+            <Text style={remitoHalfStyles.colCant}> </Text>
+            <Text style={remitoHalfStyles.colDesc}> </Text>
+            <Text style={remitoHalfStyles.colPrecioUnit}> </Text>
+            <Text style={remitoHalfStyles.colDto}> </Text>
+            <Text style={remitoHalfStyles.colUnitDto}> </Text>
+            <Text style={remitoHalfStyles.colFinal}> </Text>
+          </View>
+        ))}
+      </View>
+
+      {/* Summary */}
+      <View style={remitoHalfStyles.summaryBar}>
+        <View style={remitoHalfStyles.summaryItem}>
+          <Text><Text style={remitoHalfStyles.summaryLabel}>Items: </Text><Text style={remitoHalfStyles.summaryValue}>{totalItems}</Text></Text>
+        </View>
+        <View style={remitoHalfStyles.summaryItem}>
+          <Text><Text style={remitoHalfStyles.summaryLabel}>Unidades: </Text><Text style={remitoHalfStyles.summaryValue}>{totalUnidades}</Text></Text>
+        </View>
+        <View style={{ flex: 1 }} />
+        <View>
+          <Text><Text style={remitoHalfStyles.summaryLabel}>Total: </Text><Text style={remitoHalfStyles.summaryValue}>{formatCurrency(venta.total || 0)}</Text></Text>
+        </View>
+      </View>
+
+      {/* Saldo anterior */}
+      {venta.saldoAnterior != null && venta.saldoAnterior !== 0 && (
+        <View style={remitoHalfStyles.saldoRow}>
+          <Text>
+            <Text style={remitoHalfStyles.summaryLabel}>Saldo Anterior: </Text>
+            <Text style={remitoHalfStyles.summaryValue}>{formatCurrency(venta.saldoAnterior)}</Text>
+          </Text>
+          <Text>
+            <Text style={remitoHalfStyles.summaryLabel}>Total c/ CC: </Text>
+            <Text style={remitoHalfStyles.summaryValue}>{formatCurrency((venta.saldoAnterior || 0) + (venta.total || 0))}</Text>
+          </Text>
+        </View>
+      )}
+
+      {/* Firmas */}
+      <View style={remitoHalfStyles.firmaSection}>
+        <View style={remitoHalfStyles.firmaBox}>
+          <Text style={remitoHalfStyles.firmaLabel}>Firma - Entregó</Text>
+        </View>
+        <View style={remitoHalfStyles.firmaBox}>
+          <Text style={remitoHalfStyles.firmaLabel}>Firma y DNI - Recibió conforme</Text>
+        </View>
+      </View>
+
+      {/* Footer */}
+      <View style={remitoHalfStyles.footer}>
+        <Text>Documento no fiscal</Text>
+        <Text>{copia}</Text>
+      </View>
+    </>
+  );
+};
+
+const RemitoDoble = ({ venta }: { venta: Venta }) => (
+  <Document>
+    <Page size="A4" style={remitoHalfStyles.page}>
+      <View style={remitoHalfStyles.half}>
+        <RemitoCopia venta={venta} copia="ORIGINAL - Cliente" />
+      </View>
+      <View style={remitoHalfStyles.cutLine} />
+      <View style={remitoHalfStyles.half}>
+        <RemitoCopia venta={venta} copia="DUPLICADO - Comercio" />
+      </View>
+    </Page>
+  </Document>
+);
+
 // ===================== FUNCIÓN EXPORTABLE =====================
 /**
  * Genera un PDF de boleta o remito directamente en el cliente.
  * No usa Chromium ni ninguna API server-side.
+ * El remito sale doble en A4 (dos copias para cortar al medio).
  * Retorna el PDF como string base64.
  */
 export const generarPdfCliente = async (
@@ -822,7 +1045,7 @@ export const generarPdfCliente = async (
     tipo === "boleta" ? (
       <BoletaPDF venta={venta} afipData={afipData} />
     ) : (
-      <RemitoPDF venta={venta} />
+      <RemitoDoble venta={venta} />
     );
 
   const pdfBlob = await pdf(doc).toBlob();
