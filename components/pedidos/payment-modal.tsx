@@ -20,7 +20,7 @@ import {
 } from "@/components/ui/select";
 import { formatPrice } from "@/lib/utils/format";
 import type { Order, Client } from "@/lib/types";
-import { Banknote, CreditCard, UserPlus, Loader2, ArrowLeftRight, AlertTriangle, PackageX, ChevronDown, ChevronUp, ShieldAlert, Package, Upload, ImageIcon, X as XIcon, ChevronDown as ChevronDownIcon } from "lucide-react";
+import { Banknote, CreditCard, UserPlus, Loader2, ArrowLeftRight, AlertTriangle, PackageX, ChevronDown, ChevronUp, ShieldAlert, Package, Upload, ImageIcon, Camera, X as XIcon, ChevronDown as ChevronDownIcon } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 const generateOrderNumber = (createdAt: Date | string, index: number) => {
@@ -372,11 +372,18 @@ export function PaymentModal({
                   </button>
                 </div>
               ) : (
-                <label className="flex flex-col items-center gap-1.5 p-3 border-2 border-dashed border-violet-300 rounded-xl cursor-pointer bg-white hover:bg-violet-50 transition-colors">
-                  <ImageIcon className="h-6 w-6 text-violet-400" />
-                  <span className="text-xs text-violet-600 font-medium">Tocá para subir la foto del comprobante</span>
-                  <input type="file" accept="image/*" capture="environment" onChange={handleComprobanteChange} className="sr-only" />
-                </label>
+                <div className="grid grid-cols-2 gap-2">
+                  <label className="flex flex-col items-center gap-1.5 p-3 border-2 border-dashed border-violet-300 rounded-xl cursor-pointer bg-white hover:bg-violet-50 transition-colors">
+                    <Camera className="h-6 w-6 text-violet-400" />
+                    <span className="text-xs text-violet-600 font-medium">Sacar foto</span>
+                    <input type="file" accept="image/*" capture="environment" onChange={handleComprobanteChange} className="sr-only" />
+                  </label>
+                  <label className="flex flex-col items-center gap-1.5 p-3 border-2 border-dashed border-violet-300 rounded-xl cursor-pointer bg-white hover:bg-violet-50 transition-colors">
+                    <ImageIcon className="h-6 w-6 text-violet-400" />
+                    <span className="text-xs text-violet-600 font-medium">Desde galería</span>
+                    <input type="file" accept="image/*" onChange={handleComprobanteChange} className="sr-only" />
+                  </label>
+                </div>
               )}
             </div>
           )}
