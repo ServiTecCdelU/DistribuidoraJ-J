@@ -1126,42 +1126,6 @@ export default function TransportePage() {
               <DialogTitle>Listado de Carga</DialogTitle>
             </DialogHeader>
             <div>
-              {/* Product table */}
-              <div className="border border-gray-300 rounded-lg overflow-hidden mb-4">
-                <div className="bg-gray-100 px-3 py-2 border-b border-gray-300">
-                  <p className="text-xs font-bold text-gray-700 uppercase tracking-wider">Mercadería a Cargar</p>
-                </div>
-                <table className="w-full text-sm border-collapse">
-                  <thead>
-                    <tr className="border-b border-gray-200 bg-gray-50">
-                      <th className="text-left py-2 px-3 font-semibold text-gray-600 w-10">N°</th>
-                      <th className="text-left py-2 px-3 font-semibold text-gray-600">Producto</th>
-                      <th className="text-right py-2 px-3 font-semibold text-gray-600 w-20">Cant.</th>
-                      <th className="text-center py-2 px-3 font-semibold text-gray-600 w-14">OK</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {cargoList.map((item, index) => (
-                      <tr key={item.name} className={index % 2 === 0 ? "bg-white" : "bg-gray-50/50"}>
-                        <td className="py-2 px-3 text-gray-400 text-xs">{index + 1}</td>
-                        <td className="py-2 px-3 font-medium text-gray-900">{item.name}</td>
-                        <td className="py-2 px-3 text-right font-bold text-base text-gray-900">{item.quantity}</td>
-                        <td className="py-2 px-3 text-center">
-                          <span className="inline-block w-4 h-4 border-2 border-gray-400 rounded-sm" />
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                  <tfoot>
-                    <tr className="border-t-2 border-gray-300 bg-gray-100">
-                      <td className="py-2 px-3" />
-                      <td className="py-2 px-3 font-bold text-gray-700 text-xs uppercase">{cargoList.length} productos</td>
-                      <td className="py-2 px-3 text-right font-black text-base text-gray-900">{cargoList.reduce((acc, i) => acc + i.quantity, 0)}</td>
-                      <td className="py-2 px-3" />
-                    </tr>
-                  </tfoot>
-                </table>
-              </div>
               {/* Route by city */}
               <div className="border border-gray-300 rounded-lg overflow-hidden mb-4">
                 <div className="bg-gray-100 px-3 py-2 border-b border-gray-300">
@@ -1182,15 +1146,6 @@ export default function TransportePage() {
                               <span className="inline-block w-4 h-4 border-2 border-gray-400 rounded-sm flex-shrink-0" />
                             </div>
                             <p className="text-xs text-gray-600 mt-0.5">{order.address || "Sin dirección"}</p>
-                            <div className="mt-1.5 grid grid-cols-2 gap-x-4 gap-y-0.5">
-                              {order.items.map((item, i) => (
-                                <span key={i} className="text-xs text-gray-700">
-                                  <span className="font-bold text-gray-900">{item.quantity}</span>
-                                  <span className="text-gray-400 mx-0.5">×</span>
-                                  {item.name}
-                                </span>
-                              ))}
-                            </div>
                           </div>
                         </div>
                       </div>
@@ -1210,16 +1165,11 @@ export default function TransportePage() {
                 if (!win) return;
                 let html = `<!DOCTYPE html><html><head><title>Listado de Carga</title><style>*{margin:0;padding:0;box-sizing:border-box}body{font-family:sans-serif;padding:24px;font-size:13px}table{width:100%;border-collapse:collapse}th,td{padding:7px 12px;border-bottom:1px solid #f3f4f6}th{font-size:11px;font-weight:600;color:#4b5563;background:#f9fafb;border-bottom:1px solid #e5e7eb}td.right{text-align:right}th.right{text-align:right}th.center,td.center{text-align:center}.checkbox{display:inline-block;width:14px;height:14px;border:2px solid #9ca3af;border-radius:2px}.city-header{background:#1f2937;color:white;padding:6px 12px;font-size:11px;font-weight:700;text-transform:uppercase}.section{border:1px solid #d1d5db;border-radius:8px;overflow:hidden;margin-bottom:16px}.section-title{background:#f3f4f6;padding:8px 12px;border-bottom:1px solid #d1d5db;font-size:10px;font-weight:700;text-transform:uppercase;color:#374151}.tfoot td{border-top:2px solid #d1d5db;background:#f3f4f6;font-weight:700}.stop{display:flex;align-items:flex-start;gap:12px;padding:10px 12px;border-bottom:1px solid #e5e7eb}.stop-num{flex-shrink:0;width:26px;height:26px;border-radius:50%;background:#1f2937;color:white;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:700}.footer{margin-top:16px;text-align:center;font-size:10px;color:#9ca3af}@media print{body{padding:16px}}</style></head><body>`;
                 html += `<h2 style="margin-bottom:16px;font-size:18px">Listado de Carga — ${dateStr}</h2>`;
-                html += `<div class="section"><div class="section-title">Mercadería</div><table><thead><tr><th style="width:40px">N°</th><th>Producto</th><th class="right" style="width:70px">Cant.</th><th class="center" style="width:50px">OK</th></tr></thead><tbody>`;
-                cargoList.forEach((item, i) => {
-                  html += `<tr style="${i%2?"background:#f9fafb":""}"><td style="color:#9ca3af;font-size:11px">${i+1}</td><td style="font-weight:500">${item.name}</td><td class="right" style="font-weight:700;font-size:15px">${item.quantity}</td><td class="center"><span class="checkbox"></span></td></tr>`;
-                });
-                html += `</tbody><tr class="tfoot"><td></td><td>${cargoList.length} productos</td><td class="right">${cargoList.reduce((a,i)=>a+i.quantity,0)}</td><td></td></tr></table></div>`;
                 html += `<div class="section"><div class="section-title">Ruta de Entrega</div>`;
                 myGrouped.forEach(([city, cityOrders]) => {
                   html += `<div class="city-header">${city} — ${cityOrders.length} entregas</div>`;
                   cityOrders.forEach((order, idx) => {
-                    html += `<div class="stop"><div class="stop-num">${idx+1}</div><div style="flex:1"><div style="display:flex;justify-content:space-between"><strong>${order.clientName||"Sin cliente"}</strong><span class="checkbox"></span></div><div style="font-size:11px;color:#4b5563;margin-top:2px">${order.address||""}</div><div style="margin-top:4px;font-size:11px">${order.items.map(it=>`<strong>${it.quantity}</strong>×${it.name}`).join(" | ")}</div></div></div>`;
+                    html += `<div class="stop"><div class="stop-num">${idx+1}</div><div style="flex:1"><div style="display:flex;justify-content:space-between"><strong>${order.clientName||"Sin cliente"}</strong><span class="checkbox"></span></div><div style="font-size:11px;color:#4b5563;margin-top:2px">${order.address||""}</div></div></div>`;
                   });
                 });
                 html += `</div><div class="footer">Generado el ${stampStr}</div></body></html>`;
