@@ -809,6 +809,8 @@ const RemitoPDF = ({ venta }: { venta: Venta }) => {
 const remitoHalfStyles = StyleSheet.create({
   page: { fontFamily: "Helvetica", backgroundColor: "white" },
   half: { height: "50%", padding: "8mm 12mm", flexDirection: "column" },
+  // Copia que ocupa la hoja completa (cuando hay muchos ítems y no entran 2 por hoja).
+  full: { minHeight: "100%", padding: "12mm", flexDirection: "column" },
   cutLine: { borderBottom: "1px dashed #aaa", marginHorizontal: "12mm" },
   // Header
   header: {
@@ -1012,19 +1014,44 @@ const RemitoCopia = ({ venta, copia }: { venta: Venta; copia: string }) => {
   );
 };
 
-const RemitoDoble = ({ venta }: { venta: Venta }) => (
-  <Document>
-    <Page size="A4" style={remitoHalfStyles.page}>
-      <View style={remitoHalfStyles.half}>
-        <RemitoCopia venta={venta} copia="ORIGINAL - Cliente" />
-      </View>
-      <View style={remitoHalfStyles.cutLine} />
-      <View style={remitoHalfStyles.half}>
-        <RemitoCopia venta={venta} copia="DUPLICADO - Comercio" />
-      </View>
-    </Page>
-  </Document>
-);
+const RemitoDoble = ({ venta }: { venta: Venta }) => {
+  const itemCount = (venta.items || []).length;
+  // Si entran cómodos, dos copias en una hoja (para cortar al medio).
+  // Si hay muchos ítems, cada copia ocupa una hoja completa para que no se pisen las letras:
+  // ORIGINAL en una hoja, DUPLICADO en otra.
+  const hojaCompletaCadaUna = itemCount > 6;
+
+  if (hojaCompletaCadaUna) {
+    return (
+      <Document>
+        <Page size="A4" style={remitoHalfStyles.page}>
+          <View style={remitoHalfStyles.full}>
+            <RemitoCopia venta={venta} copia="ORIGINAL - Cliente" />
+          </View>
+        </Page>
+        <Page size="A4" style={remitoHalfStyles.page}>
+          <View style={remitoHalfStyles.full}>
+            <RemitoCopia venta={venta} copia="DUPLICADO - Comercio" />
+          </View>
+        </Page>
+      </Document>
+    );
+  }
+
+  return (
+    <Document>
+      <Page size="A4" style={remitoHalfStyles.page}>
+        <View style={remitoHalfStyles.half}>
+          <RemitoCopia venta={venta} copia="ORIGINAL - Cliente" />
+        </View>
+        <View style={remitoHalfStyles.cutLine} />
+        <View style={remitoHalfStyles.half}>
+          <RemitoCopia venta={venta} copia="DUPLICADO - Comercio" />
+        </View>
+      </Page>
+    </Document>
+  );
+};
 
 // ===================== FUNCIÓN EXPORTABLE =====================
 /**
