@@ -502,20 +502,15 @@ export default function PedidosPage() {
       const noQuiereAdj = adjustments.filter(a => a.type === "no_quiere");
       if (roturasAdj.length > 0) {
         const { registrarMovimiento } = await import("@/services/stock-service");
-        const { supabase } = await import("@/lib/supabase");
         for (const r of roturasAdj) {
+          // registrarMovimiento ya descuenta productos.stock y mayorista_productos.stock_local.
+          // No descontar de nuevo acá (causaba doble descuento del stock).
           await registrarMovimiento({
             productoId: r.productId,
             tipo: "rotura",
             cantidad: -r.quantity,
             referencia: `Rotura pedido #${selectedOrder.id} — ${r.productName}`,
           });
-          // También descontar de productos.stock (tabla principal)
-          const prodId = r.productId.startsWith("mp_") ? `prod_${r.productId}` : r.productId;
-          const { data: prod } = await supabase.from('productos').select('stock').eq('id', prodId).single();
-          if (prod) {
-            await supabase.from('productos').update({ stock: Math.max(0, (prod.stock || 0) - r.quantity) }).eq('id', prodId);
-          }
         }
       }
 
