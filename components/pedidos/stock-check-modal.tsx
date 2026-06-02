@@ -9,7 +9,7 @@ import {
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
-import { AlertTriangle, CheckCircle, Package, Repeat, Loader2, X } from "lucide-react";
+import { AlertTriangle, CheckCircle, Package, Repeat, Loader2, X, Minus, Plus } from "lucide-react";
 
 export interface StockCheckItem {
   productId: string;
@@ -33,19 +33,50 @@ interface StockCheckModalProps {
   onConfirm: (
     excludeProductIds: string[],
     replacements: Record<string, ReplacementOption>,
+    quantities: Record<string, number>,
   ) => void;
   // Busca productos del mismo tipo (otra marca) con stock para reemplazar el faltante
   findReplacements?: (item: StockCheckItem) => Promise<ReplacementOption[]>;
 }
 
-export function StockCheckModal({ open, onClose, items, onConfirm, findReplacements }: StockCheckModalProps) {
-  const sinStock = items.filter((i) => i.stock < i.quantity);
-  const conStock = items.filter((i) => i.stock >= i.quantity);
+function QtyStepper({ value, onChange }: { value: number; onChange: (v: number) => void }) {
+  return (
+    <div className="flex items-center gap-1 shrink-0">
+      <button
+        type="button"
+        onClick={() => onChange(Math.max(1, value - 1))}
+        className="h-6 w-6 flex items-center justify-center rounded-md border bg-white text-gray-600 hover:bg-gray-50"
+      >
+        <Minus className="h-3 w-3" />
+      </button>
+      <input
+        type="number"
+        min={1}
+        value={value}
+        onChange={(e) => {
+          const v = parseInt(e.target.value, 10);
+          onChange(Number.isNaN(v) || v < 1 ? 1 : v);
+        }}
+        className="h-6 w-11 text-center text-xs font-semibold border rounded-md bg-white [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+      />
+      <button
+        type="button"
+        onClick={() => onChange(value + 1)}
+        className="h-6 w-6 flex items-center justify-center rounded-md border bg-white text-gray-600 hover:bg-gray-50"
+      >
+        <Plus className="h-3 w-3" />
+      </button>
+    </div>
+  );
+}
 
+export function StockCheckModal({ open, onClose, items, onConfirm, findReplacements }: StockCheckModalProps) {
   // Faltantes que el usuario marca para incluir igual (sabe que físicamente sí están)
   const [incluirIgual, setIncluirIgual] = React.useState<Set<string>>(new Set());
   // Reemplazos elegidos: productId original -> opción de otra marca
   const [replacements, setReplacements] = React.useState<Record<string, ReplacementOption>>({});
+  // Cantidades editables: productId -> cantidad
+  const [quantities, setQuantities] = React.useState<Record<string, number>>({});
   // Panel de opciones abierto para un faltante + sus opciones cargadas
   const [openFor, setOpenFor] = React.useState<string | null>(null);
   const [options, setOptions] = React.useState<ReplacementOption[]>([]);
@@ -55,10 +86,19 @@ export function StockCheckModal({ open, onClose, items, onConfirm, findReplaceme
     if (open) {
       setIncluirIgual(new Set());
       setReplacements({});
+      setQuantities(Object.fromEntries(items.map((i) => [i.productId, i.quantity])));
       setOpenFor(null);
       setOptions([]);
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open]);
+
+  const qtyOf = (id: string) => quantities[id] ?? items.find((i) => i.productId === id)?.quantity ?? 1;
+  const setQty = (id: string, v: number) => setQuantities((prev) => ({ ...prev, [id]: Math.max(1, v) }));
+
+  // Categorías recalculadas según la cantidad editada (bajar la cantidad puede cubrir el faltante)
+  const sinStock = items.filter((i) => i.stock < qtyOf(i.productId));
+  const conStock = items.filter((i) => i.stock >= qtyOf(i.productId));
 
   const toggleIncluir = (id: string) => {
     setIncluirIgual((prev) => {
@@ -78,7 +118,7 @@ export function StockCheckModal({ open, onClose, items, onConfirm, findReplaceme
     if (!findReplacements) return;
     setLoadingOpts(true);
     try {
-      const opts = await findReplacements(item);
+      const opts = await findReplacements({ ...item, quantity: qtyOf(item.productId) });
       setOptions(opts);
     } catch {
       setOptions([]);
@@ -121,7 +161,7 @@ export function StockCheckModal({ open, onClose, items, onConfirm, findReplaceme
         <DialogHeader className="p-4 pb-3 border-b shrink-0">
           <DialogTitle className="text-base flex items-center gap-2">
             <AlertTriangle className="h-5 w-5 text-amber-500" />
-            Verificar stock
+            Verificar remito
           </DialogTitle>
         </DialogHeader>
 
@@ -157,9 +197,12 @@ export function StockCheckModal({ open, onClose, items, onConfirm, findReplaceme
                             {item.name}
                           </span>
                         </label>
-                        <span className={`text-xs whitespace-nowrap ${verde ? "text-emerald-600" : "text-red-600"}`}>
-                          {item.stock}/{item.quantity}
-                        </span>
+                        <div className="flex items-center gap-2">
+                          <QtyStepper value={qtyOf(item.productId)} onChange={(v) => setQty(item.productId, v)} />
+                          <span className={`text-[11px] whitespace-nowrap ${verde ? "text-emerald-600" : "text-red-600"}`}>
+                            stock {item.stock}
+                          </span>
+                        </div>
                       </div>
 
                       {/* Reemplazo elegido */}
@@ -224,7 +267,7 @@ export function StockCheckModal({ open, onClose, items, onConfirm, findReplaceme
                 })}
               </div>
               <p className="text-[11px] text-muted-foreground mt-1.5">
-                Tildá si tenés stock físico aunque el sistema no lo registre, o reemplazá por otra marca con stock.
+                Ajustá la cantidad, tildá si tenés stock físico aunque el sistema no lo registre, o reemplazá por otra marca con stock.
               </p>
             </div>
           )}
@@ -238,11 +281,12 @@ export function StockCheckModal({ open, onClose, items, onConfirm, findReplaceme
               </p>
               <div className="space-y-1.5">
                 {conStock.map((item) => (
-                  <div key={item.productId} className="flex items-center justify-between px-3 py-2 bg-green-50 border border-green-200 rounded-xl text-sm">
-                    <span className="font-medium text-green-800 truncate mr-2">{item.name}</span>
-                    <span className="text-xs text-green-600 whitespace-nowrap">
-                      {item.stock}/{item.quantity}
-                    </span>
+                  <div key={item.productId} className="flex items-center justify-between gap-2 px-3 py-2 bg-green-50 border border-green-200 rounded-xl text-sm">
+                    <span className="font-medium text-green-800 truncate flex-1">{item.name}</span>
+                    <div className="flex items-center gap-2">
+                      <QtyStepper value={qtyOf(item.productId)} onChange={(v) => setQty(item.productId, v)} />
+                      <span className="text-[11px] text-green-600 whitespace-nowrap">stock {item.stock}</span>
+                    </div>
                   </div>
                 ))}
               </div>
@@ -252,7 +296,7 @@ export function StockCheckModal({ open, onClose, items, onConfirm, findReplaceme
 
         <div className="p-4 pt-3 border-t space-y-2 shrink-0">
           {hayAlgoParaGenerar ? (
-            <Button className="w-full" onClick={() => onConfirm(excluidos, replacements)}>
+            <Button className="w-full" onClick={() => onConfirm(excluidos, replacements, quantities)}>
               {excluidos.length > 0 ? "Generar remito sin los faltantes" : "Generar remito"}
             </Button>
           ) : (

@@ -179,15 +179,18 @@ export default function PedidosPage() {
     }
   }, []);
 
-  const generateRemitoForOrder = useCallback(async (order: Order, excludeProductIds: string[] = [], replacements: Record<string, ReplacementOption> = {}) => {
+  const generateRemitoForOrder = useCallback(async (order: Order, excludeProductIds: string[] = [], replacements: Record<string, ReplacementOption> = {}, quantities: Record<string, number> = {}) => {
     setGeneratingDoc(true);
     try {
-      // Aplicar reemplazos por otra marca (mantiene cantidad y descuento %, cambia producto/precio)
+      // Aplicar cantidades editadas y reemplazos por otra marca (mantiene descuento %, cambia producto/precio).
       // El descuento es un porcentaje: se preserva y se aplica sobre el nuevo precio.
+      let huboCambioCantidad = false;
       const replacedItems = order.items.map((i: any) => {
+        const nuevaCant = quantities[i.productId];
+        const cant = nuevaCant != null && nuevaCant !== i.quantity ? (huboCambioCantidad = true, nuevaCant) : i.quantity;
         const r = replacements[i.productId];
-        if (!r) return i;
-        return { ...i, productId: r.productId, name: r.name, price: r.price, codigo: r.codigo };
+        if (!r) return cant !== i.quantity ? { ...i, quantity: cant } : i;
+        return { ...i, productId: r.productId, name: r.name, price: r.price, codigo: r.codigo, quantity: cant };
       });
 
       const filteredItems = excludeProductIds.length > 0
@@ -199,9 +202,9 @@ export default function PedidosPage() {
         return;
       }
 
-      // Si se excluyeron o reemplazaron productos, actualizar el pedido en BD
+      // Si se excluyeron, reemplazaron o se cambió la cantidad, actualizar el pedido en BD
       const huboReemplazos = Object.keys(replacements).length > 0;
-      if (excludeProductIds.length > 0 || huboReemplazos) {
+      if (excludeProductIds.length > 0 || huboReemplazos || huboCambioCantidad) {
         const { data: updData } = await supabase
           .from("pedidos")
           .update({ items: filteredItems })
@@ -289,23 +292,16 @@ export default function PedidosPage() {
       };
     });
 
-    const sinStock = checkItems.filter((i) => i.stock < i.quantity);
-
-    if (sinStock.length > 0) {
-      // Mostrar modal de verificación
-      setStockCheckItems(checkItems);
-      setStockCheckOrder(order);
-      setStockCheckOpen(true);
-    } else {
-      // Todo OK, generar directo
-      await generateRemitoForOrder(order);
-    }
+    // Siempre mostrar el modal para poder ajustar cantidades, reemplazar o excluir antes de generar
+    setStockCheckItems(checkItems);
+    setStockCheckOrder(order);
+    setStockCheckOpen(true);
   }, [detailOrder, generateRemitoForOrder]);
 
-  const handleStockCheckConfirm = useCallback(async (excludeProductIds: string[], replacements: Record<string, ReplacementOption>) => {
+  const handleStockCheckConfirm = useCallback(async (excludeProductIds: string[], replacements: Record<string, ReplacementOption>, quantities: Record<string, number>) => {
     setStockCheckOpen(false);
     if (stockCheckOrder) {
-      await generateRemitoForOrder(stockCheckOrder, excludeProductIds, replacements);
+      await generateRemitoForOrder(stockCheckOrder, excludeProductIds, replacements, quantities);
     }
     setStockCheckOrder(null);
     setStockCheckItems([]);
