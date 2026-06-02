@@ -369,6 +369,8 @@ export default function CajaPage() {
   const { user } = useAuth();
   const [loading, setLoading] = useState(true);
   const [sales, setSales] = useState<Sale[]>([]);
+  // Pedidos rechazados del día (cliente no los quiso). Se muestran en caja sin monto.
+  const [rejectedOrders, setRejectedOrders] = useState<{ id: string; clientName: string; remitoNumber?: string; date: string }[]>([]);
   const [losses, setLosses] = useState<{ id: string; amount: number; description: string; date: string }[]>([]);
   const [pagosComisiones, setPagosComisiones] = useState<{ id: string; sellerName: string; monto: number; createdAt: string }[]>([]);
   const [currentRegister, setCurrentRegister] = useState<CashRegister | null>(null);
@@ -467,6 +469,15 @@ export default function CajaPage() {
           .gte("created_at", cajaDate.toISOString());
         if (!mounted) return;
         setPagosComisiones((pagosData || []).map((p: any) => ({ id: p.id, sellerName: p.seller_name, monto: Number(p.monto) || 0, createdAt: p.created_at })));
+
+        // Cargar pedidos rechazados del día (no afectan totales)
+        const { data: rejData } = await supabase
+          .from("pedidos")
+          .select("id, client_name, remito_number, updated_at")
+          .eq("status", "rechazado")
+          .gte("updated_at", cajaDate.toISOString());
+        if (!mounted) return;
+        setRejectedOrders((rejData || []).map((p: any) => ({ id: p.id, clientName: p.client_name, remitoNumber: p.remito_number ?? undefined, date: p.updated_at })));
       } catch {
         if (!mounted) return;
         toast.error("Error al cargar datos de caja");
@@ -531,6 +542,13 @@ export default function CajaPage() {
         .select("id, seller_name, monto, created_at")
         .gte("created_at", cajaDate.toISOString());
       setPagosComisiones((pagosData || []).map((p: any) => ({ id: p.id, sellerName: p.seller_name, monto: Number(p.monto) || 0, createdAt: p.created_at })));
+
+      const { data: rejData } = await supabase
+        .from("pedidos")
+        .select("id, client_name, remito_number, updated_at")
+        .eq("status", "rechazado")
+        .gte("updated_at", cajaDate.toISOString());
+      setRejectedOrders((rejData || []).map((p: any) => ({ id: p.id, clientName: p.client_name, remitoNumber: p.remito_number ?? undefined, date: p.updated_at })));
     } catch {
       toast.error("Error al recargar ventas");
     } finally {
@@ -1122,7 +1140,7 @@ export default function CajaPage() {
                     </CardTitle>
                   </CardHeader>
                   <CardContent>
-                    {sales.length === 0 ? (
+                    {sales.length === 0 && rejectedOrders.length === 0 ? (
                       <p className="text-sm text-muted-foreground text-center py-8">
                         No hay ventas hoy
                       </p>
@@ -1180,6 +1198,31 @@ export default function CajaPage() {
                             </div>
                           );
                         })}
+                        {rejectedOrders.map((o) => (
+                          <div
+                            key={o.id}
+                            className="flex items-center justify-between py-1.5 border-b border-border/50 last:border-0 gap-2"
+                          >
+                            <div className="flex items-center gap-2 min-w-0 flex-1">
+                              <span className="text-sm font-medium truncate">
+                                {o.clientName || "Consumidor Final"}
+                              </span>
+                              {o.remitoNumber && (
+                                <span className="text-xs text-muted-foreground shrink-0">
+                                  {o.remitoNumber}
+                                </span>
+                              )}
+                              <span className="text-xs text-muted-foreground shrink-0">
+                                {formatTimeStr(new Date(o.date))}
+                              </span>
+                            </div>
+                            <div className="flex items-center gap-2 shrink-0">
+                              <Badge className="text-[10px] border-0 bg-red-100 text-red-700">
+                                Rechazado
+                              </Badge>
+                            </div>
+                          </div>
+                        ))}
                       </div>
                     )}
                   </CardContent>
