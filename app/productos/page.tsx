@@ -949,6 +949,7 @@ tr.cat td{border:none}
     lowStockCount: 0,
     outOfStockCount: 0,
     gananciaActual: null as number | null,
+    gananciaMedicamentos: null as number | null,
   });
 
   const fetchStats = useCallback(async () => {
@@ -1096,6 +1097,9 @@ tr.cat td{border:none}
           <div className="flex items-center gap-1.5 rounded-2xl border border-border bg-card px-3 py-1.5">
             <Pill className="h-3.5 w-3.5 text-teal-600" />
             <span className="text-xs font-medium text-muted-foreground">Medicamentos</span>
+            {stats.gananciaMedicamentos != null && (
+              <span className="text-xs font-semibold text-teal-600">{stats.gananciaMedicamentos}%</span>
+            )}
             <Input
               type="number"
               min={0}

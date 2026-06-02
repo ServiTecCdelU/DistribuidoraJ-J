@@ -108,15 +108,17 @@ export const getProductStats = async (): Promise<{
   lowStockCount: number
   outOfStockCount: number
   gananciaActual: number | null
+  gananciaMedicamentos: number | null
 }> => {
   const activeFilter = 'disabled.eq.false,disabled.is.null'
 
   // Queries de conteo en paralelo (sin límite de 1000 filas)
-  const [totalRes, outRes, lowRes, gananciaRes] = await Promise.all([
+  const [totalRes, outRes, lowRes, gananciaRes, gananciaMedRes] = await Promise.all([
     supabase.from('productos').select('*', { count: 'exact', head: true }).or(activeFilter),
     supabase.from('productos').select('*', { count: 'exact', head: true }).or(activeFilter).eq('stock', 0),
     supabase.from('productos').select('*', { count: 'exact', head: true }).or(activeFilter).gt('stock', 0).lt('stock', 10),
     supabase.from('productos').select('ganancia_global').or(activeFilter).gt('ganancia_global', 0).limit(1),
+    supabase.from('productos').select('ganancia_global').ilike('category', '%medicamento%').gt('ganancia_global', 0).limit(1),
   ])
 
   // Valor de inventario: paginar para sumar todo
@@ -138,12 +140,16 @@ export const getProductStats = async (): Promise<{
   const gananciaRow = gananciaRes.data?.[0]
   const gananciaActual = gananciaRow ? Number(gananciaRow.ganancia_global) : null
 
+  const gananciaMedRow = gananciaMedRes.data?.[0]
+  const gananciaMedicamentos = gananciaMedRow ? Number(gananciaMedRow.ganancia_global) : null
+
   return {
     totalProducts: totalRes.count ?? 0,
     totalInventoryValue,
     lowStockCount: lowRes.count ?? 0,
     outOfStockCount: outRes.count ?? 0,
     gananciaActual,
+    gananciaMedicamentos,
   }
 }
 
