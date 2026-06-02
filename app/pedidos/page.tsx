@@ -20,6 +20,7 @@ import { OrderDetailModal } from "@/components/pedidos/order-detail-modal";
 import { PaymentModal, type ItemAdjustment } from "@/components/pedidos/payment-modal";
 import { SuccessModal } from "@/components/pedidos/success-modal";
 import { StockCheckModal, type StockCheckItem, type ReplacementOption } from "@/components/pedidos/stock-check-modal";
+import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { statusConfig } from "@/lib/order-constants";
 import { formatCurrency as formatPrice } from "@/lib/utils/format";
 
@@ -86,6 +87,8 @@ export default function PedidosPage() {
 
   // Pedidos retenidos (no avanzan con "Todos a...")
   const [heldClients, setHeldClients] = useState<Set<string>>(new Set());
+  // Confirmación de eliminación de pedido(s)
+  const [pendingDelete, setPendingDelete] = useState<{ ids: string[]; label: string } | null>(null);
 
   const toggleHeldClient = useCallback((clientName: string) => {
     let willHold = false;
@@ -99,20 +102,12 @@ export default function PedidosPage() {
     ordersApi.setClientOrdersHeld(clientName, willHold).catch(() => {
       toast.error("No se pudo guardar el estado retenido");
     });
-    // Al retener, ofrecer eliminar el pedido
+    // Al retener, ofrecer eliminar el pedido (modal del sistema)
     if (willHold) {
-      setTimeout(() => {
-        if (confirm(`Pedido de ${clientName} retenido.\n¿Desea eliminar este pedido? Se borra de la base de datos y no se puede deshacer.`)) {
-          const toDelete = orders.filter((o) => (o.clientName || "Sin cliente") === clientName && o.status !== "completed");
-          Promise.all(toDelete.map((o) => ordersApi.deleteOrder(o.id)))
-            .then(() => {
-              setOrders((prev) => prev.filter((o) => !toDelete.some((d) => d.id === o.id)));
-              setHeldClients((prev) => { const n = new Set(prev); n.delete(clientName); return n; });
-              toast.success("Pedido eliminado");
-            })
-            .catch(() => toast.error("No se pudo eliminar el pedido"));
-        }
-      }, 0);
+      const toDelete = orders.filter((o) => (o.clientName || "Sin cliente") === clientName && o.status !== "completed");
+      if (toDelete.length > 0) {
+        setPendingDelete({ ids: toDelete.map((o) => o.id), label: clientName });
+      }
     }
   }, [orders]);
 
@@ -336,17 +331,26 @@ export default function PedidosPage() {
       }));
   }, []);
 
-  const handleDeleteOrder = useCallback(async (order: Order) => {
+  const handleDeleteOrder = useCallback((order: Order) => {
+    setPendingDelete({ ids: [order.id], label: order.clientName || "este cliente" });
+  }, []);
+
+  const confirmDelete = useCallback(async () => {
+    if (!pendingDelete) return;
+    const { ids, label } = pendingDelete;
     try {
-      await ordersApi.deleteOrder(order.id);
-      setOrders((prev) => prev.filter((o) => o.id !== order.id));
+      await Promise.all(ids.map((id) => ordersApi.deleteOrder(id)));
+      setOrders((prev) => prev.filter((o) => !ids.includes(o.id)));
+      setHeldClients((prev) => { const n = new Set(prev); n.delete(label); return n; });
       setActiveModal(null);
       setDetailOrder(null);
-      toast.success("Pedido eliminado");
+      toast.success(ids.length > 1 ? "Pedidos eliminados" : "Pedido eliminado");
     } catch {
       toast.error("No se pudo eliminar el pedido");
+    } finally {
+      setPendingDelete(null);
     }
-  }, []);
+  }, [pendingDelete]);
 
   // handleGenerateInvoice — deshabilitado temporalmente
   const handleGenerateInvoice = useCallback(async (_order: Order) => {}, []);
@@ -1741,6 +1745,17 @@ th.center,td.center{text-align:center}
         userRole={user?.role}
         onHacerPedido={undefined}
         onDelete={handleDeleteOrder}
+      />
+
+      <ConfirmDialog
+        open={!!pendingDelete}
+        onOpenChange={(o) => !o && setPendingDelete(null)}
+        title="Eliminar pedido"
+        description={`¿Eliminar el pedido de ${pendingDelete?.label ?? ""}? Se borra de la base de datos y no se puede deshacer.`}
+        confirmText="Eliminar"
+        cancelText="Cancelar"
+        variant="destructive"
+        onConfirm={confirmDelete}
       />
 
       <StockCheckModal
