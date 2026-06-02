@@ -1353,7 +1353,7 @@ th.center,td.center{text-align:center}
       clientOrders.forEach((order, idx) => {
         const addr = order.address || "Sin dirección";
         const city = order.city ? ` · ${order.city}` : "";
-        html += `<div class="stop"><div class="stop-num">${idx+1}</div><div style="flex:1"><div style="display:flex;justify-content:space-between;align-items:center"><strong style="font-size:12px">${addr}${city}</strong><span class="checkbox"></span></div><div style="margin-top:4px;font-size:11px;color:#6b7280">${order.items.map(it=>`<strong>${it.quantity}</strong>× ${it.name}`).join(" &middot; ")}</div></div></div>`;
+        html += `<div class="stop"><div class="stop-num">${idx+1}</div><div style="flex:1"><div style="display:flex;justify-content:space-between;align-items:center"><strong style="font-size:12px">${addr}${city}</strong><span class="checkbox"></span></div></div></div>`;
       });
       html += `</div>`;
     });
