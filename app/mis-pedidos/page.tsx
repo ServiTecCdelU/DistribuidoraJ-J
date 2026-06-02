@@ -12,7 +12,7 @@ import { statusConfig } from "@/lib/order-constants";
 import { formatCurrency } from "@/lib/utils/format";
 import { Package, ChevronDown, ChevronRight, MapPin } from "lucide-react";
 
-type StatusFilter = "all" | "pending" | "preparation" | "delivery" | "completed";
+type StatusFilter = "all" | "pending" | "preparation" | "delivery" | "completed" | "rechazado";
 
 const FILTERS: { key: StatusFilter; label: string }[] = [
   { key: "all", label: "Todos" },
@@ -20,6 +20,7 @@ const FILTERS: { key: StatusFilter; label: string }[] = [
   { key: "preparation", label: "Preparación" },
   { key: "delivery", label: "En Reparto" },
   { key: "completed", label: "Completados" },
+  { key: "rechazado", label: "Rechazados" },
 ];
 
 const orderTotal = (order: Order): number =>

@@ -8,6 +8,7 @@ export interface Venta extends Sale {
   saleNumber?: number;
   cashAmount?: number;
   creditAmount?: number;
+  rechazado?: boolean;
 }
 
 // Tipos de pago

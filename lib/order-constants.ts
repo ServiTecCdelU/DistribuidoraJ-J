@@ -1,6 +1,6 @@
 // lib/order-constants.ts
 import type { OrderStatus } from "@/types";
-import { Clock, Box, Truck, CheckCircle } from "lucide-react";
+import { Clock, Box, Truck, CheckCircle, Ban } from "lucide-react";
 
 export const statusConfig: Record<
   OrderStatus,
@@ -44,6 +44,14 @@ export const statusConfig: Record<
     bgColor: "bg-green-50",
     borderColor: "border-green-200",
     icon: CheckCircle,
+  },
+  rechazado: {
+    label: "Rechazado",
+    color: "text-red-700",
+    dotColor: "bg-red-500",
+    bgColor: "bg-red-50",
+    borderColor: "border-red-200",
+    icon: Ban,
   },
 };
 

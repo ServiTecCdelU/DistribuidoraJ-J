@@ -138,7 +138,7 @@ export interface Order {
   transportistaId?: string;
   transportistaName?: string;
   items: { productId: string; quantity: number; name: string; price: number; itemDiscount?: number; unidadesPorBulto?: number; seDivideEn?: number; precioUnitarioMayorista?: number }[];
-  status: "pending" | "preparation" | "delivery" | "completed";
+  status: "pending" | "preparation" | "delivery" | "completed" | "rechazado";
   city?: City;
   address: string;
   lat?: number;
@@ -155,7 +155,7 @@ export interface Order {
   updatedAt: Date;
 }
 
-export type OrderStatus = "pending" | "preparation" | "delivery" | "completed";
+export type OrderStatus = "pending" | "preparation" | "delivery" | "completed" | "rechazado";
 
 export interface Seller {
   id: string;

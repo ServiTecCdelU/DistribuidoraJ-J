@@ -86,6 +86,21 @@ export const completeOrder = async (id: string, saleId: string): Promise<Order> 
   return mapOrder(data)
 }
 
+// Rechaza un pedido: el cliente no lo quiso. No descuenta stock, no genera venta,
+// no suma a caja ni a comisiones. Solo cambia el estado a 'rechazado' para que el
+// vendedor lo vea como rechazado en Mis Pedidos.
+export const rejectOrder = async (id: string): Promise<Order> => {
+  const { data } = await supabase
+    .from('pedidos')
+    .update({ status: 'rechazado', held: false })
+    .eq('id', id)
+    .select()
+    .single()
+
+  if (!data) throw new Error('Order not found')
+  return mapOrder(data)
+}
+
 export const assignTransportista = async (id: string, transportistaId: string, transportistaName: string): Promise<Order> => {
   const { data } = await supabase
     .from('pedidos')

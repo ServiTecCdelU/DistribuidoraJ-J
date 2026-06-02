@@ -68,6 +68,7 @@ export interface Venta {
   saldoAnterior?: number;
   discount?: number;
   discountType?: "percent" | "fixed";
+  rechazado?: boolean;
   clientData?: {
     name?: string;
     phone?: string;
@@ -159,6 +160,26 @@ function mapVenta(d: Record<string, any>): Venta {
   };
 }
 
+// Pedido rechazado por el repartidor (cliente no lo quiso). Figura en Ventas con su
+// remito pero sin monto: total 0 y bandera rechazado para mostrar el cartel "Rechazado".
+function mapPedidoRechazado(d: Record<string, any>): Venta {
+  return {
+    id: d.id,
+    clientId: d.client_id ?? undefined,
+    clientName: d.client_name ?? undefined,
+    clientPhone: d.client_phone ?? undefined,
+    items: d.items ?? [],
+    total: 0,
+    paymentType: "cash",
+    createdAt: d.created_at ? new Date(d.created_at) : new Date(),
+    remitoNumber: d.remito_number ?? undefined,
+    remitoPdfBase64: d.remito_pdf_base64 ?? undefined,
+    sellerName: d.seller_name ?? undefined,
+    deliveryAddress: d.address ?? undefined,
+    rechazado: true,
+  };
+}
+
 export function useVentas(filterBySellerId?: string, clientCityMap?: Record<string, string>) {
   const [ventas, setVentas] = useState<Venta[]>([]);
   const [cargando, setCargando] = useState(true);
@@ -193,12 +214,25 @@ export function useVentas(filterBySellerId?: string, clientCityMap?: Record<stri
         .order("created_at", { ascending: false })
         .limit(200);
 
+      let pq = supabase
+        .from("pedidos")
+        .select("*")
+        .eq("status", "rechazado")
+        .order("created_at", { ascending: false })
+        .limit(200);
+
       if (filterBySellerId) {
         q = q.eq("seller_id", filterBySellerId);
+        pq = pq.eq("seller_id", filterBySellerId);
       }
 
-      const { data } = await q;
-      setVentas((data ?? []).map(mapVenta));
+      const [{ data }, { data: rechazados }] = await Promise.all([q, pq]);
+      const ventasList = (data ?? []).map(mapVenta);
+      const rechazadosList = (rechazados ?? []).map(mapPedidoRechazado);
+      const merged = [...ventasList, ...rechazadosList].sort(
+        (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime(),
+      );
+      setVentas(merged);
     } catch (error) {
       toast.error("Error al cargar ventas");
     } finally {

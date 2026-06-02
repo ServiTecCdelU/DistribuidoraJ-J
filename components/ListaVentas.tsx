@@ -442,10 +442,16 @@ export function ListaVentas({
                     </div>
                   </div>
                   <div className="text-right shrink-0">
-                    <p className="font-bold text-sm text-foreground">{fmt(venta.total)}</p>
-                    <Badge variant="outline" className={`text-[10px] ${payBadgeCls(venta.paymentType, venta.paymentMethod)}`}>
-                      {payLabel(venta.paymentType, venta.paymentMethod)}
-                    </Badge>
+                    {venta.rechazado ? (
+                      <Badge variant="outline" className="text-[10px] bg-red-100 text-red-700 border-red-200">Rechazado</Badge>
+                    ) : (
+                      <>
+                        <p className="font-bold text-sm text-foreground">{fmt(venta.total)}</p>
+                        <Badge variant="outline" className={`text-[10px] ${payBadgeCls(venta.paymentType, venta.paymentMethod)}`}>
+                          {payLabel(venta.paymentType, venta.paymentMethod)}
+                        </Badge>
+                      </>
+                    )}
                   </div>
                 </div>
 
@@ -472,13 +478,19 @@ export function ListaVentas({
                   <div><p>{fmtDate(venta.createdAt)}</p><p className="text-xs">{fmtTime(venta.createdAt)}</p></div>
                 </div>
                 <div className="hidden md:flex md:col-span-2 items-center justify-end">
-                  <p className="font-bold text-foreground text-base">{fmt(venta.total)}</p>
+                  {venta.rechazado ? (
+                    <Badge variant="outline" className="px-2.5 py-1 bg-red-100 text-red-700 border-red-200">Rechazado</Badge>
+                  ) : (
+                    <p className="font-bold text-foreground text-base">{fmt(venta.total)}</p>
+                  )}
                 </div>
                 <div className="hidden md:flex md:col-span-2 items-center justify-center">
-                  <Badge variant="outline" className={`gap-1.5 px-2.5 py-1 ${payBadgeCls(venta.paymentType, venta.paymentMethod)}`}>
-                    {payIcon(venta.paymentType, venta.paymentMethod)}
-                    {payLabel(venta.paymentType, venta.paymentMethod)}
-                  </Badge>
+                  {!venta.rechazado && (
+                    <Badge variant="outline" className={`gap-1.5 px-2.5 py-1 ${payBadgeCls(venta.paymentType, venta.paymentMethod)}`}>
+                      {payIcon(venta.paymentType, venta.paymentMethod)}
+                      {payLabel(venta.paymentType, venta.paymentMethod)}
+                    </Badge>
+                  )}
                 </div>
                 <div className="hidden md:flex md:col-span-1 items-center justify-center">
                   <Button variant="ghost" size="sm" className="h-8 text-blue-600 hover:text-blue-700 hover:bg-blue-50 gap-1" onClick={() => onVerDetalle(venta)}>

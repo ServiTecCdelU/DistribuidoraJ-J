@@ -78,6 +78,7 @@ interface PaymentModalProps {
   selectedClientId: string;
   setSelectedClientId: (value: string) => void;
   onComplete: (adjustments: ItemAdjustment[], payments: { efectivo: number; transferencia: number; cuentaCorriente: number }, comprobanteFile?: File) => void;
+  onReject?: () => void;
   processing: boolean;
   onNewClient: () => void;
 }
@@ -92,11 +93,13 @@ export function PaymentModal({
   selectedClientId,
   setSelectedClientId,
   onComplete,
+  onReject,
   processing,
   onNewClient,
 }: PaymentModalProps) {
   const [adjustments, setAdjustments] = useState<Record<string, ItemAdj>>({});
   const [adjustOpen, setAdjustOpen] = useState(false);
+  const [confirmReject, setConfirmReject] = useState(false);
 
   // Nuevos estados de pago multi-método
   const [efectivoAmount, setEfectivoAmount] = useState("");
@@ -113,6 +116,7 @@ export function PaymentModal({
     setCuentaCorrienteAmount("");
     setComprobanteFile(null);
     setComprobantePreview("");
+    setConfirmReject(false);
   }, [order?.id]);
 
   const handleComprobanteChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -581,6 +585,46 @@ export function PaymentModal({
               ) : "Confirmar Pago"}
             </Button>
           </div>
+
+          {/* Rechazar pedido — el cliente no lo quiso */}
+          {onReject && (
+            confirmReject ? (
+              <div className="rounded-xl border border-red-200 bg-red-50 p-3 space-y-2">
+                <p className="text-xs text-red-700 font-medium text-center">
+                  ¿Rechazar el pedido? El stock vuelve a quedar disponible y no se cobra nada.
+                </p>
+                <div className="flex gap-2">
+                  <Button
+                    variant="outline"
+                    className="flex-1 h-10 border-gray-300"
+                    onClick={() => setConfirmReject(false)}
+                    disabled={processing}
+                  >
+                    No
+                  </Button>
+                  <Button
+                    className="flex-1 h-10 bg-red-600 hover:bg-red-700 text-white font-semibold"
+                    onClick={onReject}
+                    disabled={processing}
+                  >
+                    {processing ? (
+                      <><Loader2 className="h-4 w-4 mr-2 animate-spin" />Rechazando...</>
+                    ) : "Sí, rechazar"}
+                  </Button>
+                </div>
+              </div>
+            ) : (
+              <Button
+                variant="ghost"
+                className="w-full h-10 text-red-600 hover:text-red-700 hover:bg-red-50 gap-2"
+                onClick={() => setConfirmReject(true)}
+                disabled={processing}
+              >
+                <PackageX className="h-4 w-4" />
+                Cancelar pedido — el cliente no lo quiere
+              </Button>
+            )
+          )}
         </div>
       </DialogContent>
     </Dialog>

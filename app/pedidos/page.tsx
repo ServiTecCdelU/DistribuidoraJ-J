@@ -756,6 +756,31 @@ export default function PedidosPage() {
     }
   }, [selectedOrder, selectedClientId, clients, selectedClientOrders, loadData]);
 
+  // Rechazo del pedido por el repartidor: el cliente no lo quiso.
+  // No descuenta stock, no genera venta, no suma a caja ni a comisiones.
+  // Queda como "rechazado" para que el vendedor lo vea y aparece en Ventas con su remito.
+  const handleRejectOrder = useCallback(async () => {
+    if (!selectedOrder) return;
+    setProcessingPayment(true);
+    try {
+      const ordersToReject = selectedClientOrders.length > 0 ? selectedClientOrders : [selectedOrder];
+      const rejected = await Promise.all(ordersToReject.map((o) => ordersApi.rejectOrder(o.id)));
+      setOrders((prev) =>
+        prev.map((o) => rejected.find((r) => r.id === o.id) ?? o),
+      );
+      toast.success(ordersToReject.length > 1 ? "Pedidos rechazados" : "Pedido rechazado");
+      setActiveModal(null);
+      setSelectedOrder(null);
+      setSelectedClientId("");
+      setSelectedClientOrders([]);
+      loadData();
+    } catch {
+      toast.error("Error al rechazar el pedido");
+    } finally {
+      setProcessingPayment(false);
+    }
+  }, [selectedOrder, selectedClientOrders, loadData]);
+
   const handleGoToSale = useCallback(() => {
     if (lastSaleResult?.saleId) {
       router.push(`/ventas?saleId=${lastSaleResult.saleId}`);
@@ -955,7 +980,7 @@ tfoot td{border-top:2px solid #1f4e78;background:#f2f2f2;font-weight:700;font-si
     searchQuery,
   ]);
 
-  const activeOrders = useMemo(() => orders.filter((o) => o.status !== "completed"), [orders]);
+  const activeOrders = useMemo(() => orders.filter((o) => o.status !== "completed" && o.status !== "rechazado"), [orders]);
 
   const filteredOrders = useMemo(() => {
     // Completados van a Ventas — no aparecen en Pedidos
@@ -1811,6 +1836,7 @@ th.center,td.center{text-align:center}
         selectedClientId={selectedClientId}
         setSelectedClientId={setSelectedClientId}
         onComplete={handleCompleteOrder}
+        onReject={handleRejectOrder}
         processing={processingPayment}
         onNewClient={() => setShowClientModal(true)}
       />

@@ -60,6 +60,7 @@ import {
   getOrdersBySeller,
   updateOrderStatus,
   completeOrder,
+  rejectOrder,
   createOrder,
   assignTransportista,
   removeTransportista,
@@ -270,6 +271,9 @@ export const ordersApi = {
   },
   async completeOrder(id: string, saleId: string): Promise<Order> {
     return completeOrder(id, saleId)
+  },
+  async rejectOrder(id: string): Promise<Order> {
+    return rejectOrder(id)
   },
   async assignTransportista(id: string, transportistaId: string, transportistaName: string): Promise<Order> {
     return assignTransportista(id, transportistaId, transportistaName)

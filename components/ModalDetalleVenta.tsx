@@ -149,7 +149,7 @@ export function ModalDetalleVenta({
               </div>
               <div>
                 <DialogTitle className="text-xl font-bold text-foreground">
-                  Venta {venta.saleNumber || "?"}
+                  {venta.rechazado ? "Pedido rechazado" : `Venta ${venta.saleNumber || "?"}`}
                 </DialogTitle>
                 <DialogDescription className="text-sm text-muted-foreground flex items-center gap-1 mt-0.5">
                   <Clock className="h-3.5 w-3.5" />
@@ -159,9 +159,11 @@ export function ModalDetalleVenta({
             </div>
             <Badge
               variant="outline"
-              className={`${claseBadgePago(venta.paymentType, venta.paymentMethod)} px-3 py-1`}
+              className={venta.rechazado
+                ? "bg-red-100 text-red-700 border-red-200 px-3 py-1"
+                : `${claseBadgePago(venta.paymentType, venta.paymentMethod)} px-3 py-1`}
             >
-              {etiquetaPago(venta.paymentType, venta.paymentMethod)}
+              {venta.rechazado ? "Rechazado" : etiquetaPago(venta.paymentType, venta.paymentMethod)}
             </Badge>
           </div>
         </div>
@@ -384,10 +386,17 @@ export function ModalDetalleVenta({
           })()}
 
           {/* Total */}
-          <div className="flex items-center justify-between p-4 rounded-xl bg-foreground text-background">
-            <span className="font-medium">Total</span>
-            <span className="text-2xl font-bold">{formatearMoneda(venta.total)}</span>
-          </div>
+          {venta.rechazado ? (
+            <div className="flex items-center justify-between p-4 rounded-xl bg-red-50 border border-red-200 text-red-700">
+              <span className="font-medium">Estado</span>
+              <span className="text-xl font-bold">Rechazado por el cliente</span>
+            </div>
+          ) : (
+            <div className="flex items-center justify-between p-4 rounded-xl bg-foreground text-background">
+              <span className="font-medium">Total</span>
+              <span className="text-2xl font-bold">{formatearMoneda(venta.total)}</span>
+            </div>
+          )}
 
           {/* Incidencias del pedido */}
           {(() => {
