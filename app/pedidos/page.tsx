@@ -99,7 +99,22 @@ export default function PedidosPage() {
     ordersApi.setClientOrdersHeld(clientName, willHold).catch(() => {
       toast.error("No se pudo guardar el estado retenido");
     });
-  }, []);
+    // Al retener, ofrecer eliminar el pedido
+    if (willHold) {
+      setTimeout(() => {
+        if (confirm(`Pedido de ${clientName} retenido.\n¿Desea eliminar este pedido? Se borra de la base de datos y no se puede deshacer.`)) {
+          const toDelete = orders.filter((o) => (o.clientName || "Sin cliente") === clientName && o.status !== "completed");
+          Promise.all(toDelete.map((o) => ordersApi.deleteOrder(o.id)))
+            .then(() => {
+              setOrders((prev) => prev.filter((o) => !toDelete.some((d) => d.id === o.id)));
+              setHeldClients((prev) => { const n = new Set(prev); n.delete(clientName); return n; });
+              toast.success("Pedido eliminado");
+            })
+            .catch(() => toast.error("No se pudo eliminar el pedido"));
+        }
+      }, 0);
+    }
+  }, [orders]);
 
   // Selección de clientes para acciones en lote
   const [selectedClients, setSelectedClients] = useState<Set<string>>(new Set());
