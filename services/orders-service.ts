@@ -26,6 +26,7 @@ function mapOrder(d: Record<string, any>): Order {
     invoiceNumber: d.invoice_number ?? undefined,
     invoicePdfBase64: d.invoice_pdf_base64 ?? undefined,
     checkedItems: d.checked_items ?? [],
+    held: d.held ?? false,
     createdAt: new Date(d.created_at),
     updatedAt: new Date(d.updated_at ?? d.created_at),
   }
@@ -113,6 +114,21 @@ export const removeTransportista = async (id: string): Promise<Order> => {
 
   if (!data) throw new Error('Order not found')
   return mapOrder(data)
+}
+
+export const deleteOrder = async (id: string): Promise<void> => {
+  const { error } = await supabase.from('pedidos').delete().eq('id', id)
+  if (error) throw error
+}
+
+// Marca/desmarca como retenidos todos los pedidos activos de un cliente (persistente en BD)
+export const setClientOrdersHeld = async (clientName: string, held: boolean): Promise<void> => {
+  const { error } = await supabase
+    .from('pedidos')
+    .update({ held })
+    .eq('client_name', clientName)
+    .neq('status', 'completed')
+  if (error) throw error
 }
 
 export const saveRemitoToOrder = async (id: string, remitoNumber: string, remitoPdfBase64: string): Promise<Order> => {

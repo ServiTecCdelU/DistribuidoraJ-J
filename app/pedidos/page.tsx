@@ -88,10 +88,16 @@ export default function PedidosPage() {
   const [heldClients, setHeldClients] = useState<Set<string>>(new Set());
 
   const toggleHeldClient = useCallback((clientName: string) => {
+    let willHold = false;
     setHeldClients(prev => {
       const next = new Set(prev);
-      if (next.has(clientName)) next.delete(clientName); else next.add(clientName);
+      if (next.has(clientName)) { next.delete(clientName); willHold = false; }
+      else { next.add(clientName); willHold = true; }
       return next;
+    });
+    // Persistir en BD para que otros admins lo vean y no avance aunque pase el tiempo
+    ordersApi.setClientOrdersHeld(clientName, willHold).catch(() => {
+      toast.error("No se pudo guardar el estado retenido");
     });
   }, []);
 
@@ -140,6 +146,11 @@ export default function PedidosPage() {
       setOrders(sortedOrders);
       setClients(clientsData);
       setSellers(sellersData);
+      // Reconstruir retenidos desde la BD (held) para que persistan entre admins y recargas
+      const heldFromDb = new Set(
+        sortedOrders.filter((o) => o.held && o.status !== "completed").map((o) => o.clientName || "Sin cliente")
+      );
+      setHeldClients(heldFromDb);
       // Mapa de precio actual: indexado por id de producto (prod_mp_XXX) y su alias mayorista (mp_XXX)
       const pm = new Map<string, number>();
       productsData.forEach((p) => {
@@ -308,6 +319,18 @@ export default function PedidosPage() {
         stock: p.stock ?? 0,
         codigo: p.codigo ?? undefined,
       }));
+  }, []);
+
+  const handleDeleteOrder = useCallback(async (order: Order) => {
+    try {
+      await ordersApi.deleteOrder(order.id);
+      setOrders((prev) => prev.filter((o) => o.id !== order.id));
+      setActiveModal(null);
+      setDetailOrder(null);
+      toast.success("Pedido eliminado");
+    } catch {
+      toast.error("No se pudo eliminar el pedido");
+    }
   }, []);
 
   // handleGenerateInvoice — deshabilitado temporalmente
@@ -1283,9 +1306,11 @@ th.center,td.center{text-align:center}
     // Header compacto + lista al inicio (sin tarjetas de resumen)
     html += `<div class="header"><div><h2>Listado de Carga</h2></div><div class="meta"><div style="font-weight:600;color:#1f2937;font-size:13px">${dateStr}</div></div></div>`;
 
-    // Entregas por cliente con deuda
+    // Entregas por cliente con deuda (excluye retenidos)
     html += `<div class="section"><div class="section-title">Entregas por Cliente</div>`;
-    ordersGroupedByClient.forEach(({ client, orders: clientOrders }) => {
+    ordersGroupedByClient
+      .filter(({ client }) => !heldClients.has(client))
+      .forEach(({ client, orders: clientOrders }) => {
       const firstOrder = clientOrders[0];
       const clientData = clients.find((c) => c.id === firstOrder.clientId);
       const deuda = clientData?.currentBalance || 0;
@@ -1315,7 +1340,7 @@ th.center,td.center{text-align:center}
     });
     html += `</div><div class="footer">Generado el ${stampStr}</div></body></html>`;
     printHtml(html);
-  }, [ordersGroupedByClient, clients, printHtml]);
+  }, [ordersGroupedByClient, clients, heldClients, printHtml]);
 
 
   if (!mounted) {
@@ -1700,6 +1725,7 @@ th.center,td.center{text-align:center}
         sellers={sellers}
         userRole={user?.role}
         onHacerPedido={undefined}
+        onDelete={handleDeleteOrder}
       />
 
       <StockCheckModal

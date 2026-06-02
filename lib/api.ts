@@ -66,6 +66,8 @@ import {
   saveRemitoToOrder,
   saveBoletaToOrder,
   updateCheckedItems,
+  deleteOrder,
+  setClientOrdersHeld,
 } from '@/services/orders-service'
 import {
   getDashboardStats,
@@ -282,6 +284,12 @@ export const ordersApi = {
   },
   async updateCheckedItems(id: string, checkedItems: string[]): Promise<void> {
     return updateCheckedItems(id, checkedItems)
+  },
+  async deleteOrder(id: string): Promise<void> {
+    return deleteOrder(id)
+  },
+  async setClientOrdersHeld(clientName: string, held: boolean): Promise<void> {
+    return setClientOrdersHeld(clientName, held)
   },
   async createOrder(data: {
     clientId: string

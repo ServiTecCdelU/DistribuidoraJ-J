@@ -148,6 +148,7 @@ export interface Order {
   invoiceNumber?: string;
   invoicePdfBase64?: string;
   checkedItems?: string[];
+  held?: boolean;
   createdAt: Date;
   updatedAt: Date;
 }
