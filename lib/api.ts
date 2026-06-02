@@ -67,6 +67,7 @@ import {
   saveBoletaToOrder,
   updateCheckedItems,
   deleteOrder,
+  deleteRemitoFromOrder,
   setClientOrdersHeld,
 } from '@/services/orders-service'
 import {
@@ -287,6 +288,9 @@ export const ordersApi = {
   },
   async deleteOrder(id: string): Promise<void> {
     return deleteOrder(id)
+  },
+  async deleteRemito(id: string): Promise<Order> {
+    return deleteRemitoFromOrder(id)
   },
   async setClientOrdersHeld(clientName: string, held: boolean): Promise<void> {
     return setClientOrdersHeld(clientName, held)

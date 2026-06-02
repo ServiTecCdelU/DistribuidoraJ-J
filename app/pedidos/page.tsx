@@ -336,6 +336,17 @@ export default function PedidosPage() {
     setPendingDelete({ ids: [order.id], label: order.clientName || "este cliente" });
   }, []);
 
+  const handleDeleteRemito = useCallback(async (order: Order) => {
+    try {
+      const updated = await ordersApi.deleteRemito(order.id);
+      setOrders((prev) => prev.map((o) => (o.id === order.id ? updated : o)));
+      if (detailOrder?.id === order.id) setDetailOrder(updated);
+      toast.success("Remito eliminado — podés generarlo de nuevo");
+    } catch {
+      toast.error("Error al eliminar el remito");
+    }
+  }, [detailOrder]);
+
   const confirmDelete = useCallback(async () => {
     if (!pendingDelete) return;
     const { ids, label } = pendingDelete;
@@ -1688,6 +1699,7 @@ th.center,td.center{text-align:center}
         order={detailOrder}
         onStatusChange={handleStatusChange}
         onGenerateRemito={handleGenerateRemito}
+        onDeleteRemito={handleDeleteRemito}
         onGenerateInvoice={handleGenerateInvoice}
         onAssignTransportista={handleAssignTransportista}
         onRemoveTransportista={handleRemoveTransportista}

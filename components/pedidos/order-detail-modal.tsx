@@ -73,6 +73,7 @@ interface OrderDetailModalProps {
   order: Order | null;
   onStatusChange: (orderId: string, newStatus: OrderStatus) => void;
   onGenerateRemito?: (order: Order) => Promise<void>;
+  onDeleteRemito?: (order: Order) => Promise<void>;
   onGenerateInvoice?: (order: Order) => Promise<void>;
   onAssignTransportista?: (orderId: string, transportistaId: string, transportistaName: string) => void;
   onRemoveTransportista?: (orderId: string) => void;
@@ -89,6 +90,7 @@ export function OrderDetailModal({
   order,
   onStatusChange,
   onGenerateRemito,
+  onDeleteRemito,
   onGenerateInvoice,
   onAssignTransportista,
   onRemoveTransportista,
@@ -113,6 +115,7 @@ export function OrderDetailModal({
   }, [transportistasFiltered, selectedTransportista]);
   const [generando, setGenerando] = useState(false);
   const [downloading, setDownloading] = useState<"invoice" | "remito" | null>(null);
+  const [deletingRemito, setDeletingRemito] = useState(false);
   const [showProducts, setShowProducts] = useState(false);
 
   useEffect(() => { setShowProducts(false); }, [order?.id]);
@@ -160,6 +163,16 @@ export function OrderDetailModal({
     const tipo = type === "invoice" ? "boleta" as const : "remito" as const;
     const numero = type === "invoice" ? order.invoiceNumber : order.remitoNumber;
     await enviarWhatsapp(base64, tipo, numero, order.clientName);
+  };
+
+  const handleEliminarRemito = async () => {
+    if (!onDeleteRemito) return;
+    setDeletingRemito(true);
+    try {
+      await onDeleteRemito(order);
+    } finally {
+      setDeletingRemito(false);
+    }
   };
 
   const handleGenerarRemito = async () => {
@@ -496,18 +509,28 @@ export function OrderDetailModal({
               </p>
 
               {hasRemito ? (
-                <div className="flex gap-2 mt-3">
-                  <Button variant="outline" size="sm" className="flex-1 gap-1 text-xs"
-                    disabled={downloading === "remito"} onClick={() => handleDescargar("remito")}>
-                    {downloading === "remito" ? <Loader2 className="h-3 w-3 animate-spin" /> : <Download className="h-3 w-3" />}
-                    PDF
-                  </Button>
-                  <Button size="sm" className="flex-1 gap-1 text-xs bg-green-500 hover:bg-green-600 text-white"
-                    onClick={() => handleWhatsapp("remito")}>
-                    <Send className="h-3 w-3" />
-                    WhatsApp
-                  </Button>
-                </div>
+                <>
+                  <div className="flex gap-2 mt-3">
+                    <Button variant="outline" size="sm" className="flex-1 gap-1 text-xs"
+                      disabled={downloading === "remito"} onClick={() => handleDescargar("remito")}>
+                      {downloading === "remito" ? <Loader2 className="h-3 w-3 animate-spin" /> : <Download className="h-3 w-3" />}
+                      PDF
+                    </Button>
+                    <Button size="sm" className="flex-1 gap-1 text-xs bg-green-500 hover:bg-green-600 text-white"
+                      onClick={() => handleWhatsapp("remito")}>
+                      <Send className="h-3 w-3" />
+                      WhatsApp
+                    </Button>
+                  </div>
+                  {onDeleteRemito && (
+                    <Button variant="ghost" size="sm"
+                      className="w-full gap-1.5 text-xs mt-2 text-red-600 hover:text-red-700 hover:bg-red-50"
+                      onClick={handleEliminarRemito} disabled={deletingRemito}>
+                      {deletingRemito ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Trash2 className="h-3.5 w-3.5" />}
+                      Eliminar remito
+                    </Button>
+                  )}
+                </>
               ) : (
                 <Button variant="outline" size="sm" className="w-full gap-1.5 text-xs mt-3"
                   onClick={handleGenerarRemito} disabled={generando || !onGenerateRemito}>

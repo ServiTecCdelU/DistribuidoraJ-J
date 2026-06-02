@@ -122,6 +122,19 @@ export const deleteOrder = async (id: string): Promise<void> => {
   if (error) throw error
 }
 
+// Borra el remito de un pedido (numero + PDF) para poder regenerarlo
+export const deleteRemitoFromOrder = async (id: string): Promise<Order> => {
+  const { data } = await supabase
+    .from('pedidos')
+    .update({ remito_number: null, remito_pdf_base64: null })
+    .eq('id', id)
+    .select()
+    .single()
+
+  if (!data) throw new Error('Order not found')
+  return mapOrder(data)
+}
+
 // Marca/desmarca como retenidos todos los pedidos activos de un cliente (persistente en BD)
 export const setClientOrdersHeld = async (clientName: string, held: boolean): Promise<void> => {
   const { error } = await supabase
