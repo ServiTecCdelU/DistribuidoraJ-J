@@ -1299,7 +1299,7 @@ th.center,td.center{text-align:center}
 .section{border:1px solid #d1d5db;border-radius:8px;overflow:hidden;margin-bottom:20px}
 .section-title{background:#f3f4f6;padding:8px 12px;border-bottom:1px solid #d1d5db;font-size:10px;font-weight:700;text-transform:uppercase;color:#374151;letter-spacing:0.05em}
 .tfoot td{border-top:2px solid #d1d5db;background:#f3f4f6;font-weight:700}
-.client-row{display:flex;align-items:center;justify-content:space-between;background:#1f2937;color:white;padding:8px 12px;font-size:12px;font-weight:700}
+.client-row{display:flex;align-items:center;justify-content:space-between;background:#f3f4f6;color:#111827;padding:8px 12px;font-size:13px;font-weight:800;border-bottom:1px solid #d1d5db;border-top:2px solid #9ca3af}
 .client-row .debt{font-size:11px;font-weight:600;padding:2px 8px;border-radius:4px}
 .client-meta{display:flex;gap:18px;flex-wrap:wrap;padding:6px 12px;background:#f9fafb;border-bottom:1px solid #e5e7eb;font-size:11px;color:#374151}
 .client-meta b{color:#6b7280;font-weight:600}
@@ -1319,6 +1319,7 @@ th.center,td.center{text-align:center}
 .summary-card .label{font-size:10px;color:#6b7280;text-transform:uppercase;font-weight:600;margin-top:2px}
 .footer{margin-top:20px;text-align:center;font-size:10px;color:#9ca3af;border-top:1px solid #e5e7eb;padding-top:8px}
 .cliente-block{page-break-inside:avoid}
+*{-webkit-print-color-adjust:exact;print-color-adjust:exact}
 @media print{body{padding:16px}}
 </style></head><body>`;
 
