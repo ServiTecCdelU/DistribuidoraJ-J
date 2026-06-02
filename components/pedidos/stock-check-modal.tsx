@@ -157,7 +157,7 @@ export function StockCheckModal({ open, onClose, items, onConfirm, findReplaceme
 
   return (
     <Dialog open={open} onOpenChange={(o) => !o && onClose()}>
-      <DialogContent className="sm:max-w-md w-[calc(100vw-1rem)] max-h-[80vh] flex flex-col p-0 gap-0 overflow-hidden">
+      <DialogContent className="sm:max-w-2xl w-[calc(100vw-1rem)] max-h-[80vh] flex flex-col p-0 gap-0 overflow-hidden">
         <DialogHeader className="p-4 pb-3 border-b shrink-0">
           <DialogTitle className="text-base flex items-center gap-2">
             <AlertTriangle className="h-5 w-5 text-amber-500" />
