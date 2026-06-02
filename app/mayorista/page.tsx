@@ -476,6 +476,7 @@ function ListaPrecios({
                       <td className="px-3 py-2.5 text-center">
                         {p.habilitado ? (
                           <div className="flex items-center justify-center gap-1">
+                            {/* Editar deshabilitado en mayorista: esta vista es solo para actualizar precios
                             <Button
                               variant="outline"
                               size="sm"
@@ -485,6 +486,7 @@ function ListaPrecios({
                               <Pencil className="h-3 w-3" />
                               Editar
                             </Button>
+                            */}
                             <Button
                               variant="outline"
                               size="sm"
