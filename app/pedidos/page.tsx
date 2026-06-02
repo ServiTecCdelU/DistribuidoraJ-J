@@ -9,7 +9,7 @@ import { DataTableSkeleton } from "@/components/ui/data-table-skeleton";
 import { ClientModal } from "@/components/clientes/client-modal";
 import { ordersApi, salesApi, clientsApi, sellersApi, productsApi } from "@/lib/api";
 import type { Order, OrderStatus, Client, Seller } from "@/lib/types";
-import { Package, Filter, Loader2, ClipboardList, FileSpreadsheet, Eye, ArrowRightCircle, Ban, TrendingUp, ChevronDown, ChevronRight } from "lucide-react";
+import { Package, Filter, Loader2, ClipboardList, FileText, Eye, ArrowRightCircle, Ban, TrendingUp, ChevronDown, ChevronRight } from "lucide-react";
 import { toast } from "sonner";
 import { useAuth } from "@/hooks/use-auth";
 import { useRouter } from "next/navigation";
@@ -759,8 +759,6 @@ export default function PedidosPage() {
   const handleDescargarExcel = useCallback(async () => {
     setGenerandoExcel(true);
     try {
-      const XLSX = await import("xlsx-js-style");
-
       // Si hay selección (ej: tildar un día), exportar solo esos clientes; si no, todos los activos
       const activos = orders.filter(
         (o) =>
@@ -857,120 +855,49 @@ export default function PedidosPage() {
         });
 
       const totalUnidades = filas.reduce((s, r) => s + r.cantidad, 0);
+      const totalStock = filas.reduce((s, r) => s + r.stockDisponible, 0);
+      const totalFaltante = filas.reduce((s, r) => s + r.faltante, 0);
 
-      // Construir datos de la hoja — arranca directo desde fila 1
-      const wsData: (string | number)[][] = [];
-      const lastDataRow = filas.length + 1; // header is row 1, data starts row 2
-      const totalRow = lastDataRow + 2; // 1 fila vacía de separación
+      const fechaStr = new Intl.DateTimeFormat("es-AR", { day: "2-digit", month: "long", year: "numeric" }).format(new Date());
+      const esc = (s: string) =>
+        (s ?? "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
 
-      // Fila 1: encabezados
-      wsData.push(["Código", "Descripción", "Pedido", "Stock", "Faltante"]);
+      const rowsHtml = filas
+        .map((f) => {
+          const cls = f.faltante > 0 ? ' class="faltante"' : "";
+          return `<tr${cls}><td class="cod">${esc(f.codigo || "—")}</td><td>${esc(f.nombre)}</td><td class="num">${f.cantidad}</td><td class="num">${f.stockDisponible}</td><td class="num">${f.faltante}</td></tr>`;
+        })
+        .join("");
 
-      // Filas de datos
-      for (const f of filas) {
-        wsData.push([f.codigo || "", f.nombre, f.cantidad, f.stockDisponible, f.faltante]);
-      }
+      const html = `<!DOCTYPE html><html><head><title>Pedido Mayorista</title><style>
+@page{size:A4 portrait;margin:12mm}
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:-apple-system,Arial,sans-serif;color:#1f2937;font-size:11px}
+.header{display:flex;justify-content:space-between;align-items:flex-end;border-bottom:2px solid #1f2937;padding-bottom:8px;margin-bottom:12px}
+.header h2{font-size:18px}
+.header .meta{text-align:right;font-size:11px;color:#6b7280}
+table{width:100%;border-collapse:collapse;table-layout:fixed}
+th,td{border:1px solid #d1d5db;padding:4px 6px;font-size:10px;overflow:hidden;text-overflow:ellipsis}
+thead th{background:#1f4e78;color:#fff;font-weight:700;text-align:center}
+th.cod,td.cod{width:13%}
+th:nth-child(2),td:nth-child(2){width:43%}
+th.num,td.num{width:14.66%;text-align:center}
+td td:nth-child(2){text-align:left}
+tbody tr:nth-child(even){background:#f9fafb}
+tr.faltante td{background:#f8cbad}
+tfoot td{border-top:2px solid #1f4e78;background:#f2f2f2;font-weight:700;font-size:11px}
+*{-webkit-print-color-adjust:exact;print-color-adjust:exact}
+</style></head><body>
+<div class="header"><div><h2>Pedido Mayorista</h2></div><div class="meta"><div style="font-weight:600;color:#1f2937;font-size:13px">${fechaStr}</div><div>${filas.length} items · ${totalUnidades} u.</div></div></div>
+<table>
+<thead><tr><th class="cod">Código</th><th>Descripción</th><th class="num">Pedido</th><th class="num">Stock</th><th class="num">Faltante</th></tr></thead>
+<tbody>${rowsHtml}</tbody>
+<tfoot><tr><td colspan="2">TOTAL — ${filas.length} items</td><td class="num">${totalUnidades}</td><td class="num">${totalStock}</td><td class="num">${totalFaltante}</td></tr></tfoot>
+</table>
+</body></html>`;
 
-      // 2 filas vacías de separación
-      wsData.push([]);
-      wsData.push([]);
-
-      // Fila de totales
-      wsData.push([`TOTAL  items: ${filas.length}`, "", null, null, null]);
-
-      const ws = XLSX.utils.aoa_to_sheet(wsData);
-
-      // Anchos de columna
-      ws["!cols"] = [
-        { wch: 12 },
-        { wch: 46 },
-        { wch: 18 },
-        { wch: 18 },
-        { wch: 18 },
-      ];
-
-      const cols = ["A", "B", "C", "D", "E"];
-      const headerStyle = {
-        font: { bold: true, sz: 11, color: { rgb: "FFFFFF" } },
-        fill: { fgColor: { rgb: "1F4E78" } },
-        alignment: { horizontal: "center" as const, vertical: "center" as const },
-        border: {
-          top: { style: "thin" as const, color: { rgb: "D9D9D9" } },
-          bottom: { style: "thin" as const, color: { rgb: "D9D9D9" } },
-          left: { style: "thin" as const, color: { rgb: "D9D9D9" } },
-          right: { style: "thin" as const, color: { rgb: "D9D9D9" } },
-        },
-      };
-      const cellBorder = {
-        top: { style: "thin" as const, color: { rgb: "D9D9D9" } },
-        bottom: { style: "thin" as const, color: { rgb: "D9D9D9" } },
-        left: { style: "thin" as const, color: { rgb: "D9D9D9" } },
-        right: { style: "thin" as const, color: { rgb: "D9D9D9" } },
-      };
-
-      // Estilos encabezado
-      for (const col of cols) {
-        const ref = `${col}1`;
-        if (ws[ref]) ws[ref].s = headerStyle;
-      }
-
-      // Estilos filas de datos
-      for (let r = 2; r <= lastDataRow; r++) {
-        const fila = filas[r - 2];
-        const isFaltante = fila && fila.faltante > 0;
-
-        for (const col of cols) {
-          const ref = `${col}${r}`;
-          if (!ws[ref]) continue;
-
-          if (col === "A") ws[ref].t = "s"; // código como texto
-
-          ws[ref].s = {
-            font: { sz: 10 },
-            fill: isFaltante ? { fgColor: { rgb: "F8CBAD" } } : { fgColor: { rgb: "FFFFFF" } },
-            alignment: col === "B" ? { vertical: "center" as const } : { horizontal: "center" as const, vertical: "center" as const },
-            border: cellBorder,
-          };
-        }
-      }
-
-      // Fórmulas SUM en fila de totales
-      const totalRowIdx = wsData.length;
-      ws[`C${totalRowIdx}`] = { t: "n", f: `SUM(C2:C${lastDataRow})` };
-      ws[`D${totalRowIdx}`] = { t: "n", f: `SUM(D2:D${lastDataRow})` };
-      ws[`E${totalRowIdx}`] = { t: "n", f: `SUM(E2:E${lastDataRow})` };
-
-      // Estilo fila de totales
-      const totalStyle = {
-        font: { bold: true, sz: 11 },
-        fill: { fgColor: { rgb: "F2F2F2" } },
-        border: {
-          top: { style: "medium" as const, color: { rgb: "1F4E78" } },
-          bottom: { style: "thin" as const, color: { rgb: "D9D9D9" } },
-          left: { style: "thin" as const, color: { rgb: "D9D9D9" } },
-          right: { style: "thin" as const, color: { rgb: "D9D9D9" } },
-        },
-      };
-      for (const col of cols) {
-        const ref = `${col}${totalRowIdx}`;
-        if (ws[ref]) {
-          ws[ref].s = {
-            ...totalStyle,
-            alignment: col === "B" ? {} : { horizontal: "center" as const },
-          };
-        }
-      }
-
-      // Altura fila encabezado
-      ws["!rows"] = [{ hpt: 28 }];
-
-      const wb = XLSX.utils.book_new();
-      XLSX.utils.book_append_sheet(wb, ws, "Pedido");
-
-      const fechaArchivo = new Date().toLocaleDateString("es-AR").replace(/\//g, "-");
-      XLSX.writeFile(wb, `pedido-mayorista-${fechaArchivo}.xlsx`);
-
-      toast.success(`Descargado — ${filas.length} productos`);
+      printHtml(html);
+      toast.success(`Generado — ${filas.length} productos`);
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Error al descargar");
     } finally {
@@ -1486,7 +1413,7 @@ th.center,td.center{text-align:center}
             disabled={generandoExcel}
             className="gap-2 border-emerald-300 text-emerald-700 hover:bg-emerald-50"
           >
-            {generandoExcel ? <Loader2 className="h-4 w-4 animate-spin" /> : <FileSpreadsheet className="h-4 w-4" />}
+            {generandoExcel ? <Loader2 className="h-4 w-4 animate-spin" /> : <FileText className="h-4 w-4" />}
             <span className="hidden sm:inline">Descargar Pedido</span>
           </Button>
         )}
