@@ -1242,7 +1242,6 @@ export default function PedidosPage() {
   const handlePrintCargo = useCallback(() => {
     const now = new Date();
     const dateStr = new Intl.DateTimeFormat("es-AR", { day: "2-digit", month: "long", year: "numeric" }).format(now);
-    const remitoNum = `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,"0")}${String(now.getDate()).padStart(2,"0")}-${String(Math.floor(Math.random()*9000)+1000)}`;
     const stampStr = new Intl.DateTimeFormat("es-AR", { day: "2-digit", month: "2-digit", year: "numeric", hour: "2-digit", minute: "2-digit" }).format(now);
     const fmtMoney = (n: number) => new Intl.NumberFormat("es-AR", { style: "currency", currency: "ARS", minimumFractionDigits: 0 }).format(n);
 
@@ -1260,6 +1259,8 @@ th.center,td.center{text-align:center}
 .tfoot td{border-top:2px solid #d1d5db;background:#f3f4f6;font-weight:700}
 .client-row{display:flex;align-items:center;justify-content:space-between;background:#1f2937;color:white;padding:8px 12px;font-size:12px;font-weight:700}
 .client-row .debt{font-size:11px;font-weight:600;padding:2px 8px;border-radius:4px}
+.client-meta{display:flex;gap:18px;flex-wrap:wrap;padding:6px 12px;background:#f9fafb;border-bottom:1px solid #e5e7eb;font-size:11px;color:#374151}
+.client-meta b{color:#6b7280;font-weight:600}
 .debt-moroso{background:#fca5a5;color:#991b1b}
 .debt-incobrable{background:#f87171;color:#7f1d1d}
 .debt-normal{background:#fde68a;color:#92400e}
@@ -1267,7 +1268,7 @@ th.center,td.center{text-align:center}
 .stop{display:flex;align-items:flex-start;gap:12px;padding:10px 12px;border-bottom:1px solid #e5e7eb}
 .stop:last-child{border-bottom:none}
 .stop-num{flex-shrink:0;width:24px;height:24px;border-radius:50%;background:#e5e7eb;color:#374151;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:700}
-.header{display:flex;justify-content:space-between;align-items:flex-end;margin-bottom:20px;padding-bottom:12px;border-bottom:2px solid #1f2937}
+.header{display:flex;justify-content:space-between;align-items:flex-end;margin-bottom:12px;padding-bottom:8px;border-bottom:2px solid #1f2937}
 .header h2{font-size:18px;line-height:1.2}
 .header .meta{text-align:right;font-size:11px;color:#6b7280}
 .summary{display:flex;gap:16px;margin-bottom:20px}
@@ -1278,13 +1279,8 @@ th.center,td.center{text-align:center}
 @media print{body{padding:16px}.section{page-break-inside:avoid}}
 </style></head><body>`;
 
-    // Header
-    html += `<div class="header"><div><h2>Listado de Carga</h2><div style="font-size:12px;color:#6b7280;margin-top:2px">Distribuidora Patricia</div></div><div class="meta"><div style="font-weight:600;color:#1f2937;font-size:13px">N° ${remitoNum}</div><div>${dateStr}</div></div></div>`;
-
-    // Summary cards
-    const totalProductos = cargoList.reduce((a, i) => a + i.quantity, 0);
-    const totalClientes = ordersGroupedByClient.length;
-    html += `<div class="summary"><div class="summary-card"><div class="num">${totalClientes}</div><div class="label">Clientes</div></div><div class="summary-card"><div class="num">${cargoList.length}</div><div class="label">Productos</div></div><div class="summary-card"><div class="num">${totalProductos}</div><div class="label">Unidades</div></div></div>`;
+    // Header compacto + lista al inicio (sin tarjetas de resumen)
+    html += `<div class="header"><div><h2>Listado de Carga</h2></div><div class="meta"><div style="font-weight:600;color:#1f2937;font-size:13px">${dateStr}</div></div></div>`;
 
     // Entregas por cliente con deuda
     html += `<div class="section"><div class="section-title">Entregas por Cliente</div>`;
@@ -1303,6 +1299,11 @@ th.center,td.center{text-align:center}
       }
       const codCli = clientData?.codigo ? ` (${clientData.codigo})` : "";
       html += `<div class="client-row"><span>${client}${codCli} — ${clientOrders.length} ${clientOrders.length === 1 ? "pedido" : "pedidos"}</span>${debtHtml}</div>`;
+      // Meta por cliente: remito(s), importe y vendedor
+      const remitos = clientOrders.map((o) => o.remitoNumber).filter(Boolean);
+      const importe = clientOrders.reduce((a, o) => a + calculateOrderTotal(o), 0);
+      const vendedor = firstOrder.sellerName || "—";
+      html += `<div class="client-meta"><span><b>Remito:</b> ${remitos.length ? remitos.join(", ") : "— (sin generar)"}</span><span><b>Importe:</b> ${fmtMoney(importe)}</span><span><b>Vendedor:</b> ${vendedor}</span></div>`;
       clientOrders.forEach((order, idx) => {
         const addr = order.address || "Sin dirección";
         const city = order.city ? ` · ${order.city}` : "";
@@ -1311,7 +1312,7 @@ th.center,td.center{text-align:center}
     });
     html += `</div><div class="footer">Generado el ${stampStr}</div></body></html>`;
     printHtml(html);
-  }, [cargoList, ordersGroupedByClient, clients, printHtml]);
+  }, [ordersGroupedByClient, clients, printHtml]);
 
 
   if (!mounted) {
