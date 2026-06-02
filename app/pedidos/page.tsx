@@ -1294,13 +1294,6 @@ th.center,td.center{text-align:center}
     const totalClientes = ordersGroupedByClient.length;
     html += `<div class="summary"><div class="summary-card"><div class="num">${totalClientes}</div><div class="label">Clientes</div></div><div class="summary-card"><div class="num">${cargoList.length}</div><div class="label">Productos</div></div><div class="summary-card"><div class="num">${totalProductos}</div><div class="label">Unidades</div></div></div>`;
 
-    // Tabla de mercadería
-    html += `<div class="section"><div class="section-title">Mercadería a cargar</div><table><thead><tr><th style="width:40px">N°</th><th>Producto</th><th class="right" style="width:70px">Cant.</th><th class="center" style="width:50px">OK</th></tr></thead><tbody>`;
-    cargoList.forEach((item, i) => {
-      html += `<tr style="${i%2?"background:#f9fafb":""}"><td style="color:#9ca3af;font-size:11px">${i+1}</td><td style="font-weight:500">${item.name}</td><td class="right" style="font-weight:700;font-size:15px">${item.quantity}</td><td class="center"><span class="checkbox"></span></td></tr>`;
-    });
-    html += `</tbody><tr class="tfoot"><td></td><td>${cargoList.length} productos</td><td class="right">${totalProductos}</td><td></td></tr></table></div>`;
-
     // Entregas por cliente con deuda
     html += `<div class="section"><div class="section-title">Entregas por Cliente</div>`;
     ordersGroupedByClient.forEach(({ client, orders: clientOrders }) => {
