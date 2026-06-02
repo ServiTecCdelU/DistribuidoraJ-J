@@ -1142,7 +1142,7 @@ export default function TransportePage() {
                           <div className="flex-shrink-0 w-7 h-7 rounded-full bg-gray-800 text-white flex items-center justify-center text-xs font-bold mt-0.5">{idx + 1}</div>
                           <div className="flex-1 min-w-0">
                             <div className="flex items-baseline justify-between gap-2">
-                              <p className="font-semibold text-gray-900 text-sm">{order.clientName || "Sin cliente"}</p>
+                              <p className="font-bold text-gray-900 text-sm">{order.clientName || "Sin cliente"}</p>
                               <span className="inline-block w-4 h-4 border-2 border-gray-400 rounded-sm flex-shrink-0" />
                             </div>
                             <p className="text-xs text-gray-600 mt-0.5">{order.address || "Sin dirección"}</p>
@@ -1169,7 +1169,7 @@ export default function TransportePage() {
                 myGrouped.forEach(([city, cityOrders]) => {
                   html += `<div class="city-header">${city} — ${cityOrders.length} entregas</div>`;
                   cityOrders.forEach((order, idx) => {
-                    html += `<div class="stop"><div class="stop-num">${idx+1}</div><div style="flex:1"><div style="display:flex;justify-content:space-between"><strong>${order.clientName||"Sin cliente"}</strong><span class="checkbox"></span></div><div style="font-size:11px;color:#4b5563;margin-top:2px">${order.address||""}</div></div></div>`;
+                    html += `<div class="stop"><div class="stop-num">${idx+1}</div><div style="flex:1"><div style="display:flex;justify-content:space-between"><strong style="font-size:13px;font-weight:700">${order.clientName||"Sin cliente"}</strong><span class="checkbox"></span></div><div style="font-size:11px;color:#4b5563;margin-top:2px">${order.address||""}</div></div></div>`;
                   });
                 });
                 html += `</div><div class="footer">Generado el ${stampStr}</div></body></html>`;
