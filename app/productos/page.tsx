@@ -850,7 +850,10 @@ tr.cat td{border:none}
           const mpId = editingProduct.id.replace("prod_", "");
           await registrarMovimiento({
             productoId: mpId,
-            tipo: stockAdjustment.type === "remove" ? "rotura" : "apertura_bulto",
+            // remove + pérdida real => rotura; remove sin pérdida => ajuste; add => apertura_bulto
+            tipo: stockAdjustment.type === "remove"
+              ? (stockAdjustment.isLoss ? "rotura" : "ajuste")
+              : "apertura_bulto",
             cantidad: stockAdjustment.type === "remove" ? -stockAdjustment.quantity : stockAdjustment.quantity,
             referencia: stockAdjustment.reason || undefined,
           });
@@ -862,8 +865,9 @@ tr.cat td{border:none}
           products.map((p) => (p.id === editingProduct.id ? updated : p)),
         );
 
-        // Si es "quitar", registrar pérdida en caja (tabla transacciones)
-        if (stockAdjustment?.type === "remove" && stockAdjustment.quantity > 0) {
+        // Solo registrar pérdida en caja si el "quitar" es una pérdida real (rotura/vencido).
+        // Un ajuste de stock común no debe figurar en caja.
+        if (stockAdjustment?.type === "remove" && stockAdjustment.quantity > 0 && stockAdjustment.isLoss) {
           // Obtener precio mayorista (costo) para calcular la pérdida
           let precioCosto = 0;
           if (isMayorista) {

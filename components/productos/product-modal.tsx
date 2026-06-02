@@ -46,6 +46,8 @@ export interface StockAdjustment {
   type: "add" | "remove";
   quantity: number;
   reason: string;
+  // Solo true si el "quitar" es una pérdida real (rotura/vencido) que debe ir a caja.
+  isLoss?: boolean;
 }
 
 interface ProductModalProps {
@@ -81,6 +83,9 @@ export function ProductModal({
   const [stockAdjustType, setStockAdjustType] = useState<"add" | "remove">("add");
   const [stockAdjustQty, setStockAdjustQty] = useState(0);
   const [stockAdjustReason, setStockAdjustReason] = useState("");
+  // Por defecto quitar stock es solo un ajuste de inventario (NO va a caja).
+  // Si es una pérdida real (rotura/vencido), se activa este toggle para registrarla en caja.
+  const [stockAdjustIsLoss, setStockAdjustIsLoss] = useState(false);
 
   // Lote (solo para productos de mayorista: id empieza con "prod_")
   const [lote, setLote] = useState<string>("");
@@ -251,7 +256,7 @@ export function ProductModal({
 
       const adjustment: StockAdjustment | undefined =
         isEditing && stockAdjustQty > 0
-          ? { type: stockAdjustType, quantity: stockAdjustQty, reason: stockAdjustReason }
+          ? { type: stockAdjustType, quantity: stockAdjustQty, reason: stockAdjustReason, isLoss: stockAdjustType === "remove" ? stockAdjustIsLoss : false }
           : undefined;
 
       // Productos manuales (no mayorista): guardar precio base + % ganancia
@@ -930,7 +935,7 @@ export function ProductModal({
                               ? "bg-emerald-500 text-white"
                               : "bg-muted/50 text-muted-foreground hover:bg-muted"
                           )}
-                          onClick={() => { setStockAdjustType("add"); setStockAdjustQty(0); setStockAdjustReason(""); }}
+                          onClick={() => { setStockAdjustType("add"); setStockAdjustQty(0); setStockAdjustReason(""); setStockAdjustIsLoss(false); }}
                         >
                           <PackagePlus className="h-3.5 w-3.5" />
                           Agregar
@@ -943,7 +948,7 @@ export function ProductModal({
                               ? "bg-red-500 text-white"
                               : "bg-muted/50 text-muted-foreground hover:bg-muted"
                           )}
-                          onClick={() => { setStockAdjustType("remove"); setStockAdjustQty(0); setStockAdjustReason(""); }}
+                          onClick={() => { setStockAdjustType("remove"); setStockAdjustQty(0); setStockAdjustReason(""); setStockAdjustIsLoss(false); }}
                         >
                           <PackageMinus className="h-3.5 w-3.5" />
                           Quitar
@@ -977,16 +982,29 @@ export function ProductModal({
                       )}
                     </div>
                     {stockAdjustType === "remove" && stockAdjustQty > 0 && (
-                      <div className="space-y-1.5">
-                        <Label className="text-xs text-red-600 font-medium">
-                          Motivo (obligatorio) — se registra como pérdida en caja
-                        </Label>
-                        <Input
-                          value={stockAdjustReason}
-                          onChange={(e) => setStockAdjustReason(e.target.value)}
-                          placeholder='Ej: "Se rompieron al traerlos"'
-                          className="h-9 text-sm border-red-300 focus-visible:ring-red-400"
-                        />
+                      <div className="space-y-2.5">
+                        <div className="space-y-1.5">
+                          <Label className="text-xs text-red-600 font-medium">
+                            Motivo (obligatorio)
+                          </Label>
+                          <Input
+                            value={stockAdjustReason}
+                            onChange={(e) => setStockAdjustReason(e.target.value)}
+                            placeholder={stockAdjustIsLoss ? 'Ej: "Se rompieron al traerlos"' : 'Ej: "Ajuste de inventario"'}
+                            className="h-9 text-sm border-red-300 focus-visible:ring-red-400"
+                          />
+                        </div>
+                        <div className="flex items-center justify-between gap-3 rounded-lg border border-border bg-muted/20 px-3 py-2">
+                          <div className="min-w-0">
+                            <p className="text-xs font-medium text-foreground">Registrar como pérdida en caja</p>
+                            <p className="text-[11px] text-muted-foreground">
+                              {stockAdjustIsLoss
+                                ? "Se descuenta el stock y se registra la pérdida en caja (rotura/vencido)."
+                                : "Solo ajuste de stock — no afecta la caja."}
+                            </p>
+                          </div>
+                          <Switch checked={stockAdjustIsLoss} onCheckedChange={setStockAdjustIsLoss} />
+                        </div>
                       </div>
                     )}
                     {stockAdjustType === "add" && stockAdjustQty > 0 && (
