@@ -1276,7 +1276,8 @@ th.center,td.center{text-align:center}
 .summary-card .num{font-size:22px;font-weight:800;color:#1f2937}
 .summary-card .label{font-size:10px;color:#6b7280;text-transform:uppercase;font-weight:600;margin-top:2px}
 .footer{margin-top:20px;text-align:center;font-size:10px;color:#9ca3af;border-top:1px solid #e5e7eb;padding-top:8px}
-@media print{body{padding:16px}.section{page-break-inside:avoid}}
+.cliente-block{page-break-inside:avoid}
+@media print{body{padding:16px}}
 </style></head><body>`;
 
     // Header compacto + lista al inicio (sin tarjetas de resumen)
@@ -1298,17 +1299,19 @@ th.center,td.center{text-align:center}
         debtHtml = `<span class="debt debt-ok">Al día</span>`;
       }
       const codCli = clientData?.codigo ? ` (${clientData.codigo})` : "";
-      html += `<div class="client-row"><span>${client}${codCli} — ${clientOrders.length} ${clientOrders.length === 1 ? "pedido" : "pedidos"}</span>${debtHtml}</div>`;
       // Meta por cliente: remito(s), importe y vendedor
       const remitos = clientOrders.map((o) => o.remitoNumber).filter(Boolean);
       const importe = clientOrders.reduce((a, o) => a + calculateOrderTotal(o), 0);
       const vendedor = firstOrder.sellerName || "—";
+      html += `<div class="cliente-block">`;
+      html += `<div class="client-row"><span>${client}${codCli} — ${clientOrders.length} ${clientOrders.length === 1 ? "pedido" : "pedidos"}</span>${debtHtml}</div>`;
       html += `<div class="client-meta"><span><b>Remito:</b> ${remitos.length ? remitos.join(", ") : "— (sin generar)"}</span><span><b>Importe:</b> ${fmtMoney(importe)}</span><span><b>Vendedor:</b> ${vendedor}</span></div>`;
       clientOrders.forEach((order, idx) => {
         const addr = order.address || "Sin dirección";
         const city = order.city ? ` · ${order.city}` : "";
         html += `<div class="stop"><div class="stop-num">${idx+1}</div><div style="flex:1"><div style="display:flex;justify-content:space-between;align-items:center"><strong style="font-size:12px">${addr}${city}</strong><span class="checkbox"></span></div><div style="margin-top:4px;font-size:11px;color:#6b7280">${order.items.map(it=>`<strong>${it.quantity}</strong>× ${it.name}`).join(" &middot; ")}</div></div></div>`;
       });
+      html += `</div>`;
     });
     html += `</div><div class="footer">Generado el ${stampStr}</div></body></html>`;
     printHtml(html);
