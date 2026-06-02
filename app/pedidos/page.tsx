@@ -394,6 +394,16 @@ export default function PedidosPage() {
     return () => { active = false; };
   }, [loadData]);
 
+  // El transportista entra directo a la solapa de reparto
+  const [appliedTransportistaTab, setAppliedTransportistaTab] = useState(false);
+  useEffect(() => {
+    if (appliedTransportistaTab || !user) return;
+    if (user.employeeType === "transportista") {
+      setFilterStatus("delivery");
+    }
+    setAppliedTransportistaTab(true);
+  }, [user, appliedTransportistaTab]);
+
   // Polling cada 30 segundos para detectar pedidos nuevos
   useEffect(() => {
     const interval = setInterval(() => { loadData(); }, 30000);
