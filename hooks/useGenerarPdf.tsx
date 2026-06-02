@@ -683,9 +683,7 @@ const remitoStyles = StyleSheet.create({
 const RemitoPDF = ({ venta }: { venta: Venta }) => {
   const items = venta.items || [];
   const emptyRows = Math.max(0, 10 - items.length);
-  const remitoRaw = venta.remitoNumber || "";
-  const nroPart = remitoRaw.includes("-") ? remitoRaw.split("-")[1] : remitoRaw;
-  const nro = String(nroPart || "00000001").padStart(8, "0");
+  const nro = venta.remitoNumber || "—";
 
   const clientName = venta.clientName || venta.clientData?.name || "Consumidor Final";
   const clientAddress = venta.deliveryAddress || venta.clientAddress || venta.clientData?.address || null;
@@ -895,9 +893,7 @@ const remitoHalfStyles = StyleSheet.create({
 const RemitoCopia = ({ venta, copia }: { venta: Venta; copia: string }) => {
   const items = venta.items || [];
   const emptyRows = Math.max(0, 6 - items.length);
-  const remitoRaw = venta.remitoNumber || "";
-  const nroPart = remitoRaw.includes("-") ? remitoRaw.split("-")[1] : remitoRaw;
-  const nro = String(nroPart || "00000001").padStart(8, "0");
+  const nro = venta.remitoNumber || "—";
 
   const clientName = venta.clientName || venta.clientData?.name || "Consumidor Final";
   const clientAddress = venta.deliveryAddress || venta.clientAddress || venta.clientData?.address || null;

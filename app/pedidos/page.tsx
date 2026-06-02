@@ -194,20 +194,12 @@ export default function PedidosPage() {
         }
       }
 
-      // Generate sequential remito number (query ventas for last number)
-      const { data: lastRemitos } = await supabase
-        .from("ventas")
-        .select("remito_number")
-        .not("remito_number", "is", null)
-        .order("remito_number", { ascending: false })
-        .limit(1);
-      let ultimoNumero = 0;
-      if (lastRemitos && lastRemitos.length > 0) {
-        const lastRemito = lastRemitos[0].remito_number;
-        const match = lastRemito?.match(/R-\d+-(\d+)/);
-        if (match) ultimoNumero = parseInt(match[1], 10);
+      // Número de remito único y consecutivo (función atómica en Postgres)
+      const { data: remitoNumber, error: remitoErr } = await supabase.rpc("next_remito_number");
+      if (remitoErr || !remitoNumber) {
+        toast.error("Error al generar el número de remito");
+        return;
       }
-      const remitoNumber = `R-${new Date().getFullYear()}-${String(ultimoNumero + 1).padStart(5, "0")}`;
 
       const total = calculateOrderTotal(order);
       const ventaData = {
