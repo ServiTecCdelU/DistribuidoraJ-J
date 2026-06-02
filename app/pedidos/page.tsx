@@ -206,7 +206,7 @@ export default function PedidosPage() {
         id: order.id,
         clientName: order.clientName,
         sellerName: order.sellerName,
-        items: order.items.map((i) => ({ name: i.name, quantity: i.quantity, price: i.price, ...(i.itemDiscount ? { itemDiscount: i.itemDiscount } : {}) })),
+        items: order.items.map((i: any) => ({ name: i.name, quantity: i.quantity, price: i.price, ...(i.codigo ? { codigo: i.codigo } : {}), ...(i.itemDiscount ? { itemDiscount: i.itemDiscount } : {}) })),
         total,
         paymentType: "cash" as const,
         createdAt: order.createdAt,
