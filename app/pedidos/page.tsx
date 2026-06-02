@@ -9,7 +9,7 @@ import { DataTableSkeleton } from "@/components/ui/data-table-skeleton";
 import { ClientModal } from "@/components/clientes/client-modal";
 import { ordersApi, salesApi, clientsApi, sellersApi, productsApi } from "@/lib/api";
 import type { Order, OrderStatus, Client, Seller } from "@/lib/types";
-import { Package, Filter, Loader2, ClipboardList, FileText, Eye, ArrowRightCircle, Ban, TrendingUp, ChevronDown, ChevronRight } from "lucide-react";
+import { Package, Filter, Loader2, ClipboardList, FileText, Eye, ArrowRightCircle, Ban, TrendingUp, ChevronDown, ChevronRight, MapPin, Phone } from "lucide-react";
 import { toast } from "sonner";
 import { useAuth } from "@/hooks/use-auth";
 import { useRouter } from "next/navigation";
@@ -1357,11 +1357,12 @@ th.center,td.center{text-align:center}
     const deuda = clientData?.currentBalance || 0;
     const clasificacion = clientData?.debtClassification;
     const codigo = clientData?.codigo;
-    return { mergedItems, firstOrder, displayOrder, config, onView, deuda, clasificacion, codigo };
+    const clientPhone = clientData?.phone || displayOrder.clientPhone || firstOrder.clientPhone;
+    return { mergedItems, firstOrder, displayOrder, config, onView, deuda, clasificacion, codigo, clientPhone };
   };
 
   return (
-    <MainLayout allowedRoles={['admin', 'seller']} title="Pedidos" description="Seguimiento de pedidos y entregas">
+    <MainLayout allowedRoles={['admin', 'seller']} title="Pedidos">
       <div className="space-y-4">
       <OrdersFilters
         filterStatus={filterStatus}
@@ -1622,10 +1623,72 @@ th.center,td.center{text-align:center}
                     {/* Mobile: lista */}
                     <div className="lg:hidden divide-y border-t">
                       {day.groups.map(({ client, orders: clientOrders }) => {
-                        const { mergedItems, displayOrder, config, onView, deuda, clasificacion, codigo } = computeRow(clientOrders);
+                        const { mergedItems, displayOrder, config, onView, deuda, clasificacion, codigo, clientPhone } = computeRow(clientOrders);
                         const isHeld = heldClients.has(client);
                         const isSelected = selectedClients.has(client);
+                        const notas = clientOrders.map((o) => o.notes?.trim()).filter(Boolean);
+                        const deudaColor = clasificacion === "moroso" ? "text-red-600" : clasificacion === "incobrable" ? "text-red-800" : "text-amber-600";
 
+                        // ── Vista REPARTO: tarjeta grande para el repartidor ──
+                        if (filterStatus === "delivery") {
+                          const tieneDir = displayOrder.address && displayOrder.address !== "Retiro en local";
+                          const totalUnidades = mergedItems.reduce((n, it) => n + it.quantity, 0);
+                          return (
+                            <div
+                              key={client}
+                              className={`p-4 transition-colors ${isHeld ? "bg-red-50/60 opacity-60" : "active:bg-muted/40"}`}
+                              onClick={onView}
+                            >
+                              <div className="flex items-start justify-between gap-2">
+                                <div className="min-w-0 flex-1">
+                                  <p className={`font-bold text-base leading-tight truncate ${isHeld ? "text-red-400 line-through" : "text-foreground"}`}>
+                                    {client}{codigo && <span className="ml-1 text-xs font-normal text-muted-foreground">({codigo})</span>}
+                                  </p>
+                                  <p className="text-xs text-muted-foreground mt-0.5">
+                                    {mergedItems.length} {mergedItems.length === 1 ? "producto" : "productos"} · {totalUnidades} u.
+                                    {clientOrders.length > 1 && ` · ${clientOrders.length} pedidos`}
+                                  </p>
+                                </div>
+                                <span className={`shrink-0 inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] font-semibold ${config.bgColor} border ${config.borderColor}`}>
+                                  <span className={`w-1.5 h-1.5 rounded-full ${config.dotColor}`} />
+                                  <span className={config.color}>{config.label}</span>
+                                </span>
+                              </div>
+
+                              <div className="mt-2 flex items-start gap-1.5 text-sm">
+                                <MapPin className={`h-4 w-4 shrink-0 mt-0.5 ${tieneDir ? "text-primary" : "text-muted-foreground"}`} />
+                                {tieneDir ? (
+                                  <span className="text-foreground">{displayOrder.address}{displayOrder.city ? ` · ${displayOrder.city}` : ""}</span>
+                                ) : (
+                                  <span className="text-muted-foreground italic">Retiro en local</span>
+                                )}
+                              </div>
+
+                              {notas.length > 0 && (
+                                <p className="mt-1.5 text-xs text-amber-700 italic">📝 {notas.join(" · ")}</p>
+                              )}
+
+                              <div className="mt-3 flex items-center gap-2" onClick={(e) => e.stopPropagation()}>
+                                {deuda > 0 && (
+                                  <span className={`text-xs font-bold px-2.5 py-1.5 rounded-lg bg-muted/60 ${deudaColor}`}>
+                                    Debe {formatPrice(deuda)}
+                                  </span>
+                                )}
+                                {clientPhone && (
+                                  <a
+                                    href={`tel:${clientPhone}`}
+                                    className="ml-auto h-10 w-10 flex items-center justify-center rounded-xl border-2 border-border active:bg-muted text-foreground"
+                                    title="Llamar al cliente"
+                                  >
+                                    <Phone className="h-4 w-4" />
+                                  </a>
+                                )}
+                              </div>
+                            </div>
+                          );
+                        }
+
+                        // ── Otros estados: fila compacta (workflow admin) ──
                         return (
                           <div key={client} className={`grid grid-cols-[auto_auto_1fr_auto_auto] gap-2 px-3 py-2.5 cursor-pointer transition-colors items-center ${isHeld ? "bg-red-50/60 opacity-60" : isSelected ? "bg-teal-50/60" : "hover:bg-muted/20"}`} onClick={onView}>
                             <div className="shrink-0" onClick={(e) => e.stopPropagation()}>
@@ -1656,18 +1719,15 @@ th.center,td.center{text-align:center}
                               <p className="text-[11px] text-muted-foreground truncate">
                                 {displayOrder.sellerName || "Sin vendedor"}
                               </p>
-                              {(() => {
-                                const notas = clientOrders.map((o) => o.notes?.trim()).filter(Boolean);
-                                return notas.length > 0 ? (
-                                  <p className="text-[10px] text-amber-700 italic truncate" title={notas.join(" · ")}>
-                                    📝 {notas.join(" · ")}
-                                  </p>
-                                ) : null;
-                              })()}
+                              {notas.length > 0 && (
+                                <p className="text-[10px] text-amber-700 italic truncate" title={notas.join(" · ")}>
+                                  📝 {notas.join(" · ")}
+                                </p>
+                              )}
                             </div>
                             <div className="shrink-0 text-center">
                               {deuda > 0 ? (
-                                <p className={`text-[10px] font-semibold ${clasificacion === "moroso" ? "text-red-600" : clasificacion === "incobrable" ? "text-red-800" : "text-amber-600"}`}>
+                                <p className={`text-[10px] font-semibold ${deudaColor}`}>
                                   {formatPrice(deuda)}
                                 </p>
                               ) : (

@@ -235,58 +235,6 @@ export function OrderDetailModal({
             </div>
           )}
 
-          {/* Transportista (admin only) */}
-          {userRole === "admin" && (
-            <div className="p-4 bg-orange-50 border border-orange-100 rounded-xl space-y-3">
-              <div className="flex items-center justify-between">
-                <Label className="text-xs text-orange-700 uppercase font-semibold flex items-center gap-1.5">
-                  <Truck className="h-3.5 w-3.5" />
-                  Transportista
-                </Label>
-                {order.transportistaName && onRemoveTransportista && (
-                  <button onClick={() => onRemoveTransportista(order.id)} className="text-xs text-red-500 hover:text-red-700">
-                    Quitar
-                  </button>
-                )}
-              </div>
-              {order.transportistaName ? (
-                <div className="flex items-center gap-2">
-                  <div className="h-8 w-8 rounded-full bg-orange-200 flex items-center justify-center">
-                    <UserCheck className="h-4 w-4 text-orange-700" />
-                  </div>
-                  <span className="font-medium text-gray-900">{order.transportistaName}</span>
-                  <button className="ml-auto text-xs text-orange-600 hover:underline" onClick={() => setShowTransportistaSelect(true)}>
-                    Cambiar
-                  </button>
-                </div>
-              ) : (
-                <Button variant="outline" size="sm" className="w-full border-orange-300 text-orange-700 bg-white hover:bg-orange-50 gap-2"
-                  onClick={() => setShowTransportistaSelect(true)}>
-                  <UserCheck className="h-4 w-4" />
-                  Asignar Transportista
-                </Button>
-              )}
-              {showTransportistaSelect && (
-                <div className="space-y-2 pt-1">
-                  <Select value={selectedTransportista} onValueChange={setSelectedTransportista}>
-                    <SelectTrigger className="w-full h-9">
-                      <SelectValue placeholder="Seleccionar..." />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {transportistas.length === 0
-                        ? <SelectItem value="none" disabled>Sin transportistas</SelectItem>
-                        : transportistas.map((t) => <SelectItem key={t.id} value={t.id}>{t.name}</SelectItem>)
-                      }
-                    </SelectContent>
-                  </Select>
-                  <div className="flex gap-2">
-                    <Button size="sm" className="flex-1" onClick={handleAssign} disabled={!selectedTransportista}>Asignar</Button>
-                    <Button size="sm" variant="ghost" onClick={() => setShowTransportistaSelect(false)}><X className="h-4 w-4" /></Button>
-                  </div>
-                </div>
-              )}
-            </div>
-          )}
 
           {/* Info table */}
           <div className="rounded-xl border border-gray-100 overflow-hidden">
@@ -344,15 +292,15 @@ export function OrderDetailModal({
               </span>
             </button>
             {showProducts && (
-              <div className="rounded-xl border border-gray-100 overflow-x-auto mt-1">
-                <table className="w-full min-w-[380px] text-xs">
+              <div className="rounded-xl border border-gray-100 mt-1">
+                <table className="w-full table-fixed text-[10px]">
                   <thead>
-                    <tr className="bg-gray-50 border-b border-gray-100 text-[11px] font-semibold text-gray-500 uppercase">
-                      <th className="px-3 py-2 text-left">Producto</th>
-                      <th className="px-2 py-2 text-right w-10">Cant.</th>
-                      <th className="px-2 py-2 text-right w-24">P. unit</th>
-                      <th className="px-2 py-2 text-right w-12">Dto.</th>
-                      <th className="px-3 py-2 text-right w-24">Subtotal</th>
+                    <tr className="bg-gray-50 border-b border-gray-100 text-[9px] font-semibold text-gray-500 uppercase">
+                      <th className="px-1.5 py-1.5 text-left">Producto</th>
+                      <th className="px-1 py-1.5 text-right w-8">Cant.</th>
+                      <th className="px-1 py-1.5 text-right w-16">P. unit</th>
+                      <th className="px-1 py-1.5 text-right w-9">Dto.</th>
+                      <th className="px-1.5 py-1.5 text-right w-16">Subtotal</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -362,21 +310,21 @@ export function OrderDetailModal({
                       const subtotal = precioConDto * item.quantity;
                       return (
                         <tr key={index} className="border-b border-gray-100 last:border-0 hover:bg-gray-50/50 transition-colors">
-                          <td className="px-3 py-2.5 font-medium text-gray-900 truncate max-w-0">{item.name}</td>
-                          <td className="px-2 py-2.5 text-right text-gray-700 font-mono">{item.quantity}</td>
-                          <td className="px-2 py-2.5 text-right text-gray-700">
+                          <td className="px-1.5 py-1.5 font-medium text-gray-900 truncate">{item.name}</td>
+                          <td className="px-1 py-1.5 text-right text-gray-700 font-mono">{item.quantity}</td>
+                          <td className="px-1 py-1.5 text-right text-gray-700">
                             {dto > 0
-                              ? <span className="flex flex-col items-end"><s className="text-gray-400">{formatPrice(item.price)}</s><span>{formatPrice(precioConDto)}</span></span>
+                              ? <span className="flex flex-col items-end leading-tight"><s className="text-gray-400">{formatPrice(item.price)}</s><span>{formatPrice(precioConDto)}</span></span>
                               : formatPrice(item.price)
                             }
                           </td>
-                          <td className="px-2 py-2.5 text-right">
+                          <td className="px-1 py-1.5 text-right">
                             {dto > 0
                               ? <span className="text-emerald-600 font-semibold">{dto}%</span>
                               : <span className="text-gray-300">—</span>
                             }
                           </td>
-                          <td className="px-3 py-2.5 text-right font-semibold text-gray-900">{formatPrice(subtotal)}</td>
+                          <td className="px-1.5 py-1.5 text-right font-semibold text-gray-900">{formatPrice(subtotal)}</td>
                         </tr>
                       );
                     })}
@@ -522,7 +470,7 @@ export function OrderDetailModal({
                       WhatsApp
                     </Button>
                   </div>
-                  {onDeleteRemito && (
+                  {onDeleteRemito && userRole === "admin" && (
                     <Button variant="ghost" size="sm"
                       className="w-full gap-1.5 text-xs mt-2 text-red-600 hover:text-red-700 hover:bg-red-50"
                       onClick={handleEliminarRemito} disabled={deletingRemito}>
@@ -542,7 +490,7 @@ export function OrderDetailModal({
           </div>
         </div>
         </div>
-        {onDelete && (
+        {onDelete && userRole === "admin" && (
           <div className="border-t p-3 shrink-0">
             <Button
               variant="ghost"

@@ -314,7 +314,7 @@ function NuevaVentaContent({
           </div>
           {rubros.length > 0 && (
             <Select value={rubroFiltro || "todos"} onValueChange={handleRubroChange}>
-              <SelectTrigger className="w-40 h-11 rounded-xl border-2">
+              <SelectTrigger className="w-32 sm:w-40 h-11 rounded-xl border-2">
                 <SelectValue placeholder="Rubro" />
               </SelectTrigger>
               <SelectContent>
@@ -325,6 +325,24 @@ function NuevaVentaContent({
               </SelectContent>
             </Select>
           )}
+          {/* Carrito arriba (evita choque con el + del último producto y el paginado) */}
+          <Button
+            type="button"
+            size="icon"
+            className={cn(
+              "h-11 w-11 rounded-xl shrink-0 relative transition-all",
+              state.cart.length > 0 ? "bg-primary hover:bg-primary/90" : "bg-muted/50 opacity-50",
+            )}
+            onClick={() => setCartDialogOpen(true)}
+            disabled={state.cart.length === 0}
+          >
+            <ShoppingCart className="h-5 w-5 text-white" />
+            {state.cart.length > 0 && (
+              <span className="absolute -top-1.5 -right-1.5 h-5 min-w-5 px-1 rounded-full bg-destructive text-destructive-foreground flex items-center justify-center text-[10px] font-bold ring-2 ring-background">
+                {state.cartCount}
+              </span>
+            )}
+          </Button>
         </div>
 
         {productsLoading ? (
@@ -375,26 +393,6 @@ function NuevaVentaContent({
             )}
           </div>
         )}
-      </div>
-
-      {/* Cart FAB */}
-      <div className="fixed bottom-6 right-6 z-50">
-        <Button
-          size="lg"
-          className={cn(
-            "h-16 w-16 rounded-full shadow-2xl transition-all duration-300 relative",
-            state.cart.length > 0 ? "bg-primary hover:bg-primary/90 scale-100" : "bg-muted/50 scale-90 opacity-50",
-          )}
-          onClick={() => setCartDialogOpen(true)}
-          disabled={state.cart.length === 0}
-        >
-          <ShoppingCart className="h-7 w-7 text-white" />
-          {state.cart.length > 0 && (
-            <div className="absolute -top-1 -right-1 h-6 w-6 rounded-full bg-destructive text-destructive-foreground flex items-center justify-center text-[11px] font-bold ring-2 ring-background">
-              {state.cartCount}
-            </div>
-          )}
-        </Button>
       </div>
 
       {/* Cart Dialog */}
