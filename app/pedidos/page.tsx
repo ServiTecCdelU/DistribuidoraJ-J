@@ -1581,7 +1581,7 @@ th.center,td.center{text-align:center}
                             <th className="px-2 py-2 text-center w-10"></th>
                             <th className="px-2 py-2 text-center w-10"></th>
                             <th className="px-4 py-2 text-left">Cliente</th>
-                            <th className="px-4 py-2 text-center w-24">Productos</th>
+                            <th className="px-4 py-2 text-left w-36">Vendedor</th>
                             <th className="px-4 py-2 text-left">Dirección</th>
                             <th className="px-4 py-2 text-center w-32">Deuda</th>
                             <th className="px-4 py-2 text-center w-36">Estado</th>
@@ -1621,8 +1621,8 @@ th.center,td.center{text-align:center}
                                     <p className="text-[10px] text-muted-foreground">{clientOrders.length} pedidos</p>
                                   )}
                                 </td>
-                                <td className="px-4 py-2.5 text-center">
-                                  <span className="text-xs text-foreground">{mergedItems.length}</span>
+                                <td className="px-4 py-2.5">
+                                  <span className="text-xs text-foreground truncate">{displayOrder.sellerName || "—"}</span>
                                 </td>
                                 <td className="px-4 py-2.5">
                                   <p className="text-xs text-muted-foreground truncate">
@@ -1701,8 +1701,8 @@ th.center,td.center{text-align:center}
                                   <span className="text-[10px] text-muted-foreground shrink-0">·{clientOrders.length}</span>
                                 )}
                               </div>
-                              <p className="text-[11px] text-muted-foreground">
-                                {mergedItems.length} {mergedItems.length === 1 ? "producto" : "productos"}
+                              <p className="text-[11px] text-muted-foreground truncate">
+                                {displayOrder.sellerName || "Sin vendedor"}
                               </p>
                             </div>
                             <div className="shrink-0 text-center">

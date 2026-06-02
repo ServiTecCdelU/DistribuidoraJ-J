@@ -72,10 +72,13 @@ export default function MisPedidosPage() {
     return () => clearInterval(interval);
   }, [loadData]);
 
+  // Contadores por cliente (clientes distintos, no pedidos sueltos)
   const counts = useMemo(() => {
-    const c: Record<string, number> = { all: orders.length };
-    orders.forEach((o) => {
-      c[o.status] = (c[o.status] || 0) + 1;
+    const distinct = (list: Order[]) =>
+      new Set(list.map((o) => o.clientName || "Sin cliente")).size;
+    const c: Record<string, number> = { all: distinct(orders) };
+    FILTERS.forEach((f) => {
+      if (f.key !== "all") c[f.key] = distinct(orders.filter((o) => o.status === f.key));
     });
     return c;
   }, [orders]);

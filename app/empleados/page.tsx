@@ -25,9 +25,10 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
-import { sellersApi } from '@/lib/api'
-import type { Seller, SellerCommission, EmployeeType } from '@/lib/types'
+import { sellersApi, ordersApi } from '@/lib/api'
+import type { Seller, SellerCommission, EmployeeType, Order } from '@/lib/types'
 import { formatCurrency, formatDate } from '@/lib/utils/format'
+import { statusConfig } from '@/lib/order-constants'
 import {
   Plus,
   Search,
@@ -48,6 +49,10 @@ import {
   Loader2,
   Truck,
   ShoppingCart,
+  MapPin,
+  Package,
+  Calendar,
+  ChevronDown,
 } from 'lucide-react'
 import { toast } from 'sonner'
 
@@ -81,6 +86,11 @@ export default function EmpleadosPage() {
   const [loadingCommissions, setLoadingCommissions] = useState(false)
   const [pagos, setPagos] = useState<any[]>([])
   const [resetting, setResetting] = useState(false)
+
+  // Pedidos activos del empleado
+  const [activeOrders, setActiveOrders] = useState<Order[]>([])
+  const [loadingOrders, setLoadingOrders] = useState(false)
+  const [expandedOrderId, setExpandedOrderId] = useState<string | null>(null)
 
   // Form state
   const [formData, setFormData] = useState({
@@ -166,7 +176,10 @@ export default function EmpleadosPage() {
   const handleViewDetail = async (seller: Seller) => {
     setSelectedSeller(seller)
     setDetailModalOpen(true)
+    setExpandedOrderId(null)
+    setActiveOrders([])
     setLoadingCommissions(true)
+    setLoadingOrders(true)
     try {
       const [data, pagosData] = await Promise.all([
         sellersApi.getCommissions(seller.id),
@@ -178,6 +191,24 @@ export default function EmpleadosPage() {
       toast.error('Error al cargar comisiones')
     } finally {
       setLoadingCommissions(false)
+    }
+    try {
+      const esVendedor = seller.employeeType === 'vendedor' || seller.employeeType === 'ambos'
+      const esTransportista = seller.employeeType === 'transportista' || seller.employeeType === 'ambos'
+      const [porVendedor, porTransportista] = await Promise.all([
+        esVendedor ? ordersApi.getBySeller(seller.id) : Promise.resolve([] as Order[]),
+        esTransportista ? ordersApi.getByTransportista(seller.id) : Promise.resolve([] as Order[]),
+      ])
+      const dedup = new Map<string, Order>()
+      for (const o of [...porVendedor, ...porTransportista]) dedup.set(o.id, o)
+      const activos = Array.from(dedup.values())
+        .filter((o) => o.status !== 'completed')
+        .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
+      setActiveOrders(activos)
+    } catch (error) {
+      toast.error('Error al cargar pedidos del empleado')
+    } finally {
+      setLoadingOrders(false)
     }
   }
 
@@ -305,6 +336,20 @@ export default function EmpleadosPage() {
   const pendingTotal = pendingCommissions.reduce((sum, c) => sum + c.commissionAmount, 0)
   const allSalesTotal = commissions.reduce((sum, c) => sum + c.saleTotal, 0)
   const allCommissionsTotal = commissions.reduce((sum, c) => sum + c.commissionAmount, 0)
+
+  // Pedidos activos agrupados por día y luego por cliente (más reciente primero)
+  const ordersByDay = activeOrders.reduce<Record<string, { label: string; clients: Record<string, Order[]> }>>((acc, order) => {
+    const d = new Date(order.createdAt)
+    const key = d.toISOString().slice(0, 10)
+    if (!acc[key]) acc[key] = { label: formatDate(order.createdAt), clients: {} }
+    const cliente = order.clientName || 'Sin cliente'
+    if (!acc[key].clients[cliente]) acc[key].clients[cliente] = []
+    acc[key].clients[cliente].push(order)
+    return acc
+  }, {})
+  const orderDays = Object.keys(ordersByDay).sort((a, b) => b.localeCompare(a))
+  // Contador de pedidos por cliente (clientes distintos con pedidos activos)
+  const totalClientes = new Set(activeOrders.map((o) => o.clientName || 'Sin cliente')).size
 
   return (
     <MainLayout allowedRoles={['admin']} title="Empleados" description="Gestiona tu equipo de vendedores y transportistas">
@@ -977,6 +1022,128 @@ export default function EmpleadosPage() {
                   </p>
                   <p className="text-xs text-muted-foreground">{pendingCommissions.length} comisiones</p>
                 </div>
+              </div>
+
+              {/* Pedidos activos del empleado */}
+              <div>
+                <div className="flex items-center justify-between mb-3">
+                  <h4 className="font-semibold text-foreground flex items-center gap-2">
+                    <Package className="h-4 w-4 text-primary" />
+                    Pedidos Activos
+                  </h4>
+                  {!loadingOrders && (
+                    <span className="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium bg-primary/10 text-primary border border-primary/20">
+                      {totalClientes} {totalClientes === 1 ? 'cliente' : 'clientes'}
+                    </span>
+                  )}
+                </div>
+
+                {loadingOrders ? (
+                  <div className="space-y-2">
+                    {[1, 2, 3].map((i) => (
+                      <div key={i} className="animate-pulse rounded-lg border p-4">
+                        <div className="h-4 bg-muted rounded w-1/3 mb-2" />
+                        <div className="h-3 bg-muted rounded w-1/2" />
+                      </div>
+                    ))}
+                  </div>
+                ) : activeOrders.length === 0 ? (
+                  <div className="text-center py-8 text-muted-foreground border rounded-lg border-dashed">
+                    <Package className="h-8 w-8 mx-auto mb-2 opacity-50" />
+                    <p>No tiene pedidos activos</p>
+                  </div>
+                ) : (
+                  <div className="space-y-4 max-h-[360px] overflow-y-auto">
+                    {orderDays.map((dayKey) => {
+                      const day = ordersByDay[dayKey]
+                      const clientNames = Object.keys(day.clients)
+                      return (
+                        <div key={dayKey}>
+                          <div className="flex items-center gap-2 mb-2 sticky top-0 bg-background py-1">
+                            <Calendar className="h-3.5 w-3.5 text-muted-foreground" />
+                            <span className="text-sm font-medium text-foreground">{day.label}</span>
+                            <span className="text-xs text-muted-foreground">
+                              · {clientNames.length} {clientNames.length === 1 ? 'cliente' : 'clientes'}
+                            </span>
+                          </div>
+                          <div className="space-y-2">
+                            {clientNames.map((cliente) => {
+                              const clientOrders = day.clients[cliente]
+                              const groupKey = `${dayKey}-${cliente}`
+                              const isExpanded = expandedOrderId === groupKey
+                              const itemsCount = clientOrders.reduce((n, o) => n + o.items.reduce((m, it) => m + it.quantity, 0), 0)
+                              const productsCount = clientOrders.reduce((n, o) => n + o.items.length, 0)
+                              const firstStatus = statusConfig[clientOrders[0].status]
+                              return (
+                                <div key={groupKey} className="rounded-lg border bg-card overflow-hidden">
+                                  <button
+                                    type="button"
+                                    onClick={() => setExpandedOrderId(isExpanded ? null : groupKey)}
+                                    className="w-full text-left p-3 flex items-start justify-between gap-3 hover:bg-muted/40 transition-colors"
+                                  >
+                                    <div className="min-w-0 flex-1">
+                                      <div className="flex items-center gap-2 mb-1 flex-wrap">
+                                        {clientOrders.length > 1 ? (
+                                          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-primary/10 text-primary border border-primary/20">
+                                            {clientOrders.length} pedidos
+                                          </span>
+                                        ) : (
+                                          <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium ${firstStatus.bgColor} ${firstStatus.color} ${firstStatus.borderColor} border`}>
+                                            <span className={`h-1.5 w-1.5 rounded-full ${firstStatus.dotColor}`} />
+                                            {firstStatus.label}
+                                          </span>
+                                        )}
+                                        <span className="text-xs text-muted-foreground">
+                                          {productsCount} {productsCount === 1 ? 'producto' : 'productos'} · {itemsCount} u.
+                                        </span>
+                                      </div>
+                                      <p className="font-medium text-foreground truncate">{cliente}</p>
+                                      <p className="text-xs text-muted-foreground flex items-center gap-1 truncate">
+                                        <MapPin className="h-3 w-3 shrink-0" />
+                                        {clientOrders[0].address}
+                                      </p>
+                                    </div>
+                                    <ChevronDown className={`h-4 w-4 text-muted-foreground shrink-0 transition-transform ${isExpanded ? 'rotate-180' : ''}`} />
+                                  </button>
+                                  {isExpanded && (
+                                    <div className="border-t bg-muted/20 divide-y divide-border/60">
+                                      {clientOrders.map((order, oIdx) => {
+                                        const cfg = statusConfig[order.status]
+                                        return (
+                                          <div key={order.id} className="p-3 space-y-1.5">
+                                            {clientOrders.length > 1 && (
+                                              <div className="flex items-center gap-2 text-xs">
+                                                <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full font-medium ${cfg.bgColor} ${cfg.color} ${cfg.borderColor} border`}>
+                                                  <span className={`h-1.5 w-1.5 rounded-full ${cfg.dotColor}`} />
+                                                  {cfg.label}
+                                                </span>
+                                                <span className="text-muted-foreground truncate">Pedido {oIdx + 1} · {order.address}</span>
+                                              </div>
+                                            )}
+                                            {order.items.map((it, idx) => (
+                                              <div key={`${order.id}-${idx}`} className="flex items-center justify-between text-sm">
+                                                <span className="text-foreground truncate pr-2">
+                                                  <span className="text-muted-foreground">{it.quantity}×</span> {it.name}
+                                                </span>
+                                                <span className="text-muted-foreground shrink-0">
+                                                  {formatCurrency(it.price * it.quantity)}
+                                                </span>
+                                              </div>
+                                            ))}
+                                          </div>
+                                        )
+                                      })}
+                                    </div>
+                                  )}
+                                </div>
+                              )
+                            })}
+                          </div>
+                        </div>
+                      )
+                    })}
+                  </div>
+                )}
               </div>
 
               {/* Historial de pagos realizados */}
