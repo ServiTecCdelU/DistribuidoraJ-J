@@ -7,12 +7,13 @@ export async function POST(req: NextRequest) {
     const auth = await requireAuth(req, { roles: ['admin'] })
     if (!auth.ok) return auth.response
 
-    const { porcentaje } = await req.json()
+    const { porcentaje, scope } = await req.json()
     if (typeof porcentaje !== 'number' || porcentaje < 0) {
       return NextResponse.json({ error: 'Porcentaje inválido' }, { status: 400 })
     }
 
-    const { data, error } = await supabaseAdmin.rpc('apply_ganancia_global', {
+    const rpcName = scope === 'medicamentos' ? 'apply_ganancia_medicamentos' : 'apply_ganancia_global'
+    const { data, error } = await supabaseAdmin.rpc(rpcName, {
       p_porcentaje: porcentaje,
     })
 

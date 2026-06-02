@@ -69,6 +69,7 @@ import {
   ChevronRight,
   Percent,
   RefreshCw,
+  Pill,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -153,6 +154,9 @@ export default function ProductosPage() {
   // Ganancia global
   const [gananciaInput, setGananciaInput] = useState("");
   const [applyingGlobal, setApplyingGlobal] = useState(false);
+  // Ganancia solo rubro medicamentos
+  const [gananciaMedInput, setGananciaMedInput] = useState("");
+  const [applyingMed, setApplyingMed] = useState(false);
   const [progressGanancia, setProgressGanancia] = useState({ done: 0, total: 0 });
 
   // Exportar lista de precios a PDF
@@ -610,6 +614,29 @@ tr.cat td{border:none}
     }
   };
 
+  const handleAplicarMedicamentos = async () => {
+    const porc = parseFloat(gananciaMedInput);
+    if (isNaN(porc) || porc < 0) { toast.error("Ingresá un porcentaje válido"); return; }
+    setApplyingMed(true);
+    try {
+      const token = await getAuthToken();
+      if (!token) throw new Error("No autenticado");
+      const res = await fetch("/api/apply-ganancia", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ porcentaje: porc, scope: "medicamentos" }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Error del servidor");
+      toast.success(`Ganancia del ${porc}% aplicada a ${data.updated} medicamentos`);
+      await fetchProducts(currentPage, searchQuery, categoryFilter, stockFilter);
+    } catch (err: any) {
+      toast.error(err.message || "Error al aplicar la ganancia");
+    } finally {
+      setApplyingMed(false);
+    }
+  };
+
   const handleCreate = () => {
     setEditingProduct(null);
     setModalOpen(true);
@@ -1064,7 +1091,31 @@ tr.cat td{border:none}
       {/* Header */}
       <div className="mb-4 sm:mb-6">
         {/* Toolbar compacta */}
-        <div className="flex items-center justify-center gap-2 flex-wrap">
+        <div className="flex flex-col items-center gap-2">
+          {/* Ganancia solo medicamentos */}
+          <div className="flex items-center gap-1.5 rounded-2xl border border-border bg-card px-3 py-1.5">
+            <Pill className="h-3.5 w-3.5 text-teal-600" />
+            <span className="text-xs font-medium text-muted-foreground">Medicamentos</span>
+            <Input
+              type="number"
+              min={0}
+              placeholder="%"
+              value={gananciaMedInput}
+              onChange={(e) => setGananciaMedInput(e.target.value)}
+              className="w-16 h-7 text-xs px-2"
+            />
+            <Button
+              size="sm"
+              disabled={applyingMed || !gananciaMedInput}
+              onClick={handleAplicarMedicamentos}
+              className="h-7 px-2 text-xs gap-1"
+            >
+              {applyingMed ? <RefreshCw className="h-3.5 w-3.5 animate-spin" /> : <Check className="h-3.5 w-3.5" />}
+              <span className="hidden sm:inline">Aplicar</span>
+            </Button>
+          </div>
+
+          <div className="flex items-center justify-center gap-2 flex-wrap">
           <div className="flex items-center gap-1.5 rounded-2xl border border-border bg-card px-3 py-1.5">
             <Percent className="h-3.5 w-3.5 text-teal-600" />
             <span className="text-xs font-medium text-muted-foreground hidden sm:inline">Ganancia</span>
@@ -1140,6 +1191,7 @@ tr.cat td{border:none}
               </div>
             </div>
           )}
+          </div>
         </div>
 
         {/* Barra de búsqueda */}
