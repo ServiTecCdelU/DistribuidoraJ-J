@@ -502,6 +502,7 @@ function ListaPrecios({
                               }}
                             >
                               <PackageX className="h-3 w-3" />
+                              Deshabilitar
                             </Button>
                           </div>
                         ) : (
