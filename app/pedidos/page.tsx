@@ -182,11 +182,12 @@ export default function PedidosPage() {
   const generateRemitoForOrder = useCallback(async (order: Order, excludeProductIds: string[] = [], replacements: Record<string, ReplacementOption> = {}) => {
     setGeneratingDoc(true);
     try {
-      // Aplicar reemplazos por otra marca (mantiene cantidad, cambia producto/precio)
+      // Aplicar reemplazos por otra marca (mantiene cantidad y descuento %, cambia producto/precio)
+      // El descuento es un porcentaje: se preserva y se aplica sobre el nuevo precio.
       const replacedItems = order.items.map((i: any) => {
         const r = replacements[i.productId];
         if (!r) return i;
-        return { ...i, productId: r.productId, name: r.name, price: r.price, codigo: r.codigo, itemDiscount: undefined };
+        return { ...i, productId: r.productId, name: r.name, price: r.price, codigo: r.codigo };
       });
 
       const filteredItems = excludeProductIds.length > 0
