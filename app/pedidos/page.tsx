@@ -1330,10 +1330,14 @@ th.center,td.center{text-align:center}
     // Header compacto + lista al inicio (sin tarjetas de resumen)
     html += `<div class="header"><div><h2>Listado de Carga</h2></div><div class="meta"><div style="font-weight:600;color:#1f2937;font-size:13px">${dateStr}</div></div></div>`;
 
-    // Entregas por cliente con deuda (excluye retenidos)
+    // Entregas por cliente con deuda (excluye retenidos).
+    // Solo se cargan pedidos con remito vigente: si se borró el remito, ese
+    // pedido no aparece ni suma (evita mostrar remitos/montos que ya no van).
     html += `<div class="section"><div class="section-title">Entregas por Cliente</div>`;
     ordersGroupedByClient
       .filter(({ client }) => !heldClients.has(client))
+      .map(({ client, orders }) => ({ client, orders: orders.filter((o) => o.remitoNumber) }))
+      .filter(({ orders }) => orders.length > 0)
       .forEach(({ client, orders: clientOrders }) => {
       const firstOrder = clientOrders[0];
       const clientData = clients.find((c) => c.id === firstOrder.clientId);
