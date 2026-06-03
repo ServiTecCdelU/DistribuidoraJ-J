@@ -338,10 +338,12 @@ export default function PedidosPage() {
       setOrders((prev) => prev.map((o) => (o.id === order.id ? updated : o)));
       if (detailOrder?.id === order.id) setDetailOrder(updated);
       toast.success("Remito eliminado — podés generarlo de nuevo");
+      // Confirmar contra la BD para que no quede mostrándose en el listado de carga
+      loadData();
     } catch {
       toast.error("Error al eliminar el remito");
     }
-  }, [detailOrder]);
+  }, [detailOrder, loadData]);
 
   const confirmDelete = useCallback(async () => {
     if (!pendingDelete) return;

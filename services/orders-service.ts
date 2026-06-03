@@ -139,13 +139,14 @@ export const deleteOrder = async (id: string): Promise<void> => {
 
 // Borra el remito de un pedido (numero + PDF) para poder regenerarlo
 export const deleteRemitoFromOrder = async (id: string): Promise<Order> => {
-  const { data } = await supabase
+  const { data, error } = await supabase
     .from('pedidos')
     .update({ remito_number: null, remito_pdf_base64: null })
     .eq('id', id)
     .select()
     .single()
 
+  if (error) throw error
   if (!data) throw new Error('Order not found')
   return mapOrder(data)
 }

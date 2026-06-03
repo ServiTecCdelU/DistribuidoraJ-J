@@ -835,6 +835,13 @@ export default function TransportePage() {
     return () => { active = false; };
   }, [loadData]);
 
+  // Auto-refresco cada 30s: refleja pedidos/remitos eliminados, nuevos repartos
+  // y reasignaciones sin que el transportista tenga que recargar.
+  useEffect(() => {
+    const interval = setInterval(() => { loadData(); }, 30000);
+    return () => clearInterval(interval);
+  }, [loadData]);
+
   const transportistas = useMemo(
     () =>
       sellers.filter(
