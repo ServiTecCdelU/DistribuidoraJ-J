@@ -375,13 +375,36 @@ export function useCart(role: UserRole, userEmail?: string, externalProducts?: P
         if (data.found) {
           setSellerMatchName(data.sellerName);
           setSelectedSeller(data.sellerId);
-          setSellerMaxDiscount(data.sellerMaxDiscount ?? 30);
+          setSellerMaxDiscount(data.sellerMaxDiscount ?? 0);
         } else {
           setSellerMatchName(null);
+          // Sin perfil válido: límite 0 para no permitir descuentos por encima del autorizado
+          setSellerMaxDiscount(0);
         }
-      } catch {}
+      } catch {
+        setSellerMaxDiscount(0);
+      }
     })();
   }, [role, userEmail]);
+
+  // Re-aplica el tope de descuento del vendedor a los items ya en el carrito.
+  // Corre cuando se carga el límite real del perfil: clampa hacia abajo cualquier
+  // descuento (de producto o del vendedor) que supere el máximo autorizado.
+  useEffect(() => {
+    setCart((prev) => {
+      let changed = false;
+      const next = prev.map((item) => {
+        const admin = Math.min(item.adminDiscount ?? 0, sellerMaxDiscount);
+        const eff = item.itemDiscount != null ? Math.min(item.itemDiscount, sellerMaxDiscount) : item.itemDiscount;
+        if (admin !== (item.adminDiscount ?? 0) || eff !== item.itemDiscount) {
+          changed = true;
+          return { ...item, adminDiscount: admin > 0 ? admin : undefined, itemDiscount: eff && eff > 0 ? eff : undefined };
+        }
+        return item;
+      });
+      return changed ? next : prev;
+    });
+  }, [sellerMaxDiscount]);
 
   // --- Persist cart to localStorage ---
   useEffect(() => {
