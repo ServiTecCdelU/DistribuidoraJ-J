@@ -38,6 +38,7 @@ import {
   Eye,
   ChevronLeft,
   ChevronRight,
+  Percent,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useCart } from "@/hooks/useCart";
@@ -97,13 +98,14 @@ function NuevaVentaContent({
   const [productsLoading, setProductsLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState("");
   const [rubroFiltro, setRubroFiltro] = useState("");
+  const [soloDescuento, setSoloDescuento] = useState(false);
   const [rubros, setRubros] = useState<string[]>([]);
   const [currentPage, setCurrentPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
   const [totalProductos, setTotalProductos] = useState(0);
   const debounceRef = useRef<NodeJS.Timeout | null>(null);
 
-  const fetchProducts = useCallback(async (search: string, rubro: string, page: number) => {
+  const fetchProducts = useCallback(async (search: string, rubro: string, page: number, soloDto = false) => {
     setProductsLoading(true);
     try {
       const result = await searchProductosParaVenta({
@@ -111,6 +113,7 @@ function NuevaVentaContent({
         rubro: rubro || undefined,
         page,
         pageSize: 10,
+        soloDescuento: soloDto,
       });
       const mapped: Product[] = result.data.map((p) => {
         const precioLote =
@@ -154,7 +157,7 @@ function NuevaVentaContent({
     if (debounceRef.current) clearTimeout(debounceRef.current);
     debounceRef.current = setTimeout(() => {
       setCurrentPage(1);
-      fetchProducts(value, rubroFiltro, 1);
+      fetchProducts(value, rubroFiltro, 1, soloDescuento);
     }, 300);
   };
 
@@ -162,12 +165,19 @@ function NuevaVentaContent({
     const rubro = value === "todos" ? "" : value;
     setRubroFiltro(rubro);
     setCurrentPage(1);
-    fetchProducts(searchQuery, rubro, 1);
+    fetchProducts(searchQuery, rubro, 1, soloDescuento);
+  };
+
+  const handleToggleDescuento = () => {
+    const next = !soloDescuento;
+    setSoloDescuento(next);
+    setCurrentPage(1);
+    fetchProducts(searchQuery, rubroFiltro, 1, next);
   };
 
   const handlePageChange = (page: number) => {
     setCurrentPage(page);
-    fetchProducts(searchQuery, rubroFiltro, page);
+    fetchProducts(searchQuery, rubroFiltro, page, soloDescuento);
   };
 
   const { state, actions } = useCart(cartRole, userEmail, ventaProducts);
@@ -308,7 +318,7 @@ function NuevaVentaContent({
               className="pl-10 pr-10 h-11 text-sm rounded-xl border-2 focus-visible:ring-2"
             />
             {searchQuery && (
-              <Button variant="ghost" size="icon" className="absolute right-2 top-1/2 -translate-y-1/2 h-7 w-7" onClick={() => { setSearchQuery(""); fetchProducts("", rubroFiltro, 1); }}>
+              <Button variant="ghost" size="icon" className="absolute right-2 top-1/2 -translate-y-1/2 h-7 w-7" onClick={() => { setSearchQuery(""); fetchProducts("", rubroFiltro, 1, soloDescuento); }}>
                 <X className="h-3.5 w-3.5" />
               </Button>
             )}
@@ -326,6 +336,20 @@ function NuevaVentaContent({
               </SelectContent>
             </Select>
           )}
+          {/* Filtro: solo productos con descuento */}
+          <Button
+            type="button"
+            variant={soloDescuento ? "default" : "outline"}
+            onClick={handleToggleDescuento}
+            className={cn(
+              "h-11 rounded-xl shrink-0 gap-1.5 px-3 border-2",
+              soloDescuento ? "bg-teal-600 hover:bg-teal-700 text-white border-teal-600" : "text-teal-700 border-teal-200 hover:bg-teal-50",
+            )}
+            title="Mostrar solo productos con descuento"
+          >
+            <Percent className="h-4 w-4" />
+            <span className="hidden sm:inline text-sm">Con descuento</span>
+          </Button>
           {/* Carrito arriba (evita choque con el + del último producto y el paginado) */}
           <Button
             type="button"
@@ -442,6 +466,7 @@ const ProductListItem = memo(function ProductListItem({
   const seDivideEn = (product as any).seDivideEn;
   const unidadesPorBulto = (product as any).unidadesPorBulto;
   const stockLocal = product.stockLocal;
+  const descuento = (product as any).descuento ?? 0;
   const unidadesLote = unidadesPorBulto
     ? (seDivideEn && seDivideEn > 1 ? Math.floor(unidadesPorBulto / seDivideEn) : unidadesPorBulto)
     : null;
@@ -454,7 +479,15 @@ const ProductListItem = memo(function ProductListItem({
         : "bg-card border-border",
     )}>
       {/* Nombre — línea completa */}
-      <p className="font-medium text-sm leading-tight truncate">{product.name}</p>
+      <div className="flex items-center gap-2 min-w-0">
+        <p className="font-medium text-sm leading-tight truncate flex-1">{product.name}</p>
+        {descuento > 0 && (
+          <Badge className="h-5 px-1.5 text-[10px] shrink-0 gap-0.5 bg-teal-100 text-teal-700 hover:bg-teal-100 border border-teal-200">
+            <Percent className="h-2.5 w-2.5" />
+            {descuento}% dto.
+          </Badge>
+        )}
+      </div>
 
       {/* Fila inferior: info + precio + controles */}
       <div className="flex items-center gap-2">

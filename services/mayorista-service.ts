@@ -118,6 +118,7 @@ export interface VentaProductSearchParams {
   rubro?: string
   page?: number
   pageSize?: number
+  soloDescuento?: boolean
 }
 
 export interface VentaProductSearchResult {
@@ -142,7 +143,7 @@ export interface VentaProductSearchResult {
 }
 
 export const searchProductosParaVenta = async (params: VentaProductSearchParams): Promise<VentaProductSearchResult> => {
-  const { search, rubro, page = 1, pageSize = 10 } = params
+  const { search, rubro, page = 1, pageSize = 10, soloDescuento = false } = params
   const from = (page - 1) * pageSize
   const to = from + pageSize - 1
 
@@ -157,6 +158,20 @@ export const searchProductosParaVenta = async (params: VentaProductSearchParams)
   }
   if (rubro) {
     query = query.eq('rubro', rubro)
+  }
+
+  // Solo productos con descuento: el descuento vive en `productos`, así que se
+  // resuelven primero los producto_id con descuento > 0 y se filtra por ellos.
+  if (soloDescuento) {
+    const conDto = await supabase
+      .from('productos')
+      .select('id')
+      .gt('descuento', 0)
+    const ids = (conDto.data ?? []).map((p: any) => p.id)
+    if (ids.length === 0) {
+      return { data: [], total: 0, page, pageSize, totalPages: 0 }
+    }
+    query = query.in('producto_id', ids)
   }
 
   query = query.range(from, to)
