@@ -830,7 +830,7 @@ const remitoHalfStyles = StyleSheet.create({
   remitoTitle: { fontSize: 16, fontWeight: "bold", marginBottom: 2 },
   remitoNro: { fontSize: 9, color: "#555", marginBottom: 1 },
   remitoFecha: { fontSize: 8, color: "#555" },
-  copiaLabel: { fontSize: 11, color: "#000", marginTop: 3, fontWeight: "bold" },
+  copiaLabel: { fontSize: 13, color: "#000", marginTop: 3, fontWeight: "bold" },
   clienteLabel: { fontSize: 7, color: "#888", marginBottom: 1 },
   clienteNombre: { fontSize: 10, fontWeight: "bold" },
   clienteDireccion: { fontSize: 7.5, color: "#555", marginTop: 2 },
