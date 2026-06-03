@@ -500,10 +500,21 @@ export function useCart(role: UserRole, userEmail?: string, externalProducts?: P
   // --- Cart actions ---
   const addToCart = useCallback((product: Product) => {
     setCart((prev) => {
+      // Descuento base del producto fijado por admin (topeado al máximo del vendedor).
+      // Solo se aplica si la oferta está activa: sin límite de unidades (null) o con stock de oferta (> 0).
+      const ofertaActiva = (product.descuento ?? 0) > 0 && (product.descuentoCantidad == null || product.descuentoCantidad > 0);
+      const adminDiscount = ofertaActiva ? Math.min(product.descuento ?? 0, sellerMaxDiscount) : 0;
+      // Tope de unidades de la oferta: si la oferta tiene cupo (descuentoCantidad finito) no se puede pasar de ese número.
+      const maxOferta = ofertaActiva && product.descuentoCantidad != null ? product.descuentoCantidad : Infinity;
+
       const existing = prev.find((item) => item.product.id === product.id);
       if (existing) {
         if (existing.quantity >= product.stock) {
           toast.error("Stock insuficiente");
+          return prev;
+        }
+        if (existing.quantity >= maxOferta) {
+          toast.error(`Solo ${product.descuentoCantidad} ${product.descuentoCantidad === 1 ? "unidad" : "unidades"} en oferta`);
           return prev;
         }
         return prev.map((item) =>
@@ -512,10 +523,6 @@ export function useCart(role: UserRole, userEmail?: string, externalProducts?: P
             : item,
         );
       }
-      // Descuento base del producto fijado por admin (topeado al máximo del vendedor).
-      // Solo se aplica si la oferta está activa: sin límite de unidades (null) o con stock de oferta (> 0).
-      const ofertaActiva = (product.descuento ?? 0) > 0 && (product.descuentoCantidad == null || product.descuentoCantidad > 0);
-      const adminDiscount = ofertaActiva ? Math.min(product.descuento ?? 0, sellerMaxDiscount) : 0;
       return [
         ...prev,
         {
@@ -538,6 +545,12 @@ export function useCart(role: UserRole, userEmail?: string, externalProducts?: P
             toast.error("Stock insuficiente");
             return item;
           }
+          const p = item.product;
+          const ofertaActiva = (p.descuento ?? 0) > 0 && (p.descuentoCantidad == null || p.descuentoCantidad > 0);
+          if (delta > 0 && ofertaActiva && p.descuentoCantidad != null && newQty > p.descuentoCantidad) {
+            toast.error(`Solo ${p.descuentoCantidad} ${p.descuentoCantidad === 1 ? "unidad" : "unidades"} en oferta`);
+            return item;
+          }
           return { ...item, quantity: newQty };
         })
         .filter((item) => item.quantity > 0),
@@ -548,7 +561,13 @@ export function useCart(role: UserRole, userEmail?: string, externalProducts?: P
     setCart((prev) => {
       const item = prev.find((i) => i.product.id === productId);
       if (!item) return prev;
-      const newQty = Math.max(1, Math.min(value, item.product.stock));
+      const p = item.product;
+      const ofertaActiva = (p.descuento ?? 0) > 0 && (p.descuentoCantidad == null || p.descuentoCantidad > 0);
+      const maxOferta = ofertaActiva && p.descuentoCantidad != null ? p.descuentoCantidad : Infinity;
+      const newQty = Math.max(1, Math.min(value, item.product.stock, maxOferta));
+      if (ofertaActiva && p.descuentoCantidad != null && value > p.descuentoCantidad) {
+        toast.error(`Solo ${p.descuentoCantidad} ${p.descuentoCantidad === 1 ? "unidad" : "unidades"} en oferta`);
+      }
       return prev.map((i) =>
         i.product.id === productId ? { ...i, quantity: newQty } : i,
       );
