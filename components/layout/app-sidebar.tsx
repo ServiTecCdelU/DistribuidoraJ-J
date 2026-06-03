@@ -19,6 +19,7 @@ import {
   Banknote,
   Tag,
   Store,
+  Percent,
 } from "lucide-react";
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
@@ -72,7 +73,7 @@ export function AppSidebar() {
       label: "Catálogo",
       items: [
         { href: "/productos", label: "Productos", icon: Package, roles: ["admin"] },
-        // { href: "/descuentos", label: "Descuentos", icon: Percent, roles: ["admin"] }, // oculto: activar cuando se muestre al cliente
+        { href: "/descuentos", label: "Descuentos", icon: Percent, roles: ["admin"] },
         { href: "/clientes", label: "Clientes", icon: Users, roles: ["admin"] },
       ],
     },
