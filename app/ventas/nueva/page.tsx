@@ -104,6 +104,8 @@ function NuevaVentaContent({
   const [totalPages, setTotalPages] = useState(1);
   const [totalProductos, setTotalProductos] = useState(0);
   const debounceRef = useRef<NodeJS.Timeout | null>(null);
+  // Vendedor que está vendiendo: define el cupo de oferta por producto
+  const vendedorIdRef = useRef<string>("");
 
   const fetchProducts = useCallback(async (search: string, rubro: string, page: number, soloDto = false) => {
     setProductsLoading(true);
@@ -114,6 +116,7 @@ function NuevaVentaContent({
         page,
         pageSize: 10,
         soloDescuento: soloDto,
+        vendedorId: vendedorIdRef.current || undefined,
       });
       const mapped: Product[] = result.data.map((p) => {
         const precioLote =
@@ -183,6 +186,16 @@ function NuevaVentaContent({
   };
 
   const { state, actions } = useCart(cartRole, userEmail, ventaProducts);
+
+  // Cuando se resuelve el vendedor (login del vendedor o selección del admin),
+  // recargar productos para traer el cupo de oferta de ese vendedor.
+  useEffect(() => {
+    const id = state.selectedSeller && state.selectedSeller !== "none" ? state.selectedSeller : "";
+    if (id === vendedorIdRef.current) return;
+    vendedorIdRef.current = id;
+    fetchProducts(searchQuery, rubroFiltro, currentPage, soloDescuento);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [state.selectedSeller]);
 
   const [cartDialogOpen, setCartDialogOpen] = useState(false);
 

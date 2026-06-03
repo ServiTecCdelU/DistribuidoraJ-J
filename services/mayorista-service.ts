@@ -1,6 +1,7 @@
 import { supabase } from '@/lib/supabase'
 import type { MayoristaProducto, MayoristaPrefs } from '@/lib/types'
 import { invalidateProductsCache } from '@/services/products-service'
+import { getAsignacionesVendedor, getProductosConOfertaVendedor } from '@/services/descuento-vendedor-service'
 
 const BATCH_SIZE = 300
 const UPDATE_CONCURRENCY = 10
@@ -119,6 +120,7 @@ export interface VentaProductSearchParams {
   page?: number
   pageSize?: number
   soloDescuento?: boolean
+  vendedorId?: string
 }
 
 export interface VentaProductSearchResult {
@@ -144,7 +146,7 @@ export interface VentaProductSearchResult {
 }
 
 export const searchProductosParaVenta = async (params: VentaProductSearchParams): Promise<VentaProductSearchResult> => {
-  const { search, rubro, page = 1, pageSize = 10, soloDescuento = false } = params
+  const { search, rubro, page = 1, pageSize = 10, soloDescuento = false, vendedorId } = params
   const from = (page - 1) * pageSize
   const to = from + pageSize - 1
 
@@ -161,17 +163,13 @@ export const searchProductosParaVenta = async (params: VentaProductSearchParams)
     query = query.eq('rubro', rubro)
   }
 
-  // Solo productos con descuento: el descuento vive en `productos`, así que se
-  // resuelven primero los producto_id con descuento > 0 y se filtra por ellos.
+  // Solo productos con descuento activo para ESTE vendedor: producto con % > 0
+  // y con cupo de oferta (descuento_vendedor.cantidad > 0) para el vendedor.
   if (soloDescuento) {
-    const conDto = await supabase
-      .from('productos')
-      .select('id, descuento_cantidad')
-      .gt('descuento', 0)
-    // Solo ofertas activas: sin límite (null) o con unidades restantes (> 0)
-    const ids = (conDto.data ?? [])
-      .filter((p: any) => p.descuento_cantidad == null || Number(p.descuento_cantidad) > 0)
-      .map((p: any) => p.id)
+    const conDto = await supabase.from('productos').select('id').gt('descuento', 0)
+    const dtoIds = new Set((conDto.data ?? []).map((p: any) => p.id))
+    const ofertaIds = vendedorId ? await getProductosConOfertaVendedor(vendedorId) : []
+    const ids = ofertaIds.filter((id) => dtoIds.has(id))
     if (ids.length === 0) {
       return { data: [], total: 0, page, pageSize, totalPages: 0 }
     }
@@ -192,14 +190,21 @@ export const searchProductosParaVenta = async (params: VentaProductSearchParams)
   if (prodIds.length > 0) {
     const { data: prodRows } = await supabase
       .from('productos')
-      .select('id, precio_venta, price, stock, unidades_por_bulto, se_divide_en, descuento, descuento_cantidad')
+      .select('id, precio_venta, price, stock, unidades_por_bulto, se_divide_en, descuento')
       .in('id', prodIds)
     ;(prodRows ?? []).forEach((p: any) => productosMap.set(p.id, p))
   }
 
+  // Cupo de oferta por vendedor: descuentoCantidad = unidades que le quedan a este vendedor.
+  // Sin vendedor (admin directo) no hay oferta por vendedor → 0.
+  const asignaciones = vendedorId && prodIds.length > 0
+    ? await getAsignacionesVendedor(vendedorId, prodIds)
+    : {}
+
   const results = mpRows.map((mp: any) => {
     const prod = productosMap.get(mp.producto_id)
     const precioVenta = prod ? (Number(prod.precio_venta) || Number(prod.price) || 0) : 0
+    const descuento = prod?.descuento != null ? Number(prod.descuento) : 0
     return {
       id: mp.id,
       nombre: mp.descripcion ?? '',
@@ -212,8 +217,8 @@ export const searchProductosParaVenta = async (params: VentaProductSearchParams)
       seDivideEn: prod?.se_divide_en ? Number(prod.se_divide_en) : undefined,
       precioVenta,
       stockLocal: prod?.stock ?? 0,
-      descuento: prod?.descuento != null ? Number(prod.descuento) : 0,
-      descuentoCantidad: prod?.descuento_cantidad != null ? Number(prod.descuento_cantidad) : null,
+      descuento,
+      descuentoCantidad: descuento > 0 ? (asignaciones[mp.producto_id] ?? 0) : null,
     }
   })
 

@@ -6,7 +6,7 @@ import { clientsApi, sellersApi, ordersApi } from "@/lib/api";
 import { getMayoristaProductos } from "@/services/mayorista-service";
 import { processSaleMayorista } from "@/services/sales-service";
 import { crearPedidoMayorista } from "@/services/pedidos-mayorista-service";
-import { descontarOferta } from "@/services/products-service";
+import { descontarVendedor } from "@/services/descuento-vendedor-service";
 import type { Product, Client, CartItem, Seller, City } from "@/lib/types";
 import { toast } from "sonner";
 import { formatCurrency, normalizeCuit } from "@/lib/utils/format";
@@ -787,15 +787,17 @@ export function useCart(role: UserRole, userEmail?: string, externalProducts?: P
   // --- Process sale ---
   const handleProcessSale = useCallback(async (modo: "esperar" | "disponible" = "disponible") => {
     setProcessing(true);
-    // Descuenta las unidades de oferta de los productos que se vendieron con descuento del admin.
-    // Si el producto no tiene límite (descuento_cantidad null) el RPC lo ignora.
+    // Descuenta las unidades de oferta del vendedor para los productos vendidos con descuento.
+    // Cada vendedor tiene su propio cupo (tabla descuento_vendedor).
     const descontarOfertasVendidas = async () => {
+      const vendedorId = selectedSeller && selectedSeller !== "none" ? selectedSeller : null;
+      if (!vendedorId) return;
       const tareas = cart
         .filter((it) => (it.adminDiscount ?? 0) > 0)
         .map((it) => {
           const pid = (it.product as any).productoId
             || (it.product.id.startsWith("mp_") ? `prod_${it.product.id}` : it.product.id);
-          return descontarOferta(pid, it.quantity);
+          return descontarVendedor(pid, vendedorId, it.quantity);
         });
       if (tareas.length) await Promise.all(tareas).catch(() => {});
     };
