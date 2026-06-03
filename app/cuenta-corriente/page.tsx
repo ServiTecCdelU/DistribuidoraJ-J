@@ -1138,7 +1138,7 @@ export default function CuentaCorrientePage() {
                   }}
                 >
                   <ArrowUpCircle className="h-4 w-4" />
-                  Nuevo
+                  Registrar deuda
                 </Button>
                 <Button
                   className="gap-2 rounded-xl bg-green-600 hover:bg-green-700"
