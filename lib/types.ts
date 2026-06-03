@@ -33,6 +33,8 @@ export interface Product {
   gananciaIndividual?: boolean; // true = precio seteado individualmente
   codigo?: string;
   descuento?: number;          // % de descuento del producto fijado por admin (se suma al del vendedor)
+  descuentoCantidad?: number | null; // unidades disponibles en oferta; null = sin límite, 0 = oferta agotada
+  productoId?: string;         // id en tabla productos (prod_mp_XXX) cuando el id es mayorista (mp_XXX)
 }
 
 export interface Client {

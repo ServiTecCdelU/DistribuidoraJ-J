@@ -26,6 +26,8 @@ export default function DescuentosPage() {
 
   // Valores editados localmente { [id]: "4" }
   const [edited, setEdited] = useState<Record<string, string>>({});
+  // Unidades en oferta editadas { [id]: "10" } — vacío = sin límite
+  const [editedCant, setEditedCant] = useState<Record<string, string>>({});
   const [savingId, setSavingId] = useState<string | null>(null);
 
   const fetchProducts = useCallback(async (page: number, search: string) => {
@@ -40,6 +42,7 @@ export default function DescuentosPage() {
       setTotalProducts(result.total);
       setTotalPages(result.totalPages);
       setEdited({});
+      setEditedCant({});
     } catch {
       toast.error("Error al cargar productos");
     } finally {
@@ -63,26 +66,38 @@ export default function DescuentosPage() {
   const getValue = (p: Product): string =>
     edited[p.id] !== undefined ? edited[p.id] : String(p.descuento ?? 0);
 
+  const getCant = (p: Product): string =>
+    editedCant[p.id] !== undefined
+      ? editedCant[p.id]
+      : p.descuentoCantidad != null ? String(p.descuentoCantidad) : "";
+
   const isDirty = (p: Product): boolean => {
-    if (edited[p.id] === undefined) return false;
-    return Number(edited[p.id] || 0) !== (p.descuento ?? 0);
+    const dtoDirty = edited[p.id] !== undefined && Number(edited[p.id] || 0) !== (p.descuento ?? 0);
+    const cantActual = p.descuentoCantidad != null ? String(p.descuentoCantidad) : "";
+    const cantDirty = editedCant[p.id] !== undefined && editedCant[p.id] !== cantActual;
+    return dtoDirty || cantDirty;
   };
 
   const handleSave = async (p: Product) => {
     const raw = Number(edited[p.id] ?? p.descuento ?? 0);
     const descuento = Math.max(0, Math.min(100, isNaN(raw) ? 0 : raw));
+    const cantRaw = editedCant[p.id];
+    // Vacío = sin límite (null); número = unidades de la oferta
+    const descuentoCantidad =
+      cantRaw === undefined
+        ? p.descuentoCantidad ?? null
+        : cantRaw.trim() === ""
+          ? null
+          : Math.max(0, Math.floor(Number(cantRaw) || 0));
     setSavingId(p.id);
     try {
-      await productsApi.update(p.id, { descuento });
-      setProducts((prev) => prev.map((x) => (x.id === p.id ? { ...x, descuento } : x)));
-      setEdited((prev) => {
-        const next = { ...prev };
-        delete next[p.id];
-        return next;
-      });
+      await productsApi.update(p.id, { descuento, descuentoCantidad });
+      setProducts((prev) => prev.map((x) => (x.id === p.id ? { ...x, descuento, descuentoCantidad } : x)));
+      setEdited((prev) => { const next = { ...prev }; delete next[p.id]; return next; });
+      setEditedCant((prev) => { const next = { ...prev }; delete next[p.id]; return next; });
       toast.success(
         descuento > 0
-          ? `Descuento del ${descuento}% aplicado a "${p.name}"`
+          ? `Descuento del ${descuento}%${descuentoCantidad != null ? ` (${descuentoCantidad}u)` : ""} aplicado a "${p.name}"`
           : `Descuento quitado de "${p.name}"`,
       );
     } catch {
@@ -99,8 +114,8 @@ export default function DescuentosPage() {
         <div className="rounded-2xl border border-teal-200 bg-teal-50/60 dark:bg-teal-950/20 dark:border-teal-800 p-3 flex items-start gap-2">
           <Tag className="h-4 w-4 text-teal-600 shrink-0 mt-0.5" />
           <p className="text-xs text-teal-800 dark:text-teal-200">
-            El descuento del producto se aplica automáticamente en cada venta y se{" "}
-            <strong>suma</strong> al que pueda agregar el vendedor, topeado al máximo autorizado del vendedor.
+            El descuento se aplica automáticamente en cada venta y se <strong>suma</strong> al del vendedor (topeado a su máximo).
+            En <strong>u. oferta</strong> ponés cuántas unidades quedan con ese descuento: se descuentan a medida que se venden y al llegar a <strong>0 se corta la oferta</strong>. Vacío = sin límite.
           </p>
         </div>
 
@@ -150,40 +165,63 @@ export default function DescuentosPage() {
                 >
                   <div className="flex-1 min-w-0">
                     <p className="font-medium text-sm leading-tight truncate">{p.name}</p>
-                    <div className="flex items-center gap-2 mt-0.5">
+                    <div className="flex items-center gap-2 mt-0.5 flex-wrap">
                       {p.codigo && (
                         <span className="text-[10px] font-mono text-muted-foreground">{p.codigo}</span>
                       )}
                       <span className="text-[11px] font-semibold text-teal-600">
                         {formatCurrency(p.price)}
                       </span>
+                      <span className={`text-[10px] font-medium ${p.stock > 0 ? "text-emerald-600" : "text-rose-500"}`}>
+                        {p.stock > 0 ? `${p.stock} en stock` : "Sin stock"}
+                      </span>
                       {dto > 0 && (
                         <Badge variant="secondary" className="h-4 px-1.5 text-[10px] bg-teal-100 text-teal-700 hover:bg-teal-100">
-                          {dto}% dto.
+                          {dto}% dto.{p.descuentoCantidad != null ? ` · ${p.descuentoCantidad}u oferta` : " · sin límite"}
                         </Badge>
                       )}
                     </div>
                   </div>
                   <div className="flex items-center gap-1.5 shrink-0">
-                    <Input
-                      type="number"
-                      min={0}
-                      max={100}
-                      value={getValue(p)}
-                      onChange={(e) =>
-                        setEdited((prev) => ({ ...prev, [p.id]: e.target.value }))
-                      }
-                      onKeyDown={(e) => {
-                        if (e.key === "Enter" && isDirty(p)) handleSave(p);
-                      }}
-                      className="h-8 w-16 text-center text-sm px-1"
-                    />
-                    <span className="text-xs text-muted-foreground">%</span>
+                    <div className="flex flex-col items-center">
+                      <Input
+                        type="number"
+                        min={0}
+                        max={100}
+                        value={getValue(p)}
+                        onChange={(e) =>
+                          setEdited((prev) => ({ ...prev, [p.id]: e.target.value }))
+                        }
+                        onKeyDown={(e) => {
+                          if (e.key === "Enter" && isDirty(p)) handleSave(p);
+                        }}
+                        className="h-8 w-14 text-center text-sm px-1"
+                        title="% de descuento"
+                      />
+                      <span className="text-[9px] text-muted-foreground mt-0.5">% dto.</span>
+                    </div>
+                    <div className="flex flex-col items-center">
+                      <Input
+                        type="number"
+                        min={0}
+                        placeholder="∞"
+                        value={getCant(p)}
+                        onChange={(e) =>
+                          setEditedCant((prev) => ({ ...prev, [p.id]: e.target.value }))
+                        }
+                        onKeyDown={(e) => {
+                          if (e.key === "Enter" && isDirty(p)) handleSave(p);
+                        }}
+                        className="h-8 w-16 text-center text-sm px-1"
+                        title="Unidades en oferta (vacío = sin límite)"
+                      />
+                      <span className="text-[9px] text-muted-foreground mt-0.5">u. oferta</span>
+                    </div>
                     <Button
                       size="sm"
                       disabled={!isDirty(p) || savingId === p.id}
                       onClick={() => handleSave(p)}
-                      className="h-8 px-2.5 gap-1"
+                      className="h-8 px-2.5 gap-1 self-start"
                     >
                       <Check className="h-3.5 w-3.5" />
                       <span className="hidden sm:inline text-xs">Guardar</span>

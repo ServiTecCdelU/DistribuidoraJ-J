@@ -6,6 +6,7 @@ import { clientsApi, sellersApi, ordersApi } from "@/lib/api";
 import { getMayoristaProductos } from "@/services/mayorista-service";
 import { processSaleMayorista } from "@/services/sales-service";
 import { crearPedidoMayorista } from "@/services/pedidos-mayorista-service";
+import { descontarOferta } from "@/services/products-service";
 import type { Product, Client, CartItem, Seller, City } from "@/lib/types";
 import { toast } from "sonner";
 import { formatCurrency, normalizeCuit } from "@/lib/utils/format";
@@ -511,8 +512,10 @@ export function useCart(role: UserRole, userEmail?: string, externalProducts?: P
             : item,
         );
       }
-      // Descuento base del producto fijado por admin (se aplica siempre, topeado al máximo)
-      const adminDiscount = Math.min(product.descuento ?? 0, sellerMaxDiscount);
+      // Descuento base del producto fijado por admin (topeado al máximo del vendedor).
+      // Solo se aplica si la oferta está activa: sin límite de unidades (null) o con stock de oferta (> 0).
+      const ofertaActiva = (product.descuento ?? 0) > 0 && (product.descuentoCantidad == null || product.descuentoCantidad > 0);
+      const adminDiscount = ofertaActiva ? Math.min(product.descuento ?? 0, sellerMaxDiscount) : 0;
       return [
         ...prev,
         {
@@ -742,6 +745,18 @@ export function useCart(role: UserRole, userEmail?: string, externalProducts?: P
   // --- Process sale ---
   const handleProcessSale = useCallback(async (modo: "esperar" | "disponible" = "disponible") => {
     setProcessing(true);
+    // Descuenta las unidades de oferta de los productos que se vendieron con descuento del admin.
+    // Si el producto no tiene límite (descuento_cantidad null) el RPC lo ignora.
+    const descontarOfertasVendidas = async () => {
+      const tareas = cart
+        .filter((it) => (it.adminDiscount ?? 0) > 0)
+        .map((it) => {
+          const pid = (it.product as any).productoId
+            || (it.product.id.startsWith("mp_") ? `prod_${it.product.id}` : it.product.id);
+          return descontarOferta(pid, it.quantity);
+        });
+      if (tareas.length) await Promise.all(tareas).catch(() => {});
+    };
     try {
       const resolvedAddress =
         deliveryMethod === "delivery"
@@ -848,6 +863,7 @@ export function useCart(role: UserRole, userEmail?: string, externalProducts?: P
           discountType: discountValue > 0 ? discountType : undefined,
           notes: orderNotes,
         });
+        await descontarOfertasVendidas();
         toast.success("Pedido creado correctamente");
         resetCart();
         return "order";
@@ -889,6 +905,7 @@ export function useCart(role: UserRole, userEmail?: string, externalProducts?: P
             await crearPedidoMayorista(itemsDeficit);
           }
 
+          await descontarOfertasVendidas();
           toast.success("Pedido creado — pedido al mayorista generado automáticamente");
           resetCart();
           return "order";
@@ -922,6 +939,8 @@ export function useCart(role: UserRole, userEmail?: string, externalProducts?: P
           deliveryAddress: "Retiro en local",
           modo,
         });
+
+        await descontarOfertasVendidas();
 
         const msg = modo === "esperar"
           ? "Venta creada — pendiente de stock mayorista"

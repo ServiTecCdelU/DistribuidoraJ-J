@@ -135,6 +135,7 @@ export interface VentaProductSearchResult {
     precioVenta: number
     stockLocal: number
     descuento: number
+    descuentoCantidad: number | null
   }>
   total: number
   page: number
@@ -165,9 +166,12 @@ export const searchProductosParaVenta = async (params: VentaProductSearchParams)
   if (soloDescuento) {
     const conDto = await supabase
       .from('productos')
-      .select('id')
+      .select('id, descuento_cantidad')
       .gt('descuento', 0)
-    const ids = (conDto.data ?? []).map((p: any) => p.id)
+    // Solo ofertas activas: sin límite (null) o con unidades restantes (> 0)
+    const ids = (conDto.data ?? [])
+      .filter((p: any) => p.descuento_cantidad == null || Number(p.descuento_cantidad) > 0)
+      .map((p: any) => p.id)
     if (ids.length === 0) {
       return { data: [], total: 0, page, pageSize, totalPages: 0 }
     }
@@ -188,7 +192,7 @@ export const searchProductosParaVenta = async (params: VentaProductSearchParams)
   if (prodIds.length > 0) {
     const { data: prodRows } = await supabase
       .from('productos')
-      .select('id, precio_venta, price, stock, unidades_por_bulto, se_divide_en, descuento')
+      .select('id, precio_venta, price, stock, unidades_por_bulto, se_divide_en, descuento, descuento_cantidad')
       .in('id', prodIds)
     ;(prodRows ?? []).forEach((p: any) => productosMap.set(p.id, p))
   }
@@ -209,6 +213,7 @@ export const searchProductosParaVenta = async (params: VentaProductSearchParams)
       precioVenta,
       stockLocal: prod?.stock ?? 0,
       descuento: prod?.descuento != null ? Number(prod.descuento) : 0,
+      descuentoCantidad: prod?.descuento_cantidad != null ? Number(prod.descuento_cantidad) : null,
     }
   })
 

@@ -133,6 +133,8 @@ function NuevaVentaContent({
           imageUrl: "",
           category: p.rubro || p.categoria,
           descuento: p.descuento ?? 0,
+          descuentoCantidad: p.descuentoCantidad ?? null,
+          productoId: p.productoId,
           createdAt: new Date(),
         } as any;
       });
@@ -204,6 +206,8 @@ function NuevaVentaContent({
     );
     const modo = hayPendiente ? "esperar" : "disponible";
     await actions.processSale(modo);
+    // Refrescar productos: refleja ofertas agotadas (descuento de unidades) al instante
+    fetchProducts(searchQuery, rubroFiltro, currentPage, soloDescuento);
   };
 
   if (state.processing) {
@@ -467,6 +471,8 @@ const ProductListItem = memo(function ProductListItem({
   const unidadesPorBulto = (product as any).unidadesPorBulto;
   const stockLocal = product.stockLocal;
   const descuento = (product as any).descuento ?? 0;
+  const descuentoCantidad = (product as any).descuentoCantidad;
+  const ofertaActiva = descuento > 0 && (descuentoCantidad == null || descuentoCantidad > 0);
   const unidadesLote = unidadesPorBulto
     ? (seDivideEn && seDivideEn > 1 ? Math.floor(unidadesPorBulto / seDivideEn) : unidadesPorBulto)
     : null;
@@ -481,10 +487,10 @@ const ProductListItem = memo(function ProductListItem({
       {/* Nombre — línea completa */}
       <div className="flex items-center gap-2 min-w-0">
         <p className="font-medium text-sm leading-tight truncate flex-1">{product.name}</p>
-        {descuento > 0 && (
+        {ofertaActiva && (
           <Badge className="h-5 px-1.5 text-[10px] shrink-0 gap-0.5 bg-teal-100 text-teal-700 hover:bg-teal-100 border border-teal-200">
             <Percent className="h-2.5 w-2.5" />
-            {descuento}% dto.
+            {descuento}% dto.{descuentoCantidad != null ? ` · ${descuentoCantidad}u` : ""}
           </Badge>
         )}
       </div>

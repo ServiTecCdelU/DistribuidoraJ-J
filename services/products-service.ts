@@ -24,7 +24,23 @@ function mapRow(d: Record<string, any>): Product {
     gananciaIndividual: d.ganancia_individual ?? undefined,
     codigo: d.codigo ?? undefined,
     descuento: d.descuento != null ? Number(d.descuento) : 0,
+    descuentoCantidad: d.descuento_cantidad != null ? Number(d.descuento_cantidad) : null,
   }
+}
+
+// Descuenta unidades de la oferta de un producto.
+// Si el producto no tiene límite (descuento_cantidad null) no hace nada.
+export const descontarOferta = async (productoId: string, cantidad: number): Promise<void> => {
+  if (!productoId || cantidad <= 0) return
+  const { data } = await supabase
+    .from('productos')
+    .select('descuento_cantidad')
+    .eq('id', productoId)
+    .single()
+  const actual = data?.descuento_cantidad
+  if (actual == null) return // sin límite o producto inexistente
+  const nuevo = Math.max(0, Number(actual) - cantidad)
+  await supabase.from('productos').update({ descuento_cantidad: nuevo }).eq('id', productoId)
 }
 
 export function invalidateProductsCache(): void {
@@ -232,6 +248,7 @@ export const updateProduct = async (
   if (updates.gananciaGlobal !== undefined) mapped.ganancia_global = updates.gananciaGlobal
   if (updates.gananciaIndividual !== undefined) mapped.ganancia_individual = updates.gananciaIndividual
   if (updates.descuento !== undefined) mapped.descuento = updates.descuento
+  if (updates.descuentoCantidad !== undefined) mapped.descuento_cantidad = updates.descuentoCantidad
   if ((updates as any).base !== undefined) mapped.base = (updates as any).base
   if ((updates as any).marca !== undefined) mapped.brand = (updates as any).marca
   if ((updates as any).sinTacc !== undefined) mapped.sin_tacc = (updates as any).sinTacc
