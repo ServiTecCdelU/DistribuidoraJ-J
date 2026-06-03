@@ -93,6 +93,8 @@ export default function CuentaCorrientePage() {
   const [mayPagoDialog, setMayPagoDialog] = useState(false)
   const [mayAmount, setMayAmount] = useState('')
   const [mayDesc, setMayDesc] = useState('')
+  const [mayBoleta, setMayBoleta] = useState('')
+  const [mayDate, setMayDate] = useState('')
   const [mayProcessing, setMayProcessing] = useState(false)
 
   // Preview imagen comprobante
@@ -268,12 +270,19 @@ export default function CuentaCorrientePage() {
     if (isNaN(amount) || amount <= 0) { toast.error('Ingresá un monto válido'); return }
     setMayProcessing(true)
     try {
-      const tx = await mayoristaCuentaApi.addDeuda({ amount, description: mayDesc || undefined })
+      const tx = await mayoristaCuentaApi.addDeuda({
+        amount,
+        description: mayDesc || undefined,
+        boleta: mayBoleta || undefined,
+        date: mayDate || undefined,
+      })
       setMayTxs((prev) => [tx, ...prev])
       setMayBalance((prev) => prev + amount)
       setMayDeudaDialog(false)
       setMayAmount('')
       setMayDesc('')
+      setMayBoleta('')
+      setMayDate('')
       toast.success(`Deuda de ${formatCurrency(amount)} registrada`)
     } catch (err: any) {
       toast.error(err.message || 'Error al registrar deuda')
@@ -1121,10 +1130,15 @@ export default function CuentaCorrientePage() {
                 <Button
                   className="gap-2 rounded-xl bg-red-600 hover:bg-red-700"
                   size="sm"
-                  onClick={() => { setMayAmount(''); setMayDesc(''); setMayDeudaDialog(true) }}
+                  onClick={() => {
+                    setMayAmount(''); setMayDesc(''); setMayBoleta('')
+                    const d = new Date()
+                    setMayDate(new Date(d.getTime() - d.getTimezoneOffset() * 60000).toISOString().slice(0, 10))
+                    setMayDeudaDialog(true)
+                  }}
                 >
                   <ArrowUpCircle className="h-4 w-4" />
-                  Cargar deuda
+                  Nuevo
                 </Button>
                 <Button
                   className="gap-2 rounded-xl bg-green-600 hover:bg-green-700"
@@ -1203,6 +1217,10 @@ export default function CuentaCorrientePage() {
               </DialogHeader>
               <div className="space-y-4">
                 <div className="space-y-2">
+                  <Label>Fecha</Label>
+                  <Input type="date" value={mayDate} onChange={(e) => setMayDate(e.target.value)} className="rounded-lg" />
+                </div>
+                <div className="space-y-2">
                   <Label>Monto</Label>
                   <div className="relative">
                     <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground font-medium">$</span>
@@ -1212,6 +1230,10 @@ export default function CuentaCorrientePage() {
                       className="pl-7" placeholder="0" autoFocus
                     />
                   </div>
+                </div>
+                <div className="space-y-2">
+                  <Label>Boleta</Label>
+                  <Input value={mayBoleta} onChange={(e) => setMayBoleta(e.target.value)} placeholder="N° de boleta" className="rounded-lg" />
                 </div>
                 <div className="space-y-2">
                   <Label>Descripción (opcional)</Label>

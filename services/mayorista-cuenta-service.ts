@@ -38,19 +38,29 @@ export const getTransaccionesMayorista = async (): Promise<TransaccionMayorista[
 export const addDeudaMayorista = async (data: {
   amount: number
   description?: string
+  boleta?: string
+  date?: string   // 'YYYY-MM-DD' o ISO; default hoy
 }): Promise<TransaccionMayorista> => {
   const docId = await generateReadableId('transacciones_mayorista', 'txmay', 'deuda')
+  const boleta = data.boleta?.trim()
+  const desc = boleta
+    ? `Boleta ${boleta}${data.description ? ` — ${data.description}` : ''}`
+    : (data.description || 'Deuda con mayorista')
+  // Si viene 'YYYY-MM-DD' fijar mediodía local para evitar desfase de zona horaria
+  const dateIso = data.date
+    ? new Date(/^\d{4}-\d{2}-\d{2}$/.test(data.date) ? `${data.date}T12:00:00` : data.date).toISOString()
+    : new Date().toISOString()
   const row = {
     id: docId,
     type: 'debt',
     amount: data.amount,
     saldo: data.amount,
-    description: data.description || 'Deuda con mayorista',
-    date: new Date().toISOString(),
+    description: desc,
+    date: dateIso,
   }
   const { error } = await supabase.from('transacciones_mayorista').insert(row)
   if (error) throw error
-  return { ...row, type: 'debt', date: new Date() }
+  return { ...row, type: 'debt', date: new Date(dateIso) }
 }
 
 export const pagarBoleta = async (data: {
