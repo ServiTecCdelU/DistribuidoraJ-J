@@ -23,6 +23,7 @@ function mapRow(d: Record<string, any>): Product {
     gananciaGlobal: d.ganancia_global != null ? Number(d.ganancia_global) : undefined,
     gananciaIndividual: d.ganancia_individual ?? undefined,
     codigo: d.codigo ?? undefined,
+    descuento: d.descuento != null ? Number(d.descuento) : 0,
   }
 }
 
@@ -205,6 +206,7 @@ export const createProduct = async (
     precio_base: product.precioBase ?? null,
     ganancia_global: product.gananciaGlobal ?? null,
     ganancia_individual: product.gananciaIndividual ?? null,
+    descuento: product.descuento ?? 0,
   }
   await supabase.from('productos').insert(row)
   return { ...product, id: docId, disabled: product.disabled ?? false, createdAt: new Date() }
@@ -229,6 +231,7 @@ export const updateProduct = async (
   if (updates.precioBase !== undefined) mapped.precio_base = updates.precioBase
   if (updates.gananciaGlobal !== undefined) mapped.ganancia_global = updates.gananciaGlobal
   if (updates.gananciaIndividual !== undefined) mapped.ganancia_individual = updates.gananciaIndividual
+  if (updates.descuento !== undefined) mapped.descuento = updates.descuento
   if ((updates as any).base !== undefined) mapped.base = (updates as any).base
   if ((updates as any).marca !== undefined) mapped.brand = (updates as any).marca
   if ((updates as any).sinTacc !== undefined) mapped.sin_tacc = (updates as any).sinTacc

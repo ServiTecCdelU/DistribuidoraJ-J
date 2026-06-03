@@ -25,6 +25,7 @@ function mapDoc(d: Record<string, any>): MayoristaProducto {
     stockLocal: d.stock_local ?? 0,
     unidadesPorBulto: undefined,
     seDivideEn: undefined,
+    descuento: 0,
   }
 }
 
@@ -132,6 +133,7 @@ export interface VentaProductSearchResult {
     seDivideEn?: number
     precioVenta: number
     stockLocal: number
+    descuento: number
   }>
   total: number
   page: number
@@ -171,7 +173,7 @@ export const searchProductosParaVenta = async (params: VentaProductSearchParams)
   if (prodIds.length > 0) {
     const { data: prodRows } = await supabase
       .from('productos')
-      .select('id, precio_venta, price, stock, unidades_por_bulto, se_divide_en')
+      .select('id, precio_venta, price, stock, unidades_por_bulto, se_divide_en, descuento')
       .in('id', prodIds)
     ;(prodRows ?? []).forEach((p: any) => productosMap.set(p.id, p))
   }
@@ -191,6 +193,7 @@ export const searchProductosParaVenta = async (params: VentaProductSearchParams)
       seDivideEn: prod?.se_divide_en ? Number(prod.se_divide_en) : undefined,
       precioVenta,
       stockLocal: prod?.stock ?? 0,
+      descuento: prod?.descuento != null ? Number(prod.descuento) : 0,
     }
   })
 
@@ -233,7 +236,7 @@ export const getMayoristaProductos = async (_forceRefresh = false, includeJoin =
         const chunk = prodIds.slice(i, i + 500)
         const { data: prodRows } = await supabase
           .from('productos')
-          .select('id, precio_venta, price, ganancia_global, ganancia_individual, stock, unidades_por_bulto, se_divide_en')
+          .select('id, precio_venta, price, ganancia_global, ganancia_individual, stock, unidades_por_bulto, se_divide_en, descuento')
           .in('id', chunk)
         ;(prodRows ?? []).forEach((p) => productosMap.set(p.id, p))
       }
@@ -248,6 +251,7 @@ export const getMayoristaProductos = async (_forceRefresh = false, includeJoin =
         p.stockLocal = pd.stock ?? 0
         p.unidadesPorBulto = pd.unidades_por_bulto ?? undefined
         p.seDivideEn = pd.se_divide_en ? Number(pd.se_divide_en) : undefined
+        p.descuento = pd.descuento != null ? Number(pd.descuento) : 0
       }
     }
   }

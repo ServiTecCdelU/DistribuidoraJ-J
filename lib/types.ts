@@ -32,6 +32,7 @@ export interface Product {
   gananciaGlobal?: number;     // % de ganancia aplicado
   gananciaIndividual?: boolean; // true = precio seteado individualmente
   codigo?: string;
+  descuento?: number;          // % de descuento del producto fijado por admin (se suma al del vendedor)
 }
 
 export interface Client {
@@ -76,7 +77,8 @@ export interface Transaction {
 export interface CartItem {
   product: Product;
   quantity: number;
-  itemDiscount?: number; // porcentaje 0-30
+  itemDiscount?: number; // porcentaje efectivo total (descuento admin + vendedor)
+  adminDiscount?: number; // % base fijado por admin en el producto (piso, no editable por vendedor)
   cantidadStockLocal?: number;
   cantidadPendienteMayorista?: number;
 }
@@ -232,6 +234,7 @@ export interface MayoristaProducto {
   stockLocal: number;
   unidadesPorBulto?: number;   // Lote total (era "lote"), almacenado en productos
   seDivideEn?: number;         // Unidades por porción, almacenado en productos
+  descuento?: number;          // % descuento fijado por admin, almacenado en productos
 }
 
 export interface MayoristaPrefs {

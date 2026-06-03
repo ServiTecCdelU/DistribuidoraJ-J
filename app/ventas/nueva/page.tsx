@@ -129,6 +129,7 @@ function NuevaVentaContent({
           codigo: p.codigo,
           imageUrl: "",
           category: p.rubro || p.categoria,
+          descuento: p.descuento ?? 0,
           createdAt: new Date(),
         } as any;
       });

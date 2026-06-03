@@ -288,24 +288,35 @@ export function UnifiedCart({ role, state, actions, onConfirmSale, allowDiscount
                     </span>
                   </div>
                   {/* Descuento por producto — admin/seller */}
-                  {role !== null && (
-                    <div className="flex items-center gap-1.5">
-                      <span className="text-[10px] text-muted-foreground">Dto.:</span>
-                      <Input
-                        type="number" min="0" max={maxDiscountAllowed} placeholder="0"
-                        value={item.itemDiscount || ""}
-                        onChange={(e) => actions.setItemDiscount(item.product.id, Number(e.target.value) || 0)}
-                        className="h-5 w-10 text-center text-[10px] px-0.5"
-                        title={`Máximo ${maxDiscountAllowed}%`}
-                      />
-                      <span className="text-[10px] text-muted-foreground">%</span>
-                      {item.itemDiscount ? (
-                        <span className="text-[10px] font-semibold text-emerald-600">
-                          −{actions.formatCurrency(lineTotal * item.itemDiscount / 100)}
-                        </span>
-                      ) : null}
-                    </div>
-                  )}
+                  {role !== null && (() => {
+                    const adminDto = item.adminDiscount ?? 0;
+                    const sellerDto = Math.max(0, (item.itemDiscount ?? 0) - adminDto);
+                    const maxSeller = Math.max(0, maxDiscountAllowed - adminDto);
+                    return (
+                      <div className="flex items-center gap-1.5 flex-wrap">
+                        {adminDto > 0 && (
+                          <span className="text-[10px] font-medium text-teal-600 bg-teal-50 border border-teal-200 rounded px-1">
+                            Producto {adminDto}%
+                          </span>
+                        )}
+                        <span className="text-[10px] text-muted-foreground">{adminDto > 0 ? "Vendedor:" : "Dto.:"}</span>
+                        <Input
+                          type="number" min="0" max={maxSeller} placeholder="0"
+                          value={sellerDto || ""}
+                          onChange={(e) => actions.setItemDiscount(item.product.id, Number(e.target.value) || 0)}
+                          className="h-5 w-10 text-center text-[10px] px-0.5"
+                          title={`Máximo vendedor ${maxSeller}%`}
+                        />
+                        <span className="text-[10px] text-muted-foreground">%</span>
+                        {item.itemDiscount ? (
+                          <span className="text-[10px] font-semibold text-emerald-600">
+                            −{actions.formatCurrency(lineTotal * item.itemDiscount / 100)}
+                            {adminDto > 0 && <span className="text-muted-foreground font-normal"> ({item.itemDiscount}%)</span>}
+                          </span>
+                        ) : null}
+                      </div>
+                    );
+                  })()}
                 </li>
               );
             })}

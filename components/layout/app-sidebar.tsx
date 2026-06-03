@@ -72,6 +72,7 @@ export function AppSidebar() {
       label: "Catálogo",
       items: [
         { href: "/productos", label: "Productos", icon: Package, roles: ["admin"] },
+        // { href: "/descuentos", label: "Descuentos", icon: Percent, roles: ["admin"] }, // oculto: activar cuando se muestre al cliente
         { href: "/clientes", label: "Clientes", icon: Users, roles: ["admin"] },
       ],
     },

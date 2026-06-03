@@ -338,6 +338,7 @@ export function useCart(role: UserRole, userEmail?: string, externalProducts?: P
             codigo: p.codigo,
             imageUrl: "",
             category: p.categoria,
+            descuento: p.descuento ?? 0,
             createdAt: p.updatedAt,
           };
         });
@@ -510,9 +511,18 @@ export function useCart(role: UserRole, userEmail?: string, externalProducts?: P
             : item,
         );
       }
-      return [...prev, { product, quantity: 1 }];
+      // Descuento base del producto fijado por admin (se aplica siempre, topeado al máximo)
+      const adminDiscount = Math.min(product.descuento ?? 0, sellerMaxDiscount);
+      return [
+        ...prev,
+        {
+          product,
+          quantity: 1,
+          ...(adminDiscount > 0 ? { adminDiscount, itemDiscount: adminDiscount } : {}),
+        },
+      ];
     });
-  }, []);
+  }, [sellerMaxDiscount]);
 
   const updateQuantity = useCallback((productId: string, delta: number) => {
     setCart((prev) =>
@@ -546,14 +556,19 @@ export function useCart(role: UserRole, userEmail?: string, externalProducts?: P
     setCart((prev) => prev.filter((item) => item.product.id !== productId));
   }, []);
 
+  // discount = porción del vendedor (se suma al descuento base del admin)
   const setItemDiscount = useCallback((productId: string, discount: number) => {
-    if (discount > sellerMaxDiscount) {
-      toast.error(`Descuento máximo autorizado: ${sellerMaxDiscount}%`);
-    }
-    const clamped = Math.max(0, Math.min(sellerMaxDiscount, discount));
-    setCart((prev) => prev.map((item) =>
-      item.product.id === productId ? { ...item, itemDiscount: clamped || undefined } : item
-    ));
+    setCart((prev) => prev.map((item) => {
+      if (item.product.id !== productId) return item;
+      const admin = item.adminDiscount ?? 0;
+      const maxSeller = Math.max(0, sellerMaxDiscount - admin);
+      if (discount > maxSeller) {
+        toast.error(`Descuento máximo del vendedor: ${maxSeller}% (el producto ya trae ${admin}%)`);
+      }
+      const clampedSeller = Math.max(0, Math.min(maxSeller, discount));
+      const effective = admin + clampedSeller;
+      return { ...item, itemDiscount: effective || undefined };
+    }));
   }, [sellerMaxDiscount]);
 
   // --- Payment actions ---
