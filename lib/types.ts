@@ -255,7 +255,7 @@ export interface MayoristaPrefs {
 export interface StockMovimiento {
   id: string;
   productoId: string;
-  tipo: "apertura_bulto" | "venta" | "ajuste" | "rotura";
+  tipo: "apertura_bulto" | "venta" | "ajuste" | "rotura" | "regalo";
   cantidad: number;
   referencia?: string;
   fecha: Date;

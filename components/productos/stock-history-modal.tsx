@@ -27,11 +27,11 @@ import {
   formatDateShort,
 } from '@/lib/utils/format'
 
-type TipoFilter = 'all' | 'venta' | 'apertura_bulto' | 'ajuste' | 'rotura'
+type TipoFilter = 'all' | 'venta' | 'regalo' | 'apertura_bulto' | 'ajuste' | 'rotura'
 
 interface Movimiento {
   id: string
-  tipo: 'venta' | 'apertura_bulto' | 'ajuste' | 'rotura'
+  tipo: 'venta' | 'regalo' | 'apertura_bulto' | 'ajuste' | 'rotura'
   cantidad: number
   stockAnterior: number
   stockPosterior: number
@@ -50,6 +50,7 @@ interface HistorialResponse {
   totalPages: number
   stats: {
     unitsSold: number
+    unitsGifted: number
     totalRevenue: number
     adjustments: number
     currentStock: number | null
@@ -70,6 +71,7 @@ const PAGE_SIZE = 20
 
 const TIPO_CONFIG: Record<string, { label: string; className: string }> = {
   venta:          { label: 'Venta',    className: 'bg-blue-100 text-blue-700 border-blue-200' },
+  regalo:         { label: 'Regalo',   className: 'bg-fuchsia-100 text-fuchsia-700 border-fuchsia-200' },
   apertura_bulto: { label: 'Ingreso',  className: 'bg-emerald-100 text-emerald-700 border-emerald-200' },
   ajuste:         { label: 'Ajuste',   className: 'bg-amber-100 text-amber-700 border-amber-200' },
   rotura:         { label: 'Rotura',   className: 'bg-rose-100 text-rose-700 border-rose-200' },
@@ -78,6 +80,7 @@ const TIPO_CONFIG: Record<string, { label: string; className: string }> = {
 const FILTER_OPTIONS: { id: TipoFilter; label: string }[] = [
   { id: 'all',           label: 'Todos' },
   { id: 'venta',         label: 'Ventas' },
+  { id: 'regalo',        label: 'Regalos' },
   { id: 'apertura_bulto',label: 'Ingresos' },
   { id: 'ajuste',        label: 'Ajustes' },
   { id: 'rotura',        label: 'Roturas' },
@@ -166,11 +169,16 @@ export function StockHistoryModal({
         </DialogHeader>
 
         {/* Stats */}
-        <div className="grid grid-cols-2 sm:grid-cols-6 gap-1.5 p-2.5 sm:p-4 bg-muted/30 border-b shrink-0">
+        <div className="grid grid-cols-2 sm:grid-cols-7 gap-1.5 p-2.5 sm:p-4 bg-muted/30 border-b shrink-0">
           <StatCard
             value={stats?.unitsSold}
             label="Unid. Vendidas"
             colorClass="bg-blue-50 text-blue-600"
+          />
+          <StatCard
+            value={stats?.unitsGifted}
+            label="Regaladas"
+            colorClass="bg-fuchsia-50 text-fuchsia-600"
           />
           <StatCard
             value={stats != null ? formatCurrency(stats.totalRevenue) : undefined}
@@ -358,7 +366,7 @@ function MovimientoRow({ m }: { m: Movimiento }) {
         <TipoBadge tipo={m.tipo} />
       </td>
       <td className="px-3 py-2.5 text-xs border-b">
-        {m.tipo === 'venta' ? (
+        {m.tipo === 'venta' || m.tipo === 'regalo' ? (
           <div className="min-w-0">
             <div className="flex items-center gap-2 flex-wrap">
               {m.sellerName && (
@@ -443,7 +451,7 @@ function MovimientoCard({ m }: { m: Movimiento }) {
       )}
 
       {/* Motivo libre (ajustes/roturas/ingresos) */}
-      {!m.sellerName && !m.clientName && m.motivo && m.tipo !== 'venta' && (
+      {!m.sellerName && !m.clientName && m.motivo && m.tipo !== 'venta' && m.tipo !== 'regalo' && (
         <p className="text-[11px] text-muted-foreground italic pl-0.5">{m.motivo}</p>
       )}
 

@@ -72,6 +72,22 @@ export const getProducts = async (_forceRefresh = false): Promise<Product[]> => 
   return all.map(mapRow)
 }
 
+/**
+ * Trae productos por una lista de IDs (batch). Para resolver config de oferta
+ * vigente o stock de productos regalados sin cargar todo el catálogo.
+ */
+export const getProductsByIds = async (ids: string[]): Promise<Product[]> => {
+  const unique = Array.from(new Set(ids.filter(Boolean)))
+  if (unique.length === 0) return []
+  const all: any[] = []
+  for (let i = 0; i < unique.length; i += 500) {
+    const chunk = unique.slice(i, i + 500)
+    const { data } = await supabase.from('productos').select('*').in('id', chunk)
+    if (data) all.push(...data)
+  }
+  return all.map(mapRow)
+}
+
 export interface ProductSearchParams {
   search?: string
   category?: string

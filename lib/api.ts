@@ -4,6 +4,7 @@ import {
   deleteProduct,
   getProductById,
   getProducts,
+  getProductsByIds,
   getProductsPaginated,
   searchProducts,
   updateProduct,
@@ -114,6 +115,9 @@ import type { Faltante } from '@/services/faltantes-service'
 export const productsApi = {
   async getAll(): Promise<Product[]> {
     return getProducts()
+  },
+  async getByIds(ids: string[]): Promise<Product[]> {
+    return getProductsByIds(ids)
   },
   async search(params: ProductSearchParams): Promise<ProductSearchResult> {
     return searchProducts(params)

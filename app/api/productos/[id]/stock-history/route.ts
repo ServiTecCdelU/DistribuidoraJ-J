@@ -37,9 +37,9 @@ export async function GET(
     return NextResponse.json({ error: error.message }, { status: 500 })
   }
 
-  // Enriquecer con datos de ventas para los registros de esta página
+  // Enriquecer con datos de ventas para los registros de esta página (ventas y regalos)
   const ventaIdsInPage = (movimientos ?? [])
-    .filter((m: any) => m.tipo === 'venta' && m.motivo)
+    .filter((m: any) => (m.tipo === 'venta' || m.tipo === 'regalo') && m.motivo)
     .map((m: any) => m.motivo as string)
 
   let ventaMap: Record<string, { saleNumber: string | null; sellerName: string | null; clientName: string | null; ventaTotal: number | null }> = {}
@@ -67,7 +67,7 @@ export async function GET(
   }
 
   const data = (movimientos ?? []).map((m: any) => {
-    const venta = m.tipo === 'venta' && m.motivo ? (ventaMap[m.motivo] ?? null) : null
+    const venta = (m.tipo === 'venta' || m.tipo === 'regalo') && m.motivo ? (ventaMap[m.motivo] ?? null) : null
     return {
       id: String(m.id),
       tipo: m.tipo,
@@ -79,7 +79,8 @@ export async function GET(
       saleNumber: venta?.saleNumber ?? null,
       sellerName: venta?.sellerName ?? null,
       clientName: venta?.clientName ?? null,
-      ventaTotal: venta?.ventaTotal ?? null,
+      // Los regalos son gratis: no muestran monto
+      ventaTotal: m.tipo === 'regalo' ? null : (venta?.ventaTotal ?? null),
     }
   })
 
@@ -92,6 +93,7 @@ export async function GET(
 
   const salesMovs = (allMovs ?? []).filter((m: any) => m.tipo === 'venta')
   const unitsSold = salesMovs.reduce((s: number, m: any) => s + Math.abs(m.cantidad), 0)
+  const unitsGifted = (allMovs ?? []).filter((m: any) => m.tipo === 'regalo').reduce((s: number, m: any) => s + Math.abs(m.cantidad), 0)
   const adjustments = (allMovs ?? []).filter((m: any) => m.tipo === 'ajuste' || m.tipo === 'rotura').length
   const lastStock = (allMovs ?? [])[0] ? (allMovs as any[])[0].stock_posterior : null
 
@@ -140,6 +142,7 @@ export async function GET(
     totalPages,
     stats: {
       unitsSold,
+      unitsGifted,
       totalRevenue: Math.round(totalRevenue),
       adjustments,
       currentStock: lastStock,

@@ -10,8 +10,19 @@ import { productsApi, sellersApi } from "@/lib/api";
 import type { Product, Seller } from "@/lib/types";
 import { formatCurrency } from "@/lib/utils/format";
 import { getAsignacionesProducto, setAsignacion } from "@/services/descuento-vendedor-service";
-import { Search, X, Percent, Check, Tag, ChevronLeft, ChevronRight, ChevronDown, Users, Loader2, Gift } from "lucide-react";
+import {
+  Search, X, Percent, Check, Tag, ChevronLeft, ChevronRight, ChevronDown,
+  Users, Loader2, Gift, Plus, Pencil, Trash2, AlertTriangle, CheckCircle2,
+} from "lucide-react";
 import { toast } from "sonner";
+
+type OfertaTipo = "descuento" | "regalo_mismo" | "regalo_otro";
+
+const TIPO_LABEL: Record<OfertaTipo, string> = {
+  descuento: "Descuento %",
+  regalo_mismo: "Regala el mismo producto",
+  regalo_otro: "Regala otro producto",
+};
 
 export default function DescuentosPage() {
   const [products, setProducts] = useState<Product[]>([]);
@@ -25,41 +36,46 @@ export default function DescuentosPage() {
   const [totalProducts, setTotalProducts] = useState(0);
   const pageSize = 15;
 
-  // % de descuento editado { [id]: "4" }
-  const [edited, setEdited] = useState<Record<string, string>>({});
-  // promo "regalo cada X" editada { [id]: "10" }
-  const [editedRegalo, setEditedRegalo] = useState<Record<string, string>>({});
-  // cantidad gratis por bloque editada { [id]: "2" }
-  const [editedRegaloCant, setEditedRegaloCant] = useState<Record<string, string>>({});
-  const [savingId, setSavingId] = useState<string | null>(null);
+  // Stock de los productos regalados (para el estado "sin stock" de la oferta cruzada)
+  const [stockB, setStockB] = useState<Record<string, number>>({});
 
-  // Vendedores y asignación de cupos por producto
+  // Vendedores y cupos por producto
   const [vendedores, setVendedores] = useState<Seller[]>([]);
-  const [expandedId, setExpandedId] = useState<string | null>(null);
-  // cupos { [productId]: { [vendedorId]: "5" } }
+  const [cuposOpenId, setCuposOpenId] = useState<string | null>(null);
   const [cupos, setCupos] = useState<Record<string, Record<string, string>>>({});
   const [loadingCupos, setLoadingCupos] = useState(false);
   const [savingCuposId, setSavingCuposId] = useState<string | null>(null);
 
-  // Combo: regalar OTRO producto
-  const [comboOpenId, setComboOpenId] = useState<string | null>(null);
+  // Edición de ofertas
+  const [addMenuId, setAddMenuId] = useState<string | null>(null);
+  const [editing, setEditing] = useState<{ id: string; tipo: OfertaTipo } | null>(null);
+  const [savingId, setSavingId] = useState<string | null>(null);
+
+  // Drafts por tipo
+  const [dtoDraft, setDtoDraft] = useState<Record<string, string>>({});
+  const [mismoDraft, setMismoDraft] = useState<Record<string, { cada: string; cantidad: string }>>({});
   const [comboDraft, setComboDraft] = useState<Record<string, { productoId: string | null; nombre: string; cada: string; cantidad: string }>>({});
+
+  // Buscador del producto a regalar (oferta cruzada)
   const [comboSearch, setComboSearch] = useState("");
   const [comboResults, setComboResults] = useState<Product[]>([]);
   const [comboSearching, setComboSearching] = useState(false);
-  const [savingComboId, setSavingComboId] = useState<string | null>(null);
   const comboDebounce = useRef<NodeJS.Timeout | null>(null);
 
   const fetchProducts = useCallback(async (page: number, search: string) => {
     setLoading(true);
     try {
       const result = await productsApi.search({ search: search || undefined, page, pageSize });
-      setProducts(result.data.filter((p) => !(p as any).disabled));
+      const visibles = result.data.filter((p) => !(p as any).disabled);
+      setProducts(visibles);
       setTotalProducts(result.total);
       setTotalPages(result.totalPages);
-      setEdited({});
-      setEditedRegalo({});
-      setEditedRegaloCant({});
+      // Cargar stock de los productos regalados para calcular el estado
+      const idsB = visibles.map((p) => p.regaloProductoId).filter((x): x is string => !!x);
+      if (idsB.length) {
+        const bs = await productsApi.getByIds(idsB);
+        setStockB((prev) => ({ ...prev, ...Object.fromEntries(bs.map((b) => [b.id, b.stock])) }));
+      }
     } catch {
       toast.error("Error al cargar productos");
     } finally {
@@ -86,60 +102,159 @@ export default function DescuentosPage() {
     }, 300);
   };
 
-  const getValue = (p: Product): string =>
-    edited[p.id] !== undefined ? edited[p.id] : String(p.descuento ?? 0);
+  // --- Qué ofertas tiene un producto ---
+  const tieneDescuento = (p: Product) => (p.descuento ?? 0) > 0;
+  const tieneRegaloMismo = (p: Product) => (p.regaloCada ?? 0) > 0;
+  const tieneRegaloOtro = (p: Product) => !!p.regaloProductoId && (p.regaloProductoCada ?? 0) > 0;
 
-  const getValueRegalo = (p: Product): string =>
-    editedRegalo[p.id] !== undefined ? editedRegalo[p.id] : String(p.regaloCada ?? 0);
-
-  const getValueRegaloCant = (p: Product): string =>
-    editedRegaloCant[p.id] !== undefined ? editedRegaloCant[p.id] : String(p.regaloCantidad ?? 1);
-
-  const isDirty = (p: Product): boolean => {
-    const dtoDirty = edited[p.id] !== undefined && Number(edited[p.id] || 0) !== (p.descuento ?? 0);
-    const regaloDirty = editedRegalo[p.id] !== undefined && Number(editedRegalo[p.id] || 0) !== (p.regaloCada ?? 0);
-    const regaloCantDirty = editedRegaloCant[p.id] !== undefined && Number(editedRegaloCant[p.id] || 1) !== (p.regaloCantidad ?? 1);
-    return dtoDirty || regaloDirty || regaloCantDirty;
+  const tiposDisponibles = (p: Product): OfertaTipo[] => {
+    const t: OfertaTipo[] = [];
+    if (!tieneDescuento(p)) t.push("descuento");
+    if (!tieneRegaloMismo(p)) t.push("regalo_mismo");
+    if (!tieneRegaloOtro(p)) t.push("regalo_otro");
+    return t;
   };
 
-  const handleSave = async (p: Product) => {
-    const raw = Number(edited[p.id] ?? p.descuento ?? 0);
-    const descuento = Math.max(0, Math.min(100, isNaN(raw) ? 0 : raw));
-    const rawRegalo = Number(editedRegalo[p.id] ?? p.regaloCada ?? 0);
-    const regaloCada = Math.max(0, isNaN(rawRegalo) ? 0 : Math.floor(rawRegalo)) || null;
-    const rawRegaloCant = Number(editedRegaloCant[p.id] ?? p.regaloCantidad ?? 1);
-    // Solo tiene sentido si hay promo; sin promo lo dejamos en null.
-    const regaloCantidad = regaloCada ? Math.max(1, isNaN(rawRegaloCant) ? 1 : Math.floor(rawRegaloCant)) : null;
-    setSavingId(p.id);
-    try {
-      await productsApi.update(p.id, { descuento, regaloCada, regaloCantidad });
-      setProducts((prev) => prev.map((x) => (x.id === p.id ? { ...x, descuento, regaloCada, regaloCantidad } : x)));
-      setEdited((prev) => { const next = { ...prev }; delete next[p.id]; return next; });
-      setEditedRegalo((prev) => { const next = { ...prev }; delete next[p.id]; return next; });
-      setEditedRegaloCant((prev) => { const next = { ...prev }; delete next[p.id]; return next; });
-      toast.success("Cambios guardados en \"" + p.name + "\"");
-    } catch {
-      toast.error("Error al guardar");
-    } finally {
-      setSavingId(null);
+  // --- Estado de cada oferta (activa / sin stock) ---
+  const estadoRegaloOtro = (p: Product): "activa" | "sin_stock" | "desconocido" => {
+    if (!p.regaloProductoId) return "activa";
+    const s = stockB[p.regaloProductoId];
+    if (s === undefined) return "desconocido";
+    return s > 0 ? "activa" : "sin_stock";
+  };
+
+  // --- Abrir edición / agregar ---
+  const abrirEdicion = (p: Product, tipo: OfertaTipo) => {
+    setAddMenuId(null);
+    setEditing({ id: p.id, tipo });
+    if (tipo === "descuento") {
+      setDtoDraft((prev) => ({ ...prev, [p.id]: String(p.descuento ?? "") }));
+    } else if (tipo === "regalo_mismo") {
+      setMismoDraft((prev) => ({ ...prev, [p.id]: { cada: p.regaloCada ? String(p.regaloCada) : "", cantidad: String(p.regaloCantidad ?? 1) } }));
+    } else {
+      setComboSearch("");
+      setComboResults([]);
+      setComboDraft((prev) => ({ ...prev, [p.id]: {
+        productoId: p.regaloProductoId ?? null,
+        nombre: p.regaloProductoNombre ?? "",
+        cada: p.regaloProductoCada ? String(p.regaloProductoCada) : "",
+        cantidad: String(p.regaloProductoCantidad ?? 1),
+      } }));
     }
   };
 
-  const toggleExpand = async (p: Product) => {
-    if (expandedId === p.id) { setExpandedId(null); return; }
-    setExpandedId(p.id);
-    if (cupos[p.id]) return; // ya cargado
+  const cerrarEdicion = () => setEditing(null);
+
+  const patchLocal = (id: string, patch: Partial<Product>) => {
+    setProducts((prev) => prev.map((x) => (x.id === id ? { ...x, ...patch } : x)));
+  };
+
+  // --- Guardar / quitar por tipo ---
+  const guardarDescuento = async (p: Product) => {
+    const raw = Number(dtoDraft[p.id] ?? p.descuento ?? 0);
+    const descuento = Math.max(0, Math.min(100, isNaN(raw) ? 0 : raw));
+    setSavingId(p.id);
+    try {
+      await productsApi.update(p.id, { descuento });
+      patchLocal(p.id, { descuento });
+      toast.success(descuento > 0 ? `Descuento del ${descuento}% en "${p.name}"` : `Descuento quitado`);
+      cerrarEdicion();
+    } catch { toast.error("Error al guardar"); } finally { setSavingId(null); }
+  };
+
+  const guardarRegaloMismo = async (p: Product) => {
+    const d = mismoDraft[p.id] ?? { cada: "", cantidad: "1" };
+    const cada = Math.max(0, Math.floor(Number(d.cada) || 0)) || null;
+    const cantidad = cada ? Math.max(1, Math.floor(Number(d.cantidad) || 1)) : null;
+    setSavingId(p.id);
+    try {
+      await productsApi.update(p.id, { regaloCada: cada, regaloCantidad: cantidad });
+      patchLocal(p.id, { regaloCada: cada, regaloCantidad: cantidad });
+      toast.success(cada ? `Promo guardada en "${p.name}"` : "Promo quitada");
+      cerrarEdicion();
+    } catch { toast.error("Error al guardar"); } finally { setSavingId(null); }
+  };
+
+  const guardarRegaloOtro = async (p: Product) => {
+    const d = comboDraft[p.id];
+    if (!d) return;
+    const cada = Math.max(0, Math.floor(Number(d.cada) || 0)) || null;
+    const cantidad = cada ? Math.max(1, Math.floor(Number(d.cantidad) || 1)) : null;
+    const productoId = cada && d.productoId ? d.productoId : null;
+    const nombre = productoId ? d.nombre : null;
+    if (cada && !productoId) { toast.error("Elegí el producto a regalar"); return; }
+    setSavingId(p.id);
+    try {
+      await productsApi.update(p.id, {
+        regaloProductoId: productoId,
+        regaloProductoNombre: nombre,
+        regaloProductoCada: productoId ? cada : null,
+        regaloProductoCantidad: cantidad,
+      });
+      patchLocal(p.id, {
+        regaloProductoId: productoId, regaloProductoNombre: nombre,
+        regaloProductoCada: productoId ? cada : null, regaloProductoCantidad: cantidad,
+      });
+      if (productoId) {
+        const b = await productsApi.getByIds([productoId]);
+        if (b[0]) setStockB((prev) => ({ ...prev, [productoId]: b[0].stock }));
+      }
+      toast.success(productoId ? `Combo guardado en "${p.name}"` : "Combo quitado");
+      cerrarEdicion();
+    } catch { toast.error("Error al guardar"); } finally { setSavingId(null); }
+  };
+
+  const quitarOferta = async (p: Product, tipo: OfertaTipo) => {
+    setSavingId(p.id);
+    try {
+      if (tipo === "descuento") {
+        await productsApi.update(p.id, { descuento: 0 });
+        patchLocal(p.id, { descuento: 0 });
+      } else if (tipo === "regalo_mismo") {
+        await productsApi.update(p.id, { regaloCada: null, regaloCantidad: null });
+        patchLocal(p.id, { regaloCada: null, regaloCantidad: null });
+      } else {
+        await productsApi.update(p.id, { regaloProductoId: null, regaloProductoNombre: null, regaloProductoCada: null, regaloProductoCantidad: null });
+        patchLocal(p.id, { regaloProductoId: null, regaloProductoNombre: null, regaloProductoCada: null, regaloProductoCantidad: null });
+      }
+      if (editing?.id === p.id && editing.tipo === tipo) cerrarEdicion();
+      toast.success("Oferta quitada");
+    } catch { toast.error("Error al quitar la oferta"); } finally { setSavingId(null); }
+  };
+
+  // --- Buscador del producto a regalar ---
+  const buscarComboProducto = (text: string) => {
+    setComboSearch(text);
+    if (comboDebounce.current) clearTimeout(comboDebounce.current);
+    if (text.trim().length < 2) { setComboResults([]); return; }
+    comboDebounce.current = setTimeout(async () => {
+      setComboSearching(true);
+      try {
+        const res = await productsApi.search({ search: text, page: 1, pageSize: 8 });
+        setComboResults(res.data.filter((x) => !(x as any).disabled));
+      } catch { /* ignore */ } finally { setComboSearching(false); }
+    }, 300);
+  };
+
+  const elegirComboProducto = (pId: string, prod: Product) => {
+    setComboDraft((prev) => ({ ...prev, [pId]: { ...(prev[pId] || { cada: "", cantidad: "1" }), productoId: prod.id, nombre: prod.name } }));
+    setStockB((prev) => ({ ...prev, [prod.id]: prod.stock }));
+    setComboSearch("");
+    setComboResults([]);
+  };
+
+  // --- Cupos por vendedor ---
+  const toggleCupos = async (p: Product) => {
+    if (cuposOpenId === p.id) { setCuposOpenId(null); return; }
+    setCuposOpenId(p.id);
+    if (cupos[p.id]) return;
     setLoadingCupos(true);
     try {
       const map = await getAsignacionesProducto(p.id);
       const row: Record<string, string> = {};
       vendedores.forEach((v) => { row[v.id] = map[v.id] != null ? String(map[v.id]) : ""; });
       setCupos((prev) => ({ ...prev, [p.id]: row }));
-    } catch {
-      toast.error("Error al cargar los cupos");
-    } finally {
-      setLoadingCupos(false);
-    }
+    } catch { toast.error("Error al cargar los cupos"); } finally { setLoadingCupos(false); }
   };
 
   const setCupo = (productId: string, vendedorId: string, value: string) => {
@@ -158,106 +273,24 @@ export default function DescuentosPage() {
     const row = cupos[p.id] || {};
     setSavingCuposId(p.id);
     try {
-      await Promise.all(
-        vendedores.map((v) => {
-          const n = Math.max(0, Math.floor(Number(row[v.id] || 0)));
-          return setAsignacion(p.id, v.id, n);
-        }),
-      );
+      await Promise.all(vendedores.map((v) => {
+        const n = Math.max(0, Math.floor(Number(row[v.id] || 0)));
+        return setAsignacion(p.id, v.id, n);
+      }));
       toast.success(`Cupos guardados para "${p.name}"`);
-    } catch {
-      toast.error("Error al guardar los cupos");
-    } finally {
-      setSavingCuposId(null);
-    }
-  };
-
-  // --- Combo: regalar otro producto ---
-  const toggleCombo = (p: Product) => {
-    if (comboOpenId === p.id) { setComboOpenId(null); return; }
-    setComboOpenId(p.id);
-    setComboSearch("");
-    setComboResults([]);
-    setComboDraft((prev) => ({
-      ...prev,
-      [p.id]: prev[p.id] ?? {
-        productoId: p.regaloProductoId ?? null,
-        nombre: p.regaloProductoNombre ?? "",
-        cada: p.regaloProductoCada ? String(p.regaloProductoCada) : "",
-        cantidad: String(p.regaloProductoCantidad ?? 1),
-      },
-    }));
-  };
-
-  const buscarComboProducto = (text: string) => {
-    setComboSearch(text);
-    if (comboDebounce.current) clearTimeout(comboDebounce.current);
-    if (text.trim().length < 2) { setComboResults([]); return; }
-    comboDebounce.current = setTimeout(async () => {
-      setComboSearching(true);
-      try {
-        const res = await productsApi.search({ search: text, page: 1, pageSize: 8 });
-        setComboResults(res.data.filter((x) => !(x as any).disabled));
-      } catch {
-        // ignore
-      } finally {
-        setComboSearching(false);
-      }
-    }, 300);
-  };
-
-  const elegirComboProducto = (pId: string, prod: Product) => {
-    setComboDraft((prev) => ({
-      ...prev,
-      [pId]: { ...(prev[pId] || { cada: "", cantidad: "1" }), productoId: prod.id, nombre: prod.name },
-    }));
-    setComboSearch("");
-    setComboResults([]);
-  };
-
-  const setComboField = (pId: string, field: "cada" | "cantidad", value: string) => {
-    setComboDraft((prev) => ({
-      ...prev,
-      [pId]: { ...(prev[pId] || { productoId: null, nombre: "", cada: "", cantidad: "1" }), [field]: value },
-    }));
-  };
-
-  const handleSaveCombo = async (p: Product) => {
-    const draft = comboDraft[p.id];
-    if (!draft) return;
-    const cada = Math.max(0, Math.floor(Number(draft.cada) || 0)) || null;
-    const cantidad = cada ? Math.max(1, Math.floor(Number(draft.cantidad) || 1)) : null;
-    const productoId = cada && draft.productoId ? draft.productoId : null;
-    const nombre = productoId ? draft.nombre : null;
-    if (cada && !productoId) { toast.error("Elegí el producto a regalar"); return; }
-    setSavingComboId(p.id);
-    try {
-      await productsApi.update(p.id, {
-        regaloProductoId: productoId,
-        regaloProductoNombre: nombre,
-        regaloProductoCada: productoId ? cada : null,
-        regaloProductoCantidad: cantidad,
-      });
-      setProducts((prev) => prev.map((x) => (x.id === p.id
-        ? { ...x, regaloProductoId: productoId, regaloProductoNombre: nombre, regaloProductoCada: productoId ? cada : null, regaloProductoCantidad: cantidad }
-        : x)));
-      toast.success(productoId ? `Combo guardado en "${p.name}"` : `Combo quitado de "${p.name}"`);
-      setComboOpenId(null);
-    } catch {
-      toast.error("Error al guardar el combo");
-    } finally {
-      setSavingComboId(null);
-    }
+    } catch { toast.error("Error al guardar los cupos"); } finally { setSavingCuposId(null); }
   };
 
   return (
-    <MainLayout allowedRoles={["admin"]} title="Descuentos" description="Asigná un descuento por producto y repartí las unidades por vendedor">
+    <MainLayout allowedRoles={["admin"]} title="Ofertas" description="Elegí el tipo de oferta por producto y controlá su estado">
       <div className="space-y-4">
         {/* Info */}
         <div className="rounded-2xl border border-teal-200 bg-teal-50/60 dark:bg-teal-950/20 dark:border-teal-800 p-3 flex items-start gap-2">
           <Tag className="h-4 w-4 text-teal-600 shrink-0 mt-0.5" />
           <p className="text-xs text-teal-800 dark:text-teal-200">
-            El <strong>%</strong> es el descuento del producto (se suma al del vendedor, topeado a su máximo). <strong>cada X / gratis</strong> es la promo de regalo: cada X unidades compradas se suman N gratis (paga X, lleva X+N; el stock descuenta el total). Poné 0 en "cada X" para sin promo. En <strong>Cupos</strong> repartís cuántas unidades en oferta tiene cada vendedor: se descuentan a medida que vende y al llegar a <strong>0 se le corta la oferta a ese vendedor</strong> (los demás siguen).
+            Cada producto puede tener hasta 3 ofertas que conviven: <strong>Descuento %</strong> (con cupos por vendedor),
+            <strong> Regala el mismo producto</strong> (cada X +N) y <strong>Regala otro producto</strong> (cada X → N de otro).
+            El badge muestra si está <strong>Activa</strong> o <strong>Sin stock</strong>.
           </p>
         </div>
 
@@ -280,7 +313,7 @@ export default function DescuentosPage() {
         {/* Lista */}
         {loading ? (
           <div className="space-y-2">
-            {[...Array(8)].map((_, i) => (<Skeleton key={i} className="h-16 rounded-xl" />))}
+            {[...Array(8)].map((_, i) => (<Skeleton key={i} className="h-20 rounded-xl" />))}
           </div>
         ) : products.length === 0 ? (
           <div className="rounded-xl border-2 border-dashed border-border bg-card/50 p-10 text-center">
@@ -290,10 +323,11 @@ export default function DescuentosPage() {
         ) : (
           <div className="space-y-2">
             {products.map((p) => {
-              const dto = p.descuento ?? 0;
-              const isExpanded = expandedId === p.id;
+              const disponibles = tiposDisponibles(p);
+              const sinOfertas = !tieneDescuento(p) && !tieneRegaloMismo(p) && !tieneRegaloOtro(p);
               return (
                 <div key={p.id} className="rounded-xl border border-border bg-card overflow-hidden">
+                  {/* Encabezado */}
                   <div className="flex items-center gap-3 px-3 py-2.5">
                     <div className="flex-1 min-w-0">
                       <p className="font-medium text-sm leading-tight truncate">{p.name}</p>
@@ -303,81 +337,187 @@ export default function DescuentosPage() {
                         <span className={`text-[10px] font-medium ${p.stock > 0 ? "text-emerald-600" : "text-rose-500"}`}>
                           {p.stock > 0 ? `${p.stock} en stock` : "Sin stock"}
                         </span>
-                        {dto > 0 && (
-                          <Badge variant="secondary" className="h-4 px-1.5 text-[10px] bg-teal-100 text-teal-700 hover:bg-teal-100">{dto}% dto.</Badge>
-                        )}
-                        {(p.regaloCada ?? 0) > 0 && (
-                          <Badge variant="secondary" className="h-4 px-1.5 text-[10px] bg-fuchsia-100 text-fuchsia-700 hover:bg-fuchsia-100">cada {p.regaloCada} +{p.regaloCantidad ?? 1}</Badge>
-                        )}
-                        {p.regaloProductoId && (p.regaloProductoCada ?? 0) > 0 && (
-                          <Badge variant="secondary" className="h-4 px-1.5 text-[10px] bg-purple-100 text-purple-700 hover:bg-purple-100">cada {p.regaloProductoCada} → {p.regaloProductoCantidad ?? 1}× {p.regaloProductoNombre}</Badge>
-                        )}
                       </div>
                     </div>
-                    <div className="flex items-center gap-1.5 shrink-0">
-                      <div className="flex flex-col items-center">
-                        <Input
-                          type="number" min={0} max={100}
-                          value={getValue(p)}
-                          onChange={(e) => setEdited((prev) => ({ ...prev, [p.id]: e.target.value }))}
-                          onKeyDown={(e) => { if (e.key === "Enter" && isDirty(p)) handleSave(p); }}
-                          className="h-8 w-14 text-center text-sm px-1"
-                          title="% de descuento"
-                        />
-                        <span className="text-[9px] text-muted-foreground mt-0.5">% dto.</span>
-                      </div>
-                      <div className="flex flex-col items-center">
-                        <Input
-                          type="number" min={0}
-                          value={getValueRegalo(p)}
-                          onChange={(e) => setEditedRegalo((prev) => ({ ...prev, [p.id]: e.target.value }))}
-                          onKeyDown={(e) => { if (e.key === "Enter" && isDirty(p)) handleSave(p); }}
-                          className="h-8 w-14 text-center text-sm px-1"
-                          title="Cada cuántas unidades compradas se activa la promo (0 = sin promo)"
-                        />
-                        <span className="text-[9px] text-muted-foreground mt-0.5">cada X</span>
-                      </div>
-                      <div className="flex flex-col items-center">
-                        <Input
-                          type="number" min={1}
-                          value={getValueRegaloCant(p)}
-                          onChange={(e) => setEditedRegaloCant((prev) => ({ ...prev, [p.id]: e.target.value }))}
-                          onKeyDown={(e) => { if (e.key === "Enter" && isDirty(p)) handleSave(p); }}
-                          disabled={Number(getValueRegalo(p) || 0) <= 0}
-                          className="h-8 w-14 text-center text-sm px-1"
-                          title="Cuántas unidades gratis por cada bloque"
-                        />
-                        <span className="text-[9px] text-muted-foreground mt-0.5">gratis</span>
-                      </div>
-                      <Button size="sm" disabled={!isDirty(p) || savingId === p.id} onClick={() => handleSave(p)} className="h-8 px-2.5 gap-1 self-start">
-                        <Check className="h-3.5 w-3.5" />
-                        <span className="hidden sm:inline text-xs">Guardar</span>
-                      </Button>
+                    {/* Agregar oferta */}
+                    <div className="relative shrink-0">
                       <Button
-                        size="sm" variant={isExpanded ? "default" : "outline"}
-                        onClick={() => toggleExpand(p)}
-                        className="h-8 px-2.5 gap-1 self-start"
-                        title="Repartir unidades por vendedor"
+                        size="sm"
+                        variant="outline"
+                        disabled={disponibles.length === 0}
+                        onClick={() => setAddMenuId(addMenuId === p.id ? null : p.id)}
+                        className="h-8 px-2.5 gap-1"
                       >
-                        <Users className="h-3.5 w-3.5" />
-                        <span className="hidden sm:inline text-xs">Cupos</span>
-                        <ChevronDown className={`h-3.5 w-3.5 transition-transform ${isExpanded ? "rotate-180" : ""}`} />
+                        <Plus className="h-3.5 w-3.5" />
+                        <span className="text-xs">Agregar oferta</span>
+                        <ChevronDown className={`h-3.5 w-3.5 transition-transform ${addMenuId === p.id ? "rotate-180" : ""}`} />
                       </Button>
-                      <Button
-                        size="sm" variant={comboOpenId === p.id ? "default" : "outline"}
-                        onClick={() => toggleCombo(p)}
-                        className="h-8 px-2.5 gap-1 self-start"
-                        title="Regalar otro producto"
-                      >
-                        <Gift className="h-3.5 w-3.5" />
-                        <span className="hidden sm:inline text-xs">Regalo</span>
-                        <ChevronDown className={`h-3.5 w-3.5 transition-transform ${comboOpenId === p.id ? "rotate-180" : ""}`} />
-                      </Button>
+                      {addMenuId === p.id && disponibles.length > 0 && (
+                        <div className="absolute right-0 z-20 mt-1 w-56 bg-card border border-border rounded-lg shadow-lg overflow-hidden">
+                          {disponibles.map((t) => (
+                            <button
+                              key={t}
+                              onClick={() => abrirEdicion(p, t)}
+                              className="flex items-center gap-2 w-full px-3 py-2 text-left text-xs hover:bg-muted/40 transition-colors"
+                            >
+                              {t === "descuento" ? <Percent className="h-3.5 w-3.5 text-teal-600" /> : <Gift className="h-3.5 w-3.5 text-fuchsia-600" />}
+                              {TIPO_LABEL[t]}
+                            </button>
+                          ))}
+                        </div>
+                      )}
                     </div>
                   </div>
 
+                  {/* Ofertas activas */}
+                  <div className="px-3 pb-2.5 space-y-1.5">
+                    {sinOfertas && (
+                      <p className="text-[11px] text-muted-foreground italic">Sin ofertas. Usá "Agregar oferta".</p>
+                    )}
+
+                    {tieneDescuento(p) && (
+                      <OfferRow
+                        icon={<Tag className="h-3.5 w-3.5 text-teal-600" />}
+                        text={`Descuento ${p.descuento}%`}
+                        estado={p.stock > 0 ? "activa" : "sin_stock"}
+                        onCupos={() => toggleCupos(p)}
+                        cuposActive={cuposOpenId === p.id}
+                        onEdit={() => abrirEdicion(p, "descuento")}
+                        onRemove={() => quitarOferta(p, "descuento")}
+                      />
+                    )}
+                    {tieneRegaloMismo(p) && (
+                      <OfferRow
+                        icon={<Gift className="h-3.5 w-3.5 text-fuchsia-600" />}
+                        text={`Cada ${p.regaloCada} +${p.regaloCantidad ?? 1} (mismo)`}
+                        estado={p.stock > 0 ? "activa" : "sin_stock"}
+                        onEdit={() => abrirEdicion(p, "regalo_mismo")}
+                        onRemove={() => quitarOferta(p, "regalo_mismo")}
+                      />
+                    )}
+                    {tieneRegaloOtro(p) && (
+                      <OfferRow
+                        icon={<Gift className="h-3.5 w-3.5 text-purple-600" />}
+                        text={`Cada ${p.regaloProductoCada} → ${p.regaloProductoCantidad ?? 1}× ${p.regaloProductoNombre}`}
+                        estado={estadoRegaloOtro(p)}
+                        onEdit={() => abrirEdicion(p, "regalo_otro")}
+                        onRemove={() => quitarOferta(p, "regalo_otro")}
+                      />
+                    )}
+                  </div>
+
+                  {/* Panel de edición */}
+                  {editing?.id === p.id && (
+                    <div className="border-t border-border bg-muted/20 px-3 py-3">
+                      <div className="flex items-center justify-between mb-2">
+                        <span className="text-xs font-semibold">{TIPO_LABEL[editing.tipo]}</span>
+                        <Button variant="ghost" size="icon" className="h-6 w-6" onClick={cerrarEdicion}>
+                          <X className="h-3.5 w-3.5" />
+                        </Button>
+                      </div>
+
+                      {editing.tipo === "descuento" && (
+                        <div className="flex items-end gap-2">
+                          <div className="flex flex-col">
+                            <span className="text-[9px] text-muted-foreground mb-0.5">% de descuento</span>
+                            <Input
+                              type="number" min={0} max={100}
+                              value={dtoDraft[p.id] ?? ""}
+                              onChange={(e) => setDtoDraft((prev) => ({ ...prev, [p.id]: e.target.value }))}
+                              className="h-8 w-24 text-center text-sm"
+                            />
+                          </div>
+                          <Button size="sm" disabled={savingId === p.id} onClick={() => guardarDescuento(p)} className="h-8 gap-1 ml-auto">
+                            {savingId === p.id ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Check className="h-3.5 w-3.5" />} Guardar
+                          </Button>
+                        </div>
+                      )}
+
+                      {editing.tipo === "regalo_mismo" && (
+                        <div className="flex items-end gap-3 flex-wrap">
+                          <div className="flex flex-col">
+                            <span className="text-[9px] text-muted-foreground mb-0.5">cada (compradas)</span>
+                            <Input type="number" min={0}
+                              value={mismoDraft[p.id]?.cada ?? ""}
+                              onChange={(e) => setMismoDraft((prev) => ({ ...prev, [p.id]: { ...(prev[p.id] || { cantidad: "1" }), cada: e.target.value } }))}
+                              className="h-8 w-20 text-center text-sm" />
+                          </div>
+                          <div className="flex flex-col">
+                            <span className="text-[9px] text-muted-foreground mb-0.5">gratis (mismo)</span>
+                            <Input type="number" min={1}
+                              value={mismoDraft[p.id]?.cantidad ?? "1"}
+                              onChange={(e) => setMismoDraft((prev) => ({ ...prev, [p.id]: { ...(prev[p.id] || { cada: "" }), cantidad: e.target.value } }))}
+                              className="h-8 w-20 text-center text-sm" />
+                          </div>
+                          <Button size="sm" disabled={savingId === p.id} onClick={() => guardarRegaloMismo(p)} className="h-8 gap-1 ml-auto">
+                            {savingId === p.id ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Check className="h-3.5 w-3.5" />} Guardar
+                          </Button>
+                        </div>
+                      )}
+
+                      {editing.tipo === "regalo_otro" && (
+                        <div className="space-y-2">
+                          {comboDraft[p.id]?.productoId ? (
+                            <div className="flex items-center gap-2 bg-card rounded-lg border border-purple-200 px-2 py-1.5">
+                              <Gift className="h-3.5 w-3.5 text-purple-600 shrink-0" />
+                              <span className="text-xs flex-1 truncate font-medium">{comboDraft[p.id]?.nombre}</span>
+                              <Button variant="ghost" size="icon" className="h-6 w-6" onClick={() => setComboDraft((prev) => ({ ...prev, [p.id]: { ...(prev[p.id]!), productoId: null, nombre: "" } }))}>
+                                <X className="h-3 w-3" />
+                              </Button>
+                            </div>
+                          ) : (
+                            <div className="relative">
+                              <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
+                              <Input
+                                placeholder="Buscar producto a regalar..."
+                                value={comboSearch}
+                                onChange={(e) => buscarComboProducto(e.target.value)}
+                                className="pl-8 h-8 text-xs"
+                              />
+                              {(comboSearching || comboResults.length > 0) && (
+                                <div className="absolute z-10 mt-1 w-full bg-card border border-border rounded-lg shadow-lg max-h-52 overflow-auto">
+                                  {comboSearching ? (
+                                    <div className="flex items-center gap-2 text-xs text-muted-foreground px-3 py-2">
+                                      <Loader2 className="h-3.5 w-3.5 animate-spin" /> Buscando...
+                                    </div>
+                                  ) : (
+                                    comboResults.filter((r) => r.id !== p.id).map((r) => (
+                                      <button key={r.id} onClick={() => elegirComboProducto(p.id, r)} className="flex items-center justify-between w-full px-3 py-1.5 text-left hover:bg-muted/40 transition-colors">
+                                        <span className="text-xs truncate flex-1">{r.name}</span>
+                                        <span className={`text-[10px] ml-2 ${r.stock > 0 ? "text-muted-foreground" : "text-rose-500"}`}>{r.stock > 0 ? `${r.stock} u.` : "sin stock"}</span>
+                                      </button>
+                                    ))
+                                  )}
+                                </div>
+                              )}
+                            </div>
+                          )}
+                          <div className="flex items-end gap-3 flex-wrap">
+                            <div className="flex flex-col">
+                              <span className="text-[9px] text-muted-foreground mb-0.5">cada (compradas)</span>
+                              <Input type="number" min={0}
+                                value={comboDraft[p.id]?.cada ?? ""}
+                                onChange={(e) => setComboDraft((prev) => ({ ...prev, [p.id]: { ...(prev[p.id] || { productoId: null, nombre: "", cantidad: "1" }), cada: e.target.value } }))}
+                                className="h-8 w-20 text-center text-sm" />
+                            </div>
+                            <div className="flex flex-col">
+                              <span className="text-[9px] text-muted-foreground mb-0.5">regala (gratis)</span>
+                              <Input type="number" min={1}
+                                value={comboDraft[p.id]?.cantidad ?? "1"}
+                                onChange={(e) => setComboDraft((prev) => ({ ...prev, [p.id]: { ...(prev[p.id] || { productoId: null, nombre: "", cada: "" }), cantidad: e.target.value } }))}
+                                className="h-8 w-20 text-center text-sm" />
+                            </div>
+                            <Button size="sm" disabled={savingId === p.id} onClick={() => guardarRegaloOtro(p)} className="h-8 gap-1 ml-auto">
+                              {savingId === p.id ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Check className="h-3.5 w-3.5" />} Guardar
+                            </Button>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  )}
+
                   {/* Panel de cupos por vendedor */}
-                  {isExpanded && (
+                  {cuposOpenId === p.id && (
                     <div className="border-t border-border bg-muted/20 px-3 py-3">
                       {loadingCupos && !cupos[p.id] ? (
                         <div className="flex items-center gap-2 text-xs text-muted-foreground py-2">
@@ -389,110 +529,24 @@ export default function DescuentosPage() {
                         <>
                           <div className="flex items-center gap-2 mb-2">
                             <span className="text-[11px] font-medium text-muted-foreground">Asignar a todos:</span>
-                            <Input
-                              type="number" min={0} placeholder="0"
-                              onChange={(e) => aplicarATodos(p.id, e.target.value)}
-                              className="h-7 w-16 text-center text-xs px-1"
-                            />
+                            <Input type="number" min={0} placeholder="0" onChange={(e) => aplicarATodos(p.id, e.target.value)} className="h-7 w-16 text-center text-xs px-1" />
                             <span className="text-[10px] text-muted-foreground">unidades</span>
                           </div>
                           <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                             {vendedores.map((v) => (
                               <div key={v.id} className="flex items-center gap-2 bg-card rounded-lg border border-border px-2 py-1.5">
                                 <span className="text-xs flex-1 truncate">{v.name}</span>
-                                <Input
-                                  type="number" min={0} placeholder="0"
-                                  value={cupos[p.id]?.[v.id] ?? ""}
-                                  onChange={(e) => setCupo(p.id, v.id, e.target.value)}
-                                  className="h-7 w-16 text-center text-xs px-1"
-                                />
+                                <Input type="number" min={0} placeholder="0" value={cupos[p.id]?.[v.id] ?? ""} onChange={(e) => setCupo(p.id, v.id, e.target.value)} className="h-7 w-16 text-center text-xs px-1" />
                               </div>
                             ))}
                           </div>
                           <div className="flex justify-end mt-3">
                             <Button size="sm" onClick={() => handleSaveCupos(p)} disabled={savingCuposId === p.id} className="h-8 gap-1">
-                              {savingCuposId === p.id ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Check className="h-3.5 w-3.5" />}
-                              Guardar cupos
+                              {savingCuposId === p.id ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Check className="h-3.5 w-3.5" />} Guardar cupos
                             </Button>
                           </div>
                         </>
                       )}
-                    </div>
-                  )}
-
-                  {/* Panel combo: regalar otro producto */}
-                  {comboOpenId === p.id && (
-                    <div className="border-t border-border bg-purple-50/40 dark:bg-purple-950/10 px-3 py-3 space-y-3">
-                      <p className="text-[11px] text-muted-foreground">
-                        Cada <strong>X</strong> unidades compradas de <strong>{p.name}</strong>, se regalan <strong>N</strong> unidades de otro producto (gratis, descuenta su stock).
-                      </p>
-
-                      {/* Producto a regalar */}
-                      {comboDraft[p.id]?.productoId ? (
-                        <div className="flex items-center gap-2 bg-card rounded-lg border border-purple-200 px-2 py-1.5">
-                          <Gift className="h-3.5 w-3.5 text-purple-600 shrink-0" />
-                          <span className="text-xs flex-1 truncate font-medium">{comboDraft[p.id]?.nombre}</span>
-                          <Button variant="ghost" size="icon" className="h-6 w-6" onClick={() => setComboDraft((prev) => ({ ...prev, [p.id]: { ...(prev[p.id]!), productoId: null, nombre: "" } }))}>
-                            <X className="h-3 w-3" />
-                          </Button>
-                        </div>
-                      ) : (
-                        <div className="relative">
-                          <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
-                          <Input
-                            placeholder="Buscar producto a regalar..."
-                            value={comboSearch}
-                            onChange={(e) => buscarComboProducto(e.target.value)}
-                            className="pl-8 h-8 text-xs"
-                          />
-                          {(comboSearching || comboResults.length > 0) && (
-                            <div className="absolute z-10 mt-1 w-full bg-card border border-border rounded-lg shadow-lg max-h-52 overflow-auto">
-                              {comboSearching ? (
-                                <div className="flex items-center gap-2 text-xs text-muted-foreground px-3 py-2">
-                                  <Loader2 className="h-3.5 w-3.5 animate-spin" /> Buscando...
-                                </div>
-                              ) : (
-                                comboResults.filter((r) => r.id !== p.id).map((r) => (
-                                  <button
-                                    key={r.id}
-                                    onClick={() => elegirComboProducto(p.id, r)}
-                                    className="flex items-center justify-between w-full px-3 py-1.5 text-left hover:bg-muted/40 transition-colors"
-                                  >
-                                    <span className="text-xs truncate flex-1">{r.name}</span>
-                                    <span className="text-[10px] text-muted-foreground ml-2">{r.stock > 0 ? `${r.stock} u.` : "sin stock"}</span>
-                                  </button>
-                                ))
-                              )}
-                            </div>
-                          )}
-                        </div>
-                      )}
-
-                      {/* Cantidades */}
-                      <div className="flex items-end gap-3 flex-wrap">
-                        <div className="flex flex-col">
-                          <span className="text-[9px] text-muted-foreground mb-0.5">cada (compradas)</span>
-                          <Input
-                            type="number" min={0}
-                            value={comboDraft[p.id]?.cada ?? ""}
-                            onChange={(e) => setComboField(p.id, "cada", e.target.value)}
-                            className="h-8 w-20 text-center text-sm px-1"
-                          />
-                        </div>
-                        <div className="flex flex-col">
-                          <span className="text-[9px] text-muted-foreground mb-0.5">regala (gratis)</span>
-                          <Input
-                            type="number" min={1}
-                            value={comboDraft[p.id]?.cantidad ?? "1"}
-                            onChange={(e) => setComboField(p.id, "cantidad", e.target.value)}
-                            className="h-8 w-20 text-center text-sm px-1"
-                          />
-                        </div>
-                        <Button size="sm" onClick={() => handleSaveCombo(p)} disabled={savingComboId === p.id} className="h-8 gap-1 ml-auto">
-                          {savingComboId === p.id ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Check className="h-3.5 w-3.5" />}
-                          Guardar combo
-                        </Button>
-                      </div>
                     </div>
                   )}
                 </div>
@@ -518,5 +572,56 @@ export default function DescuentosPage() {
         )}
       </div>
     </MainLayout>
+  );
+}
+
+// ─── Sub-componentes ───────────────────────────────────────────────
+
+function EstadoBadge({ estado }: { estado: "activa" | "sin_stock" | "desconocido" }) {
+  if (estado === "sin_stock") {
+    return (
+      <Badge variant="secondary" className="h-5 px-1.5 text-[10px] gap-1 bg-rose-100 text-rose-700 hover:bg-rose-100">
+        <AlertTriangle className="h-3 w-3" /> Sin stock
+      </Badge>
+    );
+  }
+  if (estado === "desconocido") {
+    return <Badge variant="secondary" className="h-5 px-1.5 text-[10px] bg-gray-100 text-gray-600 hover:bg-gray-100">—</Badge>;
+  }
+  return (
+    <Badge variant="secondary" className="h-5 px-1.5 text-[10px] gap-1 bg-emerald-100 text-emerald-700 hover:bg-emerald-100">
+      <CheckCircle2 className="h-3 w-3" /> Activa
+    </Badge>
+  );
+}
+
+function OfferRow({
+  icon, text, estado, onEdit, onRemove, onCupos, cuposActive,
+}: {
+  icon: React.ReactNode;
+  text: string;
+  estado: "activa" | "sin_stock" | "desconocido";
+  onEdit: () => void;
+  onRemove: () => void;
+  onCupos?: () => void;
+  cuposActive?: boolean;
+}) {
+  return (
+    <div className="flex items-center gap-2 rounded-lg border border-border bg-background/60 px-2.5 py-1.5">
+      {icon}
+      <span className="text-xs flex-1 min-w-0 truncate">{text}</span>
+      <EstadoBadge estado={estado} />
+      {onCupos && (
+        <Button variant={cuposActive ? "default" : "ghost"} size="icon" className="h-6 w-6" title="Cupos por vendedor" onClick={onCupos}>
+          <Users className="h-3.5 w-3.5" />
+        </Button>
+      )}
+      <Button variant="ghost" size="icon" className="h-6 w-6" title="Editar" onClick={onEdit}>
+        <Pencil className="h-3.5 w-3.5" />
+      </Button>
+      <Button variant="ghost" size="icon" className="h-6 w-6 text-muted-foreground hover:text-destructive" title="Quitar" onClick={onRemove}>
+        <Trash2 className="h-3.5 w-3.5" />
+      </Button>
+    </div>
   );
 }

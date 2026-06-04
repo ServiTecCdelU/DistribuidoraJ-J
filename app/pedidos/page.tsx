@@ -607,13 +607,21 @@ export default function PedidosPage() {
         throw new Error("Debe seleccionar un cliente para cuenta corriente");
       }
 
+      // Traer la config de oferta VIGENTE de cada producto para aplicarla al cobrar.
+      // El item del pedido usa el id de mayorista (mp_XXX); la config vive en productos (prod_mp_XXX).
+      const normId = (pid: string) => (pid?.startsWith("mp_") ? `prod_${pid}` : pid);
+      const ofertaProductos = await productsApi.getByIds(adjustedItems.map((i) => normId(i.productId)));
+      const ofertaMap = new Map(ofertaProductos.map((p) => [p.id, p]));
+
       const sale = await salesApi.processSale({
         clientId: resolvedClientId,
         clientName: client?.name || selectedOrder.clientName,
         clientPhone: client?.phone,
         sellerId: selectedOrder.sellerId,
         sellerName: selectedOrder.sellerName,
-        items: adjustedItems.map((item) => ({
+        items: adjustedItems.map((item) => {
+          const cfg = ofertaMap.get(normId(item.productId));
+          return {
           product: {
             id: item.productId,
             name: item.name,
@@ -623,10 +631,17 @@ export default function PedidosPage() {
             imageUrl: "",
             category: "",
             createdAt: new Date(),
+            regaloCada: cfg?.regaloCada ?? null,
+            regaloCantidad: cfg?.regaloCantidad ?? null,
+            regaloProductoId: cfg?.regaloProductoId ?? null,
+            regaloProductoNombre: cfg?.regaloProductoNombre ?? null,
+            regaloProductoCada: cfg?.regaloProductoCada ?? null,
+            regaloProductoCantidad: cfg?.regaloProductoCantidad ?? null,
           },
           quantity: item.quantity,
           itemDiscount: item.itemDiscount ?? undefined,
-        })),
+          };
+        }),
         discount: (selectedOrder as any).discount ?? undefined,
         discountType: (selectedOrder as any).discountType ?? undefined,
         paymentType: salePaymentType,

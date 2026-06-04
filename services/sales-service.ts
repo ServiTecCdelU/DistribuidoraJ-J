@@ -224,23 +224,30 @@ export const processSale = async (data: {
   const { error: insertErr } = await supabase.from('ventas').insert(saleRow2)
   if (insertErr) throw new Error(`Error al crear venta: ${insertErr.message}`)
 
-  // Descontar stock
+  // Descontar stock — venta (lo pagado) y regalo (lo gratis) en movimientos separados
   const { registrarMovimientoStock } = await import('@/services/stock-service')
   for (const item of data.items) {
     // Los pedidos usan IDs de mayorista_productos (mp_XXXX); stock vive en productos (prod_mp_XXXX)
     const prodId = item.product.id?.startsWith('mp_') ? `prod_${item.product.id}` : item.product.id
-    // Stock descontado = unidades pagadas + unidades de regalo (promo "cada X +1")
-    const totalEntregado = item.quantity + unidadesRegalo(item.quantity, item.product.regaloCada, item.product.regaloCantidad)
+    const regaloMismo = unidadesRegalo(item.quantity, item.product.regaloCada, item.product.regaloCantidad)
     const { data: prod } = await supabase.from('productos').select('stock').eq('id', prodId).single()
     if (prod) {
-      const stockAnterior = prod.stock || 0
-      const stockPosterior = Math.max(0, stockAnterior - totalEntregado)
-      await supabase.from('productos').update({ stock: stockPosterior }).eq('id', prodId)
-      await registrarMovimientoStock({ productoId: prodId, tipo: 'venta', cantidad: -totalEntregado, stockAnterior, stockPosterior, motivo: saleId })
+      let stockActual = prod.stock || 0
+      // Venta (lo pagado)
+      const stockTrasVenta = Math.max(0, stockActual - item.quantity)
+      await supabase.from('productos').update({ stock: stockTrasVenta }).eq('id', prodId)
+      await registrarMovimientoStock({ productoId: prodId, tipo: 'venta', cantidad: -item.quantity, stockAnterior: stockActual, stockPosterior: stockTrasVenta, motivo: saleId })
+      stockActual = stockTrasVenta
+      // Regalo del mismo producto (promo "cada X +N")
+      if (regaloMismo > 0) {
+        const stockTrasRegalo = Math.max(0, stockActual - regaloMismo)
+        await supabase.from('productos').update({ stock: stockTrasRegalo }).eq('id', prodId)
+        await registrarMovimientoStock({ productoId: prodId, tipo: 'regalo', cantidad: -regaloMismo, stockAnterior: stockActual, stockPosterior: stockTrasRegalo, motivo: saleId })
+      }
     }
   }
 
-  // Descontar stock de los productos regalados (promo cruzada)
+  // Descontar stock de los productos regalados (promo cruzada) — tipo regalo
   for (const r of regalosCruzados) {
     const prodId = r.productoId.startsWith('mp_') ? `prod_${r.productoId}` : r.productoId
     const { data: prod } = await supabase.from('productos').select('stock').eq('id', prodId).single()
@@ -248,7 +255,7 @@ export const processSale = async (data: {
       const stockAnterior = prod.stock || 0
       const stockPosterior = Math.max(0, stockAnterior - r.cantidad)
       await supabase.from('productos').update({ stock: stockPosterior }).eq('id', prodId)
-      await registrarMovimientoStock({ productoId: prodId, tipo: 'venta', cantidad: -r.cantidad, stockAnterior, stockPosterior, motivo: saleId })
+      await registrarMovimientoStock({ productoId: prodId, tipo: 'regalo', cantidad: -r.cantidad, stockAnterior, stockPosterior, motivo: saleId })
     }
   }
 
@@ -571,18 +578,20 @@ export const processSaleMayorista = async (data: {
   const { error: insertError } = await supabase.from('ventas').insert(saleRow)
   if (insertError) throw new Error(`Error al crear venta: ${insertError.message}`)
 
-  // Descontar stock solo en modo "disponible"
+  // Descontar stock solo en modo "disponible" — venta y regalo por separado
   if (modo === 'disponible') {
-    const { descontarStockVenta } = await import('@/services/stock-service')
-    const itemsConStockLocal = itemsConStock
-      .filter((i) => i.cantidadStockLocal > 0 || i.regalo > 0)
-      .map((i) => ({ productoId: i.productId, cantidad: i.cantidadStockLocal + i.regalo }))
-    // Sumar el stock de los productos regalados (promo cruzada)
+    const { descontarStockVenta, descontarStockRegalo } = await import('@/services/stock-service')
+    const itemsVenta = itemsConStock
+      .filter((i) => i.cantidadStockLocal > 0)
+      .map((i) => ({ productoId: i.productId, cantidad: i.cantidadStockLocal }))
+    // Regalo del mismo producto + regalos de otro producto (promo cruzada)
+    const itemsRegaloMismo = itemsConStock
+      .filter((i) => i.regalo > 0)
+      .map((i) => ({ productoId: i.productId, cantidad: i.regalo }))
     const itemsRegaloCruzado = regalosCruzados.map((r) => ({ productoId: r.productoId, cantidad: r.cantidad }))
-    const aDescontar = [...itemsConStockLocal, ...itemsRegaloCruzado]
-    if (aDescontar.length > 0) {
-      await descontarStockVenta(aDescontar, saleId)
-    }
+    if (itemsVenta.length > 0) await descontarStockVenta(itemsVenta, saleId)
+    const regalos = [...itemsRegaloMismo, ...itemsRegaloCruzado]
+    if (regalos.length > 0) await descontarStockRegalo(regalos, saleId)
   }
 
   // Credito, saldo a favor y comisión en paralelo

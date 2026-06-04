@@ -102,12 +102,34 @@ export const descontarStockVenta = async (
 }
 
 /**
+ * Descuenta stock de productos REGALADOS por oferta (no se cobran).
+ * Igual que descontarStockVenta pero registra el movimiento como tipo 'regalo'.
+ */
+export const descontarStockRegalo = async (
+  items: { productoId: string; cantidad: number }[],
+  ventaId: string
+): Promise<void> => {
+  await Promise.all(
+    items
+      .filter((item) => item.cantidad > 0)
+      .map((item) =>
+        registrarMovimiento({
+          productoId: item.productoId,
+          tipo: 'regalo',
+          cantidad: -item.cantidad,
+          referencia: ventaId,
+        })
+      )
+  )
+}
+
+/**
  * Registra un movimiento de stock en stock_movimientos usando los valores de productos.stock.
  * No falla ni interrumpe el flujo si hay error (FK sin mayorista, etc.).
  */
 export const registrarMovimientoStock = async (params: {
   productoId: string
-  tipo: 'venta' | 'apertura_bulto' | 'ajuste' | 'rotura'
+  tipo: 'venta' | 'apertura_bulto' | 'ajuste' | 'rotura' | 'regalo'
   cantidad: number
   stockAnterior: number
   stockPosterior: number
