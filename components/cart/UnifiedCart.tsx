@@ -292,6 +292,13 @@ export function UnifiedCart({ role, state, actions, onConfirmSale, allowDiscount
                     const adminDto = item.adminDiscount ?? 0;
                     const sellerDto = Math.max(0, (item.itemDiscount ?? 0) - adminDto);
                     const maxSeller = Math.max(0, maxDiscountAllowed - adminDto);
+                    const basePrice = item.product.price;
+                    const precioFinalUnit = Math.round(basePrice * (1 - (item.itemDiscount ?? 0) / 100) * 100) / 100;
+                    const onPrecioChange = (precio: number) => {
+                      if (!basePrice || precio <= 0) { actions.setItemDiscount(item.product.id, 0); return; }
+                      const pctTotal = Math.max(0, Math.min(100, (1 - precio / basePrice) * 100));
+                      actions.setItemDiscount(item.product.id, Math.round((pctTotal - adminDto) * 100) / 100);
+                    };
                     return (
                       <div className="flex items-center gap-1.5 flex-wrap">
                         {adminDto > 0 && (
@@ -308,10 +315,22 @@ export function UnifiedCart({ role, state, actions, onConfirmSale, allowDiscount
                           title={`Máximo vendedor ${maxSeller}%`}
                         />
                         <span className="text-[10px] text-muted-foreground">%</span>
+                        {role === "admin" && (
+                          <>
+                            <span className="text-[10px] text-muted-foreground">Precio u.:</span>
+                            <Input
+                              type="number" min="0" step="0.01" placeholder={String(basePrice)}
+                              value={precioFinalUnit || ""}
+                              onChange={(e) => onPrecioChange(Number(e.target.value) || 0)}
+                              className="h-5 w-16 text-center text-[10px] px-0.5"
+                              title="Precio unitario final — calcula el descuento"
+                            />
+                          </>
+                        )}
                         {item.itemDiscount ? (
                           <span className="text-[10px] font-semibold text-emerald-600">
                             −{actions.formatCurrency(lineTotal * item.itemDiscount / 100)}
-                            {adminDto > 0 && <span className="text-muted-foreground font-normal"> ({item.itemDiscount}%)</span>}
+                            <span className="text-muted-foreground font-normal"> ({Math.round(item.itemDiscount * 100) / 100}%)</span>
                           </span>
                         ) : null}
                       </div>
