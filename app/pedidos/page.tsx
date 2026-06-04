@@ -445,9 +445,9 @@ export default function PedidosPage() {
     if (newStatus === "completed") {
       const order = orders.find((o) => o.id === orderId);
       if (order) {
-        // Todos los pedidos no completados del mismo cliente
+        // Pedidos del mismo cliente en el MISMO estado (no se juntan entre solapas)
         const clientOrders = orders.filter(
-          (o) => o.status !== "completed" && (o.clientName === order.clientName || (o.clientId && o.clientId === order.clientId))
+          (o) => o.status !== "completed" && o.status === order.status && (o.clientName === order.clientName || (o.clientId && o.clientId === order.clientId))
         );
         const ordersForClient = clientOrders.length > 0 ? clientOrders : [order];
         setSelectedClientOrders(ordersForClient);
@@ -1095,38 +1095,43 @@ tfoot td{border-top:2px solid #1f4e78;background:#f2f2f2;font-weight:700;font-si
 
   // Group orders by client name
   const ordersGroupedByClient = useMemo(() => {
+    // Agrupar por cliente + estado: pedidos del mismo cliente en distinta solapa
+    // (pendiente / preparación / reparto) NO se juntan. Solo se agrupan los que
+    // comparten estado (ej. varios pedidos pendientes del mismo cliente sí se juntan).
     const groups: Record<string, Order[]> = {};
+    const SEP = " ";
 
     filteredOrders.forEach((order) => {
       const client = order.clientName || "Sin cliente";
-      if (!groups[client]) groups[client] = [];
-      groups[client].push(order);
+      const key = `${client}${SEP}${order.status}`;
+      if (!groups[key]) groups[key] = [];
+      groups[key].push(order);
     });
 
-    // Sort: non-completed first, then completed; within each group sort by date
-    Object.keys(groups).forEach((client) => {
-      groups[client].sort((a, b) => {
-        const aComplete = a.status === "completed" ? 1 : 0;
-        const bComplete = b.status === "completed" ? 1 : 0;
-        if (aComplete !== bComplete) return aComplete - bComplete;
-        return (a.address || "").localeCompare(b.address || "");
-      });
+    // Orden interno de cada grupo por dirección
+    Object.keys(groups).forEach((key) => {
+      groups[key].sort((a, b) => (a.address || "").localeCompare(b.address || ""));
     });
 
-    // Ordenar por día del pedido (más antiguo primero): todos los del 29, luego del 30, etc.
-    // "Sin cliente" último.
-    const fechaGrupo = (client: string) => {
-      const o = groups[client][0]; // ya viene con el pedido activo primero
+    // Ordenar por día del pedido (más antiguo primero). "Sin cliente" último.
+    const fechaGrupo = (key: string) => {
+      const o = groups[key][0];
       const t = o ? new Date(o.createdAt).getTime() : 0;
       return isNaN(t) ? 0 : t;
     };
-    const sortedClients = Object.keys(groups).sort((a, b) => {
-      if (a === "Sin cliente") return 1;
-      if (b === "Sin cliente") return -1;
+    const sortedKeys = Object.keys(groups).sort((a, b) => {
+      const aSin = a.startsWith(`Sin cliente${SEP}`);
+      const bSin = b.startsWith(`Sin cliente${SEP}`);
+      if (aSin && !bSin) return 1;
+      if (bSin && !aSin) return -1;
       return fechaGrupo(a) - fechaGrupo(b);
     });
 
-    return sortedClients.map((client) => ({ client, orders: groups[client] }));
+    return sortedKeys.map((key) => ({
+      client: groups[key][0]?.clientName || "Sin cliente",
+      groupKey: key,
+      orders: groups[key],
+    }));
   }, [filteredOrders]);
 
   // Agrupar los grupos de cliente por día del pedido (para secciones colapsables)
@@ -1619,13 +1624,13 @@ th.center,td.center{text-align:center}
                           </tr>
                         </thead>
                         <tbody className="divide-y">
-                          {day.groups.map(({ client, orders: clientOrders }) => {
+                          {day.groups.map(({ client, groupKey, orders: clientOrders }) => {
                             const { mergedItems, displayOrder, config, onView, deuda, clasificacion, codigo } = computeRow(clientOrders);
                             const isHeld = heldClients.has(client);
                             const isSelected = selectedClients.has(client);
 
                             return (
-                              <tr key={client} className={`transition-colors text-sm cursor-pointer ${isHeld ? "bg-red-50/60 opacity-60" : isSelected ? "bg-teal-50/60" : "hover:bg-muted/30"}`} onClick={onView}>
+                              <tr key={groupKey} className={`transition-colors text-sm cursor-pointer ${isHeld ? "bg-red-50/60 opacity-60" : isSelected ? "bg-teal-50/60" : "hover:bg-muted/30"}`} onClick={onView}>
                                 <td className="px-2 py-2.5 text-center" onClick={(e) => e.stopPropagation()}>
                                   <input
                                     type="checkbox"
@@ -1708,7 +1713,7 @@ th.center,td.center{text-align:center}
 
                     {/* Mobile: lista */}
                     <div className="lg:hidden divide-y border-t">
-                      {day.groups.map(({ client, orders: clientOrders }) => {
+                      {day.groups.map(({ client, groupKey, orders: clientOrders }) => {
                         const { mergedItems, displayOrder, config, onView, deuda, clasificacion, codigo, clientPhone } = computeRow(clientOrders);
                         const isHeld = heldClients.has(client);
                         const isSelected = selectedClients.has(client);
@@ -1721,7 +1726,7 @@ th.center,td.center{text-align:center}
                           const totalUnidades = mergedItems.reduce((n, it) => n + it.quantity, 0);
                           return (
                             <div
-                              key={client}
+                              key={groupKey}
                               className={`p-4 transition-colors ${isHeld ? "bg-red-50/60 opacity-60" : "active:bg-muted/40"}`}
                               onClick={onView}
                             >
@@ -1776,7 +1781,7 @@ th.center,td.center{text-align:center}
 
                         // ── Otros estados: fila compacta (workflow admin) ──
                         return (
-                          <div key={client} className={`grid grid-cols-[auto_auto_1fr_auto_auto] gap-2 px-3 py-2.5 cursor-pointer transition-colors items-center ${isHeld ? "bg-red-50/60 opacity-60" : isSelected ? "bg-teal-50/60" : "hover:bg-muted/20"}`} onClick={onView}>
+                          <div key={groupKey} className={`grid grid-cols-[auto_auto_1fr_auto_auto] gap-2 px-3 py-2.5 cursor-pointer transition-colors items-center ${isHeld ? "bg-red-50/60 opacity-60" : isSelected ? "bg-teal-50/60" : "hover:bg-muted/20"}`} onClick={onView}>
                             <div className="shrink-0" onClick={(e) => e.stopPropagation()}>
                               <input
                                 type="checkbox"
