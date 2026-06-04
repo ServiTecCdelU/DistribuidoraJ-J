@@ -166,7 +166,7 @@ export function StockHistoryModal({
         </DialogHeader>
 
         {/* Stats */}
-        <div className="grid grid-cols-3 sm:grid-cols-6 gap-1 sm:gap-1.5 p-2 sm:p-4 bg-muted/30 border-b shrink-0">
+        <div className="grid grid-cols-2 sm:grid-cols-6 gap-1.5 p-2.5 sm:p-4 bg-muted/30 border-b shrink-0">
           <StatCard
             value={stats?.unitsSold}
             label="Unid. Vendidas"
@@ -197,7 +197,6 @@ export function StockHistoryModal({
             value={stats?.stockHistorico}
             label="Stock Histórico"
             colorClass="bg-gray-50 text-gray-600"
-            span
           />
         </div>
 
@@ -238,18 +237,18 @@ export function StockHistoryModal({
             <>
               {/* Vista tabla — desktop */}
               <div className="hidden sm:block">
-                <table className="w-full text-sm">
-                  <thead className="bg-muted/50 border-b">
+                <table className="w-full text-sm border-separate border-spacing-0">
+                  <thead className="bg-muted/60 sticky top-0 z-10">
                     <tr>
-                      <th className="text-left px-2 py-2.5 font-semibold text-muted-foreground text-xs">Fecha</th>
-                      <th className="text-left px-2 py-2.5 font-semibold text-muted-foreground text-xs">Tipo</th>
-                      <th className="text-left px-2 py-2.5 font-semibold text-muted-foreground text-xs">Venta</th>
-                      <th className="text-left px-2 py-2.5 font-semibold text-muted-foreground text-xs">Cliente</th>
-                      <th className="text-right px-2 py-2.5 font-semibold text-muted-foreground text-xs">Cant.</th>
-                      <th className="text-right px-2 py-2.5 font-semibold text-muted-foreground text-xs">Monto</th>
+                      <th className="text-left px-3 py-2.5 font-semibold text-muted-foreground text-xs border-b">Fecha</th>
+                      <th className="text-left px-3 py-2.5 font-semibold text-muted-foreground text-xs border-b">Tipo</th>
+                      <th className="text-left px-3 py-2.5 font-semibold text-muted-foreground text-xs border-b">Detalle</th>
+                      <th className="text-center px-3 py-2.5 font-semibold text-muted-foreground text-xs border-b w-20">Cant.</th>
+                      <th className="text-center px-3 py-2.5 font-semibold text-muted-foreground text-xs border-b w-28">Stock</th>
+                      <th className="text-right px-3 py-2.5 font-semibold text-muted-foreground text-xs border-b w-28">Monto</th>
                     </tr>
                   </thead>
-                  <tbody className="divide-y">
+                  <tbody>
                     {movimientos.map((m) => (
                       <MovimientoRow key={m.id} m={m} />
                     ))}
@@ -350,32 +349,50 @@ function MovimientoRow({ m }: { m: Movimiento }) {
   const fecha = d.toLocaleDateString('es-AR', { day: '2-digit', month: '2-digit', year: '2-digit' })
   const hora = d.toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit' })
   return (
-    <tr className="hover:bg-muted/20 transition-colors">
-      <td className="px-2 py-2 text-xs text-muted-foreground">
-        <div className="leading-tight">{fecha}</div>
+    <tr className="hover:bg-muted/20 transition-colors align-middle">
+      <td className="px-3 py-2.5 text-xs text-muted-foreground border-b whitespace-nowrap">
+        <div className="leading-tight font-medium text-foreground/80">{fecha}</div>
         <div className="leading-tight text-[10px]">{hora}</div>
       </td>
-      <td className="px-2 py-2">
+      <td className="px-3 py-2.5 border-b">
         <TipoBadge tipo={m.tipo} />
       </td>
-      <td className="px-2 py-2 text-xs text-muted-foreground">
+      <td className="px-3 py-2.5 text-xs border-b">
         {m.tipo === 'venta' ? (
-          <div>
-            <div className="truncate max-w-[140px]">{m.sellerName ?? '—'}</div>
-            {m.saleNumber && <div className="text-[10px] text-muted-foreground/70">#{m.saleNumber}</div>}
+          <div className="min-w-0">
+            <div className="flex items-center gap-2 flex-wrap">
+              {m.sellerName && (
+                <span className="inline-flex items-center gap-1 text-foreground/80">
+                  <User className="h-3 w-3 text-muted-foreground shrink-0" />
+                  <span className="truncate max-w-[140px]">{m.sellerName}</span>
+                </span>
+              )}
+              {m.clientName && (
+                <span className="inline-flex items-center gap-1 text-muted-foreground">
+                  <Store className="h-3 w-3 shrink-0" />
+                  <span className="truncate max-w-[140px]">{m.clientName}</span>
+                </span>
+              )}
+              {!m.sellerName && !m.clientName && <span className="text-muted-foreground">—</span>}
+            </div>
+            {m.saleNumber && <div className="text-[10px] text-muted-foreground/70 mt-0.5">Venta #{m.saleNumber}</div>}
           </div>
         ) : m.motivo ? (
-          <span className="text-[10px] italic truncate max-w-[140px] block">{m.motivo}</span>
-        ) : ''}
+          <span className="text-[11px] italic text-muted-foreground line-clamp-2">{m.motivo}</span>
+        ) : <span className="text-muted-foreground">—</span>}
       </td>
-      <td className="px-2 py-2 text-xs text-muted-foreground max-w-[130px] truncate">
-        {m.clientName ?? (m.tipo === 'venta' ? '—' : '')}
-      </td>
-      <td className="px-2 py-2 text-right">
+      <td className="px-3 py-2.5 text-center border-b">
         <CantidadBadge cantidad={m.cantidad} />
       </td>
-      <td className="px-2 py-2 text-right text-xs font-medium text-foreground whitespace-nowrap">
-        {m.ventaTotal != null ? formatCurrency(m.ventaTotal) : (m.tipo === 'venta' ? '—' : '')}
+      <td className="px-3 py-2.5 text-center border-b">
+        <span className="inline-flex items-center gap-1 text-[11px] tabular-nums text-muted-foreground whitespace-nowrap">
+          <span>{m.stockAnterior}</span>
+          <ChevronRight className="h-3 w-3 text-muted-foreground/50" />
+          <span className="font-semibold text-foreground">{m.stockPosterior}</span>
+        </span>
+      </td>
+      <td className="px-3 py-2.5 text-right text-xs font-semibold text-foreground whitespace-nowrap border-b">
+        {m.ventaTotal != null ? formatCurrency(m.ventaTotal) : <span className="text-muted-foreground font-normal">—</span>}
       </td>
     </tr>
   )
@@ -383,20 +400,20 @@ function MovimientoRow({ m }: { m: Movimiento }) {
 
 function MovimientoCard({ m }: { m: Movimiento }) {
   const d = new Date(m.fecha)
-  const fecha = d.toLocaleDateString('es-AR', { day: '2-digit', month: '2-digit' })
+  const fecha = d.toLocaleDateString('es-AR', { day: '2-digit', month: '2-digit', year: '2-digit' })
   const hora = d.toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit' })
   return (
-    <div className="px-2.5 py-2 space-y-0.5">
+    <div className="px-3 py-2.5 space-y-1.5">
       {/* Fila 1: badge + fecha/hora | cant + monto */}
-      <div className="flex items-center justify-between gap-1">
-        <div className="flex items-center gap-1.5 min-w-0">
+      <div className="flex items-center justify-between gap-2">
+        <div className="flex items-center gap-2 min-w-0">
           <TipoBadge tipo={m.tipo} />
-          <span className="text-[10px] text-muted-foreground whitespace-nowrap">{fecha} {hora}</span>
+          <span className="text-[10px] text-muted-foreground whitespace-nowrap">{fecha} · {hora}</span>
         </div>
-        <div className="flex items-center gap-2 shrink-0">
+        <div className="flex items-center gap-2.5 shrink-0">
           <CantidadBadge cantidad={m.cantidad} />
           {m.ventaTotal != null && (
-            <span className="text-[11px] font-semibold text-foreground tabular-nums">
+            <span className="text-xs font-semibold text-foreground tabular-nums">
               {formatCurrency(m.ventaTotal)}
             </span>
           )}
@@ -405,17 +422,17 @@ function MovimientoCard({ m }: { m: Movimiento }) {
 
       {/* Fila 2: vendedor · cliente · #venta */}
       {(m.sellerName || m.clientName || m.saleNumber) && (
-        <div className="flex items-center gap-1 text-[10px] text-muted-foreground truncate pl-0.5">
+        <div className="flex items-center gap-1.5 text-[11px] text-muted-foreground pl-0.5">
           {m.sellerName && (
             <span className="flex items-center gap-0.5 shrink-0">
-              <User className="h-2.5 w-2.5 shrink-0" />
-              <span className="max-w-[80px] truncate">{m.sellerName}</span>
+              <User className="h-3 w-3 shrink-0" />
+              <span className="max-w-[90px] truncate">{m.sellerName}</span>
             </span>
           )}
           {m.sellerName && m.clientName && <span className="text-muted-foreground/40">·</span>}
           {m.clientName && (
             <span className="flex items-center gap-0.5 min-w-0">
-              <Store className="h-2.5 w-2.5 shrink-0" />
+              <Store className="h-3 w-3 shrink-0" />
               <span className="truncate">{m.clientName}</span>
             </span>
           )}
@@ -427,8 +444,18 @@ function MovimientoCard({ m }: { m: Movimiento }) {
 
       {/* Motivo libre (ajustes/roturas/ingresos) */}
       {!m.sellerName && !m.clientName && m.motivo && m.tipo !== 'venta' && (
-        <p className="text-[10px] text-muted-foreground italic pl-0.5">{m.motivo}</p>
+        <p className="text-[11px] text-muted-foreground italic pl-0.5">{m.motivo}</p>
       )}
+
+      {/* Fila 3: stock anterior → posterior */}
+      <div className="flex items-center gap-1.5 pl-0.5">
+        <span className="text-[10px] text-muted-foreground/70">Stock:</span>
+        <span className="inline-flex items-center gap-1 text-[11px] tabular-nums text-muted-foreground">
+          <span>{m.stockAnterior}</span>
+          <ChevronRight className="h-3 w-3 text-muted-foreground/50" />
+          <span className="font-semibold text-foreground">{m.stockPosterior}</span>
+        </span>
+      </div>
     </div>
   )
 }
