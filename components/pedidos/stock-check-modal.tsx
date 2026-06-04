@@ -9,7 +9,7 @@ import {
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
-import { AlertTriangle, CheckCircle, Package, Repeat, Loader2, X, Minus, Plus } from "lucide-react";
+import { AlertTriangle, CheckCircle, Package, Repeat, Loader2, X, Minus, Plus, Search } from "lucide-react";
 
 export interface StockCheckItem {
   productId: string;
@@ -37,6 +37,8 @@ interface StockCheckModalProps {
   ) => void;
   // Busca productos del mismo tipo (otra marca) con stock para reemplazar el faltante
   findReplacements?: (item: StockCheckItem) => Promise<ReplacementOption[]>;
+  // Búsqueda libre por nombre/código para reemplazar el faltante
+  searchReplacements?: (query: string, item: StockCheckItem) => Promise<ReplacementOption[]>;
 }
 
 function QtyStepper({ value, onChange }: { value: number; onChange: (v: number) => void }) {
@@ -70,7 +72,7 @@ function QtyStepper({ value, onChange }: { value: number; onChange: (v: number) 
   );
 }
 
-export function StockCheckModal({ open, onClose, items, onConfirm, findReplacements }: StockCheckModalProps) {
+export function StockCheckModal({ open, onClose, items, onConfirm, findReplacements, searchReplacements }: StockCheckModalProps) {
   // Faltantes que el usuario marca para incluir igual (sabe que físicamente sí están)
   const [incluirIgual, setIncluirIgual] = React.useState<Set<string>>(new Set());
   // Reemplazos elegidos: productId original -> opción de otra marca
@@ -81,6 +83,10 @@ export function StockCheckModal({ open, onClose, items, onConfirm, findReplaceme
   const [openFor, setOpenFor] = React.useState<string | null>(null);
   const [options, setOptions] = React.useState<ReplacementOption[]>([]);
   const [loadingOpts, setLoadingOpts] = React.useState(false);
+  // Búsqueda libre dentro del panel de reemplazo
+  const [searchText, setSearchText] = React.useState("");
+  const [searchResults, setSearchResults] = React.useState<ReplacementOption[]>([]);
+  const [searching, setSearching] = React.useState(false);
 
   React.useEffect(() => {
     if (open) {
@@ -89,9 +95,32 @@ export function StockCheckModal({ open, onClose, items, onConfirm, findReplaceme
       setQuantities(Object.fromEntries(items.map((i) => [i.productId, i.quantity])));
       setOpenFor(null);
       setOptions([]);
+      setSearchText("");
+      setSearchResults([]);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open]);
+
+  // Debounce de la búsqueda libre para el faltante abierto
+  React.useEffect(() => {
+    if (!openFor || !searchReplacements) return;
+    const item = items.find((i) => i.productId === openFor);
+    if (!item) return;
+    if (searchText.trim().length < 2) { setSearchResults([]); setSearching(false); return; }
+    setSearching(true);
+    const handler = setTimeout(async () => {
+      try {
+        const res = await searchReplacements(searchText, { ...item, quantity: qtyOf(item.productId) });
+        setSearchResults(res);
+      } catch {
+        setSearchResults([]);
+      } finally {
+        setSearching(false);
+      }
+    }, 350);
+    return () => clearTimeout(handler);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [searchText, openFor]);
 
   const qtyOf = (id: string) => quantities[id] ?? items.find((i) => i.productId === id)?.quantity ?? 1;
   const setQty = (id: string, v: number) => setQuantities((prev) => ({ ...prev, [id]: Math.max(1, v) }));
@@ -115,6 +144,8 @@ export function StockCheckModal({ open, onClose, items, onConfirm, findReplaceme
     }
     setOpenFor(item.productId);
     setOptions([]);
+    setSearchText("");
+    setSearchResults([]);
     if (!findReplacements) return;
     setLoadingOpts(true);
     try {
@@ -232,14 +263,57 @@ export function StockCheckModal({ open, onClose, items, onConfirm, findReplaceme
 
                             {abierto && (
                               <div className="mt-1.5 border border-cyan-200 rounded-lg bg-white overflow-hidden">
-                                {loadingOpts ? (
+                                {/* Búsqueda libre */}
+                                {searchReplacements && (
+                                  <div className="p-2 border-b border-cyan-100">
+                                    <div className="relative">
+                                      <Search className="h-3.5 w-3.5 text-gray-400 absolute left-2 top-1/2 -translate-y-1/2" />
+                                      <input
+                                        type="text"
+                                        autoFocus
+                                        value={searchText}
+                                        onChange={(e) => setSearchText(e.target.value)}
+                                        placeholder="Buscar otro producto por nombre o código…"
+                                        className="w-full h-7 pl-7 pr-2 text-xs border rounded-md bg-white focus:outline-none focus:ring-1 focus:ring-cyan-400"
+                                      />
+                                    </div>
+                                  </div>
+                                )}
+
+                                {searchText.trim().length >= 2 ? (
+                                  searching ? (
+                                    <div className="flex items-center justify-center gap-2 py-3 text-xs text-muted-foreground">
+                                      <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                                      Buscando…
+                                    </div>
+                                  ) : searchResults.length === 0 ? (
+                                    <div className="py-3 text-center text-xs text-muted-foreground">
+                                      Sin resultados con stock
+                                    </div>
+                                  ) : (
+                                    <div className="max-h-40 overflow-y-auto divide-y divide-gray-100">
+                                      {searchResults.map((opt) => (
+                                        <button
+                                          key={opt.productId}
+                                          onClick={() => elegirReemplazo(item.productId, opt)}
+                                          className="w-full flex items-center justify-between gap-2 px-3 py-2 text-left hover:bg-cyan-50"
+                                        >
+                                          <span className="text-xs font-medium text-gray-800 truncate">{opt.name}</span>
+                                          <span className="text-[11px] text-green-600 whitespace-nowrap">
+                                            stock {opt.stock}
+                                          </span>
+                                        </button>
+                                      ))}
+                                    </div>
+                                  )
+                                ) : loadingOpts ? (
                                   <div className="flex items-center justify-center gap-2 py-3 text-xs text-muted-foreground">
                                     <Loader2 className="h-3.5 w-3.5 animate-spin" />
                                     Buscando alternativas…
                                   </div>
                                 ) : options.length === 0 ? (
                                   <div className="py-3 text-center text-xs text-muted-foreground">
-                                    Sin alternativas con stock
+                                    Sin alternativas con stock — buscá arriba
                                   </div>
                                 ) : (
                                   <div className="max-h-40 overflow-y-auto divide-y divide-gray-100">

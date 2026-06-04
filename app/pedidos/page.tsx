@@ -328,6 +328,28 @@ export default function PedidosPage() {
       }));
   }, []);
 
+  // Búsqueda libre de productos con stock para reemplazar un faltante
+  const searchReplacementProducts = useCallback(async (query: string, item: StockCheckItem): Promise<ReplacementOption[]> => {
+    const q = query.trim();
+    if (q.length < 2) return [];
+    const origProd = item.productId.startsWith("mp_") ? `prod_${item.productId}` : item.productId;
+    const { data } = await supabase
+      .from("productos")
+      .select("id, name, price, stock, codigo")
+      .or(`name.ilike.%${q}%,codigo.ilike.%${q}%`)
+      .gt("stock", 0)
+      .limit(20);
+    return (data ?? [])
+      .filter((p: any) => p.id !== origProd && Number(p.price) > 0)
+      .map((p: any) => ({
+        productId: p.id,
+        name: p.name,
+        price: Number(p.price) || 0,
+        stock: p.stock ?? 0,
+        codigo: p.codigo ?? undefined,
+      }));
+  }, []);
+
   const handleDeleteOrder = useCallback((order: Order) => {
     setPendingDelete({ ids: [order.id], label: order.clientName || "este cliente" });
   }, []);
@@ -1850,6 +1872,7 @@ th.center,td.center{text-align:center}
         items={stockCheckItems}
         onConfirm={handleStockCheckConfirm}
         findReplacements={findReplacements}
+        searchReplacements={searchReplacementProducts}
       />
 
       <PaymentModal
