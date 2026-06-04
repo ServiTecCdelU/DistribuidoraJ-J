@@ -288,54 +288,15 @@ export function UnifiedCart({ role, state, actions, onConfirmSale, allowDiscount
                     </span>
                   </div>
                   {/* Descuento por producto — admin/seller */}
-                  {role !== null && (() => {
-                    const adminDto = item.adminDiscount ?? 0;
-                    const sellerDto = Math.max(0, (item.itemDiscount ?? 0) - adminDto);
-                    const maxSeller = Math.max(0, maxDiscountAllowed - adminDto);
-                    const basePrice = item.product.price;
-                    const precioFinalUnit = Math.round(basePrice * (1 - (item.itemDiscount ?? 0) / 100) * 100) / 100;
-                    const onPrecioChange = (precio: number) => {
-                      if (!basePrice || precio <= 0) { actions.setItemDiscount(item.product.id, 0); return; }
-                      const pctTotal = Math.max(0, Math.min(100, (1 - precio / basePrice) * 100));
-                      actions.setItemDiscount(item.product.id, Math.round((pctTotal - adminDto) * 100) / 100);
-                    };
-                    return (
-                      <div className="flex items-center gap-1.5 flex-wrap">
-                        {adminDto > 0 && (
-                          <span className="text-[10px] font-medium text-teal-600 bg-teal-50 border border-teal-200 rounded px-1">
-                            Producto {adminDto}%
-                          </span>
-                        )}
-                        <span className="text-[10px] text-muted-foreground">{adminDto > 0 ? "Vendedor:" : "Dto.:"}</span>
-                        <Input
-                          type="number" min="0" max={maxSeller} placeholder="0"
-                          value={sellerDto || ""}
-                          onChange={(e) => actions.setItemDiscount(item.product.id, Number(e.target.value) || 0)}
-                          className="h-5 w-10 text-center text-[10px] px-0.5"
-                          title={`Máximo vendedor ${maxSeller}%`}
-                        />
-                        <span className="text-[10px] text-muted-foreground">%</span>
-                        {role === "admin" && (
-                          <>
-                            <span className="text-[10px] text-muted-foreground">Precio u.:</span>
-                            <Input
-                              type="number" min="0" step="0.01" placeholder={String(basePrice)}
-                              value={precioFinalUnit || ""}
-                              onChange={(e) => onPrecioChange(Number(e.target.value) || 0)}
-                              className="h-5 w-16 text-center text-[10px] px-0.5"
-                              title="Precio unitario final — calcula el descuento"
-                            />
-                          </>
-                        )}
-                        {item.itemDiscount ? (
-                          <span className="text-[10px] font-semibold text-emerald-600">
-                            −{actions.formatCurrency(lineTotal * item.itemDiscount / 100)}
-                            <span className="text-muted-foreground font-normal"> ({Math.round(item.itemDiscount * 100) / 100}%)</span>
-                          </span>
-                        ) : null}
-                      </div>
-                    );
-                  })()}
+                  {role !== null && (
+                    <ItemDiscountRow
+                      item={item}
+                      role={role}
+                      maxDiscountAllowed={maxDiscountAllowed}
+                      lineTotal={lineTotal}
+                      actions={actions}
+                    />
+                  )}
                 </li>
               );
             })}
@@ -773,6 +734,78 @@ export function UnifiedCart({ role, state, actions, onConfirmSale, allowDiscount
 }
 
 // --- Sub-components ---
+
+function ItemDiscountRow({
+  item, role, maxDiscountAllowed, lineTotal, actions,
+}: {
+  item: import("@/lib/types").CartItem;
+  role: UserRole;
+  maxDiscountAllowed: number;
+  lineTotal: number;
+  actions: CartActions;
+}) {
+  const adminDto = item.adminDiscount ?? 0;
+  const sellerDto = Math.max(0, (item.itemDiscount ?? 0) - adminDto);
+  const maxSeller = Math.max(0, maxDiscountAllowed - adminDto);
+  const basePrice = item.product.price;
+  const computedPrecio = Math.round(basePrice * (1 - (item.itemDiscount ?? 0) / 100) * 100) / 100;
+
+  const [precioInput, setPrecioInput] = useState<string>("");
+  const [editing, setEditing] = useState(false);
+
+  // Sincronizar el precio mostrado con el descuento externo, salvo mientras se edita
+  useEffect(() => {
+    if (!editing) setPrecioInput(item.itemDiscount ? String(computedPrecio) : "");
+  }, [computedPrecio, item.itemDiscount, editing]);
+
+  const applyPrecio = () => {
+    setEditing(false);
+    const precio = Number(precioInput) || 0;
+    if (!basePrice || precio <= 0) { actions.setItemDiscount(item.product.id, 0); return; }
+    const pctTotal = Math.max(0, Math.min(100, (1 - precio / basePrice) * 100));
+    actions.setItemDiscount(item.product.id, Math.round((pctTotal - adminDto) * 100) / 100);
+  };
+
+  return (
+    <div className="flex items-center gap-1.5 flex-wrap">
+      {adminDto > 0 && (
+        <span className="text-[10px] font-medium text-teal-600 bg-teal-50 border border-teal-200 rounded px-1">
+          Producto {adminDto}%
+        </span>
+      )}
+      <span className="text-[10px] text-muted-foreground">{adminDto > 0 ? "Vendedor:" : "Dto.:"}</span>
+      <Input
+        type="number" min="0" max={maxSeller} placeholder="0"
+        value={sellerDto || ""}
+        onChange={(e) => actions.setItemDiscount(item.product.id, Number(e.target.value) || 0)}
+        className="h-5 w-10 text-center text-[10px] px-0.5"
+        title={`Máximo vendedor ${maxSeller}%`}
+      />
+      <span className="text-[10px] text-muted-foreground">%</span>
+      {role === "admin" && (
+        <>
+          <span className="text-[10px] text-muted-foreground">Precio u.:</span>
+          <Input
+            type="number" min="0" step="0.01" placeholder={String(basePrice)}
+            value={precioInput}
+            onFocus={() => setEditing(true)}
+            onChange={(e) => setPrecioInput(e.target.value)}
+            onBlur={applyPrecio}
+            onKeyDown={(e) => { if (e.key === "Enter") (e.target as HTMLInputElement).blur(); }}
+            className="h-5 w-20 text-center text-[10px] px-1"
+            title="Precio unitario final — calcula el descuento al salir del campo"
+          />
+        </>
+      )}
+      {item.itemDiscount ? (
+        <span className="text-[10px] font-semibold text-emerald-600">
+          −{actions.formatCurrency(lineTotal * item.itemDiscount / 100)}
+          <span className="text-muted-foreground font-normal"> ({Math.round(item.itemDiscount * 100) / 100}%)</span>
+        </span>
+      ) : null}
+    </div>
+  );
+}
 
 function ClientLookupSection({
   role, lookupType, dniLookup, dniLoading, dniFound, dniNotFound,
