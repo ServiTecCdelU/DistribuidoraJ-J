@@ -6,6 +6,12 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
+import {
+  DropdownMenu,
+  DropdownMenuTrigger,
+  DropdownMenuContent,
+  DropdownMenuItem,
+} from "@/components/ui/dropdown-menu";
 import { productsApi, sellersApi } from "@/lib/api";
 import type { Product, Seller } from "@/lib/types";
 import { formatCurrency } from "@/lib/utils/format";
@@ -47,7 +53,6 @@ export default function DescuentosPage() {
   const [savingCuposId, setSavingCuposId] = useState<string | null>(null);
 
   // Edición de ofertas
-  const [addMenuId, setAddMenuId] = useState<string | null>(null);
   const [editing, setEditing] = useState<{ id: string; tipo: OfertaTipo } | null>(null);
   const [savingId, setSavingId] = useState<string | null>(null);
 
@@ -125,7 +130,6 @@ export default function DescuentosPage() {
 
   // --- Abrir edición / agregar ---
   const abrirEdicion = (p: Product, tipo: OfertaTipo) => {
-    setAddMenuId(null);
     setEditing({ id: p.id, tipo });
     if (tipo === "descuento") {
       setDtoDraft((prev) => ({ ...prev, [p.id]: String(p.descuento ?? "") }));
@@ -340,32 +344,24 @@ export default function DescuentosPage() {
                       </div>
                     </div>
                     {/* Agregar oferta */}
-                    <div className="relative shrink-0">
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        disabled={disponibles.length === 0}
-                        onClick={() => setAddMenuId(addMenuId === p.id ? null : p.id)}
-                        className="h-8 px-2.5 gap-1"
-                      >
-                        <Plus className="h-3.5 w-3.5" />
-                        <span className="text-xs">Agregar oferta</span>
-                        <ChevronDown className={`h-3.5 w-3.5 transition-transform ${addMenuId === p.id ? "rotate-180" : ""}`} />
-                      </Button>
-                      {addMenuId === p.id && disponibles.length > 0 && (
-                        <div className="absolute right-0 z-20 mt-1 w-56 bg-card border border-border rounded-lg shadow-lg overflow-hidden">
+                    <div className="shrink-0">
+                      <DropdownMenu>
+                        <DropdownMenuTrigger asChild>
+                          <Button size="sm" variant="outline" disabled={disponibles.length === 0} className="h-8 px-2.5 gap-1">
+                            <Plus className="h-3.5 w-3.5" />
+                            <span className="text-xs">Agregar oferta</span>
+                            <ChevronDown className="h-3.5 w-3.5" />
+                          </Button>
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent align="end" className="w-56">
                           {disponibles.map((t) => (
-                            <button
-                              key={t}
-                              onClick={() => abrirEdicion(p, t)}
-                              className="flex items-center gap-2 w-full px-3 py-2 text-left text-xs hover:bg-muted/40 transition-colors"
-                            >
+                            <DropdownMenuItem key={t} onSelect={() => abrirEdicion(p, t)} className="gap-2 text-xs">
                               {t === "descuento" ? <Percent className="h-3.5 w-3.5 text-teal-600" /> : <Gift className="h-3.5 w-3.5 text-fuchsia-600" />}
                               {TIPO_LABEL[t]}
-                            </button>
+                            </DropdownMenuItem>
                           ))}
-                        </div>
-                      )}
+                        </DropdownMenuContent>
+                      </DropdownMenu>
                     </div>
                   </div>
 
