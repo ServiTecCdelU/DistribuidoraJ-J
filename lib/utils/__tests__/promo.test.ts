@@ -43,6 +43,25 @@ describe("unidadesRegalo — promo 'cada X comprados +1 gratis'", () => {
     expect(regalo).toBe(1);
     expect(lleva).toBe(11);
   });
+
+  it("regaloCantidad configurable: cada 10 con 2 gratis", () => {
+    expect(unidadesRegalo(9, 10, 2)).toBe(0);
+    expect(unidadesRegalo(10, 10, 2)).toBe(2);
+    expect(unidadesRegalo(20, 10, 2)).toBe(4);
+    expect(unidadesRegalo(25, 10, 2)).toBe(4);
+    expect(unidadesRegalo(30, 10, 2)).toBe(6);
+  });
+
+  it("regaloCantidad 3: cada 5 con 3 gratis", () => {
+    expect(unidadesRegalo(5, 5, 3)).toBe(3);
+    expect(unidadesRegalo(10, 5, 3)).toBe(6);
+  });
+
+  it("regaloCantidad null/0 equivale a 1 (retrocompat)", () => {
+    expect(unidadesRegalo(10, 10, null)).toBe(1);
+    expect(unidadesRegalo(10, 10, 0)).toBe(1);
+    expect(unidadesRegalo(10, 10, undefined)).toBe(1);
+  });
 });
 
 describe("maxQtyPagable — tope de cantidad para no superar el stock con el regalo", () => {
@@ -75,13 +94,19 @@ describe("maxQtyPagable — tope de cantidad para no superar el stock con el reg
     expect(maxQtyPagable(1, 10)).toBe(1);
   });
 
+  it("regaloCantidad=2, stock=12: máximo pagable 10 (10 + 2 regalo = 12)", () => {
+    expect(maxQtyPagable(12, 10, 2)).toBe(10);
+  });
+
   it("invariante: pagable + su regalo nunca supera el stock", () => {
     for (let stock = 1; stock <= 100; stock++) {
       for (const cada of [1, 2, 5, 10, 12]) {
-        const q = maxQtyPagable(stock, cada);
-        expect(q + unidadesRegalo(q, cada)).toBeLessThanOrEqual(stock);
-        // y un pagable mayor sí lo superaría (q es el máximo)
-        expect((q + 1) + unidadesRegalo(q + 1, cada)).toBeGreaterThan(stock);
+        for (const cant of [1, 2, 3]) {
+          const q = maxQtyPagable(stock, cada, cant);
+          expect(q + unidadesRegalo(q, cada, cant)).toBeLessThanOrEqual(stock);
+          // y un pagable mayor sí lo superaría (q es el máximo)
+          expect((q + 1) + unidadesRegalo(q + 1, cada, cant)).toBeGreaterThan(stock);
+        }
       }
     }
   });

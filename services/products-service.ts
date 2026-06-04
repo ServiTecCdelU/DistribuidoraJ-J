@@ -26,6 +26,7 @@ function mapRow(d: Record<string, any>): Product {
     descuento: d.descuento != null ? Number(d.descuento) : 0,
     descuentoCantidad: d.descuento_cantidad != null ? Number(d.descuento_cantidad) : null,
     regaloCada: d.regalo_cada != null ? Number(d.regalo_cada) : null,
+    regaloCantidad: d.regalo_cantidad != null ? Number(d.regalo_cantidad) : null,
   }
 }
 
@@ -251,6 +252,7 @@ export const updateProduct = async (
   if (updates.descuento !== undefined) mapped.descuento = updates.descuento
   if (updates.descuentoCantidad !== undefined) mapped.descuento_cantidad = updates.descuentoCantidad
   if (updates.regaloCada !== undefined) mapped.regalo_cada = updates.regaloCada
+  if (updates.regaloCantidad !== undefined) mapped.regalo_cantidad = updates.regaloCantidad
   if ((updates as any).base !== undefined) mapped.base = (updates as any).base
   if ((updates as any).marca !== undefined) mapped.brand = (updates as any).marca
   if ((updates as any).sinTacc !== undefined) mapped.sin_tacc = (updates as any).sinTacc

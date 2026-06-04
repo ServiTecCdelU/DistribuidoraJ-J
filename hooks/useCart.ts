@@ -534,7 +534,7 @@ export function useCart(role: UserRole, userEmail?: string, externalProducts?: P
       const existing = prev.find((item) => item.product.id === product.id);
       if (existing) {
         const nextQty = existing.quantity + 1;
-        if (nextQty + unidadesRegalo(nextQty, product.regaloCada) > product.stock) {
+        if (nextQty + unidadesRegalo(nextQty, product.regaloCada, product.regaloCantidad) > product.stock) {
           toast.error("Stock insuficiente");
           return prev;
         }
@@ -566,7 +566,7 @@ export function useCart(role: UserRole, userEmail?: string, externalProducts?: P
           if (item.product.id !== productId) return item;
           const newQty = item.quantity + delta;
           if (newQty <= 0) return { ...item, quantity: 0 };
-          if (newQty + unidadesRegalo(newQty, item.product.regaloCada) > item.product.stock) {
+          if (newQty + unidadesRegalo(newQty, item.product.regaloCada, item.product.regaloCantidad) > item.product.stock) {
             toast.error("Stock insuficiente");
             return item;
           }
@@ -589,7 +589,7 @@ export function useCart(role: UserRole, userEmail?: string, externalProducts?: P
       const p = item.product;
       const ofertaActiva = (p.descuento ?? 0) > 0 && (p.descuentoCantidad == null || p.descuentoCantidad > 0);
       const maxOferta = ofertaActiva && p.descuentoCantidad != null ? p.descuentoCantidad : Infinity;
-      const stockCap = maxQtyPagable(item.product.stock, p.regaloCada);
+      const stockCap = maxQtyPagable(item.product.stock, p.regaloCada, p.regaloCantidad);
       const newQty = Math.max(1, Math.min(value, stockCap, maxOferta));
       if (ofertaActiva && p.descuentoCantidad != null && value > p.descuentoCantidad) {
         toast.error(`Solo ${p.descuentoCantidad} ${p.descuentoCantidad === 1 ? "unidad" : "unidades"} en oferta`);

@@ -34,7 +34,8 @@ export interface Product {
   codigo?: string;
   descuento?: number;          // % de descuento del producto fijado por admin (se suma al del vendedor)
   descuentoCantidad?: number | null; // unidades disponibles en oferta; null = sin límite, 0 = oferta agotada
-  regaloCada?: number | null;  // promo "cada X comprados +1 gratis"; null/0 = sin promo
+  regaloCada?: number | null;  // promo "cada X comprados +N gratis"; null/0 = sin promo
+  regaloCantidad?: number | null; // unidades gratis por cada bloque de regaloCada (default 1)
   productoId?: string;         // id en tabla productos (prod_mp_XXX) cuando el id es mayorista (mp_XXX)
 }
 

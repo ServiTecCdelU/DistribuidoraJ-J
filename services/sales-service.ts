@@ -180,7 +180,7 @@ export const processSale = async (data: {
   const saleId = await generateReadableId('ventas', 'venta', resolvedClientName)
 
   const saleItems = data.items.map((item) => {
-    const regalo = unidadesRegalo(item.quantity, item.product.regaloCada)
+    const regalo = unidadesRegalo(item.quantity, item.product.regaloCada, item.product.regaloCantidad)
     return {
       productId: item.product.id ?? null,
       quantity: item.quantity,
@@ -225,7 +225,7 @@ export const processSale = async (data: {
     // Los pedidos usan IDs de mayorista_productos (mp_XXXX); stock vive en productos (prod_mp_XXXX)
     const prodId = item.product.id?.startsWith('mp_') ? `prod_${item.product.id}` : item.product.id
     // Stock descontado = unidades pagadas + unidades de regalo (promo "cada X +1")
-    const totalEntregado = item.quantity + unidadesRegalo(item.quantity, item.product.regaloCada)
+    const totalEntregado = item.quantity + unidadesRegalo(item.quantity, item.product.regaloCada, item.product.regaloCantidad)
     const { data: prod } = await supabase.from('productos').select('stock').eq('id', prodId).single()
     if (prod) {
       const stockAnterior = prod.stock || 0
@@ -505,7 +505,7 @@ export const processSaleMayorista = async (data: {
     const cantidadStockLocal = Math.min(cantidadPedida, stockLocal)
     const cantidadPendienteMayorista =
       modo === 'disponible' ? 0 : Math.max(0, cantidadPedida - stockLocal)
-    const regalo = unidadesRegalo(cantidadPedida, item.product.regaloCada)
+    const regalo = unidadesRegalo(cantidadPedida, item.product.regaloCada, item.product.regaloCantidad)
     return {
       productId: item.product.id,
       name: item.product.name,

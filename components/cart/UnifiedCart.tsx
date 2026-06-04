@@ -223,7 +223,7 @@ export function UnifiedCart({ role, state, actions, onConfirmSale, allowDiscount
               const cantidadPendiente = Math.max(0, item.quantity - stockLocal);
               const lineTotal = item.product.price * item.quantity;
               const lineFinal = item.itemDiscount ? lineTotal * (1 - item.itemDiscount / 100) : lineTotal;
-              const regalo = unidadesRegalo(item.quantity, item.product.regaloCada);
+              const regalo = unidadesRegalo(item.quantity, item.product.regaloCada, item.product.regaloCantidad);
               return (
                 <li key={item.product.id} className="px-3 py-2 hover:bg-muted/20 transition-colors space-y-1.5">
                   {/* Nombre + eliminar */}
@@ -758,7 +758,8 @@ function ItemDiscountRow({
   const maxSeller = Math.max(0, maxDiscountAllowed - adminDto);
   const basePrice = item.product.price;
   const regaloCada = item.product.regaloCada ?? 0;
-  const regalo = unidadesRegalo(item.quantity, item.product.regaloCada);
+  const regaloCantidad = item.product.regaloCantidad && item.product.regaloCantidad > 0 ? item.product.regaloCantidad : 1;
+  const regalo = unidadesRegalo(item.quantity, item.product.regaloCada, item.product.regaloCantidad);
   const computedPrecio = Math.round(basePrice * (1 - (item.itemDiscount ?? 0) / 100) * 100) / 100;
 
   const [precioInput, setPrecioInput] = useState<string>("");
@@ -786,7 +787,7 @@ function ItemDiscountRow({
       )}
       {regaloCada > 0 && (
         <span className="text-[10px] font-medium text-fuchsia-600 bg-fuchsia-50 border border-fuchsia-200 rounded px-1">
-          Regalo cada {regaloCada}{regalo > 0 ? ` (+${regalo})` : ""}
+          Regalo cada {regaloCada} +{regaloCantidad}{regalo > 0 ? ` (+${regalo})` : ""}
         </span>
       )}
       <span className="text-[10px] text-muted-foreground">{adminDto > 0 ? "Vendedor:" : "Dto.:"}</span>
