@@ -36,6 +36,7 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
+import { unidadesRegalo } from "@/lib/utils/promo";
 import type { UserRole, CartState, CartActions } from "@/hooks/useCart";
 
 
@@ -222,6 +223,7 @@ export function UnifiedCart({ role, state, actions, onConfirmSale, allowDiscount
               const cantidadPendiente = Math.max(0, item.quantity - stockLocal);
               const lineTotal = item.product.price * item.quantity;
               const lineFinal = item.itemDiscount ? lineTotal * (1 - item.itemDiscount / 100) : lineTotal;
+              const regalo = unidadesRegalo(item.quantity, item.product.regaloCada);
               return (
                 <li key={item.product.id} className="px-3 py-2 hover:bg-muted/20 transition-colors space-y-1.5">
                   {/* Nombre + eliminar */}
@@ -287,6 +289,13 @@ export function UnifiedCart({ role, state, actions, onConfirmSale, allowDiscount
                       }
                     </span>
                   </div>
+                  {/* Promo: unidades de regalo (paga {quantity}, lleva {quantity + regalo}) */}
+                  {regalo > 0 && (
+                    <div className="flex items-center gap-1 text-[10px] font-medium text-fuchsia-600">
+                      <Sparkles className="h-2.5 w-2.5" />
+                      <span>+{regalo} de regalo · lleva {item.quantity + regalo}</span>
+                    </div>
+                  )}
                   {/* Descuento por producto — admin/seller */}
                   {role !== null && (
                     <ItemDiscountRow

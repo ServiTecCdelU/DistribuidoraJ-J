@@ -10,6 +10,7 @@ import { descontarVendedor } from "@/services/descuento-vendedor-service";
 import type { Product, Client, CartItem, Seller, City } from "@/lib/types";
 import { toast } from "sonner";
 import { formatCurrency, normalizeCuit } from "@/lib/utils/format";
+import { unidadesRegalo, maxQtyPagable } from "@/lib/utils/promo";
 
 export type UserRole = "admin" | "seller" | null;
 
@@ -532,7 +533,8 @@ export function useCart(role: UserRole, userEmail?: string, externalProducts?: P
 
       const existing = prev.find((item) => item.product.id === product.id);
       if (existing) {
-        if (existing.quantity >= product.stock) {
+        const nextQty = existing.quantity + 1;
+        if (nextQty + unidadesRegalo(nextQty, product.regaloCada) > product.stock) {
           toast.error("Stock insuficiente");
           return prev;
         }
@@ -564,7 +566,7 @@ export function useCart(role: UserRole, userEmail?: string, externalProducts?: P
           if (item.product.id !== productId) return item;
           const newQty = item.quantity + delta;
           if (newQty <= 0) return { ...item, quantity: 0 };
-          if (newQty > item.product.stock) {
+          if (newQty + unidadesRegalo(newQty, item.product.regaloCada) > item.product.stock) {
             toast.error("Stock insuficiente");
             return item;
           }
@@ -587,7 +589,8 @@ export function useCart(role: UserRole, userEmail?: string, externalProducts?: P
       const p = item.product;
       const ofertaActiva = (p.descuento ?? 0) > 0 && (p.descuentoCantidad == null || p.descuentoCantidad > 0);
       const maxOferta = ofertaActiva && p.descuentoCantidad != null ? p.descuentoCantidad : Infinity;
-      const newQty = Math.max(1, Math.min(value, item.product.stock, maxOferta));
+      const stockCap = maxQtyPagable(item.product.stock, p.regaloCada);
+      const newQty = Math.max(1, Math.min(value, stockCap, maxOferta));
       if (ofertaActiva && p.descuentoCantidad != null && value > p.descuentoCantidad) {
         toast.error(`Solo ${p.descuentoCantidad} ${p.descuentoCantidad === 1 ? "unidad" : "unidades"} en oferta`);
       }

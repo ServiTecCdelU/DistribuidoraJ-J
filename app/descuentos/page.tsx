@@ -27,6 +27,8 @@ export default function DescuentosPage() {
 
   // % de descuento editado { [id]: "4" }
   const [edited, setEdited] = useState<Record<string, string>>({});
+  // promo "regalo cada X" editada { [id]: "10" }
+  const [editedRegalo, setEditedRegalo] = useState<Record<string, string>>({});
   const [savingId, setSavingId] = useState<string | null>(null);
 
   // Vendedores y asignación de cupos por producto
@@ -45,6 +47,7 @@ export default function DescuentosPage() {
       setTotalProducts(result.total);
       setTotalPages(result.totalPages);
       setEdited({});
+      setEditedRegalo({});
     } catch {
       toast.error("Error al cargar productos");
     } finally {
@@ -74,20 +77,29 @@ export default function DescuentosPage() {
   const getValue = (p: Product): string =>
     edited[p.id] !== undefined ? edited[p.id] : String(p.descuento ?? 0);
 
-  const isDirty = (p: Product): boolean =>
-    edited[p.id] !== undefined && Number(edited[p.id] || 0) !== (p.descuento ?? 0);
+  const getValueRegalo = (p: Product): string =>
+    editedRegalo[p.id] !== undefined ? editedRegalo[p.id] : String(p.regaloCada ?? 0);
+
+  const isDirty = (p: Product): boolean => {
+    const dtoDirty = edited[p.id] !== undefined && Number(edited[p.id] || 0) !== (p.descuento ?? 0);
+    const regaloDirty = editedRegalo[p.id] !== undefined && Number(editedRegalo[p.id] || 0) !== (p.regaloCada ?? 0);
+    return dtoDirty || regaloDirty;
+  };
 
   const handleSave = async (p: Product) => {
     const raw = Number(edited[p.id] ?? p.descuento ?? 0);
     const descuento = Math.max(0, Math.min(100, isNaN(raw) ? 0 : raw));
+    const rawRegalo = Number(editedRegalo[p.id] ?? p.regaloCada ?? 0);
+    const regaloCada = Math.max(0, isNaN(rawRegalo) ? 0 : Math.floor(rawRegalo)) || null;
     setSavingId(p.id);
     try {
-      await productsApi.update(p.id, { descuento });
-      setProducts((prev) => prev.map((x) => (x.id === p.id ? { ...x, descuento } : x)));
+      await productsApi.update(p.id, { descuento, regaloCada });
+      setProducts((prev) => prev.map((x) => (x.id === p.id ? { ...x, descuento, regaloCada } : x)));
       setEdited((prev) => { const next = { ...prev }; delete next[p.id]; return next; });
-      toast.success(descuento > 0 ? `Descuento del ${descuento}% en "${p.name}"` : `Descuento quitado de "${p.name}"`);
+      setEditedRegalo((prev) => { const next = { ...prev }; delete next[p.id]; return next; });
+      toast.success("Cambios guardados en \"" + p.name + "\"");
     } catch {
-      toast.error("Error al guardar el descuento");
+      toast.error("Error al guardar");
     } finally {
       setSavingId(null);
     }
@@ -147,7 +159,7 @@ export default function DescuentosPage() {
         <div className="rounded-2xl border border-teal-200 bg-teal-50/60 dark:bg-teal-950/20 dark:border-teal-800 p-3 flex items-start gap-2">
           <Tag className="h-4 w-4 text-teal-600 shrink-0 mt-0.5" />
           <p className="text-xs text-teal-800 dark:text-teal-200">
-            El <strong>%</strong> es el descuento del producto (se suma al del vendedor, topeado a su máximo). En <strong>Cupos</strong> repartís cuántas unidades en oferta tiene cada vendedor: se descuentan a medida que vende y al llegar a <strong>0 se le corta la oferta a ese vendedor</strong> (los demás siguen). Sin cupo = ese vendedor no tiene la oferta.
+            El <strong>%</strong> es el descuento del producto (se suma al del vendedor, topeado a su máximo). <strong>cada X +1</strong> es la promo de regalo: cada X unidades compradas se suma 1 gratis (paga X, lleva X+1; el stock descuenta el total). Poné 0 para sin promo. En <strong>Cupos</strong> repartís cuántas unidades en oferta tiene cada vendedor: se descuentan a medida que vende y al llegar a <strong>0 se le corta la oferta a ese vendedor</strong> (los demás siguen).
           </p>
         </div>
 
@@ -196,6 +208,9 @@ export default function DescuentosPage() {
                         {dto > 0 && (
                           <Badge variant="secondary" className="h-4 px-1.5 text-[10px] bg-teal-100 text-teal-700 hover:bg-teal-100">{dto}% dto.</Badge>
                         )}
+                        {(p.regaloCada ?? 0) > 0 && (
+                          <Badge variant="secondary" className="h-4 px-1.5 text-[10px] bg-fuchsia-100 text-fuchsia-700 hover:bg-fuchsia-100">cada {p.regaloCada} +1</Badge>
+                        )}
                       </div>
                     </div>
                     <div className="flex items-center gap-1.5 shrink-0">
@@ -209,6 +224,17 @@ export default function DescuentosPage() {
                           title="% de descuento"
                         />
                         <span className="text-[9px] text-muted-foreground mt-0.5">% dto.</span>
+                      </div>
+                      <div className="flex flex-col items-center">
+                        <Input
+                          type="number" min={0}
+                          value={getValueRegalo(p)}
+                          onChange={(e) => setEditedRegalo((prev) => ({ ...prev, [p.id]: e.target.value }))}
+                          onKeyDown={(e) => { if (e.key === "Enter" && isDirty(p)) handleSave(p); }}
+                          className="h-8 w-14 text-center text-sm px-1"
+                          title="Cada cuántas unidades regala 1 (0 = sin promo)"
+                        />
+                        <span className="text-[9px] text-muted-foreground mt-0.5">cada X +1</span>
                       </div>
                       <Button size="sm" disabled={!isDirty(p) || savingId === p.id} onClick={() => handleSave(p)} className="h-8 px-2.5 gap-1 self-start">
                         <Check className="h-3.5 w-3.5" />

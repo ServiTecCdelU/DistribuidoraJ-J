@@ -2,6 +2,7 @@
 import { supabase } from '@/lib/supabase'
 import type { CartItem, Sale } from '@/lib/types'
 import { generateReadableId, slugify } from '@/services/supabase-helpers'
+import { unidadesRegalo } from '@/lib/utils/promo'
 
 
 // Cache: ¿existe la columna payment_method en ventas?
@@ -178,14 +179,18 @@ export const processSale = async (data: {
 
   const saleId = await generateReadableId('ventas', 'venta', resolvedClientName)
 
-  const saleItems = data.items.map((item) => ({
-    productId: item.product.id ?? null,
-    quantity: item.quantity,
-    price: item.product.price ?? null,
-    name: item.product.name ?? null,
-    ...(item.product.codigo ? { codigo: item.product.codigo } : {}),
-    ...(item.itemDiscount ? { itemDiscount: item.itemDiscount } : {}),
-  }))
+  const saleItems = data.items.map((item) => {
+    const regalo = unidadesRegalo(item.quantity, item.product.regaloCada)
+    return {
+      productId: item.product.id ?? null,
+      quantity: item.quantity,
+      price: item.product.price ?? null,
+      name: item.product.name ?? null,
+      ...(item.product.codigo ? { codigo: item.product.codigo } : {}),
+      ...(item.itemDiscount ? { itemDiscount: item.itemDiscount } : {}),
+      ...(regalo > 0 ? { regalo } : {}),
+    }
+  })
 
   const saleRow2: Record<string, any> = {
     id: saleId,
@@ -219,12 +224,14 @@ export const processSale = async (data: {
   for (const item of data.items) {
     // Los pedidos usan IDs de mayorista_productos (mp_XXXX); stock vive en productos (prod_mp_XXXX)
     const prodId = item.product.id?.startsWith('mp_') ? `prod_${item.product.id}` : item.product.id
+    // Stock descontado = unidades pagadas + unidades de regalo (promo "cada X +1")
+    const totalEntregado = item.quantity + unidadesRegalo(item.quantity, item.product.regaloCada)
     const { data: prod } = await supabase.from('productos').select('stock').eq('id', prodId).single()
     if (prod) {
       const stockAnterior = prod.stock || 0
-      const stockPosterior = Math.max(0, stockAnterior - item.quantity)
+      const stockPosterior = Math.max(0, stockAnterior - totalEntregado)
       await supabase.from('productos').update({ stock: stockPosterior }).eq('id', prodId)
-      await registrarMovimientoStock({ productoId: prodId, tipo: 'venta', cantidad: -item.quantity, stockAnterior, stockPosterior, motivo: saleId })
+      await registrarMovimientoStock({ productoId: prodId, tipo: 'venta', cantidad: -totalEntregado, stockAnterior, stockPosterior, motivo: saleId })
     }
   }
 
@@ -498,6 +505,7 @@ export const processSaleMayorista = async (data: {
     const cantidadStockLocal = Math.min(cantidadPedida, stockLocal)
     const cantidadPendienteMayorista =
       modo === 'disponible' ? 0 : Math.max(0, cantidadPedida - stockLocal)
+    const regalo = unidadesRegalo(cantidadPedida, item.product.regaloCada)
     return {
       productId: item.product.id,
       name: item.product.name,
@@ -506,6 +514,7 @@ export const processSaleMayorista = async (data: {
       cantidadPedida,
       cantidadStockLocal,
       cantidadPendienteMayorista,
+      regalo,
       ...(item.itemDiscount ? { itemDiscount: item.itemDiscount } : {}),
       ...(item.product.codigo ? { codigo: item.product.codigo } : {}),
     }
@@ -542,8 +551,8 @@ export const processSaleMayorista = async (data: {
   if (modo === 'disponible') {
     const { descontarStockVenta } = await import('@/services/stock-service')
     const itemsConStockLocal = itemsConStock
-      .filter((i) => i.cantidadStockLocal > 0)
-      .map((i) => ({ productoId: i.productId, cantidad: i.cantidadStockLocal }))
+      .filter((i) => i.cantidadStockLocal > 0 || i.regalo > 0)
+      .map((i) => ({ productoId: i.productId, cantidad: i.cantidadStockLocal + i.regalo }))
     if (itemsConStockLocal.length > 0) {
       await descontarStockVenta(itemsConStockLocal, saleId)
     }

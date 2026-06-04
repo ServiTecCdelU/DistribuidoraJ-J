@@ -34,6 +34,7 @@ export interface Product {
   codigo?: string;
   descuento?: number;          // % de descuento del producto fijado por admin (se suma al del vendedor)
   descuentoCantidad?: number | null; // unidades disponibles en oferta; null = sin límite, 0 = oferta agotada
+  regaloCada?: number | null;  // promo "cada X comprados +1 gratis"; null/0 = sin promo
   productoId?: string;         // id en tabla productos (prod_mp_XXX) cuando el id es mayorista (mp_XXX)
 }
 
@@ -99,7 +100,7 @@ export interface Sale {
   sellerId?: string;
   sellerName?: string;
   source?: "direct" | "order";
-  items: { productId: string; quantity: number; price: number; name: string; itemDiscount?: number }[];
+  items: { productId: string; quantity: number; price: number; name: string; itemDiscount?: number; regalo?: number }[];
   total: number;
   paymentType: "cash" | "credit" | "mixed";
   paymentMethod?: "efectivo" | "transferencia";
