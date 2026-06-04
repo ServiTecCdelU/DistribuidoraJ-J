@@ -757,6 +757,8 @@ function ItemDiscountRow({
   const sellerDto = Math.max(0, (item.itemDiscount ?? 0) - adminDto);
   const maxSeller = Math.max(0, maxDiscountAllowed - adminDto);
   const basePrice = item.product.price;
+  const regaloCada = item.product.regaloCada ?? 0;
+  const regalo = unidadesRegalo(item.quantity, item.product.regaloCada);
   const computedPrecio = Math.round(basePrice * (1 - (item.itemDiscount ?? 0) / 100) * 100) / 100;
 
   const [precioInput, setPrecioInput] = useState<string>("");
@@ -780,6 +782,11 @@ function ItemDiscountRow({
       {adminDto > 0 && (
         <span className="text-[10px] font-medium text-teal-600 bg-teal-50 border border-teal-200 rounded px-1">
           Producto {adminDto}%
+        </span>
+      )}
+      {regaloCada > 0 && (
+        <span className="text-[10px] font-medium text-fuchsia-600 bg-fuchsia-50 border border-fuchsia-200 rounded px-1">
+          Regalo cada {regaloCada}{regalo > 0 ? ` (+${regalo})` : ""}
         </span>
       )}
       <span className="text-[10px] text-muted-foreground">{adminDto > 0 ? "Vendedor:" : "Dto.:"}</span>
