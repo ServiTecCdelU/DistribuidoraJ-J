@@ -42,6 +42,8 @@ interface MatchedItem {
   matchedProduct: Product | null;
   quantity: number;
   precioListaActual?: number;
+  mpId?: string;
+  needsEnable?: boolean;
 }
 
 interface RemitoImportModalProps {
@@ -356,17 +358,19 @@ export function RemitoImportModal({
       const codigos = parsedItems.map((item) => item.codigo);
       const { data: mpRows } = await supabase
         .from("mayorista_productos")
-        .select("id, codigo, producto_id, precio_lista, descripcion")
+        .select("id, codigo, producto_id, precio_lista, descripcion, habilitado")
         .in("codigo", codigos);
 
       // Mapa código → info de mayorista
-      const mpByCodigo = new Map<string, { productoId: string | null; precioLista: number; descripcion: string }>();
+      const mpByCodigo = new Map<string, { mpId: string; productoId: string | null; precioLista: number; descripcion: string; habilitado: boolean }>();
       if (mpRows) {
         for (const mp of mpRows) {
           mpByCodigo.set(mp.codigo, {
+            mpId: mp.id,
             productoId: mp.producto_id,
             precioLista: Number(mp.precio_lista) || 0,
             descripcion: mp.descripcion ?? "",
+            habilitado: mp.habilitado ?? false,
           });
         }
       }
@@ -428,7 +432,10 @@ export function RemitoImportModal({
           parsedItem: item,
           matchedProduct,
           quantity: item.cantidad,
-            precioListaActual,
+          precioListaActual,
+          mpId: mpInfo?.mpId,
+          // Está matcheado pero el registro mayorista figura deshabilitado → se habilitará al confirmar
+          needsEnable: !!mpInfo && mpInfo.habilitado === false && matchedProduct !== null,
         };
       });
 
@@ -511,6 +518,20 @@ export function RemitoImportModal({
 
       await onConfirm(updates);
 
+      // Habilitar los productos matcheados que figuraban deshabilitados en mayorista
+      const toEnable = toUpdate.filter((item) => item.needsEnable && item.mpId);
+      if (toEnable.length > 0) {
+        const { error } = await supabase
+          .from("mayorista_productos")
+          .update({ habilitado: true })
+          .in("id", toEnable.map((item) => item.mpId!));
+        if (error) {
+          toast.error("Stock actualizado pero no se pudieron habilitar algunos productos");
+        } else {
+          toast.success(`${toEnable.length} producto(s) habilitado(s)`);
+        }
+      }
+
       // Registrar deuda en cuenta mayorista si hay total
       if (remitoTotal > 0) {
         try {
@@ -537,6 +558,7 @@ export function RemitoImportModal({
 
   const matchedCount = items.filter((i) => i.matchedProduct !== null).length;
   const unmatchedCount = items.filter((i) => i.matchedProduct === null).length;
+  const toEnableCount = items.filter((i) => i.matchedProduct !== null && i.needsEnable).length;
   const priceChangedCount = items.filter(
     (i) => i.matchedProduct && i.precioListaActual != null && i.precioListaActual > 0 && Math.abs(i.parsedItem.precio - i.precioListaActual) > 0.01
   ).length;
@@ -653,6 +675,12 @@ export function RemitoImportModal({
                 <CheckCircle2 className="h-3.5 w-3.5" />
                 {matchedCount} coincidencias
               </Badge>
+              {toEnableCount > 0 && (
+                <Badge className="gap-1.5 text-xs bg-teal-500/15 text-teal-700 border-teal-200">
+                  <CheckCircle2 className="h-3.5 w-3.5" />
+                  {toEnableCount} se habilitarán
+                </Badge>
+              )}
               {priceChangedCount > 0 && (
                 <Badge
                   variant="outline"
@@ -688,8 +716,13 @@ export function RemitoImportModal({
                         <p className="text-xs text-muted-foreground truncate">
                           Remito: [{item.parsedItem.codigo}] {item.parsedItem.rawName}
                         </p>
-                        <p className="font-medium text-sm truncate">
+                        <p className="font-medium text-sm truncate flex items-center gap-1.5">
                           {item.matchedProduct!.name}
+                          {item.needsEnable && (
+                            <span className="shrink-0 text-[10px] font-semibold text-teal-700 bg-teal-100 border border-teal-200 rounded px-1.5 py-0.5">
+                              Se habilitará
+                            </span>
+                          )}
                         </p>
                         <p className="text-xs text-muted-foreground">
                           Stock actual: {item.matchedProduct!.stock} · Cantidad: {item.parsedItem.cantidad}
