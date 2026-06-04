@@ -1377,6 +1377,7 @@ th.center,td.center{text-align:center}
     html += `<div class="section"><div class="section-title">Entregas por Cliente</div>`;
     ordersGroupedByClient
       .filter(({ client }) => !heldClients.has(client))
+      .filter(({ client }) => selectedClients.size === 0 || selectedClients.has(client))
       .map(({ client, orders }) => ({ client, orders: orders.filter((o) => o.remitoNumber) }))
       .filter(({ orders }) => orders.length > 0)
       .forEach(({ client, orders: clientOrders }) => {
@@ -1409,7 +1410,7 @@ th.center,td.center{text-align:center}
     });
     html += `</div><div class="footer">Generado el ${stampStr}</div></body></html>`;
     printHtml(html);
-  }, [ordersGroupedByClient, clients, heldClients, printHtml]);
+  }, [ordersGroupedByClient, clients, heldClients, selectedClients, printHtml]);
 
 
   if (!mounted) {
