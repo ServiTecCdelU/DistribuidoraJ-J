@@ -36,6 +36,11 @@ export interface Product {
   descuentoCantidad?: number | null; // unidades disponibles en oferta; null = sin límite, 0 = oferta agotada
   regaloCada?: number | null;  // promo "cada X comprados +N gratis"; null/0 = sin promo
   regaloCantidad?: number | null; // unidades gratis por cada bloque de regaloCada (default 1)
+  // Promo cruzada: "cada X comprados, regala N de OTRO producto"
+  regaloProductoId?: string | null;     // id del producto que se regala
+  regaloProductoNombre?: string | null; // nombre del producto regalado (cache para mostrar)
+  regaloProductoCada?: number | null;   // cada cuántas compradas se activa
+  regaloProductoCantidad?: number | null; // unidades del otro producto por bloque
   productoId?: string;         // id en tabla productos (prod_mp_XXX) cuando el id es mayorista (mp_XXX)
 }
 
@@ -101,7 +106,7 @@ export interface Sale {
   sellerId?: string;
   sellerName?: string;
   source?: "direct" | "order";
-  items: { productId: string; quantity: number; price: number; name: string; itemDiscount?: number; regalo?: number }[];
+  items: { productId: string; quantity: number; price: number; name: string; itemDiscount?: number; regalo?: number; esRegalo?: boolean; regaloDe?: string }[];
   total: number;
   paymentType: "cash" | "credit" | "mixed";
   paymentMethod?: "efectivo" | "transferencia";

@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { unidadesRegalo, maxQtyPagable } from "../promo";
+import { unidadesRegalo, maxQtyPagable, calcularRegalosCruzados } from "../promo";
 
 describe("unidadesRegalo — promo 'cada X comprados +1 gratis'", () => {
   it("sin promo (regaloCada null/0/undefined) no regala nada", () => {
@@ -109,5 +109,47 @@ describe("maxQtyPagable — tope de cantidad para no superar el stock con el reg
         }
       }
     }
+  });
+});
+
+describe("calcularRegalosCruzados — regalo de OTRO producto", () => {
+  const itemA = (quantity: number, cada: number | null, cant: number | null, bId = "prod_B", bNom = "Producto B") => ({
+    quantity,
+    product: { regaloProductoId: bId, regaloProductoNombre: bNom, regaloProductoCada: cada, regaloProductoCantidad: cant },
+  });
+
+  it("sin producto de regalo configurado devuelve vacío", () => {
+    expect(calcularRegalosCruzados([{ quantity: 50, product: {} }])).toEqual([]);
+  });
+
+  it("12 leche → 2 de otro producto", () => {
+    const r = calcularRegalosCruzados([itemA(12, 12, 2)]);
+    expect(r).toEqual([{ productoId: "prod_B", nombre: "Producto B", cantidad: 2 }]);
+  });
+
+  it("no activa si no llega al múltiplo", () => {
+    expect(calcularRegalosCruzados([itemA(11, 12, 2)])).toEqual([]);
+  });
+
+  it("24 leche → 4 (dos bloques)", () => {
+    expect(calcularRegalosCruzados([itemA(24, 12, 2)])[0].cantidad).toBe(4);
+  });
+
+  it("regaloProductoCantidad null se toma como 1", () => {
+    expect(calcularRegalosCruzados([itemA(12, 12, null)])[0].cantidad).toBe(1);
+  });
+
+  it("acumula cuando varios items regalan el mismo producto", () => {
+    const r = calcularRegalosCruzados([itemA(12, 12, 2), itemA(24, 12, 2)]);
+    expect(r).toHaveLength(1);
+    expect(r[0].cantidad).toBe(6); // 2 + 4
+  });
+
+  it("separa por producto regalado distinto", () => {
+    const r = calcularRegalosCruzados([
+      itemA(12, 12, 1, "prod_B", "B"),
+      itemA(10, 10, 1, "prod_C", "C"),
+    ]);
+    expect(r).toHaveLength(2);
   });
 });

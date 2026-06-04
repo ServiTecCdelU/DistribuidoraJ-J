@@ -10,7 +10,7 @@ import { productsApi, sellersApi } from "@/lib/api";
 import type { Product, Seller } from "@/lib/types";
 import { formatCurrency } from "@/lib/utils/format";
 import { getAsignacionesProducto, setAsignacion } from "@/services/descuento-vendedor-service";
-import { Search, X, Percent, Check, Tag, ChevronLeft, ChevronRight, ChevronDown, Users, Loader2 } from "lucide-react";
+import { Search, X, Percent, Check, Tag, ChevronLeft, ChevronRight, ChevronDown, Users, Loader2, Gift } from "lucide-react";
 import { toast } from "sonner";
 
 export default function DescuentosPage() {
@@ -40,6 +40,15 @@ export default function DescuentosPage() {
   const [cupos, setCupos] = useState<Record<string, Record<string, string>>>({});
   const [loadingCupos, setLoadingCupos] = useState(false);
   const [savingCuposId, setSavingCuposId] = useState<string | null>(null);
+
+  // Combo: regalar OTRO producto
+  const [comboOpenId, setComboOpenId] = useState<string | null>(null);
+  const [comboDraft, setComboDraft] = useState<Record<string, { productoId: string | null; nombre: string; cada: string; cantidad: string }>>({});
+  const [comboSearch, setComboSearch] = useState("");
+  const [comboResults, setComboResults] = useState<Product[]>([]);
+  const [comboSearching, setComboSearching] = useState(false);
+  const [savingComboId, setSavingComboId] = useState<string | null>(null);
+  const comboDebounce = useRef<NodeJS.Timeout | null>(null);
 
   const fetchProducts = useCallback(async (page: number, search: string) => {
     setLoading(true);
@@ -163,6 +172,84 @@ export default function DescuentosPage() {
     }
   };
 
+  // --- Combo: regalar otro producto ---
+  const toggleCombo = (p: Product) => {
+    if (comboOpenId === p.id) { setComboOpenId(null); return; }
+    setComboOpenId(p.id);
+    setComboSearch("");
+    setComboResults([]);
+    setComboDraft((prev) => ({
+      ...prev,
+      [p.id]: prev[p.id] ?? {
+        productoId: p.regaloProductoId ?? null,
+        nombre: p.regaloProductoNombre ?? "",
+        cada: p.regaloProductoCada ? String(p.regaloProductoCada) : "",
+        cantidad: String(p.regaloProductoCantidad ?? 1),
+      },
+    }));
+  };
+
+  const buscarComboProducto = (text: string) => {
+    setComboSearch(text);
+    if (comboDebounce.current) clearTimeout(comboDebounce.current);
+    if (text.trim().length < 2) { setComboResults([]); return; }
+    comboDebounce.current = setTimeout(async () => {
+      setComboSearching(true);
+      try {
+        const res = await productsApi.search({ search: text, page: 1, pageSize: 8 });
+        setComboResults(res.data.filter((x) => !(x as any).disabled));
+      } catch {
+        // ignore
+      } finally {
+        setComboSearching(false);
+      }
+    }, 300);
+  };
+
+  const elegirComboProducto = (pId: string, prod: Product) => {
+    setComboDraft((prev) => ({
+      ...prev,
+      [pId]: { ...(prev[pId] || { cada: "", cantidad: "1" }), productoId: prod.id, nombre: prod.name },
+    }));
+    setComboSearch("");
+    setComboResults([]);
+  };
+
+  const setComboField = (pId: string, field: "cada" | "cantidad", value: string) => {
+    setComboDraft((prev) => ({
+      ...prev,
+      [pId]: { ...(prev[pId] || { productoId: null, nombre: "", cada: "", cantidad: "1" }), [field]: value },
+    }));
+  };
+
+  const handleSaveCombo = async (p: Product) => {
+    const draft = comboDraft[p.id];
+    if (!draft) return;
+    const cada = Math.max(0, Math.floor(Number(draft.cada) || 0)) || null;
+    const cantidad = cada ? Math.max(1, Math.floor(Number(draft.cantidad) || 1)) : null;
+    const productoId = cada && draft.productoId ? draft.productoId : null;
+    const nombre = productoId ? draft.nombre : null;
+    if (cada && !productoId) { toast.error("Elegí el producto a regalar"); return; }
+    setSavingComboId(p.id);
+    try {
+      await productsApi.update(p.id, {
+        regaloProductoId: productoId,
+        regaloProductoNombre: nombre,
+        regaloProductoCada: productoId ? cada : null,
+        regaloProductoCantidad: cantidad,
+      });
+      setProducts((prev) => prev.map((x) => (x.id === p.id
+        ? { ...x, regaloProductoId: productoId, regaloProductoNombre: nombre, regaloProductoCada: productoId ? cada : null, regaloProductoCantidad: cantidad }
+        : x)));
+      toast.success(productoId ? `Combo guardado en "${p.name}"` : `Combo quitado de "${p.name}"`);
+      setComboOpenId(null);
+    } catch {
+      toast.error("Error al guardar el combo");
+    } finally {
+      setSavingComboId(null);
+    }
+  };
+
   return (
     <MainLayout allowedRoles={["admin"]} title="Descuentos" description="Asigná un descuento por producto y repartí las unidades por vendedor">
       <div className="space-y-4">
@@ -222,6 +309,9 @@ export default function DescuentosPage() {
                         {(p.regaloCada ?? 0) > 0 && (
                           <Badge variant="secondary" className="h-4 px-1.5 text-[10px] bg-fuchsia-100 text-fuchsia-700 hover:bg-fuchsia-100">cada {p.regaloCada} +{p.regaloCantidad ?? 1}</Badge>
                         )}
+                        {p.regaloProductoId && (p.regaloProductoCada ?? 0) > 0 && (
+                          <Badge variant="secondary" className="h-4 px-1.5 text-[10px] bg-purple-100 text-purple-700 hover:bg-purple-100">cada {p.regaloProductoCada} → {p.regaloProductoCantidad ?? 1}× {p.regaloProductoNombre}</Badge>
+                        )}
                       </div>
                     </div>
                     <div className="flex items-center gap-1.5 shrink-0">
@@ -273,6 +363,16 @@ export default function DescuentosPage() {
                         <span className="hidden sm:inline text-xs">Cupos</span>
                         <ChevronDown className={`h-3.5 w-3.5 transition-transform ${isExpanded ? "rotate-180" : ""}`} />
                       </Button>
+                      <Button
+                        size="sm" variant={comboOpenId === p.id ? "default" : "outline"}
+                        onClick={() => toggleCombo(p)}
+                        className="h-8 px-2.5 gap-1 self-start"
+                        title="Regalar otro producto"
+                      >
+                        <Gift className="h-3.5 w-3.5" />
+                        <span className="hidden sm:inline text-xs">Regalo</span>
+                        <ChevronDown className={`h-3.5 w-3.5 transition-transform ${comboOpenId === p.id ? "rotate-180" : ""}`} />
+                      </Button>
                     </div>
                   </div>
 
@@ -317,6 +417,82 @@ export default function DescuentosPage() {
                           </div>
                         </>
                       )}
+                    </div>
+                  )}
+
+                  {/* Panel combo: regalar otro producto */}
+                  {comboOpenId === p.id && (
+                    <div className="border-t border-border bg-purple-50/40 dark:bg-purple-950/10 px-3 py-3 space-y-3">
+                      <p className="text-[11px] text-muted-foreground">
+                        Cada <strong>X</strong> unidades compradas de <strong>{p.name}</strong>, se regalan <strong>N</strong> unidades de otro producto (gratis, descuenta su stock).
+                      </p>
+
+                      {/* Producto a regalar */}
+                      {comboDraft[p.id]?.productoId ? (
+                        <div className="flex items-center gap-2 bg-card rounded-lg border border-purple-200 px-2 py-1.5">
+                          <Gift className="h-3.5 w-3.5 text-purple-600 shrink-0" />
+                          <span className="text-xs flex-1 truncate font-medium">{comboDraft[p.id]?.nombre}</span>
+                          <Button variant="ghost" size="icon" className="h-6 w-6" onClick={() => setComboDraft((prev) => ({ ...prev, [p.id]: { ...(prev[p.id]!), productoId: null, nombre: "" } }))}>
+                            <X className="h-3 w-3" />
+                          </Button>
+                        </div>
+                      ) : (
+                        <div className="relative">
+                          <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
+                          <Input
+                            placeholder="Buscar producto a regalar..."
+                            value={comboSearch}
+                            onChange={(e) => buscarComboProducto(e.target.value)}
+                            className="pl-8 h-8 text-xs"
+                          />
+                          {(comboSearching || comboResults.length > 0) && (
+                            <div className="absolute z-10 mt-1 w-full bg-card border border-border rounded-lg shadow-lg max-h-52 overflow-auto">
+                              {comboSearching ? (
+                                <div className="flex items-center gap-2 text-xs text-muted-foreground px-3 py-2">
+                                  <Loader2 className="h-3.5 w-3.5 animate-spin" /> Buscando...
+                                </div>
+                              ) : (
+                                comboResults.filter((r) => r.id !== p.id).map((r) => (
+                                  <button
+                                    key={r.id}
+                                    onClick={() => elegirComboProducto(p.id, r)}
+                                    className="flex items-center justify-between w-full px-3 py-1.5 text-left hover:bg-muted/40 transition-colors"
+                                  >
+                                    <span className="text-xs truncate flex-1">{r.name}</span>
+                                    <span className="text-[10px] text-muted-foreground ml-2">{r.stock > 0 ? `${r.stock} u.` : "sin stock"}</span>
+                                  </button>
+                                ))
+                              )}
+                            </div>
+                          )}
+                        </div>
+                      )}
+
+                      {/* Cantidades */}
+                      <div className="flex items-end gap-3 flex-wrap">
+                        <div className="flex flex-col">
+                          <span className="text-[9px] text-muted-foreground mb-0.5">cada (compradas)</span>
+                          <Input
+                            type="number" min={0}
+                            value={comboDraft[p.id]?.cada ?? ""}
+                            onChange={(e) => setComboField(p.id, "cada", e.target.value)}
+                            className="h-8 w-20 text-center text-sm px-1"
+                          />
+                        </div>
+                        <div className="flex flex-col">
+                          <span className="text-[9px] text-muted-foreground mb-0.5">regala (gratis)</span>
+                          <Input
+                            type="number" min={1}
+                            value={comboDraft[p.id]?.cantidad ?? "1"}
+                            onChange={(e) => setComboField(p.id, "cantidad", e.target.value)}
+                            className="h-8 w-20 text-center text-sm px-1"
+                          />
+                        </div>
+                        <Button size="sm" onClick={() => handleSaveCombo(p)} disabled={savingComboId === p.id} className="h-8 gap-1 ml-auto">
+                          {savingComboId === p.id ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Check className="h-3.5 w-3.5" />}
+                          Guardar combo
+                        </Button>
+                      </div>
                     </div>
                   )}
                 </div>

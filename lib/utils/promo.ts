@@ -38,3 +38,44 @@ export function maxQtyPagable(
   while (q > 0 && q + unidadesRegalo(q, regaloCada, regaloCantidad) > stock) q--;
   return q;
 }
+
+export interface ItemPromo {
+  quantity: number;
+  product: {
+    regaloProductoId?: string | null;
+    regaloProductoNombre?: string | null;
+    regaloProductoCada?: number | null;
+    regaloProductoCantidad?: number | null;
+  };
+}
+
+export interface RegaloCruzado {
+  productoId: string;
+  nombre: string;
+  cantidad: number;
+}
+
+/**
+ * Calcula los regalos de OTRO producto a partir de los items comprados.
+ * Acumula por producto regalado (varios items pueden regalar el mismo).
+ */
+export function calcularRegalosCruzados(items: ItemPromo[]): RegaloCruzado[] {
+  const map = new Map<string, RegaloCruzado>();
+  for (const it of items) {
+    const p = it.product;
+    if (!p.regaloProductoId || !p.regaloProductoCada || p.regaloProductoCada <= 0) continue;
+    const cant = unidadesRegalo(it.quantity, p.regaloProductoCada, p.regaloProductoCantidad);
+    if (cant <= 0) continue;
+    const prev = map.get(p.regaloProductoId);
+    if (prev) {
+      prev.cantidad += cant;
+    } else {
+      map.set(p.regaloProductoId, {
+        productoId: p.regaloProductoId,
+        nombre: p.regaloProductoNombre ?? "Producto de regalo",
+        cantidad: cant,
+      });
+    }
+  }
+  return Array.from(map.values());
+}

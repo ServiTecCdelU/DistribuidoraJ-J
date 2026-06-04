@@ -2,7 +2,7 @@
 import { supabase } from '@/lib/supabase'
 import type { CartItem, Sale } from '@/lib/types'
 import { generateReadableId, slugify } from '@/services/supabase-helpers'
-import { unidadesRegalo } from '@/lib/utils/promo'
+import { unidadesRegalo, calcularRegalosCruzados } from '@/lib/utils/promo'
 
 
 // Cache: ¿existe la columna payment_method en ventas?
@@ -179,7 +179,8 @@ export const processSale = async (data: {
 
   const saleId = await generateReadableId('ventas', 'venta', resolvedClientName)
 
-  const saleItems = data.items.map((item) => {
+  const regalosCruzados = calcularRegalosCruzados(data.items)
+  const saleItems: Record<string, any>[] = data.items.map((item) => {
     const regalo = unidadesRegalo(item.quantity, item.product.regaloCada, item.product.regaloCantidad)
     return {
       productId: item.product.id ?? null,
@@ -191,6 +192,10 @@ export const processSale = async (data: {
       ...(regalo > 0 ? { regalo } : {}),
     }
   })
+  // Items de regalo de OTRO producto (gratis, no se cobran)
+  for (const r of regalosCruzados) {
+    saleItems.push({ productId: r.productoId, quantity: r.cantidad, price: 0, name: r.nombre, esRegalo: true })
+  }
 
   const saleRow2: Record<string, any> = {
     id: saleId,
@@ -232,6 +237,18 @@ export const processSale = async (data: {
       const stockPosterior = Math.max(0, stockAnterior - totalEntregado)
       await supabase.from('productos').update({ stock: stockPosterior }).eq('id', prodId)
       await registrarMovimientoStock({ productoId: prodId, tipo: 'venta', cantidad: -totalEntregado, stockAnterior, stockPosterior, motivo: saleId })
+    }
+  }
+
+  // Descontar stock de los productos regalados (promo cruzada)
+  for (const r of regalosCruzados) {
+    const prodId = r.productoId.startsWith('mp_') ? `prod_${r.productoId}` : r.productoId
+    const { data: prod } = await supabase.from('productos').select('stock').eq('id', prodId).single()
+    if (prod) {
+      const stockAnterior = prod.stock || 0
+      const stockPosterior = Math.max(0, stockAnterior - r.cantidad)
+      await supabase.from('productos').update({ stock: stockPosterior }).eq('id', prodId)
+      await registrarMovimientoStock({ productoId: prodId, tipo: 'venta', cantidad: -r.cantidad, stockAnterior, stockPosterior, motivo: saleId })
     }
   }
 
@@ -520,6 +537,13 @@ export const processSaleMayorista = async (data: {
     }
   })
 
+  // Regalos de OTRO producto (promo cruzada) — gratis, se agregan al registro
+  const regalosCruzados = calcularRegalosCruzados(data.items)
+  const itemsParaGuardar = [
+    ...itemsConStock,
+    ...regalosCruzados.map((r) => ({ productId: r.productoId, name: r.nombre, price: 0, quantity: r.cantidad, esRegalo: true })),
+  ]
+
   const saleStatus: Sale['status'] = modo === 'esperar' ? 'pendiente' : 'listo'
 
   const saleRow: Record<string, any> = {
@@ -531,7 +555,7 @@ export const processSaleMayorista = async (data: {
     seller_id: data.sellerId ?? null,
     seller_name: data.sellerName ?? null,
     source: 'direct',
-    items: itemsConStock,
+    items: itemsParaGuardar,
     total,
     payment_type: data.paymentType,
     payment_method: data.paymentMethod ?? 'efectivo',
@@ -553,8 +577,11 @@ export const processSaleMayorista = async (data: {
     const itemsConStockLocal = itemsConStock
       .filter((i) => i.cantidadStockLocal > 0 || i.regalo > 0)
       .map((i) => ({ productoId: i.productId, cantidad: i.cantidadStockLocal + i.regalo }))
-    if (itemsConStockLocal.length > 0) {
-      await descontarStockVenta(itemsConStockLocal, saleId)
+    // Sumar el stock de los productos regalados (promo cruzada)
+    const itemsRegaloCruzado = regalosCruzados.map((r) => ({ productoId: r.productoId, cantidad: r.cantidad }))
+    const aDescontar = [...itemsConStockLocal, ...itemsRegaloCruzado]
+    if (aDescontar.length > 0) {
+      await descontarStockVenta(aDescontar, saleId)
     }
   }
 
@@ -623,7 +650,7 @@ export const processSaleMayorista = async (data: {
     id: saleId, saleNumber, clientId: data.clientId, clientName: resolvedClientName,
     clientPhone: resolvedClientPhone ?? undefined, clientCuit: resolvedClientCuit ?? undefined,
     clientAddress: resolvedClientAddress ?? undefined, sellerId: data.sellerId,
-    sellerName: data.sellerName, source: 'direct', items: itemsConStock, total,
+    sellerName: data.sellerName, source: 'direct', items: itemsParaGuardar, total,
     paymentType: data.paymentType, paymentMethod: data.paymentMethod ?? 'efectivo',
     cashAmount: data.cashAmount, creditAmount: data.creditAmount, discount: data.discount,
     discountType: data.discountType, status: saleStatus, invoiceEmitted: false,

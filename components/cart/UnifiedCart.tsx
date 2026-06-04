@@ -224,6 +224,7 @@ export function UnifiedCart({ role, state, actions, onConfirmSale, allowDiscount
               const lineTotal = item.product.price * item.quantity;
               const lineFinal = item.itemDiscount ? lineTotal * (1 - item.itemDiscount / 100) : lineTotal;
               const regalo = unidadesRegalo(item.quantity, item.product.regaloCada, item.product.regaloCantidad);
+              const regaloCruzadoCant = unidadesRegalo(item.quantity, item.product.regaloProductoCada, item.product.regaloProductoCantidad);
               return (
                 <li key={item.product.id} className="px-3 py-2 hover:bg-muted/20 transition-colors space-y-1.5">
                   {/* Nombre + eliminar */}
@@ -294,6 +295,13 @@ export function UnifiedCart({ role, state, actions, onConfirmSale, allowDiscount
                     <div className="flex items-center gap-1 text-[10px] font-medium text-fuchsia-600">
                       <Sparkles className="h-2.5 w-2.5" />
                       <span>+{regalo} de regalo · lleva {item.quantity + regalo}</span>
+                    </div>
+                  )}
+                  {/* Promo cruzada: regala otro producto */}
+                  {regaloCruzadoCant > 0 && (
+                    <div className="flex items-center gap-1 text-[10px] font-medium text-fuchsia-600">
+                      <Sparkles className="h-2.5 w-2.5" />
+                      <span>Regala {regaloCruzadoCant}× {item.product.regaloProductoNombre || "otro producto"} gratis</span>
                     </div>
                   )}
                   {/* Descuento por producto — admin/seller */}
