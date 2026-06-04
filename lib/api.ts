@@ -103,6 +103,13 @@ import {
   approveComprobante,
   rejectComprobante,
 } from '@/services/cobranzas-service'
+import {
+  registrarFaltantes,
+  quitarFaltantes,
+  eliminarFaltante,
+  getFaltantesByCliente,
+} from '@/services/faltantes-service'
+import type { Faltante } from '@/services/faltantes-service'
 
 export const productsApi = {
   async getAll(): Promise<Product[]> {
@@ -235,6 +242,15 @@ export const mayoristaCuentaApi = {
   addPago: addPagoMayorista,
   pagarBoleta,
 }
+
+export const faltantesApi = {
+  registrar: registrarFaltantes,
+  quitar: quitarFaltantes,
+  eliminar: eliminarFaltante,
+  getByCliente: getFaltantesByCliente,
+}
+
+export type { Faltante }
 
 export const invoiceApi = {
   async createInvoice(saleId: string, client?: { name?: string; phone?: string; email?: string }) {

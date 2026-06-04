@@ -16,7 +16,8 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog'
-import { clientsApi, paymentsApi, sellersApi } from '@/lib/api'
+import { clientsApi, paymentsApi, sellersApi, faltantesApi } from '@/lib/api'
+import type { Faltante } from '@/lib/api'
 import type { Client, Transaction, Seller } from '@/lib/types'
 import { formatCurrency, formatDate } from '@/lib/utils/format'
 import {
@@ -26,7 +27,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
-import { DollarSign, Plus, Loader2, UserCheck } from 'lucide-react'
+import { DollarSign, Plus, Loader2, UserCheck, PackageX, X } from 'lucide-react'
 import { PageHeader } from '@/components/layout/page-header'
 
 export default function ClientDetailPage() {
@@ -40,10 +41,12 @@ export default function ClientDetailPage() {
   const [paymentDescription, setPaymentDescription] = useState('')
   const [processingPayment, setProcessingPayment] = useState(false)
   const [sellers, setSellers] = useState<Seller[]>([])
+  const [faltantes, setFaltantes] = useState<Faltante[]>([])
 
   useEffect(() => {
     loadData()
     sellersApi.getAll().then((s) => setSellers(s.filter((x) => x.isActive))).catch(() => {})
+    faltantesApi.getByCliente(params.id as string).then(setFaltantes).catch(() => {})
   }, [params.id])
 
   const loadData = async () => {
@@ -97,6 +100,16 @@ export default function ClientDetailPage() {
       console.error('Error registering payment:', error)
     } finally {
       setProcessingPayment(false)
+    }
+  }
+
+  const handleEliminarFaltante = async (id: string) => {
+    const prev = faltantes
+    setFaltantes((f) => f.filter((x) => x.id !== id))
+    try {
+      await faltantesApi.eliminar(id)
+    } catch {
+      setFaltantes(prev)
     }
   }
 
@@ -239,6 +252,48 @@ export default function ClientDetailPage() {
           </Select>
         </CardContent>
       </Card>
+
+      {/* Faltantes — productos que no se le pudieron enviar */}
+      {faltantes.length > 0 && (
+        <Card className="mb-8 border-amber-200">
+          <CardHeader className="pb-3">
+            <CardTitle className="text-base font-semibold flex items-center gap-2 text-amber-700">
+              <PackageX className="h-4 w-4" />
+              Pendientes de enviar ({faltantes.length})
+            </CardTitle>
+            <p className="text-xs text-muted-foreground">
+              Productos que se pidieron y no se le pudieron mandar. Se quitan solos cuando se le envían en otro remito.
+            </p>
+          </CardHeader>
+          <CardContent>
+            <ul className="divide-y divide-border/50">
+              {faltantes.map((f) => (
+                <li key={f.id} className="flex items-center gap-3 py-2.5">
+                  <div className="h-8 w-8 rounded-lg bg-amber-50 border border-amber-200 flex items-center justify-center shrink-0">
+                    <PackageX className="h-4 w-4 text-amber-600" />
+                  </div>
+                  <div className="min-w-0 flex-1">
+                    <p className="text-sm font-medium text-foreground truncate">{f.productoNombre}</p>
+                    <p className="text-xs text-muted-foreground">
+                      {f.cantidad > 0 && <span>Cantidad: {f.cantidad} · </span>}
+                      {formatDate(f.fecha)}
+                    </p>
+                  </div>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="h-7 w-7 text-muted-foreground hover:text-destructive shrink-0"
+                    onClick={() => handleEliminarFaltante(f.id)}
+                    title="Quitar del historial"
+                  >
+                    <X className="h-4 w-4" />
+                  </Button>
+                </li>
+              ))}
+            </ul>
+          </CardContent>
+        </Card>
+      )}
 
       {/* Transactions */}
       <Card>

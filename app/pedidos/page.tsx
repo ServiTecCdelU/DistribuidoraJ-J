@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { DataTableSkeleton } from "@/components/ui/data-table-skeleton";
 import { ClientModal } from "@/components/clientes/client-modal";
-import { ordersApi, salesApi, clientsApi, sellersApi, productsApi } from "@/lib/api";
+import { ordersApi, salesApi, clientsApi, sellersApi, productsApi, faltantesApi } from "@/lib/api";
 import type { Order, OrderStatus, Client, Seller } from "@/lib/types";
 import { Package, Filter, Loader2, ClipboardList, FileText, Eye, ArrowRightCircle, Ban, TrendingUp, ChevronDown, ChevronRight, MapPin, Phone } from "lucide-react";
 import { toast } from "sonner";
@@ -200,6 +200,20 @@ export default function PedidosPage() {
       if (filteredItems.length === 0) {
         toast.error("No quedan productos para generar el remito");
         return;
+      }
+
+      // Historial de faltantes del cliente: registrar lo que NO se le envía (excluido)
+      // y quitar del historial lo que sí se le envía en este remito.
+      const clienteId = order.clientId;
+      if (clienteId) {
+        const faltantesParaRegistrar = order.items
+          .filter((i: any) => excludeProductIds.includes(i.productId))
+          .map((i: any) => ({ productId: i.productId, name: i.name, quantity: quantities[i.productId] ?? i.quantity }));
+        const enviados = filteredItems.map((i: any) => i.productId).filter(Boolean);
+        try {
+          if (faltantesParaRegistrar.length > 0) await faltantesApi.registrar(clienteId, faltantesParaRegistrar, order.id);
+          if (enviados.length > 0) await faltantesApi.quitar(clienteId, enviados);
+        } catch { /* tabla cliente_faltantes aún no creada — no bloquear el remito */ }
       }
 
       // Si se excluyeron, reemplazaron o se cambió la cantidad, actualizar el pedido en BD
@@ -1099,7 +1113,7 @@ tfoot td{border-top:2px solid #1f4e78;background:#f2f2f2;font-weight:700;font-si
     // (pendiente / preparación / reparto) NO se juntan. Solo se agrupan los que
     // comparten estado (ej. varios pedidos pendientes del mismo cliente sí se juntan).
     const groups: Record<string, Order[]> = {};
-    const SEP = " ";
+    const SEP = "|#|";
 
     filteredOrders.forEach((order) => {
       const client = order.clientName || "Sin cliente";
