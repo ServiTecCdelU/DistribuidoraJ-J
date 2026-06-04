@@ -9,7 +9,7 @@ import { DataTableSkeleton } from "@/components/ui/data-table-skeleton";
 import { ClientModal } from "@/components/clientes/client-modal";
 import { ordersApi, salesApi, clientsApi, sellersApi, productsApi, faltantesApi } from "@/lib/api";
 import type { Order, OrderStatus, Client, Seller } from "@/lib/types";
-import { Package, Filter, Loader2, ClipboardList, FileText, Eye, ArrowRightCircle, Ban, TrendingUp, ChevronDown, ChevronRight, MapPin, Phone } from "lucide-react";
+import { Package, Filter, Loader2, ClipboardList, FileText, Eye, ArrowRightCircle, ArrowLeftCircle, Ban, TrendingUp, ChevronDown, ChevronRight, MapPin, Phone } from "lucide-react";
 import { toast } from "sonner";
 import { useAuth } from "@/hooks/use-auth";
 import { useRouter } from "next/navigation";
@@ -1278,7 +1278,7 @@ tfoot td{border-top:2px solid #1f4e78;background:#f2f2f2;font-weight:700;font-si
     try {
       await Promise.all(toMove.map((o) => ordersApi.updateStatus(o.id, to)));
       await loadData();
-      const label = to === "preparation" ? "preparación" : "reparto";
+      const label = to === "preparation" ? "preparación" : to === "delivery" ? "reparto" : "pendiente";
       const heldCount = orders.filter((o) => o.status === from && heldClients.has(o.clientName || "Sin cliente")).length;
       const msg = heldCount > 0
         ? `${toMove.length} pedidos pasados a ${label} (${heldCount} retenidos)`
@@ -1428,6 +1428,13 @@ th.center,td.center{text-align:center}
     ? { from: "preparation" as OrderStatus, to: "delivery" as OrderStatus, label: "reparto" }
     : { from: "pending" as OrderStatus, to: "preparation" as OrderStatus, label: "preparación" };
 
+  // Retroceso al estado anterior (solo en preparación y reparto)
+  const selBack = filterStatus === "preparation"
+    ? { from: "preparation" as OrderStatus, to: "pending" as OrderStatus, label: "pendiente" }
+    : filterStatus === "delivery"
+    ? { from: "delivery" as OrderStatus, to: "preparation" as OrderStatus, label: "preparación" }
+    : null;
+
   const toggleDaySelection = (dayGroups: { client: string }[]) => {
     const clientsOfDay = dayGroups.map((g) => g.client);
     const allSel = clientsOfDay.every((c) => selectedClients.has(c));
@@ -1535,7 +1542,19 @@ th.center,td.center{text-align:center}
             <span className="hidden sm:inline">Descargar Pedido</span>
           </Button>
         )}
-        {selectedClients.size > 0 && (
+        {selectedClients.size > 0 && selBack && (
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => handleMoveSelected(selBack.from, selBack.to)}
+            disabled={movingAll}
+            className="gap-2 border-slate-300 text-slate-700 hover:bg-slate-50"
+          >
+            {movingAll ? <Loader2 className="h-4 w-4 animate-spin" /> : <ArrowLeftCircle className="h-4 w-4" />}
+            <span>Volver {selectedClients.size} a {selBack.label}</span>
+          </Button>
+        )}
+        {selectedClients.size > 0 && filterStatus !== "delivery" && (
           <Button
             size="sm"
             onClick={() => handleMoveSelected(selMove.from, selMove.to)}
@@ -1568,6 +1587,18 @@ th.center,td.center{text-align:center}
           >
             {movingAll ? <Loader2 className="h-4 w-4 animate-spin" /> : <ArrowRightCircle className="h-4 w-4" />}
             <span className="hidden sm:inline">Todos a reparto</span>
+          </Button>
+        )}
+        {selBack && filteredOrders.length > 0 && selectedClients.size === 0 && (
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => handleMoveAll(selBack.from, selBack.to)}
+            disabled={movingAll}
+            className="gap-2 border-slate-300 text-slate-700 hover:bg-slate-50"
+          >
+            {movingAll ? <Loader2 className="h-4 w-4 animate-spin" /> : <ArrowLeftCircle className="h-4 w-4" />}
+            <span className="hidden sm:inline">Todos a {selBack.label}</span>
           </Button>
         )}
       </OrdersFilters>
