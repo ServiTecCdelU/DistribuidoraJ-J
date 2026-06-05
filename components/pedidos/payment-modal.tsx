@@ -246,13 +246,7 @@ export function PaymentModal({
           {/* Info del pedido */}
           <div className="p-3 bg-gradient-to-br from-gray-50 to-gray-100 rounded-xl border border-gray-200">
             <div className="flex items-center justify-between">
-              <div>
-                <p className="text-[10px] text-gray-500 uppercase font-semibold">Pedido</p>
-                <p className="font-mono text-xs text-gray-700">
-                  #{generateOrderNumber(order.createdAt, 0)}
-                </p>
-              </div>
-              <p className="font-semibold text-gray-900">
+              <p className="text-sm font-semibold text-gray-900 truncate">
                 {order.clientName || "Venta directa"}
               </p>
             </div>
@@ -304,8 +298,8 @@ export function PaymentModal({
                       <div className="grid grid-cols-3 gap-2">
                         {/* Rotura */}
                         <div className="flex flex-col items-center gap-1 bg-orange-50 border border-orange-200 rounded-xl px-2 py-2">
-                          <span className="text-xs text-orange-700 font-semibold flex items-center gap-1">
-                            <ShieldAlert className="h-3.5 w-3.5 text-orange-500" /> Roto
+                          <span className="text-[11px] text-orange-700 font-semibold flex items-center gap-0.5 whitespace-nowrap">
+                            <ShieldAlert className="h-3 w-3 text-orange-500 shrink-0" /> Roto
                           </span>
                           <Input
                             type="number" inputMode="numeric" min={0} max={item.quantity}
@@ -318,8 +312,8 @@ export function PaymentModal({
 
                         {/* Faltante (error humano) */}
                         <div className="flex flex-col items-center gap-1 bg-purple-50 border border-purple-200 rounded-xl px-2 py-2">
-                          <span className="text-xs text-purple-700 font-semibold flex items-center gap-1">
-                            <Package className="h-3.5 w-3.5 text-purple-500" /> Faltante
+                          <span className="text-[11px] text-purple-700 font-semibold flex items-center gap-0.5 whitespace-nowrap">
+                            <Package className="h-3 w-3 text-purple-500 shrink-0" /> Faltante
                           </span>
                           <Input
                             type="number" inputMode="numeric" min={0} max={item.quantity}
@@ -332,8 +326,8 @@ export function PaymentModal({
 
                         {/* No lo quiere */}
                         <div className="flex flex-col items-center gap-1 bg-blue-50 border border-blue-200 rounded-xl px-2 py-2">
-                          <span className="text-xs text-blue-700 font-semibold flex items-center gap-1">
-                            <PackageX className="h-3.5 w-3.5 text-blue-500" /> No quiere
+                          <span className="text-[11px] text-blue-700 font-semibold flex items-center gap-0.5 whitespace-nowrap">
+                            <PackageX className="h-3 w-3 text-blue-500 shrink-0" /> No quiere
                           </span>
                           <Input
                             type="number" inputMode="numeric" min={0} max={item.quantity}
