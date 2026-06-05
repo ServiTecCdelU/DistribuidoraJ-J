@@ -465,7 +465,20 @@ export default function PedidosPage() {
         const clientOrders = orders.filter(
           (o) => o.status !== "completed" && o.status === order.status && (o.clientName === order.clientName || (o.clientId && o.clientId === order.clientId))
         );
-        const ordersForClient = clientOrders.length > 0 ? clientOrders : [order];
+        let ordersForClient = clientOrders.length > 0 ? clientOrders : [order];
+
+        // En reparto vale el remito: si hay pedidos con remito, los sin remito (fantasmas/duplicados)
+        // NO entran al cobro. Evita que un pedido sin remito infle el monto al sumar por cliente.
+        if (order.status === "delivery" && ordersForClient.length > 1) {
+          const conRemito = ordersForClient.filter((o) => o.remitoNumber);
+          if (conRemito.length > 0 && conRemito.length < ordersForClient.length) {
+            const excluidos = ordersForClient.length - conRemito.length;
+            ordersForClient = conRemito;
+            toast.warning(
+              `Se ${excluidos === 1 ? "excluyó 1 pedido sin remito" : `excluyeron ${excluidos} pedidos sin remito`} del cobro. En reparto solo se cobra lo del remito.`
+            );
+          }
+        }
         setSelectedClientOrders(ordersForClient);
 
         // Construir merged order con items combinados (igual que en la lista)
@@ -482,7 +495,9 @@ export default function PedidosPage() {
           });
         });
         const mergedItems = Array.from(itemMap.values());
-        const mergedOrder: Order = { ...order, items: mergedItems };
+        // Base del merge: el pedido clickeado si sigue en la lista; si fue excluido, el primero válido.
+        const baseOrder = ordersForClient.find((o) => o.id === order.id) || ordersForClient[0];
+        const mergedOrder: Order = { ...baseOrder, items: mergedItems };
 
         setActiveModal(null);
         setDetailOrder(null);
