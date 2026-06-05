@@ -406,6 +406,110 @@ export default function CajaPage() {
   const [detailLoading, setDetailLoading] = useState(false);
   const [generatingHistorialPdf, setGeneratingHistorialPdf] = useState<string | null>(null);
 
+  // Reconciliación por horario fijo: la caja abre 06:00 y cierra 23:00, automáticamente.
+  // - Cierra (con final = esperado; se controla por PDF) toda caja abierta cuyo cierre 23:00 ya pasó.
+  // - Si estamos dentro del horario y no hay caja del día, abre una nueva (06:00, inicial 0).
+  // - Fuera de horario (23:00–06:00) no hay caja activa.
+  // Devuelve la fila (snake_case) de la caja activa, o null si está fuera de horario.
+  const reconciliarCajaHorario = useCallback(async (): Promise<any | null> => {
+    const HORA_APERTURA = 6;
+    const HORA_CIERRE = 23;
+    const ahora = new Date();
+    const diaHoy = new Date(ahora); diaHoy.setHours(0, 0, 0, 0);
+    const aperturaHoy = new Date(diaHoy); aperturaHoy.setHours(HORA_APERTURA, 0, 0, 0);
+    const cierreHoy = new Date(diaHoy); cierreHoy.setHours(HORA_CIERRE, 0, 0, 0);
+    const dentroHorario = ahora >= aperturaHoy && ahora < cierreHoy;
+
+    const agg = (src: any[]) => {
+      let efectivo = 0, transfer = 0, credito = 0, total = 0;
+      for (const s of src) {
+        total += s.total || 0;
+        const method = (s as any).paymentMethod || "efectivo";
+        if (s.paymentType === "cash") {
+          if (method === "transferencia") transfer += s.total || 0; else efectivo += s.total || 0;
+        } else if (s.paymentType === "credit") {
+          credito += s.total || 0;
+        } else if (s.paymentType === "mixed") {
+          const cashAmt = (s as any).cashAmount || 0;
+          const creditAmt = (s as any).creditAmount || 0;
+          const ef = (s as any).efectivo_amount ?? (method !== "transferencia" ? cashAmt : 0);
+          const tr = (s as any).transferencia_amount ?? (method === "transferencia" ? cashAmt : 0);
+          efectivo += ef; transfer += tr; credito += creditAmt;
+        }
+      }
+      return { efectivo, transfer, credito, total, count: src.length };
+    };
+
+    try {
+      // 1) Cerrar automáticamente cajas abiertas cuyo cierre programado (23:00 de su día) ya pasó.
+      const { data: abiertas } = await supabase
+        .from("caja").select("*").eq("status", "open").order("opened_at", { ascending: true });
+      const allSales = (abiertas && abiertas.length) ? await salesApi.getAll() : [];
+      for (const reg of (abiertas || [])) {
+        const ap = new Date(reg.opened_at);
+        const diaReg = new Date(ap); diaReg.setHours(0, 0, 0, 0);
+        const cierreReg = new Date(diaReg); cierreReg.setHours(HORA_CIERRE, 0, 0, 0);
+        const esDeHoy = diaReg.getTime() === diaHoy.getTime();
+        if (esDeHoy && ahora < cierreReg) continue; // caja de hoy aún en horario: sigue activa
+
+        const periodo = allSales.filter((s: any) => {
+          const d = new Date(s.createdAt);
+          return d >= ap && d <= cierreReg && Boolean(s.remitoNumber);
+        });
+        const st = agg(periodo);
+        const { data: pagos } = await supabase
+          .from("pagos_comisiones").select("monto")
+          .gte("created_at", ap.toISOString()).lte("created_at", cierreReg.toISOString());
+        const comis = (pagos || []).reduce((a: number, p: any) => a + (Number(p.monto) || 0), 0);
+        const esperado = (reg.initial_amount || 0) + st.efectivo - comis;
+        // .eq("status","open") en el update evita doble cierre si dos pestañas reconcilian a la vez.
+        await supabase.from("caja").update({
+          closed_at: cierreReg.toISOString(),
+          closed_by: "Cierre automático",
+          final_amount: esperado,
+          expected_amount: esperado,
+          difference: 0,
+          status: "closed",
+          notes: "Cierre automático 23:00",
+          sales_count: st.count,
+          total_sales: st.total,
+          cash_total: st.efectivo,
+          credit_total: st.credito,
+          transfer_total: st.transfer,
+        }).eq("id", reg.id).eq("status", "open");
+      }
+
+      // 2) ¿Ya hay una caja abierta de hoy? Usarla.
+      const { data: deHoy } = await supabase
+        .from("caja").select("*").eq("status", "open")
+        .gte("opened_at", diaHoy.toISOString()).order("opened_at", { ascending: false }).limit(1);
+      if (deHoy && deHoy.length) return deHoy[0];
+
+      // 3) Dentro de horario y sin caja de hoy: abrir automáticamente (06:00, inicial 0).
+      if (dentroHorario) {
+        const dateStr = `${diaHoy.getFullYear()}${String(diaHoy.getMonth() + 1).padStart(2, "0")}${String(diaHoy.getDate()).padStart(2, "0")}`;
+        const id = await generateReadableId("caja", "caja", dateStr);
+        const { data: nueva, error } = await supabase.from("caja").insert({
+          id,
+          opened_at: aperturaHoy.toISOString(),
+          opened_by: "Apertura automática",
+          initial_amount: 0,
+          status: "open",
+        }).select().single();
+        if (!error && nueva) return nueva;
+        // Si falló (carrera), releer la de hoy.
+        const { data: retry } = await supabase
+          .from("caja").select("*").eq("status", "open")
+          .gte("opened_at", diaHoy.toISOString()).limit(1);
+        return (retry && retry[0]) || null;
+      }
+
+      return null; // fuera de horario (23:00–06:00): caja cerrada
+    } catch {
+      return null;
+    }
+  }, []);
+
   useEffect(() => {
     let mounted = true;
     const doLoad = async () => {
@@ -413,34 +517,10 @@ export default function CajaPage() {
         const today = new Date();
         today.setHours(0, 0, 0, 0);
 
-        // Buscar caja de hoy
-        const { data: registers } = await supabase
-          .from("caja")
-          .select("*")
-          .gte("opened_at", today.toISOString())
-          .order("opened_at", { ascending: false })
-          .limit(1);
-
+        // Reconciliar por horario (06:00–23:00): cierra cajas vencidas y abre la del día.
+        const activeRegister = await reconciliarCajaHorario();
         if (!mounted) return;
-
-        let activeRegister = registers && registers.length > 0 ? registers[0] : null;
-
-        // Si no hay caja de hoy, buscar la última caja abierta sin cerrar
-        if (!activeRegister) {
-          const { data: openRegisters } = await supabase
-            .from("caja")
-            .select("*")
-            .eq("status", "open")
-            .order("opened_at", { ascending: false })
-            .limit(1);
-          if (openRegisters && openRegisters.length > 0) {
-            activeRegister = openRegisters[0];
-          }
-        }
-
-        if (activeRegister) {
-          setCurrentRegister(mapRegister(activeRegister));
-        }
+        setCurrentRegister(activeRegister ? mapRegister(activeRegister) : null);
 
         // Cargar ventas desde la fecha de apertura de la caja activa
         const salesData = await salesApi.getAll();
