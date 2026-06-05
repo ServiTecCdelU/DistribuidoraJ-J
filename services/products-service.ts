@@ -88,6 +88,19 @@ export const getProductsByIds = async (ids: string[]): Promise<Product[]> => {
   return all.map(mapRow)
 }
 
+/**
+ * Trae los productos que tienen al menos una oferta activa:
+ * descuento %, regalo del mismo producto, o regalo de otro producto.
+ */
+export const getProductosConOfertas = async (): Promise<Product[]> => {
+  const { data } = await supabase
+    .from('productos')
+    .select('*')
+    .or('descuento.gt.0,regalo_cada.gt.0,regalo_producto_id.not.is.null')
+    .order('name', { ascending: true })
+  return (data ?? []).filter((d: any) => !d.disabled).map(mapRow)
+}
+
 export interface ProductSearchParams {
   search?: string
   category?: string

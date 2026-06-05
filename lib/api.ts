@@ -5,6 +5,7 @@ import {
   getProductById,
   getProducts,
   getProductsByIds,
+  getProductosConOfertas,
   getProductsPaginated,
   searchProducts,
   updateProduct,
@@ -118,6 +119,9 @@ export const productsApi = {
   },
   async getByIds(ids: string[]): Promise<Product[]> {
     return getProductsByIds(ids)
+  },
+  async getConOfertas(): Promise<Product[]> {
+    return getProductosConOfertas()
   },
   async search(params: ProductSearchParams): Promise<ProductSearchResult> {
     return searchProducts(params)

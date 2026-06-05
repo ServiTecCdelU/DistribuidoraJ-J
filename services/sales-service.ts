@@ -352,7 +352,7 @@ export const processSale = async (data: {
     sellerId: data.sellerId,
     sellerName: data.sellerName,
     source: data.source,
-    items: saleItems,
+    items: saleItems as Sale['items'],
     total,
     paymentType: data.paymentType,
     paymentMethod: data.paymentMethod ?? 'efectivo',

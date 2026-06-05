@@ -45,6 +45,10 @@ export default function DescuentosPage() {
   // Stock de los productos regalados (para el estado "sin stock" de la oferta cruzada)
   const [stockB, setStockB] = useState<Record<string, number>>({});
 
+  // Resumen de ofertas activas (todos los productos con oferta)
+  const [ofertasActivas, setOfertasActivas] = useState<Product[]>([]);
+  const [ofertasOpen, setOfertasOpen] = useState(true);
+
   // Vendedores y cupos por producto
   const [vendedores, setVendedores] = useState<Seller[]>([]);
   const [cuposOpenId, setCuposOpenId] = useState<string | null>(null);
@@ -88,9 +92,25 @@ export default function DescuentosPage() {
     }
   }, []);
 
+  const cargarOfertasActivas = useCallback(async () => {
+    try {
+      const ofs = await productsApi.getConOfertas();
+      setOfertasActivas(ofs);
+      const idsB = ofs.map((p) => p.regaloProductoId).filter((x): x is string => !!x);
+      if (idsB.length) {
+        const bs = await productsApi.getByIds(idsB);
+        setStockB((prev) => ({ ...prev, ...Object.fromEntries(bs.map((b) => [b.id, b.stock])) }));
+      }
+    } catch { /* ignore */ }
+  }, []);
+
   useEffect(() => {
     fetchProducts(currentPage, searchQuery);
   }, [currentPage, searchQuery, fetchProducts]);
+
+  useEffect(() => {
+    cargarOfertasActivas();
+  }, [cargarOfertasActivas]);
 
   useEffect(() => {
     sellersApi.getAll()
@@ -128,6 +148,15 @@ export default function DescuentosPage() {
     return s > 0 ? "activa" : "sin_stock";
   };
 
+  // Lista descriptiva de las ofertas activas de un producto
+  const ofertasDe = (p: Product): { tipo: OfertaTipo; text: string; estado: "activa" | "sin_stock" | "desconocido" }[] => {
+    const arr: { tipo: OfertaTipo; text: string; estado: "activa" | "sin_stock" | "desconocido" }[] = [];
+    if (tieneDescuento(p)) arr.push({ tipo: "descuento", text: `Descuento ${p.descuento}%`, estado: p.stock > 0 ? "activa" : "sin_stock" });
+    if (tieneRegaloMismo(p)) arr.push({ tipo: "regalo_mismo", text: `Cada ${p.regaloCada} +${p.regaloCantidad ?? 1} (mismo)`, estado: p.stock > 0 ? "activa" : "sin_stock" });
+    if (tieneRegaloOtro(p)) arr.push({ tipo: "regalo_otro", text: `Cada ${p.regaloProductoCada} → ${p.regaloProductoCantidad ?? 1}× ${p.regaloProductoNombre}`, estado: estadoRegaloOtro(p) });
+    return arr;
+  };
+
   // --- Abrir edición / agregar ---
   const abrirEdicion = (p: Product, tipo: OfertaTipo) => {
     setEditing({ id: p.id, tipo });
@@ -163,6 +192,7 @@ export default function DescuentosPage() {
       patchLocal(p.id, { descuento });
       toast.success(descuento > 0 ? `Descuento del ${descuento}% en "${p.name}"` : `Descuento quitado`);
       cerrarEdicion();
+      cargarOfertasActivas();
     } catch { toast.error("Error al guardar"); } finally { setSavingId(null); }
   };
 
@@ -176,6 +206,7 @@ export default function DescuentosPage() {
       patchLocal(p.id, { regaloCada: cada, regaloCantidad: cantidad });
       toast.success(cada ? `Promo guardada en "${p.name}"` : "Promo quitada");
       cerrarEdicion();
+      cargarOfertasActivas();
     } catch { toast.error("Error al guardar"); } finally { setSavingId(null); }
   };
 
@@ -205,6 +236,7 @@ export default function DescuentosPage() {
       }
       toast.success(productoId ? `Combo guardado en "${p.name}"` : "Combo quitado");
       cerrarEdicion();
+      cargarOfertasActivas();
     } catch { toast.error("Error al guardar"); } finally { setSavingId(null); }
   };
 
@@ -223,6 +255,7 @@ export default function DescuentosPage() {
       }
       if (editing?.id === p.id && editing.tipo === tipo) cerrarEdicion();
       toast.success("Oferta quitada");
+      cargarOfertasActivas();
     } catch { toast.error("Error al quitar la oferta"); } finally { setSavingId(null); }
   };
 
@@ -296,6 +329,47 @@ export default function DescuentosPage() {
             <strong> Regala el mismo producto</strong> (cada X +N) y <strong>Regala otro producto</strong> (cada X → N de otro).
             El badge muestra si está <strong>Activa</strong> o <strong>Sin stock</strong>.
           </p>
+        </div>
+
+        {/* Ofertas activas (resumen) */}
+        <div className="rounded-2xl border border-border bg-card overflow-hidden">
+          <button
+            onClick={() => setOfertasOpen((v) => !v)}
+            className="flex items-center justify-between w-full px-4 py-3 hover:bg-muted/30 transition-colors"
+          >
+            <span className="flex items-center gap-2 text-sm font-semibold">
+              <Gift className="h-4 w-4 text-fuchsia-600" />
+              Ofertas activas
+              <Badge variant="secondary" className="h-5 px-1.5 text-[10px] bg-fuchsia-100 text-fuchsia-700 hover:bg-fuchsia-100">
+                {ofertasActivas.reduce((acc, p) => acc + ofertasDe(p).length, 0)}
+              </Badge>
+            </span>
+            <ChevronDown className={`h-4 w-4 text-muted-foreground transition-transform ${ofertasOpen ? "rotate-180" : ""}`} />
+          </button>
+          {ofertasOpen && (
+            <div className="border-t border-border divide-y divide-border/60">
+              {ofertasActivas.length === 0 ? (
+                <p className="px-4 py-3 text-xs text-muted-foreground">No hay ofertas configuradas.</p>
+              ) : (
+                ofertasActivas.map((p) => (
+                  <div key={p.id} className="px-4 py-2.5">
+                    <p className="text-xs font-medium truncate mb-1">{p.name}</p>
+                    <div className="flex flex-col gap-1">
+                      {ofertasDe(p).map((o) => (
+                        <div key={o.tipo} className="flex items-center gap-2">
+                          {o.tipo === "descuento"
+                            ? <Tag className="h-3.5 w-3.5 text-teal-600 shrink-0" />
+                            : <Gift className={`h-3.5 w-3.5 shrink-0 ${o.tipo === "regalo_otro" ? "text-purple-600" : "text-fuchsia-600"}`} />}
+                          <span className="text-[11px] text-muted-foreground flex-1 min-w-0 truncate">{o.text}</span>
+                          <EstadoBadge estado={o.estado} />
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                ))
+              )}
+            </div>
+          )}
         </div>
 
         {/* Búsqueda */}
