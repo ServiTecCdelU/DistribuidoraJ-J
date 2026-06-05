@@ -1662,7 +1662,6 @@ th.center,td.center{text-align:center}
             const dayClients = day.groups.map((g) => g.client);
             const daySelectedCount = dayClients.filter((c) => selectedClients.has(c)).length;
             const dayAllSelected = dayClients.length > 0 && daySelectedCount === dayClients.length;
-            const totalPedidos = day.groups.reduce((s, g) => s + g.orders.length, 0);
 
             return (
               <div key={day.key} className="border rounded-2xl overflow-hidden shadow-sm">
@@ -1682,7 +1681,7 @@ th.center,td.center{text-align:center}
                   {isExpanded ? <ChevronDown className="h-4 w-4 text-muted-foreground" /> : <ChevronRight className="h-4 w-4 text-muted-foreground" />}
                   <span className="text-sm font-semibold capitalize">{day.label}</span>
                   <span className="text-xs text-muted-foreground">
-                    {day.groups.length} {day.groups.length === 1 ? "cliente" : "clientes"} · {totalPedidos} {totalPedidos === 1 ? "pedido" : "pedidos"}
+                    {day.groups.length} {day.groups.length === 1 ? "cliente" : "clientes"}
                   </span>
                   {daySelectedCount > 0 && (
                     <span className="ml-auto text-xs font-medium text-teal-600">{daySelectedCount} seleccionado(s)</span>
