@@ -362,6 +362,15 @@ export default function DescuentosPage() {
                             : <Gift className={`h-3.5 w-3.5 shrink-0 ${o.tipo === "regalo_otro" ? "text-purple-600" : "text-fuchsia-600"}`} />}
                           <span className="text-[11px] text-muted-foreground flex-1 min-w-0 truncate">{o.text}</span>
                           <EstadoBadge estado={o.estado} />
+                          <Button
+                            variant="ghost" size="icon"
+                            className="h-6 w-6 text-muted-foreground hover:text-destructive shrink-0"
+                            title="Quitar oferta"
+                            disabled={savingId === p.id}
+                            onClick={() => quitarOferta(p, o.tipo)}
+                          >
+                            {savingId === p.id ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Trash2 className="h-3.5 w-3.5" />}
+                          </Button>
                         </div>
                       ))}
                     </div>
