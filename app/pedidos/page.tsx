@@ -218,28 +218,32 @@ export default function PedidosPage() {
         } catch { /* tabla cliente_faltantes aún no creada — no bloquear el remito */ }
       }
 
-      // Si se excluyeron, reemplazaron o se cambió la cantidad, actualizar el pedido en BD
-      const huboReemplazos = Object.keys(replacements).length > 0;
-      if (excludeProductIds.length > 0 || huboReemplazos || huboCambioCantidad) {
-        const { data: updData } = await supabase
-          .from("pedidos")
-          .update({ items: filteredItems })
-          .eq("id", order.id)
-          .select()
-          .single();
-        if (updData) {
-          const mapped = { ...order, items: filteredItems };
-          setOrders((prev) => prev.map((o) => (o.id === order.id ? mapped : o)));
-          if (detailOrder?.id === order.id) setDetailOrder(mapped);
-          order = mapped;
-        }
-      }
+      // Consolidar: un cliente puede tener varios pedidos abiertos en el mismo estado. El remito
+      // se genera sobre los items YA fusionados del cliente (mergedOrder). Persistimos ese set en
+      // ESTE pedido y borramos los hermanos, para que quede 1 cliente = 1 pedido con remito y el
+      // listado de carga / cobro (que agrupan por cliente) coincidan SIEMPRE con el remito.
+      const siblingOrders = orders.filter((o) =>
+        o.id !== order.id &&
+        o.status !== "completed" &&
+        o.status === order.status &&
+        (o.clientName === order.clientName || (o.clientId && o.clientId === order.clientId))
+      );
 
-      // Número de remito único y consecutivo (función atómica en Postgres)
-      const { data: remitoNumber, error: remitoErr } = await supabase.rpc("next_remito_number");
-      if (remitoErr || !remitoNumber) {
-        toast.error("Error al generar el número de remito");
-        return;
+      await supabase.from("pedidos").update({ items: filteredItems }).eq("id", order.id);
+      order = { ...order, items: filteredItems };
+      setOrders((prev) => prev.map((o) => (o.id === order.id ? order : o)));
+      if (detailOrder?.id === order.id) setDetailOrder(order);
+
+      // Si el pedido ya tiene remito, regenerar conservando el MISMO número (no quemar uno nuevo).
+      // Si no, pedir un número único y consecutivo (función atómica en Postgres).
+      let remitoNumber = order.remitoNumber;
+      if (!remitoNumber) {
+        const { data, error: remitoErr } = await supabase.rpc("next_remito_number");
+        if (remitoErr || !data) {
+          toast.error("Error al generar el número de remito");
+          return;
+        }
+        remitoNumber = data;
       }
 
       const total = calculateOrderTotal(order);
@@ -263,6 +267,13 @@ export default function PedidosPage() {
       setOrders((prev) => prev.map((o) => (o.id === order.id ? updatedOrder : o)));
       if (detailOrder?.id === order.id) setDetailOrder(updatedOrder);
 
+      // Borrar los pedidos hermanos: sus items ya quedaron consolidados en este (cubiertos por el remito).
+      if (siblingOrders.length > 0) {
+        await Promise.all(siblingOrders.map((s) => ordersApi.deleteOrder(s.id).catch(() => {})));
+        const siblingIds = new Set(siblingOrders.map((s) => s.id));
+        setOrders((prev) => prev.filter((o) => !siblingIds.has(o.id)));
+      }
+
       const link = document.createElement("a");
       link.href = `data:application/pdf;base64,${pdfBase64}`;
       link.download = `remito-${remitoNumber}.pdf`;
@@ -272,7 +283,7 @@ export default function PedidosPage() {
     } finally {
       setGeneratingDoc(false);
     }
-  }, [detailOrder]);
+  }, [detailOrder, orders]);
 
   const handleGenerateRemito = useCallback(async (order: Order) => {
     // If remito already exists, just download it
@@ -1521,7 +1532,10 @@ th.center,td.center{text-align:center}
     const config = statusConfig[displayOrder.status] || {
       label: displayOrder.status, color: "text-gray-700", dotColor: "bg-gray-500", bgColor: "bg-gray-50", borderColor: "border-gray-200",
     };
-    const mergedOrder: Order = { ...firstOrder, items: mergedItems };
+    // Base del merge: el pedido que YA tiene remito (para conservar su número al consolidar);
+    // si ninguno tiene, el primero.
+    const baseForMerge = clientOrders.find((o) => o.remitoNumber) ?? firstOrder;
+    const mergedOrder: Order = { ...baseForMerge, items: mergedItems };
     const onView = () => { setDetailOrder(mergedOrder); setActiveModal("detail"); };
     const clientData = clients.find((c) => c.id === firstOrder.clientId);
     const deuda = clientData?.currentBalance || 0;
