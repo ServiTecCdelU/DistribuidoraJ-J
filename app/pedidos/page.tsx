@@ -1,7 +1,7 @@
 //app\pedidos\page.tsx
 "use client";
 
-import React, { useEffect, useState, useCallback, useMemo } from "react";
+import React, { useEffect, useState, useCallback, useMemo, useRef } from "react";
 import { MainLayout } from "@/components/layout/main-layout";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -80,6 +80,8 @@ export default function PedidosPage() {
   const [clientSearch, setClientSearch] = useState("");
   const [showClientModal, setShowClientModal] = useState(false);
   const [processingPayment, setProcessingPayment] = useState(false);
+  // Guarda sincrónica contra doble ejecución del cobro (evita ventas duplicadas)
+  const completingRef = useRef(false);
   // Todos los pedidos del cliente seleccionado para completar juntos
   const [selectedClientOrders, setSelectedClientOrders] = useState<Order[]>([]);
 
@@ -535,9 +537,27 @@ export default function PedidosPage() {
     comprobanteFile?: File
   ) => {
     if (!selectedOrder) return;
+    // Guarda sincrónica: si ya hay un cobro en curso, ignorar el segundo disparo (doble click).
+    if (completingRef.current) return;
+    completingRef.current = true;
     setProcessingPayment(true);
 
     try {
+      // Idempotencia: releer el estado real de los pedidos a cobrar. Sin realtime, la lista en
+      // memoria puede estar stale y permitir cobrar dos veces el mismo pedido (venta duplicada).
+      const ordersToCheck = selectedClientOrders.length > 0 ? selectedClientOrders : [selectedOrder];
+      const { data: estadoActual } = await supabase
+        .from("pedidos")
+        .select("id, status")
+        .in("id", ordersToCheck.map((o) => o.id));
+      if ((estadoActual || []).some((p: any) => p.status === "completed")) {
+        toast.error("Este pedido ya fue cobrado. Recargá la lista (F5).");
+        setActiveModal(null);
+        setSelectedOrder(null);
+        loadData();
+        return;
+      }
+
       // Aplicar ajustes a los items
       // - rotura: se rompió → descontar stock + registrar pérdida
       // - faltante: error humano, está en stock → solo quitar del pedido
@@ -825,6 +845,7 @@ export default function PedidosPage() {
       );
     } finally {
       setProcessingPayment(false);
+      completingRef.current = false;
     }
   }, [selectedOrder, selectedClientId, clients, selectedClientOrders, loadData]);
 

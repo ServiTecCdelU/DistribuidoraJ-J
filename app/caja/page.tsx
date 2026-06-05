@@ -447,9 +447,11 @@ export default function CajaPage() {
         if (!mounted) return;
         const cajaDate = activeRegister ? new Date(activeRegister.opened_at) : today;
         cajaDate.setHours(0, 0, 0, 0);
+        // Caja toma SOLO ventas con remito. Una venta sin remito es un cobro duplicado/incompleto
+        // (vale el remito) y no debe sumar al efectivo del día.
         const todaySales = salesData.filter((sale) => {
           const dt = new Date(sale.createdAt);
-          return dt >= cajaDate;
+          return dt >= cajaDate && Boolean(sale.remitoNumber);
         });
         setSales(todaySales);
 
@@ -523,9 +525,10 @@ export default function CajaPage() {
       const salesData = await salesApi.getAll();
       const cajaDate = activeRegister ? new Date(activeRegister.opened_at) : today;
       cajaDate.setHours(0, 0, 0, 0);
+      // Caja toma SOLO ventas con remito (vale el remito; sin remito = cobro duplicado/incompleto).
       const todaySales = salesData.filter((sale) => {
         const d = new Date(sale.createdAt);
-        return d >= cajaDate;
+        return d >= cajaDate && Boolean(sale.remitoNumber);
       });
       setSales(todaySales);
 
@@ -604,7 +607,7 @@ export default function CajaPage() {
       const salesData = await salesApi.getAll();
       const daySales = salesData.filter((s) => {
         const d = new Date(s.createdAt);
-        return d >= start && d <= end;
+        return d >= start && d <= end && Boolean(s.remitoNumber);
       });
       setSelectedSales(daySales);
     } catch {
@@ -805,7 +808,7 @@ export default function CajaPage() {
       const salesData = await salesApi.getAll();
       const daySales = salesData.filter((s) => {
         const d = new Date(s.createdAt);
-        return d >= start && d <= end;
+        return d >= start && d <= end && Boolean(s.remitoNumber);
       });
       // Cargar pérdidas del día
       const { data: lossData } = await supabase
