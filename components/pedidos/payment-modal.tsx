@@ -300,44 +300,47 @@ export function PaymentModal({
                         </span>
                       </div>
 
-                      {/* 3 opciones por unidad */}
-                      <div className="flex items-center gap-1.5 flex-wrap">
+                      {/* 3 opciones por unidad — botones grandes para mobile */}
+                      <div className="grid grid-cols-3 gap-2">
                         {/* Rotura */}
-                        <div className="flex items-center gap-1 bg-orange-50 border border-orange-200 rounded-lg px-2 py-1">
-                          <ShieldAlert className="h-3 w-3 text-orange-500 shrink-0" />
-                          <span className="text-[10px] text-orange-700 font-medium">Roto:</span>
+                        <div className="flex flex-col items-center gap-1 bg-orange-50 border border-orange-200 rounded-xl px-2 py-2">
+                          <span className="text-xs text-orange-700 font-semibold flex items-center gap-1">
+                            <ShieldAlert className="h-3.5 w-3.5 text-orange-500" /> Roto
+                          </span>
                           <Input
-                            type="number" min={0} max={item.quantity}
+                            type="number" inputMode="numeric" min={0} max={item.quantity}
                             value={adj.rotura || ""}
                             onChange={(e) => setAdjField(item.productId, "rotura", Number(e.target.value), item.quantity)}
                             placeholder="0"
-                            className="w-10 h-5 text-[10px] text-center px-0.5 border-orange-300"
+                            className="w-full h-11 text-base font-semibold text-center bg-white border-orange-300"
                           />
                         </div>
 
                         {/* Faltante (error humano) */}
-                        <div className="flex items-center gap-1 bg-purple-50 border border-purple-200 rounded-lg px-2 py-1">
-                          <Package className="h-3 w-3 text-purple-500 shrink-0" />
-                          <span className="text-[10px] text-purple-700 font-medium">Faltante:</span>
+                        <div className="flex flex-col items-center gap-1 bg-purple-50 border border-purple-200 rounded-xl px-2 py-2">
+                          <span className="text-xs text-purple-700 font-semibold flex items-center gap-1">
+                            <Package className="h-3.5 w-3.5 text-purple-500" /> Faltante
+                          </span>
                           <Input
-                            type="number" min={0} max={item.quantity}
+                            type="number" inputMode="numeric" min={0} max={item.quantity}
                             value={adj.faltante || ""}
                             onChange={(e) => setAdjField(item.productId, "faltante", Number(e.target.value), item.quantity)}
                             placeholder="0"
-                            className="w-10 h-5 text-[10px] text-center px-0.5 border-purple-300"
+                            className="w-full h-11 text-base font-semibold text-center bg-white border-purple-300"
                           />
                         </div>
 
                         {/* No lo quiere */}
-                        <div className="flex items-center gap-1 bg-blue-50 border border-blue-200 rounded-lg px-2 py-1">
-                          <PackageX className="h-3 w-3 text-blue-500 shrink-0" />
-                          <span className="text-[10px] text-blue-700 font-medium">No quiere:</span>
+                        <div className="flex flex-col items-center gap-1 bg-blue-50 border border-blue-200 rounded-xl px-2 py-2">
+                          <span className="text-xs text-blue-700 font-semibold flex items-center gap-1">
+                            <PackageX className="h-3.5 w-3.5 text-blue-500" /> No quiere
+                          </span>
                           <Input
-                            type="number" min={0} max={item.quantity}
+                            type="number" inputMode="numeric" min={0} max={item.quantity}
                             value={adj.no_quiere || ""}
                             onChange={(e) => setAdjField(item.productId, "no_quiere", Number(e.target.value), item.quantity)}
                             placeholder="0"
-                            className="w-10 h-5 text-[10px] text-center px-0.5 border-blue-300"
+                            className="w-full h-11 text-base font-semibold text-center bg-white border-blue-300"
                           />
                         </div>
                       </div>
