@@ -113,6 +113,8 @@ export default function PedidosPage() {
 
   // Selección de clientes para acciones en lote
   const [selectedClients, setSelectedClients] = useState<Set<string>>(new Set());
+  // Días tildados con el checkbox de día (para exportar/listar solo esos días)
+  const [selectedDays, setSelectedDays] = useState<Set<string>>(new Set());
 
   const toggleSelectedClient = useCallback((clientName: string) => {
     setSelectedClients(prev => {
@@ -850,12 +852,24 @@ export default function PedidosPage() {
   const handleDescargarExcel = useCallback(async () => {
     setGenerandoExcel(true);
     try {
-      // Si hay selección (ej: tildar un día), exportar solo esos clientes; si no, todos los activos
-      const activos = orders.filter(
-        (o) =>
-          o.status !== "completed" &&
-          (selectedClients.size === 0 || selectedClients.has(o.clientName || "Sin cliente")),
-      );
+      // Exportar lo mismo que se ve en pantalla: respeta la solapa (estado) y el día/fecha,
+      // y si hay selección de clientes (ej: tildar un día) limita a esos clientes.
+      const toLocalDay = (value: unknown) => {
+        const d = new Date(value as any);
+        if (isNaN(d.getTime())) return "";
+        return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+      };
+      const activos = orders.filter((o) => {
+        if (o.status === "completed" || o.status === "rechazado") return false;
+        if (filterStatus !== "all" && o.status !== filterStatus) return false;
+        if (filterClient && o.clientId !== filterClient) return false;
+        if (filterSeller && o.sellerId !== filterSeller) return false;
+        if (filterDate && toLocalDay(o.createdAt) !== filterDate) return false;
+        // Si se tildaron días (checkbox de día), exportar solo esos días
+        if (selectedDays.size > 0 && !selectedDays.has(toLocalDay(o.createdAt))) return false;
+        if (selectedClients.size > 0 && !selectedClients.has(o.clientName || "Sin cliente")) return false;
+        return true;
+      });
 
       // Consolidar items por nombre
       type AcumItem = {
@@ -1026,7 +1040,7 @@ tfoot td{border-top:2px solid #1f4e78;background:#f2f2f2;font-weight:700;font-si
     } finally {
       setGenerandoExcel(false);
     }
-  }, [orders, selectedClients]);
+  }, [orders, selectedClients, selectedDays, filterStatus, filterClient, filterSeller, filterDate]);
 
 
   const clearFilters = useCallback(() => {
@@ -1321,6 +1335,7 @@ tfoot td{border-top:2px solid #1f4e78;background:#f2f2f2;font-weight:700;font-si
       const label = to === "preparation" ? "preparación" : to === "delivery" ? "reparto" : to;
       toast.success(`${toMove.length} pedido(s) pasados a ${label}`);
       setSelectedClients(new Set());
+      setSelectedDays(new Set());
     } catch {
       toast.error("Error al mover pedidos");
     } finally {
@@ -1451,13 +1466,19 @@ th.center,td.center{text-align:center}
     ? { from: "delivery" as OrderStatus, to: "preparation" as OrderStatus, label: "preparación" }
     : null;
 
-  const toggleDaySelection = (dayGroups: { client: string }[]) => {
+  const toggleDaySelection = (dayGroups: { client: string }[], dayKey: string) => {
     const clientsOfDay = dayGroups.map((g) => g.client);
     const allSel = clientsOfDay.every((c) => selectedClients.has(c));
     setSelectedClients((prev) => {
       const next = new Set(prev);
       if (allSel) clientsOfDay.forEach((c) => next.delete(c));
       else clientsOfDay.forEach((c) => next.add(c));
+      return next;
+    });
+    setSelectedDays((prev) => {
+      const next = new Set(prev);
+      if (allSel) next.delete(dayKey);
+      else next.add(dayKey);
       return next;
     });
   };
@@ -1653,7 +1674,7 @@ th.center,td.center{text-align:center}
                   <input
                     type="checkbox"
                     checked={dayAllSelected}
-                    onChange={() => toggleDaySelection(day.groups)}
+                    onChange={() => toggleDaySelection(day.groups, day.key)}
                     onClick={(e) => e.stopPropagation()}
                     className="h-4 w-4 accent-teal-600 cursor-pointer"
                     title="Seleccionar todo el día"
