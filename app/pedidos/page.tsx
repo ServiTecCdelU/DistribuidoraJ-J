@@ -880,9 +880,15 @@ export default function PedidosPage() {
         if (filterClient && o.clientId !== filterClient) return false;
         if (filterSeller && o.sellerId !== filterSeller) return false;
         if (filterDate && toLocalDay(o.createdAt) !== filterDate) return false;
-        // Si se tildaron días (checkbox de día), exportar solo esos días
-        if (selectedDays.size > 0 && !selectedDays.has(toLocalDay(o.createdAt))) return false;
-        if (selectedClients.size > 0 && !selectedClients.has(o.clientName || "Sin cliente")) return false;
+        // Si se seleccionaron clientes (tildar día o cliente), exportar TODOS sus pedidos del estado
+        // actual, sin importar el día de cada pedido. La UI agrupa los pedidos de un cliente del
+        // mismo estado en una sola fila bajo un único día; filtrar por createdAt acá dejaría afuera
+        // pedidos de otros días que la fila sí muestra (ej: fernet de un pedido de otro día).
+        if (selectedClients.size > 0) {
+          if (!selectedClients.has(o.clientName || "Sin cliente")) return false;
+        } else if (selectedDays.size > 0 && !selectedDays.has(toLocalDay(o.createdAt))) {
+          return false;
+        }
         return true;
       });
 
