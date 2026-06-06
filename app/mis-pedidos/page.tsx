@@ -67,10 +67,18 @@ export default function MisPedidosPage() {
     loadData();
   }, [loadData]);
 
-  // Refresco automático cada 30s
+  // Refresco automatico cada 3 min y al volver a la pestaña.
+  // Solo recarga si la pestaña esta visible para no consumir egress en segundo plano.
   useEffect(() => {
-    const interval = setInterval(loadData, 30000);
-    return () => clearInterval(interval);
+    const refreshIfVisible = () => {
+      if (document.visibilityState === "visible") loadData();
+    };
+    const interval = setInterval(refreshIfVisible, 180000);
+    document.addEventListener("visibilitychange", refreshIfVisible);
+    return () => {
+      clearInterval(interval);
+      document.removeEventListener("visibilitychange", refreshIfVisible);
+    };
   }, [loadData]);
 
   // Contadores por cliente (clientes distintos, no pedidos sueltos)

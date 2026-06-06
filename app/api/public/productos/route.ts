@@ -12,9 +12,11 @@ export async function GET(request: Request) {
     return NextResponse.json({ error: "Demasiadas solicitudes" }, { status: 429 });
   }
 
+  // Filtra deshabilitados en la BD (no traer ~7400 filas para descartar en JS).
   const { data: rows, error } = await supabaseAdmin
     .from("productos")
-    .select("*");
+    .select("*")
+    .or("disabled.is.null,disabled.eq.false");
 
   if (error) {
     return NextResponse.json({ error: error.message }, { status: 500 });

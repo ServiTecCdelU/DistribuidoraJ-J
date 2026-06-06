@@ -453,10 +453,19 @@ export default function PedidosPage() {
     setAppliedTransportistaTab(true);
   }, [user, appliedTransportistaTab]);
 
-  // Polling cada 30 segundos para detectar pedidos nuevos
+  // Refresco automatico cada 3 min y al volver a la pestaña.
+  // Solo recarga si la pestaña esta visible: evita descargas innecesarias
+  // (y consumo de egress) en pestañas abiertas en segundo plano.
   useEffect(() => {
-    const interval = setInterval(() => { loadData(); }, 30000);
-    return () => clearInterval(interval);
+    const refreshIfVisible = () => {
+      if (document.visibilityState === "visible") loadData();
+    };
+    const interval = setInterval(refreshIfVisible, 180000);
+    document.addEventListener("visibilitychange", refreshIfVisible);
+    return () => {
+      clearInterval(interval);
+      document.removeEventListener("visibilitychange", refreshIfVisible);
+    };
   }, [loadData]);
 
   useEffect(() => {

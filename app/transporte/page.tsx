@@ -835,11 +835,19 @@ export default function TransportePage() {
     return () => { active = false; };
   }, [loadData]);
 
-  // Auto-refresco cada 30s: refleja pedidos/remitos eliminados, nuevos repartos
-  // y reasignaciones sin que el transportista tenga que recargar.
+  // Auto-refresco cada 3 min y al volver a la pestaña: refleja pedidos/remitos
+  // eliminados, nuevos repartos y reasignaciones. Solo recarga si la pestaña
+  // esta visible para no consumir egress en segundo plano.
   useEffect(() => {
-    const interval = setInterval(() => { loadData(); }, 30000);
-    return () => clearInterval(interval);
+    const refreshIfVisible = () => {
+      if (document.visibilityState === "visible") loadData();
+    };
+    const interval = setInterval(refreshIfVisible, 180000);
+    document.addEventListener("visibilitychange", refreshIfVisible);
+    return () => {
+      clearInterval(interval);
+      document.removeEventListener("visibilitychange", refreshIfVisible);
+    };
   }, [loadData]);
 
   const transportistas = useMemo(
