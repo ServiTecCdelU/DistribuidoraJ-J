@@ -492,6 +492,14 @@ export default function PedidosPage() {
             );
           }
         }
+        // Robustez anti-fantasma: en reparto SOLO se cobra lo del remito. Si ningún pedido del
+        // cliente tiene remito, es un fantasma (pedido sin remito que quedó vivo). No se cobra:
+        // así no se generan ventas duplicadas como las que sumaban doble al mismo cliente.
+        if (order.status === "delivery" && !ordersForClient.some((o) => o.remitoNumber)) {
+          toast.error("Este pedido no tiene remito. En reparto solo se cobra lo del remito: generá el remito o eliminá el pedido.");
+          return;
+        }
+
         setSelectedClientOrders(ordersForClient);
 
         // Construir merged order con items combinados (igual que en la lista)
@@ -760,6 +768,35 @@ export default function PedidosPage() {
           return completedVersion ?? o;
         }),
       );
+
+      // Robustez anti-fantasma: tras cobrar en reparto, eliminar de la BASE cualquier otro pedido
+      // del cliente que siga en reparto SIN remito. Se consulta Supabase (no la lista en memoria),
+      // así atrapa fantasmas que la sesión actual no tenía cargados (creados por otra vía o sesión).
+      // Sin esto, el fantasma quedaba vivo y se podía cobrar de nuevo → venta duplicada.
+      if (selectedOrder.status === "delivery") {
+        try {
+          const completedIds = new Set(ordersToComplete.map((o) => o.id));
+          let ghostQuery = supabase
+            .from("pedidos")
+            .select("id")
+            .eq("status", "delivery")
+            .is("remito_number", null);
+          ghostQuery = selectedOrder.clientId
+            ? ghostQuery.eq("client_id", selectedOrder.clientId)
+            : ghostQuery.eq("client_name", selectedOrder.clientName);
+          const { data: ghosts } = await ghostQuery;
+          const ghostIds = (ghosts || [])
+            .map((g: { id: string }) => g.id)
+            .filter((id: string) => !completedIds.has(id));
+          if (ghostIds.length > 0) {
+            await Promise.all(ghostIds.map((id) => ordersApi.deleteOrder(id).catch(() => {})));
+            const ghostSet = new Set(ghostIds);
+            setOrders((prev) => prev.filter((o) => !ghostSet.has(o.id)));
+          }
+        } catch {
+          // No bloquea el cobro: la limpieza es defensiva.
+        }
+      }
 
       // Boleta — deshabilitado temporalmente
       // if (selectedOrder.invoiceNumber && selectedOrder.invoicePdfBase64) {
