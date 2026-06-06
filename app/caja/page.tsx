@@ -655,11 +655,11 @@ export default function CajaPage() {
         query = query.gte("opened_at", start.toISOString()).lte("opened_at", end.toISOString());
       }
 
-      // Excluir la caja de hoy
-      const today = new Date();
-      today.setHours(0, 0, 0, 0);
+      // Vista por defecto: historial = cajas CERRADAS (incluye la de hoy si ya cerró, p.ej. el
+      // cierre automático de las 23:00). Antes filtraba opened_at < hoy, lo que ocultaba la caja
+      // cerrada de hoy cuando ya no había caja activa (fuera de horario 23:00–06:00).
       if (!date) {
-        query = query.lt("opened_at", today.toISOString());
+        query = query.eq("status", "closed");
       }
 
       query = query.range(page * HISTORIAL_PAGE_SIZE, (page + 1) * HISTORIAL_PAGE_SIZE - 1);
