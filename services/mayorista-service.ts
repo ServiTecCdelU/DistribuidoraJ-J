@@ -167,9 +167,16 @@ export const searchProductosParaVenta = async (params: VentaProductSearchParams)
   // y con cupo de oferta (descuento_vendedor.cantidad > 0) para el vendedor.
   if (soloDescuento) {
     const conDto = await supabase.from('productos').select('id').gt('descuento', 0)
-    const dtoIds = new Set((conDto.data ?? []).map((p: any) => p.id))
-    const ofertaIds = vendedorId ? await getProductosConOfertaVendedor(vendedorId) : []
-    const ids = ofertaIds.filter((id) => dtoIds.has(id))
+    const dtoIds = (conDto.data ?? []).map((p: any) => p.id)
+    // Vendedor: solo ofertas con cupo asignado. Admin directo (sin vendedor): todas las ofertas activas.
+    let ids: string[]
+    if (vendedorId) {
+      const dtoSet = new Set(dtoIds)
+      const ofertaIds = await getProductosConOfertaVendedor(vendedorId)
+      ids = ofertaIds.filter((id) => dtoSet.has(id))
+    } else {
+      ids = dtoIds
+    }
     if (ids.length === 0) {
       return { data: [], total: 0, page, pageSize, totalPages: 0 }
     }
@@ -196,7 +203,7 @@ export const searchProductosParaVenta = async (params: VentaProductSearchParams)
   }
 
   // Cupo de oferta por vendedor: descuentoCantidad = unidades que le quedan a este vendedor.
-  // Sin vendedor (admin directo) no hay oferta por vendedor → 0.
+  // Sin vendedor (admin directo) la oferta aplica sin tope de cupo (descuentoCantidad = null).
   const asignaciones = vendedorId && prodIds.length > 0
     ? await getAsignacionesVendedor(vendedorId, prodIds)
     : {}
@@ -218,7 +225,7 @@ export const searchProductosParaVenta = async (params: VentaProductSearchParams)
       precioVenta,
       stockLocal: prod?.stock ?? 0,
       descuento,
-      descuentoCantidad: descuento > 0 ? (asignaciones[mp.producto_id] ?? 0) : null,
+      descuentoCantidad: descuento > 0 ? (vendedorId ? (asignaciones[mp.producto_id] ?? 0) : null) : null,
     }
   })
 
