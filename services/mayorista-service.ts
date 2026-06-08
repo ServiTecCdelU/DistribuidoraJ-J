@@ -575,6 +575,7 @@ export const saveMayoristaPrefs = async (
 export interface PriceUpdateRow {
   codigo: string
   precio: number
+  descripcion?: string
 }
 
 export interface PriceDiscrepancia {
@@ -589,6 +590,8 @@ export interface PriceUpdateResult {
   preciosVentaActualizados: number
   verificados: number
   discrepancias: PriceDiscrepancia[]
+  agregados: number
+  agregadosDetalle: { codigo: string; descripcion: string }[]
 }
 
 /**
@@ -654,10 +657,26 @@ export const actualizarPreciosMayorista = async (
   // Preparar updates
   const mpUpdates: Array<{ id: string; precio_lista: number }> = []
   const prodUpdates: Array<{ id: string; price: number; precio_venta: number }> = []
+  // Productos del Excel que no existen en la base: se crean como nuevos (deshabilitados).
+  const nuevos = new Map<string, { id: string; codigo: string; descripcion: string; precio_lista: number; codigo_barras: string; rubro: string; subrubro: string; categoria: string }>()
 
   for (const row of rows) {
     const mp = mpExact.get(row.codigo) || mpStripped.get(row.codigo.replace(/^0+/, '') || row.codigo)
     if (!mp) {
+      // No está en la base: prepararlo para alta (deduplicado por id).
+      const id = `mp_${row.codigo.replace(/[^a-zA-Z0-9]/g, '_')}`
+      if (!nuevos.has(id)) {
+        nuevos.set(id, {
+          id,
+          codigo: row.codigo,
+          descripcion: row.descripcion?.trim() || row.codigo,
+          precio_lista: row.precio,
+          codigo_barras: '',
+          rubro: '',
+          subrubro: '',
+          categoria: '',
+        })
+      }
       sinMatch++
       continue
     }
@@ -712,6 +731,23 @@ export const actualizarPreciosMayorista = async (
     onProgress?.(done, totalOps)
   }
 
+  // Alta de los productos que no existían: se crean en mayorista_productos
+  // (deshabilitados, sin producto de venta asociado todavía).
+  const nuevosRows = [...nuevos.values()]
+  let agregados = 0
+  const agregadosDetalle: { codigo: string; descripcion: string }[] = []
+  for (let i = 0; i < nuevosRows.length; i += BATCH_SIZE) {
+    const chunk = nuevosRows.slice(i, i + BATCH_SIZE)
+    const { error } = await supabase
+      .from('mayorista_productos')
+      .upsert(chunk, { onConflict: 'id', ignoreDuplicates: false })
+    if (error) throw new Error(`Error agregando productos nuevos: ${error.message}`)
+    agregados += chunk.length
+  }
+  if (nuevosRows.length > 0) {
+    agregadosDetalle.push(...nuevosRows.slice(0, 200).map((r) => ({ codigo: r.codigo, descripcion: r.descripcion })))
+  }
+
   onProgress?.(totalOps, totalOps)
   invalidateProductsCache()
 
@@ -760,7 +796,7 @@ export const actualizarPreciosMayorista = async (
     discrepancias.length = 0
   }
 
-  return { actualizados, sinMatch, preciosVentaActualizados, verificados, discrepancias }
+  return { actualizados, sinMatch, preciosVentaActualizados, verificados, discrepancias, agregados, agregadosDetalle }
 }
 
 // ─── Importacion masiva desde lista de precios Excel ─────────────────────────

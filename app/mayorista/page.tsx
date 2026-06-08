@@ -605,9 +605,9 @@ function ListaPrecios({
                     <p className="text-xl font-bold text-blue-700">{priceUpdateSuccess?.preciosVentaActualizados}</p>
                     <p className="text-[10px] text-blue-600 font-medium">Precio venta</p>
                   </div>
-                  <div className="p-3 rounded-xl bg-amber-50 border border-amber-200">
-                    <p className="text-xl font-bold text-amber-700">{priceUpdateSuccess?.sinMatch}</p>
-                    <p className="text-[10px] text-amber-600 font-medium">Sin match</p>
+                  <div className="p-3 rounded-xl bg-fuchsia-50 border border-fuchsia-200">
+                    <p className="text-xl font-bold text-fuchsia-700">{priceUpdateSuccess?.agregados}</p>
+                    <p className="text-[10px] text-fuchsia-600 font-medium">Nuevos</p>
                   </div>
                 </div>
 
@@ -621,6 +621,30 @@ function ListaPrecios({
                         </span>
                       </div>
                     ))}
+                  </div>
+                )}
+
+                {!!priceUpdateSuccess && priceUpdateSuccess.agregados > 0 && (
+                  <div className="mt-3 text-left">
+                    <p className="text-[11px] font-semibold text-fuchsia-700 mb-1">
+                      {priceUpdateSuccess.agregados} productos nuevos agregados (deshabilitados):
+                    </p>
+                    <div className="rounded-lg border border-fuchsia-200 bg-fuchsia-50/60 max-h-32 overflow-y-auto text-[11px]">
+                      {priceUpdateSuccess.agregadosDetalle.slice(0, 30).map((a, i) => (
+                        <div key={i} className="flex items-center gap-2 px-2 py-1 border-b border-fuchsia-100 last:border-0">
+                          <span className="font-mono text-[10px] shrink-0">{a.codigo}</span>
+                          <span className="truncate">{a.descripcion}</span>
+                        </div>
+                      ))}
+                      {priceUpdateSuccess.agregados > priceUpdateSuccess.agregadosDetalle.length && (
+                        <div className="px-2 py-1 text-[10px] text-muted-foreground">
+                          +{priceUpdateSuccess.agregados - priceUpdateSuccess.agregadosDetalle.length} más
+                        </div>
+                      )}
+                    </div>
+                    <p className="text-[10px] text-muted-foreground mt-1">
+                      Quedaron cargados con su precio. Habilitálos desde la lista para venderlos.
+                    </p>
                   </div>
                 )}
 
@@ -985,7 +1009,7 @@ function HabilitarModal({
 
 // ─── Dialog de actualización de precios ──────────────────────────────────────
 
-type PriceMapping = { codigo: string; precio: string };
+type PriceMapping = { codigo: string; precio: string; descripcion: string };
 
 function PriceUpdateDialog({
   open,
@@ -1002,7 +1026,7 @@ function PriceUpdateDialog({
   const [step, setStep] = useState<"upload" | "mapping" | "preview">("upload");
   const [columns, setColumns] = useState<ExcelColumn[]>([]);
   const [rawRows, setRawRows] = useState<unknown[][]>([]);
-  const [mapping, setMapping] = useState<PriceMapping>({ codigo: "A", precio: "B" });
+  const [mapping, setMapping] = useState<PriceMapping>({ codigo: "A", precio: "B", descripcion: "C" });
   const [headerRowIndex, setHeaderRowIndex] = useState(0);
   const [parsed, setParsed] = useState<PriceUpdateRow[]>([]);
   const [saving, setSaving] = useState(false);
@@ -1064,12 +1088,13 @@ function PriceUpdateDialog({
           const h = col.header.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
           if (!autoMapping.codigo && (h.includes("codigo") || h.includes("code") || h.includes("cod") || h === "id")) autoMapping.codigo = col.letter;
           else if (!autoMapping.precio && (h.includes("precio") || h.includes("lista") || h.includes("p.u") || h.includes("costo"))) autoMapping.precio = col.letter;
+          else if (!autoMapping.descripcion && (h.includes("descrip") || h.includes("nombre") || h.includes("detalle") || h.includes("articulo") || h.includes("producto"))) autoMapping.descripcion = col.letter;
         }
 
         setHeaderRowIndex(detectedHeader);
         setColumns(cols);
         setRawRows(rows);
-        setMapping({ codigo: autoMapping.codigo || "A", precio: autoMapping.precio || "D" });
+        setMapping({ codigo: autoMapping.codigo || "A", precio: autoMapping.precio || "D", descripcion: autoMapping.descripcion || "C" });
         setStep("mapping");
       } catch {
         toast.error("Error al leer el archivo Excel");
@@ -1092,6 +1117,7 @@ function PriceUpdateDialog({
         return {
           codigo: cellToString(r[letterToIndex(mapping.codigo)]),
           precio: cellToNumber(r[letterToIndex(mapping.precio)]),
+          descripcion: cellToString(r[letterToIndex(mapping.descripcion)]),
         };
       })
       .filter((r) => r.codigo && r.precio > 0);
@@ -1121,6 +1147,7 @@ function PriceUpdateDialog({
   const campos: { key: keyof PriceMapping; label: string }[] = [
     { key: "codigo", label: "Código del producto" },
     { key: "precio", label: "Precio mayorista" },
+    { key: "descripcion", label: "Descripción (para productos nuevos)" },
   ];
 
   return (
@@ -1215,6 +1242,7 @@ function PriceUpdateDialog({
             )}
             <p className="text-sm">
               Se van a buscar <strong>{parsed.length}</strong> códigos y actualizar sus precios.
+              Los que no estén en el sistema se <strong>agregan como productos nuevos</strong> (deshabilitados).
             </p>
             {saving && (
               <div className="space-y-1">
