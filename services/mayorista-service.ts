@@ -692,13 +692,23 @@ export const actualizarPreciosMayorista = async (
     onProgress?.(done, totalOps)
   }
 
-  for (let i = 0; i < prodUpdates.length; i += BATCH_SIZE) {
-    const chunk = prodUpdates.slice(i, i + BATCH_SIZE)
-    const { error } = await supabase
-      .from('productos')
-      .upsert(chunk, { onConflict: 'id', ignoreDuplicates: false })
-    if (error) throw new Error(`Error actualizando precios venta: ${error.message}`)
-    done += chunk.length
+  // productos tiene columnas NOT NULL (name, etc.): un upsert intentaría un
+  // INSERT parcial y daría 400. Se usa UPDATE real por id, en lotes paralelos.
+  const CONCURRENCIA = 40
+  for (let i = 0; i < prodUpdates.length; i += CONCURRENCIA) {
+    const lote = prodUpdates.slice(i, i + CONCURRENCIA)
+    const resultados = await Promise.all(
+      lote.map((u) =>
+        supabase
+          .from('productos')
+          .update({ price: u.price, precio_venta: u.precio_venta })
+          .eq('id', u.id),
+      ),
+    )
+    for (const { error } of resultados) {
+      if (error) throw new Error(`Error actualizando precios venta: ${error.message}`)
+    }
+    done += lote.length
     onProgress?.(done, totalOps)
   }
 
