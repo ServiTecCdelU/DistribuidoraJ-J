@@ -272,6 +272,7 @@ function ListaPrecios({
   const [estadoFiltro, setEstadoFiltro] = useState<"todos" | "habilitados" | "deshabilitados">("todos");
   const [importOpen, setImportOpen] = useState(false);
   const [priceUpdateOpen, setPriceUpdateOpen] = useState(false);
+  const [priceUpdateSuccess, setPriceUpdateSuccess] = useState<PriceUpdateResult | null>(null);
   const [habilitarTarget, setHabilitarTarget] = useState<MayoristaProducto | null>(null);
   const [editarTarget, setEditarTarget] = useState<MayoristaProducto | null>(null);
   const debounceRef = useRef<NodeJS.Timeout | null>(null);
@@ -562,9 +563,43 @@ function ListaPrecios({
         onOpenChange={setPriceUpdateOpen}
         onActualizado={async () => {
           onProductosImportados();
-          setPriceUpdateOpen(false);
         }}
+        onSuccess={(res) => setPriceUpdateSuccess(res)}
       />
+
+      {/* Modal de confirmación: precios actualizados correctamente */}
+      <Dialog open={!!priceUpdateSuccess} onOpenChange={(v) => { if (!v) setPriceUpdateSuccess(null); }}>
+        <DialogContent className="w-[95vw] max-w-sm p-6 text-center">
+          <DialogHeader className="items-center">
+            <div className="flex items-center justify-center h-14 w-14 rounded-full bg-emerald-100 mb-2">
+              <Check className="h-7 w-7 text-emerald-600" />
+            </div>
+            <DialogTitle>Precios actualizados</DialogTitle>
+            <DialogDescription>
+              Se verificó contra la base de datos que los{" "}
+              <strong>{priceUpdateSuccess?.verificados}</strong> precios quedaron guardados
+              correctamente. Está todo bien.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="grid grid-cols-3 gap-3 mt-2">
+            <div className="p-3 rounded-xl bg-teal-50 border border-teal-200">
+              <p className="text-xl font-bold text-teal-700">{priceUpdateSuccess?.actualizados}</p>
+              <p className="text-[10px] text-teal-600 font-medium">Mayorista</p>
+            </div>
+            <div className="p-3 rounded-xl bg-blue-50 border border-blue-200">
+              <p className="text-xl font-bold text-blue-700">{priceUpdateSuccess?.preciosVentaActualizados}</p>
+              <p className="text-[10px] text-blue-600 font-medium">Precio venta</p>
+            </div>
+            <div className="p-3 rounded-xl bg-amber-50 border border-amber-200">
+              <p className="text-xl font-bold text-amber-700">{priceUpdateSuccess?.sinMatch}</p>
+              <p className="text-[10px] text-amber-600 font-medium">Sin match</p>
+            </div>
+          </div>
+          <DialogFooter className="mt-2">
+            <Button className="w-full" onClick={() => setPriceUpdateSuccess(null)}>Cerrar</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       {/* Modal de importación de productos nuevos */}
       <ExcelImportDialog
@@ -924,10 +959,12 @@ function PriceUpdateDialog({
   open,
   onOpenChange,
   onActualizado,
+  onSuccess,
 }: {
   open: boolean;
   onOpenChange: (v: boolean) => void;
   onActualizado: () => Promise<void>;
+  onSuccess: (res: PriceUpdateResult) => void;
 }) {
   const fileRef = useRef<HTMLInputElement>(null);
   const [step, setStep] = useState<"upload" | "mapping" | "preview">("upload");
@@ -1037,11 +1074,14 @@ function PriceUpdateDialog({
     setProgress({ done: 0, total: parsed.length });
     try {
       const res = await actualizarPreciosMayorista(parsed, (done, total) => setProgress({ done, total }));
-      setResult(res);
       await onActualizado();
       if (res.discrepancias.length === 0) {
-        toast.success(`${res.verificados} precios verificados en la base. Todo correcto.`);
+        // Éxito total: cerrar este modal y mostrar el modal de confirmación.
+        onSuccess(res);
+        handleClose(false);
       } else {
+        // Con diferencias: quedarse en el modal mostrando el detalle para revisar.
+        setResult(res);
         toast.warning(`${res.verificados} verificados, ${res.discrepancias.length} no coincidieron tras guardar.`);
       }
     } catch (err) {
