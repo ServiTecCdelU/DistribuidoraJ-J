@@ -55,7 +55,7 @@ import {
   actualizarPreciosMayorista,
   editarProductoMayorista,
 } from "@/services/mayorista-service";
-import type { MayoristaSearchParams, PriceUpdateRow, EditarProductoData } from "@/services/mayorista-service";
+import type { MayoristaSearchParams, PriceUpdateRow, EditarProductoData, PriceUpdateResult } from "@/services/mayorista-service";
 import { formatCurrency } from "@/lib/utils/format";
 import { useAuth } from "@/hooks/use-auth";
 
@@ -938,7 +938,7 @@ function PriceUpdateDialog({
   const [parsed, setParsed] = useState<PriceUpdateRow[]>([]);
   const [saving, setSaving] = useState(false);
   const [progress, setProgress] = useState({ done: 0, total: 0 });
-  const [result, setResult] = useState<{ actualizados: number; sinMatch: number; preciosVentaActualizados: number } | null>(null);
+  const [result, setResult] = useState<PriceUpdateResult | null>(null);
 
   const reset = () => {
     setStep("upload");
@@ -1039,7 +1039,11 @@ function PriceUpdateDialog({
       const res = await actualizarPreciosMayorista(parsed, (done, total) => setProgress({ done, total }));
       setResult(res);
       await onActualizado();
-      toast.success(`${res.actualizados} precios actualizados, ${res.preciosVentaActualizados} precios de venta recalculados`);
+      if (res.discrepancias.length === 0) {
+        toast.success(`${res.verificados} precios verificados en la base. Todo correcto.`);
+      } else {
+        toast.warning(`${res.verificados} verificados, ${res.discrepancias.length} no coincidieron tras guardar.`);
+      }
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Error al actualizar precios");
     } finally {
@@ -1165,6 +1169,45 @@ function PriceUpdateDialog({
 
         {step === "preview" && result && (
           <div className="space-y-4">
+            {/* Confirmación verificada contra la base de datos */}
+            {result.discrepancias.length === 0 ? (
+              <div className="flex items-start gap-3 p-4 rounded-2xl bg-emerald-50 border border-emerald-200">
+                <div className="flex items-center justify-center h-9 w-9 shrink-0 rounded-full bg-emerald-100">
+                  <Check className="h-5 w-5 text-emerald-600" />
+                </div>
+                <div>
+                  <p className="text-sm font-semibold text-emerald-800">Precios actualizados y verificados</p>
+                  <p className="text-xs text-emerald-700 mt-0.5">
+                    Se confirmó leyendo la base de datos que los <strong>{result.verificados}</strong> precios
+                    quedaron guardados correctamente. Está todo bien.
+                  </p>
+                </div>
+              </div>
+            ) : (
+              <div className="flex items-start gap-3 p-4 rounded-2xl bg-amber-50 border border-amber-300">
+                <div className="flex items-center justify-center h-9 w-9 shrink-0 rounded-full bg-amber-100">
+                  <AlertCircle className="h-5 w-5 text-amber-600" />
+                </div>
+                <div className="min-w-0">
+                  <p className="text-sm font-semibold text-amber-800">Verificación con diferencias</p>
+                  <p className="text-xs text-amber-700 mt-0.5">
+                    {result.verificados} precios quedaron correctos, pero <strong>{result.discrepancias.length}</strong> no
+                    coincidieron tras guardar. Revisalos abajo y volvé a intentar.
+                  </p>
+                  <div className="mt-2 rounded-lg border border-amber-200 bg-white/60 max-h-32 overflow-y-auto text-[11px]">
+                    {result.discrepancias.slice(0, 10).map((d, i) => (
+                      <div key={i} className="flex items-center justify-between px-2 py-1 border-b border-amber-100 last:border-0">
+                        <span className="font-mono">{d.codigo}</span>
+                        <span className="text-muted-foreground">
+                          esperado {formatCurrency(d.esperado)} · real {d.real != null ? formatCurrency(d.real) : "—"}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            )}
+
             <div className="grid grid-cols-3 gap-3">
               <div className="p-3 rounded-xl bg-teal-50 border border-teal-200 text-center">
                 <p className="text-2xl font-bold text-teal-700">{result.actualizados}</p>

@@ -577,10 +577,18 @@ export interface PriceUpdateRow {
   precio: number
 }
 
+export interface PriceDiscrepancia {
+  codigo: string
+  esperado: number
+  real: number | null
+}
+
 export interface PriceUpdateResult {
   actualizados: number
   sinMatch: number
   preciosVentaActualizados: number
+  verificados: number
+  discrepancias: PriceDiscrepancia[]
 }
 
 /**
@@ -694,10 +702,38 @@ export const actualizarPreciosMayorista = async (
     onProgress?.(done, totalOps)
   }
 
+  // Verificación: releer de la base los precios recién actualizados y
+  // comparar contra lo que se pidió escribir. Corrobora que el dato quedó guardado.
+  const esperadoById = new Map<string, number>(mpUpdates.map((u) => [u.id, u.precio_lista]))
+  const idsActualizados = mpUpdates.map((u) => u.id)
+  let verificados = 0
+  const discrepancias: PriceDiscrepancia[] = []
+  const MAX_DISCREPANCIAS = 50
+
+  for (let i = 0; i < idsActualizados.length; i += 500) {
+    const chunk = idsActualizados.slice(i, i + 500)
+    const { data, error } = await supabase
+      .from('mayorista_productos')
+      .select('id, codigo, precio_lista')
+      .in('id', chunk)
+    if (error) throw new Error(`Error verificando precios: ${error.message}`)
+    const leidos = new Map<string, any>((data ?? []).map((d: any) => [d.id, d]))
+    for (const id of chunk) {
+      const esperado = esperadoById.get(id) ?? 0
+      const d = leidos.get(id)
+      const real = d?.precio_lista != null ? Number(d.precio_lista) : null
+      if (real != null && Math.abs(real - esperado) < 0.01) {
+        verificados++
+      } else if (discrepancias.length < MAX_DISCREPANCIAS) {
+        discrepancias.push({ codigo: d?.codigo ?? id, esperado, real })
+      }
+    }
+  }
+
   onProgress?.(totalOps, totalOps)
   invalidateProductsCache()
 
-  return { actualizados, sinMatch, preciosVentaActualizados }
+  return { actualizados, sinMatch, preciosVentaActualizados, verificados, discrepancias }
 }
 
 // ─── Importacion masiva desde lista de precios Excel ─────────────────────────
