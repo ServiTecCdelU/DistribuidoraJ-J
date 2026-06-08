@@ -567,37 +567,69 @@ function ListaPrecios({
         onSuccess={(res) => setPriceUpdateSuccess(res)}
       />
 
-      {/* Modal de confirmación: precios actualizados correctamente */}
+      {/* Modal de confirmación: resultado de actualizar precios */}
       <Dialog open={!!priceUpdateSuccess} onOpenChange={(v) => { if (!v) setPriceUpdateSuccess(null); }}>
         <DialogContent className="w-[95vw] max-w-sm p-6 text-center">
-          <DialogHeader className="items-center">
-            <div className="flex items-center justify-center h-14 w-14 rounded-full bg-emerald-100 mb-2">
-              <Check className="h-7 w-7 text-emerald-600" />
-            </div>
-            <DialogTitle>Precios actualizados</DialogTitle>
-            <DialogDescription>
-              Se verificó contra la base de datos que los{" "}
-              <strong>{priceUpdateSuccess?.verificados}</strong> precios quedaron guardados
-              correctamente. Está todo bien.
-            </DialogDescription>
-          </DialogHeader>
-          <div className="grid grid-cols-3 gap-3 mt-2">
-            <div className="p-3 rounded-xl bg-teal-50 border border-teal-200">
-              <p className="text-xl font-bold text-teal-700">{priceUpdateSuccess?.actualizados}</p>
-              <p className="text-[10px] text-teal-600 font-medium">Mayorista</p>
-            </div>
-            <div className="p-3 rounded-xl bg-blue-50 border border-blue-200">
-              <p className="text-xl font-bold text-blue-700">{priceUpdateSuccess?.preciosVentaActualizados}</p>
-              <p className="text-[10px] text-blue-600 font-medium">Precio venta</p>
-            </div>
-            <div className="p-3 rounded-xl bg-amber-50 border border-amber-200">
-              <p className="text-xl font-bold text-amber-700">{priceUpdateSuccess?.sinMatch}</p>
-              <p className="text-[10px] text-amber-600 font-medium">Sin match</p>
-            </div>
-          </div>
-          <DialogFooter className="mt-2">
-            <Button className="w-full" onClick={() => setPriceUpdateSuccess(null)}>Cerrar</Button>
-          </DialogFooter>
+          {(() => {
+            const ok = (priceUpdateSuccess?.discrepancias.length ?? 0) === 0;
+            return (
+              <>
+                <DialogHeader className="items-center">
+                  <div className={`flex items-center justify-center h-14 w-14 rounded-full mb-2 ${ok ? "bg-emerald-100" : "bg-amber-100"}`}>
+                    {ok ? <Check className="h-7 w-7 text-emerald-600" /> : <AlertCircle className="h-7 w-7 text-amber-600" />}
+                  </div>
+                  <DialogTitle>{ok ? "Precios actualizados" : "Actualizado con diferencias"}</DialogTitle>
+                  <DialogDescription>
+                    {ok ? (
+                      <>
+                        Se verificó contra la base de datos que los{" "}
+                        <strong>{priceUpdateSuccess?.verificados}</strong> precios quedaron guardados
+                        correctamente. Está todo bien.
+                      </>
+                    ) : (
+                      <>
+                        {priceUpdateSuccess?.verificados} precios se guardaron OK, pero{" "}
+                        <strong>{priceUpdateSuccess?.discrepancias.length}</strong> no coincidieron al
+                        verificar. Revisalos y volvé a intentar con esos códigos.
+                      </>
+                    )}
+                  </DialogDescription>
+                </DialogHeader>
+
+                <div className="grid grid-cols-3 gap-3 mt-2">
+                  <div className="p-3 rounded-xl bg-teal-50 border border-teal-200">
+                    <p className="text-xl font-bold text-teal-700">{priceUpdateSuccess?.actualizados}</p>
+                    <p className="text-[10px] text-teal-600 font-medium">Mayorista</p>
+                  </div>
+                  <div className="p-3 rounded-xl bg-blue-50 border border-blue-200">
+                    <p className="text-xl font-bold text-blue-700">{priceUpdateSuccess?.preciosVentaActualizados}</p>
+                    <p className="text-[10px] text-blue-600 font-medium">Precio venta</p>
+                  </div>
+                  <div className="p-3 rounded-xl bg-amber-50 border border-amber-200">
+                    <p className="text-xl font-bold text-amber-700">{priceUpdateSuccess?.sinMatch}</p>
+                    <p className="text-[10px] text-amber-600 font-medium">Sin match</p>
+                  </div>
+                </div>
+
+                {!ok && priceUpdateSuccess && (
+                  <div className="mt-3 rounded-lg border border-amber-200 bg-amber-50/60 max-h-32 overflow-y-auto text-[11px] text-left">
+                    {priceUpdateSuccess.discrepancias.slice(0, 10).map((d, i) => (
+                      <div key={i} className="flex items-center justify-between px-2 py-1 border-b border-amber-100 last:border-0">
+                        <span className="font-mono">{d.codigo}</span>
+                        <span className="text-muted-foreground">
+                          esperado {formatCurrency(d.esperado)} · real {d.real != null ? formatCurrency(d.real) : "—"}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                )}
+
+                <DialogFooter className="mt-3">
+                  <Button className="w-full" onClick={() => setPriceUpdateSuccess(null)}>Cerrar</Button>
+                </DialogFooter>
+              </>
+            );
+          })()}
         </DialogContent>
       </Dialog>
 
@@ -1075,15 +1107,9 @@ function PriceUpdateDialog({
     try {
       const res = await actualizarPreciosMayorista(parsed, (done, total) => setProgress({ done, total }));
       await onActualizado();
-      if (res.discrepancias.length === 0) {
-        // Éxito total: cerrar este modal y mostrar el modal de confirmación.
-        onSuccess(res);
-        handleClose(false);
-      } else {
-        // Con diferencias: quedarse en el modal mostrando el detalle para revisar.
-        setResult(res);
-        toast.warning(`${res.verificados} verificados, ${res.discrepancias.length} no coincidieron tras guardar.`);
-      }
+      // Siempre: cerrar este modal y mostrar el modal de confirmación con el resultado.
+      onSuccess(res);
+      handleClose(false);
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Error al actualizar precios");
     } finally {
