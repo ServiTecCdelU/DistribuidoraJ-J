@@ -530,7 +530,14 @@ const ProductListItem = memo(function ProductListItem({
 
         {/* Precio */}
         <div className="text-right shrink-0">
-          <p className="font-bold text-sm text-teal-600">{formatCurrency(product.price)}</p>
+          {ofertaActiva ? (
+            <>
+              <p className="text-[11px] text-muted-foreground line-through leading-none">{formatCurrency(product.price)}</p>
+              <p className="font-bold text-sm text-teal-600">{formatCurrency(product.price * (1 - descuento / 100))}</p>
+            </>
+          ) : (
+            <p className="font-bold text-sm text-teal-600">{formatCurrency(product.price)}</p>
+          )}
           {seDivideEn && seDivideEn > 1 && (
             <p className="text-[10px] text-muted-foreground leading-none">/ lote</p>
           )}
