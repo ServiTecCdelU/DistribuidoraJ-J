@@ -9,7 +9,7 @@ import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { DataTableSkeleton } from "@/components/ui/data-table-skeleton";
 import { gastosApi, type GastoFijo, type GastoVariable } from "@/lib/api";
 import { formatCurrency } from "@/lib/utils/format";
-import { labelCategoria } from "@/lib/gastos-constants";
+import { labelCategoria, periodoActual, esGastoFijoVigente } from "@/lib/gastos-constants";
 import { GastoFijoModal } from "@/components/gastos/gasto-fijo-modal";
 import { GastoVariableModal } from "@/components/gastos/gasto-variable-modal";
 import { Plus, Pencil, Trash2, Repeat, CalendarDays, Wallet } from "lucide-react";
@@ -19,23 +19,6 @@ const MESES = [
   "Enero", "Febrero", "Marzo", "Abril", "Mayo", "Junio",
   "Julio", "Agosto", "Septiembre", "Octubre", "Noviembre", "Diciembre",
 ];
-
-function periodoActual(): string {
-  const d = new Date();
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
-}
-
-// Fijo activo y vigente dentro del mes 'YYYY-MM'.
-function esVigente(g: GastoFijo, periodo: string): boolean {
-  if (!g.activo) return false;
-  const inicioMes = `${periodo}-01`;
-  const [y, m] = periodo.split("-").map(Number);
-  const finDia = new Date(y, m, 0).getDate();
-  const finMes = `${periodo}-${String(finDia).padStart(2, "0")}`;
-  if (g.desde && g.desde > finMes) return false;
-  if (g.hasta && g.hasta < inicioMes) return false;
-  return true;
-}
 
 export default function GastosPage() {
   const [periodo, setPeriodo] = useState(periodoActual());
@@ -69,7 +52,7 @@ export default function GastosPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [periodo]);
 
-  const fijosVigentes = useMemo(() => fijos.filter((g) => esVigente(g, periodo)), [fijos, periodo]);
+  const fijosVigentes = useMemo(() => fijos.filter((g) => esGastoFijoVigente(g, periodo)), [fijos, periodo]);
   const totalFijos = useMemo(() => fijosVigentes.reduce((a, g) => a + g.monto, 0), [fijosVigentes]);
   const totalVariables = useMemo(() => variables.reduce((a, g) => a + g.monto, 0), [variables]);
   const totalMes = totalFijos + totalVariables;
@@ -132,7 +115,7 @@ export default function GastosPage() {
               ) : (
                 <div className="space-y-2">
                   {fijos.map((g) => {
-                    const vigente = esVigente(g, periodo);
+                    const vigente = esGastoFijoVigente(g, periodo);
                     return (
                       <Card key={g.id} className={`rounded-2xl ${!vigente ? "opacity-60" : ""}`}>
                         <CardContent className="flex items-center justify-between gap-3 p-4">
