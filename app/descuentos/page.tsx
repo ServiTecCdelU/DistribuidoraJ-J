@@ -15,7 +15,7 @@ import {
 import { productsApi, sellersApi } from "@/lib/api";
 import type { Product, Seller } from "@/lib/types";
 import { formatCurrency } from "@/lib/utils/format";
-import { getAsignacionesProducto, setAsignacion } from "@/services/descuento-vendedor-service";
+import { getAsignacionesProducto, setAsignacion, getTotalesCupos } from "@/services/descuento-vendedor-service";
 import {
   Search, X, Percent, Check, Tag, ChevronLeft, ChevronRight, ChevronDown,
   Users, Loader2, Gift, Plus, Pencil, Trash2, AlertTriangle, CheckCircle2,
@@ -55,6 +55,8 @@ export default function DescuentosPage() {
   const [cupos, setCupos] = useState<Record<string, Record<string, string>>>({});
   const [loadingCupos, setLoadingCupos] = useState(false);
   const [savingCuposId, setSavingCuposId] = useState<string | null>(null);
+  // Total de cupos asignados por producto (para detectar descuentos sin cupos)
+  const [cuposTotales, setCuposTotales] = useState<Record<string, number>>({});
 
   // Edición de ofertas
   const [editing, setEditing] = useState<{ id: string; tipo: OfertaTipo } | null>(null);
@@ -84,6 +86,12 @@ export default function DescuentosPage() {
       if (idsB.length) {
         const bs = await productsApi.getByIds(idsB);
         setStockB((prev) => ({ ...prev, ...Object.fromEntries(bs.map((b) => [b.id, b.stock])) }));
+      }
+      // Cargar totales de cupos de los productos con descuento (para el aviso "sin cupos")
+      const idsDto = visibles.filter((p) => (p.descuento ?? 0) > 0).map((p) => p.id);
+      if (idsDto.length) {
+        const tot = await getTotalesCupos(idsDto);
+        setCuposTotales((prev) => ({ ...prev, ...Object.fromEntries(idsDto.map((id) => [id, tot[id] ?? 0])) }));
       }
     } catch {
       toast.error("Error al cargar productos");
@@ -190,6 +198,10 @@ export default function DescuentosPage() {
     try {
       await productsApi.update(p.id, { descuento });
       patchLocal(p.id, { descuento });
+      if (descuento > 0) {
+        const tot = await getTotalesCupos([p.id]);
+        setCuposTotales((prev) => ({ ...prev, [p.id]: tot[p.id] ?? 0 }));
+      }
       toast.success(descuento > 0 ? `Descuento del ${descuento}% en "${p.name}"` : `Descuento quitado`);
       cerrarEdicion();
       cargarOfertasActivas();
@@ -310,10 +322,13 @@ export default function DescuentosPage() {
     const row = cupos[p.id] || {};
     setSavingCuposId(p.id);
     try {
+      let total = 0;
       await Promise.all(vendedores.map((v) => {
         const n = Math.max(0, Math.floor(Number(row[v.id] || 0)));
+        total += n;
         return setAsignacion(p.id, v.id, n);
       }));
+      setCuposTotales((prev) => ({ ...prev, [p.id]: total }));
       toast.success(`Cupos guardados para "${p.name}"`);
     } catch { toast.error("Error al guardar los cupos"); } finally { setSavingCuposId(null); }
   };
@@ -455,15 +470,31 @@ export default function DescuentosPage() {
                     )}
 
                     {tieneDescuento(p) && (
-                      <OfferRow
-                        icon={<Tag className="h-3.5 w-3.5 text-teal-600" />}
-                        text={`Descuento ${p.descuento}%`}
-                        estado={p.stock > 0 ? "activa" : "sin_stock"}
-                        onCupos={() => toggleCupos(p)}
-                        cuposActive={cuposOpenId === p.id}
-                        onEdit={() => abrirEdicion(p, "descuento")}
-                        onRemove={() => quitarOferta(p, "descuento")}
-                      />
+                      <>
+                        <OfferRow
+                          icon={<Tag className="h-3.5 w-3.5 text-teal-600" />}
+                          text={`Descuento ${p.descuento}%`}
+                          estado={p.stock > 0 ? "activa" : "sin_stock"}
+                          onCupos={() => toggleCupos(p)}
+                          cuposActive={cuposOpenId === p.id}
+                          onEdit={() => abrirEdicion(p, "descuento")}
+                          onRemove={() => quitarOferta(p, "descuento")}
+                        />
+                        {cuposTotales[p.id] === 0 && cuposOpenId !== p.id && (
+                          <button
+                            onClick={() => toggleCupos(p)}
+                            className="flex items-center gap-2 w-full rounded-lg border border-amber-300 bg-amber-50 dark:bg-amber-950/20 dark:border-amber-800 px-2.5 py-1.5 text-left hover:bg-amber-100 dark:hover:bg-amber-950/40 transition-colors"
+                          >
+                            <AlertTriangle className="h-3.5 w-3.5 text-amber-600 shrink-0" />
+                            <span className="text-[11px] text-amber-800 dark:text-amber-200 flex-1 min-w-0">
+                              Sin cupos asignados — ningún vendedor verá esta oferta.
+                            </span>
+                            <span className="text-[11px] font-semibold text-amber-700 dark:text-amber-300 shrink-0 flex items-center gap-1">
+                              <Users className="h-3.5 w-3.5" /> Asignar cupos
+                            </span>
+                          </button>
+                        )}
+                      </>
                     )}
                     {tieneRegaloMismo(p) && (
                       <OfferRow

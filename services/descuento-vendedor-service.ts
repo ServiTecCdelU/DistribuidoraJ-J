@@ -24,6 +24,24 @@ export const setAsignacion = async (productoId: string, vendedorId: string, cant
     .upsert({ producto_id: productoId, vendedor_id: vendedorId, cantidad }, { onConflict: 'producto_id,vendedor_id' })
 }
 
+// Mapa producto_id -> total de cupos asignados (suma de todos los vendedores).
+// Sirve para detectar descuentos sin cupos (que ningún vendedor podría ver).
+export const getTotalesCupos = async (productoIds: string[]): Promise<Record<string, number>> => {
+  const map: Record<string, number> = {}
+  if (productoIds.length === 0) return map
+  for (let i = 0; i < productoIds.length; i += 500) {
+    const chunk = productoIds.slice(i, i + 500)
+    const { data } = await supabase
+      .from('descuento_vendedor')
+      .select('producto_id, cantidad')
+      .in('producto_id', chunk)
+    ;(data ?? []).forEach((r: any) => {
+      map[r.producto_id] = (map[r.producto_id] || 0) + (Number(r.cantidad) || 0)
+    })
+  }
+  return map
+}
+
 // Mapa producto_id -> unidades restantes para un vendedor (para la pantalla de venta).
 export const getAsignacionesVendedor = async (vendedorId: string, productoIds: string[]): Promise<Record<string, number>> => {
   if (!vendedorId || productoIds.length === 0) return {}
