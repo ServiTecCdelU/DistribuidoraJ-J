@@ -1106,7 +1106,8 @@ function PriceUpdateDialog({
     setProgress({ done: 0, total: parsed.length });
     try {
       const res = await actualizarPreciosMayorista(parsed, (done, total) => setProgress({ done, total }));
-      await onActualizado();
+      // La recarga de datos no debe bloquear el cierre del modal.
+      try { await onActualizado(); } catch { /* recarga falló, no importa para el cierre */ }
       // Siempre: cerrar este modal y mostrar el modal de confirmación con el resultado.
       onSuccess(res);
       handleClose(false);

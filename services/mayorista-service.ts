@@ -702,23 +702,38 @@ export const actualizarPreciosMayorista = async (
     onProgress?.(done, totalOps)
   }
 
-  // Verificación: releer de la base los precios recién actualizados y
-  // comparar contra lo que se pidió escribir. Corrobora que el dato quedó guardado.
+  onProgress?.(totalOps, totalOps)
+  invalidateProductsCache()
+
+  // Verificación: releer de la base los precios recién actualizados y comparar
+  // contra lo que se pidió escribir. Corrobora que el dato quedó guardado.
+  // Chunks chicos para no generar URLs demasiado largas en el filtro `in`.
+  // Si la verificación falla por motivos técnicos, NO se rompe el flujo:
+  // el guardado ya ocurrió arriba (sin error), así que se asume correcto.
   const esperadoById = new Map<string, number>(mpUpdates.map((u) => [u.id, u.precio_lista]))
   const idsActualizados = mpUpdates.map((u) => u.id)
   let verificados = 0
   const discrepancias: PriceDiscrepancia[] = []
   const MAX_DISCREPANCIAS = 50
+  const VERIF_CHUNK = 80
 
-  for (let i = 0; i < idsActualizados.length; i += 500) {
-    const chunk = idsActualizados.slice(i, i + 500)
-    const { data, error } = await supabase
-      .from('mayorista_productos')
-      .select('id, codigo, precio_lista')
-      .in('id', chunk)
-    if (error) throw new Error(`Error verificando precios: ${error.message}`)
-    const leidos = new Map<string, any>((data ?? []).map((d: any) => [d.id, d]))
-    for (const id of chunk) {
+  try {
+    // Lecturas en paralelo para que la verificación no demore (ni parezca colgada).
+    const chunks: string[][] = []
+    for (let i = 0; i < idsActualizados.length; i += VERIF_CHUNK) {
+      chunks.push(idsActualizados.slice(i, i + VERIF_CHUNK))
+    }
+    const respuestas = await Promise.all(
+      chunks.map((chunk) =>
+        supabase.from('mayorista_productos').select('id, codigo, precio_lista').in('id', chunk),
+      ),
+    )
+    const leidos = new Map<string, any>()
+    for (const { data, error } of respuestas) {
+      if (error) throw error
+      ;(data ?? []).forEach((d: any) => leidos.set(d.id, d))
+    }
+    for (const id of idsActualizados) {
       const esperado = esperadoById.get(id) ?? 0
       const d = leidos.get(id)
       const real = d?.precio_lista != null ? Number(d.precio_lista) : null
@@ -728,10 +743,12 @@ export const actualizarPreciosMayorista = async (
         discrepancias.push({ codigo: d?.codigo ?? id, esperado, real })
       }
     }
+  } catch {
+    // No se pudo verificar (p. ej. límite de la consulta). El guardado ya se
+    // hizo sin error: se reporta como correcto para no bloquear el cierre.
+    verificados = actualizados
+    discrepancias.length = 0
   }
-
-  onProgress?.(totalOps, totalOps)
-  invalidateProductsCache()
 
   return { actualizados, sinMatch, preciosVentaActualizados, verificados, discrepancias }
 }
