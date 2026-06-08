@@ -39,6 +39,7 @@ import {
   ChevronLeft,
   ChevronRight,
   Percent,
+  Tag,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useCart } from "@/hooks/useCart";
@@ -362,10 +363,10 @@ function NuevaVentaContent({
               "h-11 rounded-xl shrink-0 gap-1.5 px-3 border-2",
               soloDescuento ? "bg-teal-600 hover:bg-teal-700 text-white border-teal-600" : "text-teal-700 border-teal-200 hover:bg-teal-50",
             )}
-            title="Mostrar solo productos con descuento"
+            title="Mostrar solo productos con promociones"
           >
-            <Percent className="h-4 w-4" />
-            <span className="hidden sm:inline text-sm">Con descuento</span>
+            <Tag className="h-4 w-4" />
+            <span className="hidden sm:inline text-sm">Promociones</span>
           </Button>
           {/* Carrito arriba (evita choque con el + del último producto y el paginado) */}
           <Button
