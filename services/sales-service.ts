@@ -48,6 +48,7 @@ function mapSale(d: Record<string, any>): Sale {
     invoicePdfUrl: d.invoice_pdf_url ?? undefined,
     invoiceWhatsappUrl: d.invoice_whatsapp_url ?? undefined,
     remitoPdfUrl: d.remito_pdf_url ?? undefined,
+    remitoPdfBase64: d.remito_pdf_base64 ?? undefined,
     remitoNumber: d.remito_number ?? undefined,
     discount: d.discount ? Number(d.discount) : undefined,
     discountType: d.discount_type ?? undefined,

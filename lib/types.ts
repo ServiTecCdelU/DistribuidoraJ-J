@@ -121,6 +121,7 @@ export interface Sale {
   invoicePdfUrl?: string;
   invoiceWhatsappUrl?: string;
   remitoPdfUrl?: string;
+  remitoPdfBase64?: string;
   discount?: number;
   discountType?: "percent" | "fixed";
   orderId?: string;

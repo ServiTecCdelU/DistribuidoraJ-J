@@ -33,10 +33,11 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table'
-import { cobranzasApi, clientsApi, paymentsApi, sellersApi, mayoristaCuentaApi } from '@/lib/api'
+import { cobranzasApi, clientsApi, paymentsApi, sellersApi, mayoristaCuentaApi, salesApi } from '@/lib/api'
 import type { TransaccionMayorista } from '@/services/mayorista-cuenta-service'
 import { useAuth } from '@/hooks/use-auth'
-import type { Client, ComprobantePago, DebtClassification, Seller, Transaction } from '@/lib/types'
+import type { Client, ComprobantePago, DebtClassification, Sale, Seller, Transaction } from '@/lib/types'
+import { MovimientoDeudaCard } from '@/components/cuenta-corriente/movimiento-deuda-card'
 import { formatCurrency, formatDate } from '@/lib/utils/format'
 import {
   Users, FileCheck, CheckCircle2, XCircle, Clock, Loader2, ExternalLink,
@@ -61,6 +62,7 @@ export default function CuentaCorrientePage() {
   // Cliente seleccionado
   const [selectedClient, setSelectedClient] = useState<ClientWithSeller | null>(null)
   const [clientTransactions, setClientTransactions] = useState<Transaction[]>([])
+  const [clientSales, setClientSales] = useState<Sale[]>([])
   const [clientComprobantes, setClientComprobantes] = useState<ComprobantePago[]>([])
   const [loadingDetail, setLoadingDetail] = useState(false)
 
@@ -148,11 +150,13 @@ export default function CuentaCorrientePage() {
     setSelectedClient(client)
     setLoadingDetail(true)
     try {
-      const [txs, comps] = await Promise.all([
+      const [txs, comps, sales] = await Promise.all([
         clientsApi.getTransactions(client.id),
         cobranzasApi.getComprobantes(),
+        salesApi.getByClient(client.id),
       ])
       setClientTransactions(txs)
+      setClientSales(sales)
       setClientComprobantes(comps.filter((c) => c.clientId === client.id))
     } catch {
       toast.error('Error al cargar detalle del cliente')
@@ -394,6 +398,7 @@ export default function CuentaCorrientePage() {
     const txMinorista = clientTransactions.filter((tx) => !tx.cuenta || tx.cuenta === 'minorista')
     const txMayorista = clientTransactions.filter((tx) => tx.cuenta === 'mayorista')
     const balanceMayorista = selectedClient.currentBalanceMayorista ?? 0
+    const salesById = new Map(clientSales.map((s) => [s.id, s]))
 
     return (
       <MainLayout allowedRoles={['admin']} title="Cuenta Corriente" description="Detalle de cliente">
@@ -534,25 +539,11 @@ export default function CuentaCorrientePage() {
               ) : (
                 <div className="flex flex-col gap-2">
                   {txMinorista.map((tx) => (
-                    <Card key={tx.id}>
-                      <CardContent className="p-3 flex items-center gap-3">
-                        <div className={`h-8 w-8 rounded-full flex items-center justify-center shrink-0 ${
-                          tx.type === 'payment' ? 'bg-green-100 dark:bg-green-900/30' : 'bg-red-100 dark:bg-red-900/30'
-                        }`}>
-                          {tx.type === 'payment'
-                            ? <ArrowDownCircle className="h-4 w-4 text-green-600" />
-                            : <ArrowUpCircle className="h-4 w-4 text-red-600" />
-                          }
-                        </div>
-                        <div className="flex-1 min-w-0">
-                          <p className="text-sm font-medium truncate">{tx.description}</p>
-                          <p className="text-xs text-muted-foreground">{formatDate(tx.date)}</p>
-                        </div>
-                        <p className={`font-bold tabular-nums ${tx.type === 'payment' ? 'text-green-600' : 'text-red-600'}`}>
-                          {tx.type === 'payment' ? '-' : '+'}{formatCurrency(tx.amount)}
-                        </p>
-                      </CardContent>
-                    </Card>
+                    <MovimientoDeudaCard
+                      key={tx.id}
+                      tx={tx}
+                      sale={tx.saleId ? salesById.get(tx.saleId) : undefined}
+                    />
                   ))}
                 </div>
               )}

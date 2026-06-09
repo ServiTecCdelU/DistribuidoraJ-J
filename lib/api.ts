@@ -27,6 +27,7 @@ import {
   getSalesPaginated,
   getSalesByDateRange,
   getSalesBySeller,
+  getSalesByClient,
   getSaleById,
   processSale,
   saveBoletaToSale,
@@ -188,6 +189,9 @@ export const salesApi = {
   },
   async getBySeller(sellerId: string): Promise<Sale[]> {
     return getSalesBySeller(sellerId)
+  },
+  async getByClient(clientId: string): Promise<Sale[]> {
+    return getSalesByClient(clientId)
   },
   async processSale(data: {
     clientId?: string
