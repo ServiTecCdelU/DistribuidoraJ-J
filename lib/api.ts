@@ -447,3 +447,27 @@ export const cobranzasApi = {
     return rejectComprobante(id, reason, reviewedBy)
   },
 }
+
+import {
+  getGastosFijos,
+  createGastoFijo,
+  updateGastoFijo,
+  deleteGastoFijo,
+  getGastosVariables,
+  createGastoVariable,
+  updateGastoVariable,
+  deleteGastoVariable,
+} from '@/services/gastos-service'
+import type { GastoFijo, GastoVariable } from '@/services/gastos-service'
+
+export const gastosApi = {
+  getFijos: getGastosFijos,
+  createFijo: createGastoFijo,
+  updateFijo: updateGastoFijo,
+  deleteFijo: deleteGastoFijo,
+  getVariables: getGastosVariables,
+  createVariable: createGastoVariable,
+  updateVariable: updateGastoVariable,
+  deleteVariable: deleteGastoVariable,
+}
+export type { GastoFijo, GastoVariable }

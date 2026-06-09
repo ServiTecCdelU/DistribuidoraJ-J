@@ -20,6 +20,7 @@ import {
   Tag,
   Store,
   Percent,
+  Wallet,
 } from "lucide-react";
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
@@ -75,6 +76,12 @@ export function AppSidebar() {
         { href: "/productos", label: "Productos", icon: Package, roles: ["admin"] },
         { href: "/descuentos", label: "Descuentos", icon: Percent, roles: ["admin"] },
         { href: "/clientes", label: "Clientes", icon: Users, roles: ["admin"] },
+      ],
+    },
+    {
+      label: "Finanzas",
+      items: [
+        { href: "/gastos", label: "Gastos", icon: Wallet, roles: ["admin"] },
       ],
     },
     {
