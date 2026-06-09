@@ -77,7 +77,10 @@ CREATE INDEX IF NOT EXISTS idx_clientes_codigo_externo ON clientes(codigo_extern
 ### 4. UI
 
 - **Form de vendedor** (`app/empleados`): input "Código de vendedor" (texto).
-- **Modal de cliente** (`components/clientes/client-modal.tsx`): input "Código externo".
+- **Modal de cliente** (`components/clientes/client-modal.tsx`): input "Código externo"
+  **y selector de vendedor** (hoy no existe). Permite asignar/cambiar el `seller_id`
+  de un cliente desde la UI — necesario para los ~19 clientes que no están en el CSV
+  y quedan "sin asignar" tras el import. Solo visible/operable para admin.
 - **Carrito** (`hooks/useCart.ts`): efecto sobre `selectedClientData` — si el cliente
   tiene `sellerId` y `role === "admin"`, se autocompleta `selectedSeller` con ese id.
   El Select sigue editable (se puede cambiar en esa venta). Para `role === "seller"`
@@ -115,6 +118,11 @@ vendedores.codigo_vendedor "3"  ← clave de cruce con CSV (03)
 
 ## Errores y casos borde
 
+- Hoy 242/293 clientes están "sin asignar" (`seller_id` null). El import resuelve
+  ~255 (los que están en el CSV). Quedan ~19 fuera del CSV (o con nombre corrupto por
+  encoding, ej. `MONTAÑANA ALDO`, `DOÑA CHOLA`) que se asignan a mano vía el selector
+  del modal de cliente. Cuenta corriente ya muestra el vendedor derivándolo de
+  `seller_id` (`getDebtClients`), así que se actualiza solo tras el import.
 - Clientes del CSV sin match por nombre (~2): el script los reporta; se asignan a mano.
 - Vendedores sin número en el name: `codigo_vendedor` queda `null` (no rompe nada).
 - Admin crea cliente sin elegir vendedor: `seller_id` queda `null` (igual que hoy).
