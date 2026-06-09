@@ -97,6 +97,7 @@ export default function EmpleadosPage() {
     name: '',
     email: '',
     phone: '',
+    codigoVendedor: '',
     isVendedor: true,
     isTransportista: false,
     commissionRate: 10,
@@ -142,6 +143,7 @@ export default function EmpleadosPage() {
       name: '',
       email: '',
       phone: '',
+      codigoVendedor: '',
       isVendedor: true,
       isTransportista: false,
       commissionRate: 10,
@@ -158,6 +160,7 @@ export default function EmpleadosPage() {
       name: seller.name,
       email: seller.email,
       phone: seller.phone,
+      codigoVendedor: seller.codigoVendedor ?? '',
       isVendedor: seller.employeeType === 'vendedor' || seller.employeeType === 'ambos',
       isTransportista: seller.employeeType === 'transportista' || seller.employeeType === 'ambos',
       commissionRate: seller.commissionRate,
@@ -241,6 +244,7 @@ export default function EmpleadosPage() {
       name: formData.name,
       email: formData.email,
       phone: formData.phone,
+      codigoVendedor: formData.codigoVendedor.trim() || undefined,
       employeeType,
       commissionRate: formData.isVendedor ? formData.commissionRate : 0,
       maxDiscount: formData.isVendedor ? formData.maxDiscount : 0,
@@ -822,6 +826,15 @@ export default function EmpleadosPage() {
                   onChange={(e) => setFormData({ ...formData, name: e.target.value })}
                   placeholder="Ej: Juan Perez"
                   required
+                />
+              </div>
+              <div className="grid gap-2">
+                <Label htmlFor="codigoVendedor">Código de vendedor</Label>
+                <Input
+                  id="codigoVendedor"
+                  value={formData.codigoVendedor}
+                  onChange={(e) => setFormData({ ...formData, codigoVendedor: e.target.value })}
+                  placeholder="Ej: 3"
                 />
               </div>
               <div className="grid gap-2">

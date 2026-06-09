@@ -403,6 +403,7 @@ export default function CajaPage() {
   // Detalle de caja histórica
   const [selectedHistorial, setSelectedHistorial] = useState<CashRegister | null>(null);
   const [selectedSales, setSelectedSales] = useState<Sale[]>([]);
+  const [filtroVendedorCaja, setFiltroVendedorCaja] = useState<string>("all");
   const [detailLoading, setDetailLoading] = useState(false);
   const [generatingHistorialPdf, setGeneratingHistorialPdf] = useState<string | null>(null);
 
@@ -919,6 +920,18 @@ export default function CajaPage() {
   const isOpen = currentRegister?.status === "open";
   const isClosed = currentRegister?.status === "closed";
 
+  const vendedoresEnCaja = Array.from(
+    new Map(
+      sales
+        .filter((s) => s.sellerId)
+        .map((s) => [s.sellerId as string, s.sellerName || "Vendedor"]),
+    ).entries(),
+  ).map(([id, name]) => ({ id, name }));
+
+  const salesFiltradas = filtroVendedorCaja === "all"
+    ? sales
+    : sales.filter((s) => s.sellerId === filtroVendedorCaja);
+
   return (
     <MainLayout allowedRoles={['admin']} title="Caja de Reparto" description="Apertura y cierre de caja de reparto">
       <div className="p-4 lg:p-6 space-y-6">
@@ -1218,8 +1231,20 @@ export default function CajaPage() {
                 {/* Today's sales */}
                 <Card>
                   <CardHeader className="pb-3">
+                    {vendedoresEnCaja.length > 1 && (
+                      <select
+                        className="mb-2 h-9 w-full rounded-2xl border border-input bg-background px-3 text-sm"
+                        value={filtroVendedorCaja}
+                        onChange={(e) => setFiltroVendedorCaja(e.target.value)}
+                      >
+                        <option value="all">Todos los vendedores</option>
+                        {vendedoresEnCaja.map((v) => (
+                          <option key={v.id} value={v.id}>{v.name}</option>
+                        ))}
+                      </select>
+                    )}
                     <CardTitle className="text-base">
-                      Ventas del dia ({sales.length})
+                      Ventas del dia ({salesFiltradas.length})
                     </CardTitle>
                   </CardHeader>
                   <CardContent>
@@ -1229,7 +1254,12 @@ export default function CajaPage() {
                       </p>
                     ) : (
                       <div className="space-y-1">
-                        {sales.map((sale) => {
+                        {salesFiltradas.length === 0 && (
+                          <p className="text-sm text-muted-foreground text-center py-4">
+                            No hay ventas de este vendedor
+                          </p>
+                        )}
+                        {salesFiltradas.map((sale) => {
                           const paymentLabel = sale.paymentType === "cash"
                             ? ((sale as any).paymentMethod === "transferencia" ? "Transferencia" : "Efectivo")
                             : sale.paymentType === "credit"

@@ -47,6 +47,7 @@ export interface Product {
 export interface Client {
   id: string;
   codigo?: string;
+  codigoExterno?: string;
   name: string;
   dni?: string;
   cuit: string;
@@ -174,6 +175,7 @@ export interface Seller {
   name: string;
   email: string;
   phone: string;
+  codigoVendedor?: string;
   employeeType: EmployeeType;
   commissionRate: number;
   transportistaCommissionRate?: number;

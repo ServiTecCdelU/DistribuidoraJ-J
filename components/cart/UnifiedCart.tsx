@@ -459,7 +459,9 @@ export function UnifiedCart({ role, state, actions, onConfirmSale, allowDiscount
                 <SelectItem value="none" className="text-sm">Sin vendedor</SelectItem>
                 {sellers.map((seller) => (
                   <SelectItem key={seller.id} value={seller.id} className="text-sm">
-                    {seller.name}
+                    {seller.codigoVendedor && !seller.name.includes(seller.codigoVendedor)
+                      ? `${seller.name} · #${seller.codigoVendedor}`
+                      : seller.name}
                   </SelectItem>
                 ))}
               </SelectContent>

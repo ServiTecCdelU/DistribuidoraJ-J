@@ -9,6 +9,7 @@ function mapSeller(d: Record<string, any>): Seller {
     name: d.name,
     email: d.email ?? '',
     phone: d.phone ?? '',
+    codigoVendedor: d.codigo_vendedor ?? undefined,
     employeeType: d.employee_type ?? 'vendedor',
     commissionRate: Number(d.commission_rate) || 10,
     transportistaCommissionRate: d.transportista_commission_rate ? Number(d.transportista_commission_rate) : undefined,
@@ -50,6 +51,7 @@ export const createSeller = async (
     name: seller.name,
     email: seller.email || null,
     phone: seller.phone || null,
+    codigo_vendedor: seller.codigoVendedor || null,
     employee_type: seller.employeeType,
     commission_rate: seller.commissionRate,
     transportista_commission_rate: seller.transportistaCommissionRate ?? null,
@@ -80,6 +82,7 @@ export const updateSeller = async (id: string, updates: Partial<Seller>): Promis
   if (updates.isActive !== undefined) mapped.is_active = updates.isActive
   if (updates.totalSales !== undefined) mapped.total_sales = updates.totalSales
   if (updates.totalCommission !== undefined) mapped.total_commission = updates.totalCommission
+  if (updates.codigoVendedor !== undefined) mapped.codigo_vendedor = updates.codigoVendedor || null
 
   await supabase.from('vendedores').update(mapped).eq('id', id)
   const updated = await getSellerById(id)

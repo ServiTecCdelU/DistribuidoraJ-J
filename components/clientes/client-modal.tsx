@@ -29,9 +29,10 @@ interface ClientModalProps {
     name: string; dni: string; cuit: string; email: string;
     phone: string; address: string; taxCategory: string; creditLimit: number; notes: string;
   }>
+  sellers?: { id: string; name: string }[]
 }
 
-export function ClientModal({ open, onOpenChange, client, onSave, showCreditLimit = true, showNotes = true, defaultValues }: ClientModalProps) {
+export function ClientModal({ open, onOpenChange, client, onSave, showCreditLimit = true, showNotes = true, defaultValues, sellers }: ClientModalProps) {
   const [loading, setLoading] = useState(false)
   const [errors, setErrors] = useState<Record<string, string>>({})
   const [formData, setFormData] = useState({
@@ -44,6 +45,8 @@ export function ClientModal({ open, onOpenChange, client, onSave, showCreditLimi
     taxCategory: 'consumidor_final' as const,
     creditLimit: 0,
     notes: '',
+    codigoExterno: '',
+    sellerId: '',
   })
 
   useEffect(() => {
@@ -58,6 +61,8 @@ export function ClientModal({ open, onOpenChange, client, onSave, showCreditLimi
         taxCategory: client.taxCategory || 'consumidor_final',
         creditLimit: typeof client.creditLimit === 'number' ? client.creditLimit : 50000,
         notes: client.notes || '',
+        codigoExterno: client.codigoExterno || '',
+        sellerId: client.sellerId || '',
       })
     } else {
       setFormData({
@@ -70,6 +75,8 @@ export function ClientModal({ open, onOpenChange, client, onSave, showCreditLimi
         taxCategory: (defaultValues?.taxCategory as typeof formData.taxCategory) || 'consumidor_final',
         creditLimit: defaultValues?.creditLimit ?? 50000,
         notes: defaultValues?.notes || '',
+        codigoExterno: '',
+        sellerId: '',
       })
     }
     setErrors({})
@@ -106,7 +113,12 @@ export function ClientModal({ open, onOpenChange, client, onSave, showCreditLimi
     
     setLoading(true)
     try {
-      await onSave({ ...formData, cuit: formatCuit(formData.cuit) })
+      await onSave({
+        ...formData,
+        cuit: formatCuit(formData.cuit),
+        sellerId: formData.sellerId || undefined,
+        codigoExterno: formData.codigoExterno.trim() || undefined,
+      })
     } finally {
       setLoading(false)
     }
@@ -176,6 +188,31 @@ export function ClientModal({ open, onOpenChange, client, onSave, showCreditLimi
               </div>
             </div>
 
+              <div className="grid gap-2">
+                <Label htmlFor="codigoExterno" className="text-foreground">Código externo</Label>
+                <Input
+                  id="codigoExterno"
+                  value={formData.codigoExterno}
+                  onChange={(e) => setFormData({ ...formData, codigoExterno: e.target.value })}
+                  placeholder="Ej: 106"
+                />
+              </div>
+              {sellers && sellers.length > 0 && (
+                <div className="grid gap-2">
+                  <Label htmlFor="sellerId" className="text-foreground">Vendedor</Label>
+                  <select
+                    id="sellerId"
+                    className="flex h-10 w-full rounded-2xl border border-input bg-background px-3 py-2 text-sm"
+                    value={formData.sellerId}
+                    onChange={(e) => setFormData({ ...formData, sellerId: e.target.value })}
+                  >
+                    <option value="">Sin asignar</option>
+                    {sellers.map((s) => (
+                      <option key={s.id} value={s.id}>{s.name}</option>
+                    ))}
+                  </select>
+                </div>
+              )}
             <div className="space-y-2">
               <Label htmlFor="taxCategory" className="text-foreground flex items-center gap-2">
                 <Building className="h-3.5 w-3.5" />

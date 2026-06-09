@@ -152,7 +152,7 @@ export interface CartActions {
   // Client creation
   createNewClient: (form: NewClientForm) => Promise<void>;
   registerClientFromDni: () => Promise<void>;
-  registerClientFromModal: (form: { name: string; dni: string; cuit: string; email: string; phone: string; address: string; taxCategory: string; creditLimit: number; notes: string }) => Promise<void>;
+  registerClientFromModal: (form: { name: string; dni: string; cuit: string; email: string; phone: string; address: string; taxCategory: string; creditLimit: number; notes: string; sellerId?: string; codigoExterno?: string }) => Promise<void>;
   setClientCreditLimit: (v: number) => void;
   clearClient: () => void;
   refreshClientInList: (client: Client) => void;
@@ -282,6 +282,8 @@ export function useCart(role: UserRole, userEmail?: string, externalProducts?: P
   useEffect(() => {
     if (!selectedClientData) {
       setSelectedSavedAddress(null);
+      // Sin cliente: limpiar el vendedor auto-asignado (admin)
+      if (role === "admin") setSelectedSeller("");
       return;
     }
     // Pre-seleccionar la primera dirección guardada del cliente
@@ -294,6 +296,11 @@ export function useCart(role: UserRole, userEmail?: string, externalProducts?: P
     } else if (selectedClientData.address) {
       setSelectedSavedAddress({ address: selectedClientData.address });
       setDeliveryAddress("saved");
+    }
+    // Auto-asignar el vendedor del cliente (admin); el Select queda editable.
+    // Si el cliente no tiene vendedor, limpiar para no arrastrar el del cliente anterior.
+    if (role === "admin") {
+      setSelectedSeller(selectedClientData.sellerId || "");
     }
   }, [selectedClientData?.id]);
 
@@ -710,6 +717,7 @@ export function useCart(role: UserRole, userEmail?: string, externalProducts?: P
         creditLimit: clientCreditLimit,
         taxCategory: clientTaxCategory,
         notes: "",
+        sellerId: role === "seller" && selectedSeller && selectedSeller !== "none" ? selectedSeller : undefined,
       });
       setDniClientId(newClient.id);
       setDniFound(true);
@@ -723,7 +731,7 @@ export function useCart(role: UserRole, userEmail?: string, externalProducts?: P
   }, [clientName, dniLookup, clientCuit, clientEmail, clientPhone, clientAddress, clientCreditLimit, clientTaxCategory]);
 
   // --- Register client from modal (seller/public using ClientModal) ---
-  const registerClientFromModal = useCallback(async (form: { name: string; dni: string; cuit: string; email: string; phone: string; address: string; taxCategory: string; creditLimit: number; notes: string }) => {
+  const registerClientFromModal = useCallback(async (form: { name: string; dni: string; cuit: string; email: string; phone: string; address: string; taxCategory: string; creditLimit: number; notes: string; sellerId?: string; codigoExterno?: string }) => {
     const newClient = await clientsApi.create({
       name: form.name,
       dni: form.dni || dniLookup.trim(),
@@ -734,6 +742,8 @@ export function useCart(role: UserRole, userEmail?: string, externalProducts?: P
       creditLimit: form.creditLimit ?? 50000,
       taxCategory: (form.taxCategory as TaxCategory) || "consumidor_final",
       notes: form.notes || "",
+      sellerId: role === "seller" && selectedSeller && selectedSeller !== "none" ? selectedSeller : (form.sellerId || undefined),
+      codigoExterno: form.codigoExterno || undefined,
     });
     setClients((prev) => [newClient, ...prev]);
     setSelectedClient(newClient.id);

@@ -19,7 +19,7 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
-import { clientsApi } from '@/lib/api'
+import { clientsApi, sellersApi } from '@/lib/api'
 import {
   Select,
   SelectContent,
@@ -59,6 +59,7 @@ import { getAuthToken } from '@/services/auth-service'
 
 export default function ClientesPage() {
   const [clients, setClients] = useState<Client[]>([])
+  const [sellers, setSellers] = useState<{ id: string; name: string }[]>([])
   const [loading, setLoading] = useState(true)
   const [searchQuery, setSearchQuery] = useState('')
   const [categoryFilter, setCategoryFilter] = useState<string>('all')
@@ -129,6 +130,9 @@ export default function ClientesPage() {
   useEffect(() => {
     let mounted = true
     loadClients(() => mounted)
+    sellersApi.getAll().then((data) =>
+      setSellers(data.filter((s) => s.isActive).map((s) => ({ id: s.id, name: s.name })))
+    )
     return () => { mounted = false }
   }, [])
 
@@ -833,6 +837,7 @@ export default function ClientesPage() {
         client={editingClient}
         onSave={handleSave}
         defaultValues={arcaDefaults ?? undefined}
+        sellers={sellers}
       />
 
       {/* Dialog Consultar ARCA */}
