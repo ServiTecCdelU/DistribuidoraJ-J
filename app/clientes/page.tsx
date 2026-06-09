@@ -152,6 +152,18 @@ export default function ClientesPage() {
     setDetailModalOpen(true)
   }
 
+  const handleAssignSeller = async (sellerId: string) => {
+    if (!selectedClient) return
+    try {
+      const updated = await clientsApi.update(selectedClient.id, { sellerId: sellerId || undefined })
+      setClients((prev) => prev.map((c) => (c.id === updated.id ? updated : c)))
+      setSelectedClient(updated)
+      toast.success(sellerId ? 'Vendedor asignado' : 'Vendedor quitado')
+    } catch {
+      toast.error('Error al asignar vendedor')
+    }
+  }
+
   const handleSave = async (clientData: Omit<Client, 'id' | 'createdAt' | 'currentBalance'>) => {
     try {
       if (editingClient) {
@@ -766,14 +778,21 @@ export default function ClientesPage() {
                 )
               })()}
 
-              {/* Vendedor asignado */}
-              {selectedClient.sellerName && (
-                <div className="flex items-center gap-3 text-sm p-2 rounded-lg bg-muted/40">
-                  <User className="h-4 w-4 text-muted-foreground shrink-0" />
-                  <span className="text-muted-foreground">Vendedor:</span>
-                  <span className="font-medium text-foreground">{selectedClient.sellerName}</span>
-                </div>
-              )}
+              {/* Vendedor asignado (editable) */}
+              <div className="flex items-center gap-3 text-sm p-2 rounded-lg bg-muted/40">
+                <User className="h-4 w-4 text-muted-foreground shrink-0" />
+                <span className="text-muted-foreground shrink-0">Vendedor:</span>
+                <select
+                  className="flex h-9 w-full rounded-2xl border border-input bg-background px-3 text-sm"
+                  value={selectedClient.sellerId || ''}
+                  onChange={(e) => handleAssignSeller(e.target.value)}
+                >
+                  <option value="">Sin asignar</option>
+                  {sellers.map((s) => (
+                    <option key={s.id} value={s.id}>{s.name}</option>
+                  ))}
+                </select>
+              </div>
 
               {/* Private Notes */}
               {selectedClient.notes && (
