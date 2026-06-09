@@ -12,13 +12,12 @@ import {
   DropdownMenuContent,
   DropdownMenuItem,
 } from "@/components/ui/dropdown-menu";
-import { productsApi, sellersApi } from "@/lib/api";
-import type { Product, Seller } from "@/lib/types";
+import { productsApi } from "@/lib/api";
+import type { Product } from "@/lib/types";
 import { formatCurrency } from "@/lib/utils/format";
-import { getAsignacionesProducto, setAsignacion, getTotalesCupos } from "@/services/descuento-vendedor-service";
 import {
   Search, X, Percent, Check, Tag, ChevronLeft, ChevronRight, ChevronDown,
-  Users, Loader2, Gift, Plus, Pencil, Trash2, AlertTriangle, CheckCircle2,
+  Loader2, Gift, Plus, Pencil, Trash2, AlertTriangle, CheckCircle2,
 } from "lucide-react";
 import { toast } from "sonner";
 
@@ -49,23 +48,14 @@ export default function DescuentosPage() {
   const [ofertasActivas, setOfertasActivas] = useState<Product[]>([]);
   const [ofertasOpen, setOfertasOpen] = useState(true);
 
-  // Vendedores y cupos por producto
-  const [vendedores, setVendedores] = useState<Seller[]>([]);
-  const [cuposOpenId, setCuposOpenId] = useState<string | null>(null);
-  const [cupos, setCupos] = useState<Record<string, Record<string, string>>>({});
-  const [loadingCupos, setLoadingCupos] = useState(false);
-  const [savingCuposId, setSavingCuposId] = useState<string | null>(null);
-  // Total de cupos asignados por producto (para detectar descuentos sin cupos)
-  const [cuposTotales, setCuposTotales] = useState<Record<string, number>>({});
-
   // Edición de ofertas
   const [editing, setEditing] = useState<{ id: string; tipo: OfertaTipo } | null>(null);
   const [savingId, setSavingId] = useState<string | null>(null);
 
   // Drafts por tipo
   const [dtoDraft, setDtoDraft] = useState<Record<string, string>>({});
-  const [mismoDraft, setMismoDraft] = useState<Record<string, { cada: string; cantidad: string }>>({});
-  const [comboDraft, setComboDraft] = useState<Record<string, { productoId: string | null; nombre: string; cada: string; cantidad: string }>>({});
+  const [mismoDraft, setMismoDraft] = useState<Record<string, { max: string }>>({});
+  const [comboDraft, setComboDraft] = useState<Record<string, { productoId: string | null; nombre: string; max: string }>>({});
 
   // Buscador del producto a regalar (oferta cruzada)
   const [comboSearch, setComboSearch] = useState("");
@@ -86,12 +76,6 @@ export default function DescuentosPage() {
       if (idsB.length) {
         const bs = await productsApi.getByIds(idsB);
         setStockB((prev) => ({ ...prev, ...Object.fromEntries(bs.map((b) => [b.id, b.stock])) }));
-      }
-      // Cargar totales de cupos de los productos con descuento (para el aviso "sin cupos")
-      const idsDto = visibles.filter((p) => (p.descuento ?? 0) > 0).map((p) => p.id);
-      if (idsDto.length) {
-        const tot = await getTotalesCupos(idsDto);
-        setCuposTotales((prev) => ({ ...prev, ...Object.fromEntries(idsDto.map((id) => [id, tot[id] ?? 0])) }));
       }
     } catch {
       toast.error("Error al cargar productos");
@@ -120,12 +104,6 @@ export default function DescuentosPage() {
     cargarOfertasActivas();
   }, [cargarOfertasActivas]);
 
-  useEffect(() => {
-    sellersApi.getAll()
-      .then((all) => setVendedores(all.filter((s) => s.employeeType === "vendedor" || s.employeeType === "ambos")))
-      .catch(() => {});
-  }, []);
-
   const handleSearchChange = (value: string) => {
     setSearchInput(value);
     if (debounceRef.current) clearTimeout(debounceRef.current);
@@ -137,8 +115,8 @@ export default function DescuentosPage() {
 
   // --- Qué ofertas tiene un producto ---
   const tieneDescuento = (p: Product) => (p.descuento ?? 0) > 0;
-  const tieneRegaloMismo = (p: Product) => (p.regaloCada ?? 0) > 0;
-  const tieneRegaloOtro = (p: Product) => !!p.regaloProductoId && (p.regaloProductoCada ?? 0) > 0;
+  const tieneRegaloMismo = (p: Product) => !!p.regaloMismo;
+  const tieneRegaloOtro = (p: Product) => !!p.regaloProductoId;
 
   const tiposDisponibles = (p: Product): OfertaTipo[] => {
     const t: OfertaTipo[] = [];
@@ -159,9 +137,9 @@ export default function DescuentosPage() {
   // Lista descriptiva de las ofertas activas de un producto
   const ofertasDe = (p: Product): { tipo: OfertaTipo; text: string; estado: "activa" | "sin_stock" | "desconocido" }[] => {
     const arr: { tipo: OfertaTipo; text: string; estado: "activa" | "sin_stock" | "desconocido" }[] = [];
-    if (tieneDescuento(p)) arr.push({ tipo: "descuento", text: `Descuento ${p.descuento}%`, estado: p.stock > 0 ? "activa" : "sin_stock" });
-    if (tieneRegaloMismo(p)) arr.push({ tipo: "regalo_mismo", text: `Cada ${p.regaloCada} +${p.regaloCantidad ?? 1} (mismo)`, estado: p.stock > 0 ? "activa" : "sin_stock" });
-    if (tieneRegaloOtro(p)) arr.push({ tipo: "regalo_otro", text: `Cada ${p.regaloProductoCada} → ${p.regaloProductoCantidad ?? 1}× ${p.regaloProductoNombre}`, estado: estadoRegaloOtro(p) });
+    if (tieneDescuento(p)) arr.push({ tipo: "descuento", text: `Descuento máx ${p.descuento}%`, estado: p.stock > 0 ? "activa" : "sin_stock" });
+    if (tieneRegaloMismo(p)) arr.push({ tipo: "regalo_mismo", text: p.regaloMismoMax != null ? `Regala mismo (máx ${p.regaloMismoMax})` : `Regala mismo (libre)`, estado: p.stock > 0 ? "activa" : "sin_stock" });
+    if (tieneRegaloOtro(p)) arr.push({ tipo: "regalo_otro", text: p.regaloOtroMax != null ? `Regala ${p.regaloProductoNombre} (máx ${p.regaloOtroMax})` : `Regala ${p.regaloProductoNombre} (libre)`, estado: estadoRegaloOtro(p) });
     return arr;
   };
 
@@ -171,15 +149,14 @@ export default function DescuentosPage() {
     if (tipo === "descuento") {
       setDtoDraft((prev) => ({ ...prev, [p.id]: String(p.descuento ?? "") }));
     } else if (tipo === "regalo_mismo") {
-      setMismoDraft((prev) => ({ ...prev, [p.id]: { cada: p.regaloCada ? String(p.regaloCada) : "", cantidad: String(p.regaloCantidad ?? 1) } }));
+      setMismoDraft((prev) => ({ ...prev, [p.id]: { max: p.regaloMismoMax != null ? String(p.regaloMismoMax) : "" } }));
     } else {
       setComboSearch("");
       setComboResults([]);
       setComboDraft((prev) => ({ ...prev, [p.id]: {
         productoId: p.regaloProductoId ?? null,
         nombre: p.regaloProductoNombre ?? "",
-        cada: p.regaloProductoCada ? String(p.regaloProductoCada) : "",
-        cantidad: String(p.regaloProductoCantidad ?? 1),
+        max: p.regaloOtroMax != null ? String(p.regaloOtroMax) : "",
       } }));
     }
   };
@@ -198,10 +175,6 @@ export default function DescuentosPage() {
     try {
       await productsApi.update(p.id, { descuento });
       patchLocal(p.id, { descuento });
-      if (descuento > 0) {
-        const tot = await getTotalesCupos([p.id]);
-        setCuposTotales((prev) => ({ ...prev, [p.id]: tot[p.id] ?? 0 }));
-      }
       toast.success(descuento > 0 ? `Descuento del ${descuento}% en "${p.name}"` : `Descuento quitado`);
       cerrarEdicion();
       cargarOfertasActivas();
@@ -209,14 +182,13 @@ export default function DescuentosPage() {
   };
 
   const guardarRegaloMismo = async (p: Product) => {
-    const d = mismoDraft[p.id] ?? { cada: "", cantidad: "1" };
-    const cada = Math.max(0, Math.floor(Number(d.cada) || 0)) || null;
-    const cantidad = cada ? Math.max(1, Math.floor(Number(d.cantidad) || 1)) : null;
+    const d = mismoDraft[p.id] ?? { max: "" };
+    const max = d.max.trim() === "" ? null : Math.max(1, Math.floor(Number(d.max) || 0));
     setSavingId(p.id);
     try {
-      await productsApi.update(p.id, { regaloCada: cada, regaloCantidad: cantidad });
-      patchLocal(p.id, { regaloCada: cada, regaloCantidad: cantidad });
-      toast.success(cada ? `Promo guardada en "${p.name}"` : "Promo quitada");
+      await productsApi.update(p.id, { regaloMismo: true, regaloMismoMax: max });
+      patchLocal(p.id, { regaloMismo: true, regaloMismoMax: max });
+      toast.success(`Regalo del mismo habilitado en "${p.name}"`);
       cerrarEdicion();
       cargarOfertasActivas();
     } catch { toast.error("Error al guardar"); } finally { setSavingId(null); }
@@ -225,28 +197,15 @@ export default function DescuentosPage() {
   const guardarRegaloOtro = async (p: Product) => {
     const d = comboDraft[p.id];
     if (!d) return;
-    const cada = Math.max(0, Math.floor(Number(d.cada) || 0)) || null;
-    const cantidad = cada ? Math.max(1, Math.floor(Number(d.cantidad) || 1)) : null;
-    const productoId = cada && d.productoId ? d.productoId : null;
-    const nombre = productoId ? d.nombre : null;
-    if (cada && !productoId) { toast.error("Elegí el producto a regalar"); return; }
+    if (!d.productoId) { toast.error("Elegí el producto a regalar"); return; }
+    const max = d.max.trim() === "" ? null : Math.max(1, Math.floor(Number(d.max) || 0));
     setSavingId(p.id);
     try {
-      await productsApi.update(p.id, {
-        regaloProductoId: productoId,
-        regaloProductoNombre: nombre,
-        regaloProductoCada: productoId ? cada : null,
-        regaloProductoCantidad: cantidad,
-      });
-      patchLocal(p.id, {
-        regaloProductoId: productoId, regaloProductoNombre: nombre,
-        regaloProductoCada: productoId ? cada : null, regaloProductoCantidad: cantidad,
-      });
-      if (productoId) {
-        const b = await productsApi.getByIds([productoId]);
-        if (b[0]) setStockB((prev) => ({ ...prev, [productoId]: b[0].stock }));
-      }
-      toast.success(productoId ? `Combo guardado en "${p.name}"` : "Combo quitado");
+      await productsApi.update(p.id, { regaloProductoId: d.productoId, regaloProductoNombre: d.nombre, regaloOtroMax: max });
+      patchLocal(p.id, { regaloProductoId: d.productoId, regaloProductoNombre: d.nombre, regaloOtroMax: max });
+      const b = await productsApi.getByIds([d.productoId]);
+      if (b[0]) setStockB((prev) => ({ ...prev, [d.productoId!]: b[0].stock }));
+      toast.success(`Combo guardado en "${p.name}"`);
       cerrarEdicion();
       cargarOfertasActivas();
     } catch { toast.error("Error al guardar"); } finally { setSavingId(null); }
@@ -259,11 +218,11 @@ export default function DescuentosPage() {
         await productsApi.update(p.id, { descuento: 0 });
         patchLocal(p.id, { descuento: 0 });
       } else if (tipo === "regalo_mismo") {
-        await productsApi.update(p.id, { regaloCada: null, regaloCantidad: null });
-        patchLocal(p.id, { regaloCada: null, regaloCantidad: null });
+        await productsApi.update(p.id, { regaloMismo: false, regaloMismoMax: null });
+        patchLocal(p.id, { regaloMismo: false, regaloMismoMax: null });
       } else {
-        await productsApi.update(p.id, { regaloProductoId: null, regaloProductoNombre: null, regaloProductoCada: null, regaloProductoCantidad: null });
-        patchLocal(p.id, { regaloProductoId: null, regaloProductoNombre: null, regaloProductoCada: null, regaloProductoCantidad: null });
+        await productsApi.update(p.id, { regaloProductoId: null, regaloProductoNombre: null, regaloOtroMax: null });
+        patchLocal(p.id, { regaloProductoId: null, regaloProductoNombre: null, regaloOtroMax: null });
       }
       if (editing?.id === p.id && editing.tipo === tipo) cerrarEdicion();
       toast.success("Oferta quitada");
@@ -286,51 +245,10 @@ export default function DescuentosPage() {
   };
 
   const elegirComboProducto = (pId: string, prod: Product) => {
-    setComboDraft((prev) => ({ ...prev, [pId]: { ...(prev[pId] || { cada: "", cantidad: "1" }), productoId: prod.id, nombre: prod.name } }));
+    setComboDraft((prev) => ({ ...prev, [pId]: { ...(prev[pId] || { max: "" }), productoId: prod.id, nombre: prod.name } }));
     setStockB((prev) => ({ ...prev, [prod.id]: prod.stock }));
     setComboSearch("");
     setComboResults([]);
-  };
-
-  // --- Cupos por vendedor ---
-  const toggleCupos = async (p: Product) => {
-    if (cuposOpenId === p.id) { setCuposOpenId(null); return; }
-    setCuposOpenId(p.id);
-    if (cupos[p.id]) return;
-    setLoadingCupos(true);
-    try {
-      const map = await getAsignacionesProducto(p.id);
-      const row: Record<string, string> = {};
-      vendedores.forEach((v) => { row[v.id] = map[v.id] != null ? String(map[v.id]) : ""; });
-      setCupos((prev) => ({ ...prev, [p.id]: row }));
-    } catch { toast.error("Error al cargar los cupos"); } finally { setLoadingCupos(false); }
-  };
-
-  const setCupo = (productId: string, vendedorId: string, value: string) => {
-    setCupos((prev) => ({ ...prev, [productId]: { ...(prev[productId] || {}), [vendedorId]: value } }));
-  };
-
-  const aplicarATodos = (productId: string, value: string) => {
-    setCupos((prev) => {
-      const row: Record<string, string> = {};
-      vendedores.forEach((v) => { row[v.id] = value; });
-      return { ...prev, [productId]: row };
-    });
-  };
-
-  const handleSaveCupos = async (p: Product) => {
-    const row = cupos[p.id] || {};
-    setSavingCuposId(p.id);
-    try {
-      let total = 0;
-      await Promise.all(vendedores.map((v) => {
-        const n = Math.max(0, Math.floor(Number(row[v.id] || 0)));
-        total += n;
-        return setAsignacion(p.id, v.id, n);
-      }));
-      setCuposTotales((prev) => ({ ...prev, [p.id]: total }));
-      toast.success(`Cupos guardados para "${p.name}"`);
-    } catch { toast.error("Error al guardar los cupos"); } finally { setSavingCuposId(null); }
   };
 
   return (
@@ -340,8 +258,8 @@ export default function DescuentosPage() {
         <div className="rounded-2xl border border-teal-200 bg-teal-50/60 dark:bg-teal-950/20 dark:border-teal-800 p-3 flex items-start gap-2">
           <Tag className="h-4 w-4 text-teal-600 shrink-0 mt-0.5" />
           <p className="text-xs text-teal-800 dark:text-teal-200">
-            Cada producto puede tener hasta 3 ofertas que conviven: <strong>Descuento %</strong> (con cupos por vendedor),
-            <strong> Regala el mismo producto</strong> (cada X +N) y <strong>Regala otro producto</strong> (cada X → N de otro).
+            Cada producto puede tener hasta 3 ofertas: <strong>Descuento %</strong> (máximo que el vendedor puede aplicar),
+            <strong> Regala el mismo producto</strong> (cantidad libre o con tope) y <strong>Regala otro producto</strong>.
             El badge muestra si está <strong>Activa</strong> o <strong>Sin stock</strong>.
           </p>
         </div>
@@ -470,36 +388,18 @@ export default function DescuentosPage() {
                     )}
 
                     {tieneDescuento(p) && (
-                      <>
-                        <OfferRow
-                          icon={<Tag className="h-3.5 w-3.5 text-teal-600" />}
-                          text={`Descuento ${p.descuento}%`}
-                          estado={p.stock > 0 ? "activa" : "sin_stock"}
-                          onCupos={() => toggleCupos(p)}
-                          cuposActive={cuposOpenId === p.id}
-                          onEdit={() => abrirEdicion(p, "descuento")}
-                          onRemove={() => quitarOferta(p, "descuento")}
-                        />
-                        {cuposTotales[p.id] === 0 && cuposOpenId !== p.id && (
-                          <button
-                            onClick={() => toggleCupos(p)}
-                            className="flex items-center gap-2 w-full rounded-lg border border-amber-300 bg-amber-50 dark:bg-amber-950/20 dark:border-amber-800 px-2.5 py-1.5 text-left hover:bg-amber-100 dark:hover:bg-amber-950/40 transition-colors"
-                          >
-                            <AlertTriangle className="h-3.5 w-3.5 text-amber-600 shrink-0" />
-                            <span className="text-[11px] text-amber-800 dark:text-amber-200 flex-1 min-w-0">
-                              Sin cupos asignados — ningún vendedor verá esta oferta.
-                            </span>
-                            <span className="text-[11px] font-semibold text-amber-700 dark:text-amber-300 shrink-0 flex items-center gap-1">
-                              <Users className="h-3.5 w-3.5" /> Asignar cupos
-                            </span>
-                          </button>
-                        )}
-                      </>
+                      <OfferRow
+                        icon={<Tag className="h-3.5 w-3.5 text-teal-600" />}
+                        text={`Descuento máx ${p.descuento}%`}
+                        estado={p.stock > 0 ? "activa" : "sin_stock"}
+                        onEdit={() => abrirEdicion(p, "descuento")}
+                        onRemove={() => quitarOferta(p, "descuento")}
+                      />
                     )}
                     {tieneRegaloMismo(p) && (
                       <OfferRow
                         icon={<Gift className="h-3.5 w-3.5 text-fuchsia-600" />}
-                        text={`Cada ${p.regaloCada} +${p.regaloCantidad ?? 1} (mismo)`}
+                        text={p.regaloMismoMax != null ? `Regala mismo (máx ${p.regaloMismoMax})` : `Regala mismo (libre)`}
                         estado={p.stock > 0 ? "activa" : "sin_stock"}
                         onEdit={() => abrirEdicion(p, "regalo_mismo")}
                         onRemove={() => quitarOferta(p, "regalo_mismo")}
@@ -508,7 +408,7 @@ export default function DescuentosPage() {
                     {tieneRegaloOtro(p) && (
                       <OfferRow
                         icon={<Gift className="h-3.5 w-3.5 text-purple-600" />}
-                        text={`Cada ${p.regaloProductoCada} → ${p.regaloProductoCantidad ?? 1}× ${p.regaloProductoNombre}`}
+                        text={p.regaloOtroMax != null ? `Regala ${p.regaloProductoNombre} (máx ${p.regaloOtroMax})` : `Regala ${p.regaloProductoNombre} (libre)`}
                         estado={estadoRegaloOtro(p)}
                         onEdit={() => abrirEdicion(p, "regalo_otro")}
                         onRemove={() => quitarOferta(p, "regalo_otro")}
@@ -529,7 +429,7 @@ export default function DescuentosPage() {
                       {editing.tipo === "descuento" && (
                         <div className="flex items-end gap-2">
                           <div className="flex flex-col">
-                            <span className="text-[9px] text-muted-foreground mb-0.5">% de descuento</span>
+                            <span className="text-[9px] text-muted-foreground mb-0.5">% máximo de descuento</span>
                             <Input
                               type="number" min={0} max={100}
                               value={dtoDraft[p.id] ?? ""}
@@ -546,18 +446,11 @@ export default function DescuentosPage() {
                       {editing.tipo === "regalo_mismo" && (
                         <div className="flex items-end gap-3 flex-wrap">
                           <div className="flex flex-col">
-                            <span className="text-[9px] text-muted-foreground mb-0.5">cada (compradas)</span>
-                            <Input type="number" min={0}
-                              value={mismoDraft[p.id]?.cada ?? ""}
-                              onChange={(e) => setMismoDraft((prev) => ({ ...prev, [p.id]: { ...(prev[p.id] || { cantidad: "1" }), cada: e.target.value } }))}
-                              className="h-8 w-20 text-center text-sm" />
-                          </div>
-                          <div className="flex flex-col">
-                            <span className="text-[9px] text-muted-foreground mb-0.5">gratis (mismo)</span>
+                            <span className="text-[9px] text-muted-foreground mb-0.5">máx a regalar (vacío = libre)</span>
                             <Input type="number" min={1}
-                              value={mismoDraft[p.id]?.cantidad ?? "1"}
-                              onChange={(e) => setMismoDraft((prev) => ({ ...prev, [p.id]: { ...(prev[p.id] || { cada: "" }), cantidad: e.target.value } }))}
-                              className="h-8 w-20 text-center text-sm" />
+                              value={mismoDraft[p.id]?.max ?? ""}
+                              onChange={(e) => setMismoDraft((prev) => ({ ...prev, [p.id]: { max: e.target.value } }))}
+                              className="h-8 w-28 text-center text-sm" placeholder="libre" />
                           </div>
                           <Button size="sm" disabled={savingId === p.id} onClick={() => guardarRegaloMismo(p)} className="h-8 gap-1 ml-auto">
                             {savingId === p.id ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Check className="h-3.5 w-3.5" />} Guardar
@@ -604,18 +497,11 @@ export default function DescuentosPage() {
                           )}
                           <div className="flex items-end gap-3 flex-wrap">
                             <div className="flex flex-col">
-                              <span className="text-[9px] text-muted-foreground mb-0.5">cada (compradas)</span>
-                              <Input type="number" min={0}
-                                value={comboDraft[p.id]?.cada ?? ""}
-                                onChange={(e) => setComboDraft((prev) => ({ ...prev, [p.id]: { ...(prev[p.id] || { productoId: null, nombre: "", cantidad: "1" }), cada: e.target.value } }))}
-                                className="h-8 w-20 text-center text-sm" />
-                            </div>
-                            <div className="flex flex-col">
-                              <span className="text-[9px] text-muted-foreground mb-0.5">regala (gratis)</span>
+                              <span className="text-[9px] text-muted-foreground mb-0.5">máx a regalar (vacío = libre)</span>
                               <Input type="number" min={1}
-                                value={comboDraft[p.id]?.cantidad ?? "1"}
-                                onChange={(e) => setComboDraft((prev) => ({ ...prev, [p.id]: { ...(prev[p.id] || { productoId: null, nombre: "", cada: "" }), cantidad: e.target.value } }))}
-                                className="h-8 w-20 text-center text-sm" />
+                                value={comboDraft[p.id]?.max ?? ""}
+                                onChange={(e) => setComboDraft((prev) => ({ ...prev, [p.id]: { ...(prev[p.id] || { productoId: null, nombre: "" }), max: e.target.value } }))}
+                                className="h-8 w-28 text-center text-sm" placeholder="libre" />
                             </div>
                             <Button size="sm" disabled={savingId === p.id} onClick={() => guardarRegaloOtro(p)} className="h-8 gap-1 ml-auto">
                               {savingId === p.id ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Check className="h-3.5 w-3.5" />} Guardar
@@ -626,39 +512,6 @@ export default function DescuentosPage() {
                     </div>
                   )}
 
-                  {/* Panel de cupos por vendedor */}
-                  {cuposOpenId === p.id && (
-                    <div className="border-t border-border bg-muted/20 px-3 py-3">
-                      {loadingCupos && !cupos[p.id] ? (
-                        <div className="flex items-center gap-2 text-xs text-muted-foreground py-2">
-                          <Loader2 className="h-3.5 w-3.5 animate-spin" /> Cargando cupos...
-                        </div>
-                      ) : vendedores.length === 0 ? (
-                        <p className="text-xs text-muted-foreground py-2">No hay vendedores cargados.</p>
-                      ) : (
-                        <>
-                          <div className="flex items-center gap-2 mb-2">
-                            <span className="text-[11px] font-medium text-muted-foreground">Asignar a todos:</span>
-                            <Input type="number" min={0} placeholder="0" onChange={(e) => aplicarATodos(p.id, e.target.value)} className="h-7 w-16 text-center text-xs px-1" />
-                            <span className="text-[10px] text-muted-foreground">unidades</span>
-                          </div>
-                          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                            {vendedores.map((v) => (
-                              <div key={v.id} className="flex items-center gap-2 bg-card rounded-lg border border-border px-2 py-1.5">
-                                <span className="text-xs flex-1 truncate">{v.name}</span>
-                                <Input type="number" min={0} placeholder="0" value={cupos[p.id]?.[v.id] ?? ""} onChange={(e) => setCupo(p.id, v.id, e.target.value)} className="h-7 w-16 text-center text-xs px-1" />
-                              </div>
-                            ))}
-                          </div>
-                          <div className="flex justify-end mt-3">
-                            <Button size="sm" onClick={() => handleSaveCupos(p)} disabled={savingCuposId === p.id} className="h-8 gap-1">
-                              {savingCuposId === p.id ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Check className="h-3.5 w-3.5" />} Guardar cupos
-                            </Button>
-                          </div>
-                        </>
-                      )}
-                    </div>
-                  )}
                 </div>
               );
             })}
@@ -706,26 +559,19 @@ function EstadoBadge({ estado }: { estado: "activa" | "sin_stock" | "desconocido
 }
 
 function OfferRow({
-  icon, text, estado, onEdit, onRemove, onCupos, cuposActive,
+  icon, text, estado, onEdit, onRemove,
 }: {
   icon: React.ReactNode;
   text: string;
   estado: "activa" | "sin_stock" | "desconocido";
   onEdit: () => void;
   onRemove: () => void;
-  onCupos?: () => void;
-  cuposActive?: boolean;
 }) {
   return (
     <div className="flex items-center gap-2 rounded-lg border border-border bg-background/60 px-2.5 py-1.5">
       {icon}
       <span className="text-xs flex-1 min-w-0 truncate">{text}</span>
       <EstadoBadge estado={estado} />
-      {onCupos && (
-        <Button variant={cuposActive ? "default" : "ghost"} size="icon" className="h-6 w-6" title="Cupos por vendedor" onClick={onCupos}>
-          <Users className="h-3.5 w-3.5" />
-        </Button>
-      )}
       <Button variant="ghost" size="icon" className="h-6 w-6" title="Editar" onClick={onEdit}>
         <Pencil className="h-3.5 w-3.5" />
       </Button>

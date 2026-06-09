@@ -32,15 +32,13 @@ export interface Product {
   gananciaGlobal?: number;     // % de ganancia aplicado
   gananciaIndividual?: boolean; // true = precio seteado individualmente
   codigo?: string;
-  descuento?: number;          // % de descuento del producto fijado por admin (se suma al del vendedor)
-  descuentoCantidad?: number | null; // unidades disponibles en oferta; null = sin límite, 0 = oferta agotada
-  regaloCada?: number | null;  // promo "cada X comprados +N gratis"; null/0 = sin promo
-  regaloCantidad?: number | null; // unidades gratis por cada bloque de regaloCada (default 1)
+  descuento?: number;          // % MÁXIMO de descuento que el vendedor puede aplicar; 0 = no admite
+  regaloMismo?: boolean;       // permite regalar unidades del mismo producto
+  regaloMismoMax?: number | null;   // tope de unidades a regalar (mismo); null = libre
+  regaloOtroMax?: number | null;    // tope de unidades a regalar (otro); null = libre
   // Promo cruzada: "cada X comprados, regala N de OTRO producto"
   regaloProductoId?: string | null;     // id del producto que se regala
   regaloProductoNombre?: string | null; // nombre del producto regalado (cache para mostrar)
-  regaloProductoCada?: number | null;   // cada cuántas compradas se activa
-  regaloProductoCantidad?: number | null; // unidades del otro producto por bloque
   productoId?: string;         // id en tabla productos (prod_mp_XXX) cuando el id es mayorista (mp_XXX)
 }
 
@@ -87,8 +85,9 @@ export interface Transaction {
 export interface CartItem {
   product: Product;
   quantity: number;
-  itemDiscount?: number; // porcentaje efectivo total (descuento admin + vendedor)
-  adminDiscount?: number; // % base fijado por admin en el producto (piso, no editable por vendedor)
+  itemDiscount?: number; // % elegido por el vendedor (0..product.descuento)
+  regalo?: number;       // unidades gratis del mismo producto (manual)
+  regaloOtroCantidad?: number; // unidades del producto fijado a regalar (manual)
   cantidadStockLocal?: number;
   cantidadPendienteMayorista?: number;
 }
@@ -179,7 +178,6 @@ export interface Seller {
   employeeType: EmployeeType;
   commissionRate: number;
   transportistaCommissionRate?: number;
-  maxDiscount: number;
   isActive: boolean;
   totalSales: number;
   totalCommission: number;

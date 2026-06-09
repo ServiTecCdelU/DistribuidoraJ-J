@@ -6,11 +6,9 @@ import { clientsApi, sellersApi, ordersApi } from "@/lib/api";
 import { getMayoristaProductos } from "@/services/mayorista-service";
 import { processSaleMayorista } from "@/services/sales-service";
 import { crearPedidoMayorista } from "@/services/pedidos-mayorista-service";
-import { descontarVendedor } from "@/services/descuento-vendedor-service";
 import type { Product, Client, CartItem, Seller, City } from "@/lib/types";
 import { toast } from "sonner";
 import { formatCurrency, normalizeCuit } from "@/lib/utils/format";
-import { unidadesRegalo, maxQtyPagable } from "@/lib/utils/promo";
 
 export type UserRole = "admin" | "seller" | null;
 
@@ -64,7 +62,6 @@ export interface CartState {
   selectedSeller: string;
   selectedSellerData: Seller | undefined;
   sellerMatchName: string | null;
-  sellerMaxDiscount: number;
 
   // Payment
   paymentType: PaymentType;
@@ -102,6 +99,8 @@ export interface CartActions {
   setQuantityDirect: (productId: string, value: number) => void;
   removeFromCart: (productId: string) => void;
   setItemDiscount: (productId: string, discount: number) => void;
+  setItemRegaloMismo: (productId: string, n: number) => void;
+  setItemRegaloOtro: (productId: string, n: number) => void;
 
   // Client
   setLookupType: (type: LookupType) => void;
@@ -211,7 +210,6 @@ export function useCart(role: UserRole, userEmail?: string, externalProducts?: P
   // Seller
   const [selectedSeller, setSelectedSeller] = useState("");
   const [sellerMatchName, setSellerMatchName] = useState<string | null>(null);
-  const [sellerMaxDiscount, setSellerMaxDiscount] = useState<number>(role === "admin" ? 100 : 30);
 
   // Payment
   const [paymentType, setPaymentType] = useState<PaymentType>("cash");
@@ -383,36 +381,14 @@ export function useCart(role: UserRole, userEmail?: string, externalProducts?: P
         if (data.found) {
           setSellerMatchName(data.sellerName);
           setSelectedSeller(data.sellerId);
-          setSellerMaxDiscount(data.sellerMaxDiscount ?? 0);
         } else {
           setSellerMatchName(null);
-          // Sin perfil válido: límite 0 para no permitir descuentos por encima del autorizado
-          setSellerMaxDiscount(0);
         }
       } catch {
-        setSellerMaxDiscount(0);
+        // silently fail
       }
     })();
   }, [role, userEmail]);
-
-  // Re-aplica el tope de descuento del vendedor a los items ya en el carrito.
-  // Corre cuando se carga el límite real del perfil: clampa hacia abajo cualquier
-  // descuento (de producto o del vendedor) que supere el máximo autorizado.
-  useEffect(() => {
-    setCart((prev) => {
-      let changed = false;
-      const next = prev.map((item) => {
-        const admin = Math.min(item.adminDiscount ?? 0, sellerMaxDiscount);
-        const eff = item.itemDiscount != null ? Math.min(item.itemDiscount, sellerMaxDiscount) : item.itemDiscount;
-        if (admin !== (item.adminDiscount ?? 0) || eff !== item.itemDiscount) {
-          changed = true;
-          return { ...item, adminDiscount: admin > 0 ? admin : undefined, itemDiscount: eff && eff > 0 ? eff : undefined };
-        }
-        return item;
-      });
-      return changed ? next : prev;
-    });
-  }, [sellerMaxDiscount]);
 
   // --- Persist cart to localStorage ---
   useEffect(() => {
@@ -531,40 +507,20 @@ export function useCart(role: UserRole, userEmail?: string, externalProducts?: P
   // --- Cart actions ---
   const addToCart = useCallback((product: Product) => {
     setCart((prev) => {
-      // Descuento base del producto fijado por admin (topeado al máximo del vendedor).
-      // Solo se aplica si la oferta está activa: sin límite de unidades (null) o con stock de oferta (> 0).
-      const ofertaActiva = (product.descuento ?? 0) > 0 && (product.descuentoCantidad == null || product.descuentoCantidad > 0);
-      const adminDiscount = ofertaActiva ? Math.min(product.descuento ?? 0, sellerMaxDiscount) : 0;
-      // Tope de unidades de la oferta: si la oferta tiene cupo (descuentoCantidad finito) no se puede pasar de ese número.
-      const maxOferta = ofertaActiva && product.descuentoCantidad != null ? product.descuentoCantidad : Infinity;
-
       const existing = prev.find((item) => item.product.id === product.id);
       if (existing) {
-        const nextQty = existing.quantity + 1;
-        if (nextQty + unidadesRegalo(nextQty, product.regaloCada, product.regaloCantidad) > product.stock) {
+        const regalo = existing.regalo ?? 0;
+        if (existing.quantity + 1 + regalo > product.stock) {
           toast.error("Stock insuficiente");
           return prev;
         }
-        if (existing.quantity >= maxOferta) {
-          toast.error(`Solo ${product.descuentoCantidad} ${product.descuentoCantidad === 1 ? "unidad" : "unidades"} en oferta`);
-          return prev;
-        }
         return prev.map((item) =>
-          item.product.id === product.id
-            ? { ...item, quantity: item.quantity + 1 }
-            : item,
+          item.product.id === product.id ? { ...item, quantity: item.quantity + 1 } : item,
         );
       }
-      return [
-        ...prev,
-        {
-          product,
-          quantity: 1,
-          ...(adminDiscount > 0 ? { adminDiscount, itemDiscount: adminDiscount } : {}),
-        },
-      ];
+      return [...prev, { product, quantity: 1 }];
     });
-  }, [sellerMaxDiscount]);
+  }, []);
 
   const updateQuantity = useCallback((productId: string, delta: number) => {
     setCart((prev) =>
@@ -573,14 +529,8 @@ export function useCart(role: UserRole, userEmail?: string, externalProducts?: P
           if (item.product.id !== productId) return item;
           const newQty = item.quantity + delta;
           if (newQty <= 0) return { ...item, quantity: 0 };
-          if (newQty + unidadesRegalo(newQty, item.product.regaloCada, item.product.regaloCantidad) > item.product.stock) {
+          if (newQty + (item.regalo ?? 0) > item.product.stock) {
             toast.error("Stock insuficiente");
-            return item;
-          }
-          const p = item.product;
-          const ofertaActiva = (p.descuento ?? 0) > 0 && (p.descuentoCantidad == null || p.descuentoCantidad > 0);
-          if (delta > 0 && ofertaActiva && p.descuentoCantidad != null && newQty > p.descuentoCantidad) {
-            toast.error(`Solo ${p.descuentoCantidad} ${p.descuentoCantidad === 1 ? "unidad" : "unidades"} en oferta`);
             return item;
           }
           return { ...item, quantity: newQty };
@@ -593,17 +543,9 @@ export function useCart(role: UserRole, userEmail?: string, externalProducts?: P
     setCart((prev) => {
       const item = prev.find((i) => i.product.id === productId);
       if (!item) return prev;
-      const p = item.product;
-      const ofertaActiva = (p.descuento ?? 0) > 0 && (p.descuentoCantidad == null || p.descuentoCantidad > 0);
-      const maxOferta = ofertaActiva && p.descuentoCantidad != null ? p.descuentoCantidad : Infinity;
-      const stockCap = maxQtyPagable(item.product.stock, p.regaloCada, p.regaloCantidad);
-      const newQty = Math.max(1, Math.min(value, stockCap, maxOferta));
-      if (ofertaActiva && p.descuentoCantidad != null && value > p.descuentoCantidad) {
-        toast.error(`Solo ${p.descuentoCantidad} ${p.descuentoCantidad === 1 ? "unidad" : "unidades"} en oferta`);
-      }
-      return prev.map((i) =>
-        i.product.id === productId ? { ...i, quantity: newQty } : i,
-      );
+      const maxPagable = Math.max(1, item.product.stock - (item.regalo ?? 0));
+      const newQty = Math.max(1, Math.min(value, maxPagable));
+      return prev.map((i) => (i.product.id === productId ? { ...i, quantity: newQty } : i));
     });
   }, []);
 
@@ -611,20 +553,40 @@ export function useCart(role: UserRole, userEmail?: string, externalProducts?: P
     setCart((prev) => prev.filter((item) => item.product.id !== productId));
   }, []);
 
-  // discount = porción del vendedor (se suma al descuento base del admin)
+  // El máximo es el % configurado en el producto (product.descuento). 0 = no admite.
   const setItemDiscount = useCallback((productId: string, discount: number) => {
     setCart((prev) => prev.map((item) => {
       if (item.product.id !== productId) return item;
-      const admin = item.adminDiscount ?? 0;
-      const maxSeller = Math.max(0, sellerMaxDiscount - admin);
-      if (discount > maxSeller) {
-        toast.error(`Descuento máximo del vendedor: ${maxSeller}% (el producto ya trae ${admin}%)`);
-      }
-      const clampedSeller = Math.max(0, Math.min(maxSeller, discount));
-      const effective = admin + clampedSeller;
-      return { ...item, itemDiscount: effective || undefined };
+      const max = item.product.descuento ?? 0;
+      if (discount > max) toast.error(`Descuento máximo del producto: ${max}%`);
+      const clamped = Math.max(0, Math.min(max, discount));
+      return { ...item, itemDiscount: clamped || undefined };
     }));
-  }, [sellerMaxDiscount]);
+  }, []);
+
+  const setItemRegaloMismo = useCallback((productId: string, n: number) => {
+    setCart((prev) => prev.map((item) => {
+      if (item.product.id !== productId) return item;
+      const max = item.product.regaloMismoMax ?? Infinity;
+      let val = Math.max(0, Math.floor(n || 0));
+      if (val > max) { toast.error(`Máximo a regalar: ${max}`); val = max; }
+      if (item.quantity + val > item.product.stock) {
+        toast.error("Stock insuficiente para ese regalo");
+        val = Math.max(0, item.product.stock - item.quantity);
+      }
+      return { ...item, regalo: val || undefined };
+    }));
+  }, []);
+
+  const setItemRegaloOtro = useCallback((productId: string, n: number) => {
+    setCart((prev) => prev.map((item) => {
+      if (item.product.id !== productId) return item;
+      const max = item.product.regaloOtroMax ?? Infinity;
+      let val = Math.max(0, Math.floor(n || 0));
+      if (val > max) { toast.error(`Máximo a regalar: ${max}`); val = max; }
+      return { ...item, regaloOtroCantidad: val || undefined };
+    }));
+  }, []);
 
   // --- Payment actions ---
   const handleCashAmountChange = useCallback(
@@ -800,20 +762,6 @@ export function useCart(role: UserRole, userEmail?: string, externalProducts?: P
   // --- Process sale ---
   const handleProcessSale = useCallback(async (modo: "esperar" | "disponible" = "disponible") => {
     setProcessing(true);
-    // Descuenta las unidades de oferta del vendedor para los productos vendidos con descuento.
-    // Cada vendedor tiene su propio cupo (tabla descuento_vendedor).
-    const descontarOfertasVendidas = async () => {
-      const vendedorId = selectedSeller && selectedSeller !== "none" ? selectedSeller : null;
-      if (!vendedorId) return;
-      const tareas = cart
-        .filter((it) => (it.adminDiscount ?? 0) > 0)
-        .map((it) => {
-          const pid = (it.product as any).productoId
-            || (it.product.id.startsWith("mp_") ? `prod_${it.product.id}` : it.product.id);
-          return descontarVendedor(pid, vendedorId, it.quantity);
-        });
-      if (tareas.length) await Promise.all(tareas).catch(() => {});
-    };
     try {
       const resolvedAddress =
         deliveryMethod === "delivery"
@@ -920,7 +868,6 @@ export function useCart(role: UserRole, userEmail?: string, externalProducts?: P
           discountType: discountValue > 0 ? discountType : undefined,
           notes: orderNotes,
         });
-        await descontarOfertasVendidas();
         toast.success("Pedido creado correctamente");
         resetCart();
         return "order";
@@ -962,7 +909,6 @@ export function useCart(role: UserRole, userEmail?: string, externalProducts?: P
             await crearPedidoMayorista(itemsDeficit);
           }
 
-          await descontarOfertasVendidas();
           toast.success("Pedido creado — pedido al mayorista generado automáticamente");
           resetCart();
           return "order";
@@ -996,8 +942,6 @@ export function useCart(role: UserRole, userEmail?: string, externalProducts?: P
           deliveryAddress: "Retiro en local",
           modo,
         });
-
-        await descontarOfertasVendidas();
 
         const msg = modo === "esperar"
           ? "Venta creada — pendiente de stock mayorista"
@@ -1144,7 +1088,7 @@ export function useCart(role: UserRole, userEmail?: string, externalProducts?: P
     lookupType, selectedClient, selectedClientData,
     dniLookup, dniLoading, dniFound, dniNotFound, dniClientId,
     clientName, clientEmail, clientPhone, clientAddress, clientDni, clientCuit, clientTaxCategory, clientCreditLimit,
-    selectedSeller, selectedSellerData, sellerMatchName, sellerMaxDiscount,
+    selectedSeller, selectedSellerData, sellerMatchName,
     paymentType, paymentMethod, cashAmount, creditAmountInput,
     selectedCity, deliveryMethod, deliveryAddress, newAddress,
     deliveryLat, deliveryLng, selectedSavedAddress,
@@ -1154,16 +1098,12 @@ export function useCart(role: UserRole, userEmail?: string, externalProducts?: P
   };
 
   const actions: CartActions = {
-    addToCart, updateQuantity, setQuantityDirect, removeFromCart, setItemDiscount,
+    addToCart, updateQuantity, setQuantityDirect, removeFromCart, setItemDiscount, setItemRegaloMismo, setItemRegaloOtro,
     setLookupType, setSelectedClient, setDniLookup, selectClientFromSearch,
     setClientName, setClientEmail, setClientPhone, setClientAddress,
     setClientDni, setClientCuit, setClientTaxCategory,
     setSelectedSeller: (id: string) => {
       setSelectedSeller(id);
-      if (role === "admin") {
-        const seller = sellers.find((s) => s.id === id);
-        setSellerMaxDiscount(seller?.maxDiscount ?? 100);
-      }
     },
     setPaymentType, setPaymentMethod, handleCashAmountChange, handleCreditAmountChange,
     setSelectedCity: (city: City | "") => {

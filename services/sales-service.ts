@@ -2,7 +2,6 @@
 import { supabase } from '@/lib/supabase'
 import type { CartItem, Sale } from '@/lib/types'
 import { generateReadableId, slugify } from '@/services/supabase-helpers'
-import { unidadesRegalo, calcularRegalosCruzados } from '@/lib/utils/promo'
 
 
 // Cache: ¿existe la columna payment_method en ventas?
@@ -180,9 +179,11 @@ export const processSale = async (data: {
 
   const saleId = await generateReadableId('ventas', 'venta', resolvedClientName)
 
-  const regalosCruzados = calcularRegalosCruzados(data.items)
+  const regalosCruzados = data.items
+    .filter((it) => (it.regaloOtroCantidad ?? 0) > 0 && it.product.regaloProductoId)
+    .map((it) => ({ productoId: it.product.regaloProductoId as string, nombre: it.product.regaloProductoNombre ?? 'Regalo', cantidad: it.regaloOtroCantidad as number }))
   const saleItems: Record<string, any>[] = data.items.map((item) => {
-    const regalo = unidadesRegalo(item.quantity, item.product.regaloCada, item.product.regaloCantidad)
+    const regalo = item.regalo ?? 0
     return {
       productId: item.product.id ?? null,
       quantity: item.quantity,
@@ -230,7 +231,7 @@ export const processSale = async (data: {
   for (const item of data.items) {
     // Los pedidos usan IDs de mayorista_productos (mp_XXXX); stock vive en productos (prod_mp_XXXX)
     const prodId = item.product.id?.startsWith('mp_') ? `prod_${item.product.id}` : item.product.id
-    const regaloMismo = unidadesRegalo(item.quantity, item.product.regaloCada, item.product.regaloCantidad)
+    const regaloMismo = item.regalo ?? 0
     const { data: prod } = await supabase.from('productos').select('stock').eq('id', prodId).single()
     if (prod) {
       let stockActual = prod.stock || 0
@@ -530,7 +531,7 @@ export const processSaleMayorista = async (data: {
     const cantidadStockLocal = Math.min(cantidadPedida, stockLocal)
     const cantidadPendienteMayorista =
       modo === 'disponible' ? 0 : Math.max(0, cantidadPedida - stockLocal)
-    const regalo = unidadesRegalo(cantidadPedida, item.product.regaloCada, item.product.regaloCantidad)
+    const regalo = item.regalo ?? 0
     return {
       productId: item.product.id,
       name: item.product.name,
@@ -546,7 +547,9 @@ export const processSaleMayorista = async (data: {
   })
 
   // Regalos de OTRO producto (promo cruzada) — gratis, se agregan al registro
-  const regalosCruzados = calcularRegalosCruzados(data.items)
+  const regalosCruzados = data.items
+    .filter((it) => (it.regaloOtroCantidad ?? 0) > 0 && it.product.regaloProductoId)
+    .map((it) => ({ productoId: it.product.regaloProductoId as string, nombre: it.product.regaloProductoNombre ?? 'Regalo', cantidad: it.regaloOtroCantidad as number }))
   const itemsParaGuardar = [
     ...itemsConStock,
     ...regalosCruzados.map((r) => ({ productId: r.productoId, name: r.nombre, price: 0, quantity: r.cantidad, esRegalo: true })),

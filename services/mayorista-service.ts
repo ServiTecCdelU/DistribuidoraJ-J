@@ -1,7 +1,6 @@
 import { supabase } from '@/lib/supabase'
 import type { MayoristaProducto, MayoristaPrefs } from '@/lib/types'
 import { invalidateProductsCache } from '@/services/products-service'
-import { getAsignacionesVendedor, getProductosConOfertaVendedor } from '@/services/descuento-vendedor-service'
 
 const BATCH_SIZE = 300
 const UPDATE_CONCURRENCY = 10
@@ -163,20 +162,10 @@ export const searchProductosParaVenta = async (params: VentaProductSearchParams)
     query = query.eq('rubro', rubro)
   }
 
-  // Solo productos con descuento activo para ESTE vendedor: producto con % > 0
-  // y con cupo de oferta (descuento_vendedor.cantidad > 0) para el vendedor.
+  // Solo productos con descuento activo (descuento > 0), sin distinción de vendedor.
   if (soloDescuento) {
     const conDto = await supabase.from('productos').select('id').gt('descuento', 0)
-    const dtoIds = (conDto.data ?? []).map((p: any) => p.id)
-    // Vendedor: solo ofertas con cupo asignado. Admin directo (sin vendedor): todas las ofertas activas.
-    let ids: string[]
-    if (vendedorId) {
-      const dtoSet = new Set(dtoIds)
-      const ofertaIds = await getProductosConOfertaVendedor(vendedorId)
-      ids = ofertaIds.filter((id) => dtoSet.has(id))
-    } else {
-      ids = dtoIds
-    }
+    const ids = (conDto.data ?? []).map((p: any) => p.id)
     if (ids.length === 0) {
       return { data: [], total: 0, page, pageSize, totalPages: 0 }
     }
@@ -202,12 +191,6 @@ export const searchProductosParaVenta = async (params: VentaProductSearchParams)
     ;(prodRows ?? []).forEach((p: any) => productosMap.set(p.id, p))
   }
 
-  // Cupo de oferta por vendedor: descuentoCantidad = unidades que le quedan a este vendedor.
-  // Sin vendedor (admin directo) la oferta aplica sin tope de cupo (descuentoCantidad = null).
-  const asignaciones = vendedorId && prodIds.length > 0
-    ? await getAsignacionesVendedor(vendedorId, prodIds)
-    : {}
-
   const results = mpRows.map((mp: any) => {
     const prod = productosMap.get(mp.producto_id)
     const precioVenta = prod ? (Number(prod.precio_venta) || Number(prod.price) || 0) : 0
@@ -225,7 +208,7 @@ export const searchProductosParaVenta = async (params: VentaProductSearchParams)
       precioVenta,
       stockLocal: prod?.stock ?? 0,
       descuento,
-      descuentoCantidad: descuento > 0 ? (vendedorId ? (asignaciones[mp.producto_id] ?? 0) : null) : null,
+      descuentoCantidad: null,
     }
   })
 

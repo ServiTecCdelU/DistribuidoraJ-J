@@ -24,30 +24,14 @@ function mapRow(d: Record<string, any>): Product {
     gananciaIndividual: d.ganancia_individual ?? undefined,
     codigo: d.codigo ?? undefined,
     descuento: d.descuento != null ? Number(d.descuento) : 0,
-    descuentoCantidad: d.descuento_cantidad != null ? Number(d.descuento_cantidad) : null,
-    regaloCada: d.regalo_cada != null ? Number(d.regalo_cada) : null,
-    regaloCantidad: d.regalo_cantidad != null ? Number(d.regalo_cantidad) : null,
+    regaloMismo: d.regalo_mismo ?? false,
+    regaloMismoMax: d.regalo_mismo_max != null ? Number(d.regalo_mismo_max) : null,
+    regaloOtroMax: d.regalo_otro_max != null ? Number(d.regalo_otro_max) : null,
     regaloProductoId: d.regalo_producto_id ?? null,
     regaloProductoNombre: d.regalo_producto_nombre ?? null,
-    regaloProductoCada: d.regalo_producto_cada != null ? Number(d.regalo_producto_cada) : null,
-    regaloProductoCantidad: d.regalo_producto_cantidad != null ? Number(d.regalo_producto_cantidad) : null,
   }
 }
 
-// Descuenta unidades de la oferta de un producto.
-// Si el producto no tiene límite (descuento_cantidad null) no hace nada.
-export const descontarOferta = async (productoId: string, cantidad: number): Promise<void> => {
-  if (!productoId || cantidad <= 0) return
-  const { data } = await supabase
-    .from('productos')
-    .select('descuento_cantidad')
-    .eq('id', productoId)
-    .single()
-  const actual = data?.descuento_cantidad
-  if (actual == null) return // sin límite o producto inexistente
-  const nuevo = Math.max(0, Number(actual) - cantidad)
-  await supabase.from('productos').update({ descuento_cantidad: nuevo }).eq('id', productoId)
-}
 
 export function invalidateProductsCache(): void {
   // No-op — sin cache con Supabase
@@ -96,7 +80,7 @@ export const getProductosConOfertas = async (): Promise<Product[]> => {
   const { data } = await supabase
     .from('productos')
     .select('*')
-    .or('descuento.gt.0,regalo_cada.gt.0,regalo_producto_id.not.is.null')
+    .or('descuento.gt.0,regalo_mismo.eq.true,regalo_producto_id.not.is.null')
     .order('name', { ascending: true })
   return (data ?? []).filter((d: any) => !d.disabled).map(mapRow)
 }
@@ -283,13 +267,11 @@ export const updateProduct = async (
   if (updates.gananciaGlobal !== undefined) mapped.ganancia_global = updates.gananciaGlobal
   if (updates.gananciaIndividual !== undefined) mapped.ganancia_individual = updates.gananciaIndividual
   if (updates.descuento !== undefined) mapped.descuento = updates.descuento
-  if (updates.descuentoCantidad !== undefined) mapped.descuento_cantidad = updates.descuentoCantidad
-  if (updates.regaloCada !== undefined) mapped.regalo_cada = updates.regaloCada
-  if (updates.regaloCantidad !== undefined) mapped.regalo_cantidad = updates.regaloCantidad
+  if (updates.regaloMismo !== undefined) mapped.regalo_mismo = updates.regaloMismo
+  if (updates.regaloMismoMax !== undefined) mapped.regalo_mismo_max = updates.regaloMismoMax
+  if (updates.regaloOtroMax !== undefined) mapped.regalo_otro_max = updates.regaloOtroMax
   if (updates.regaloProductoId !== undefined) mapped.regalo_producto_id = updates.regaloProductoId
   if (updates.regaloProductoNombre !== undefined) mapped.regalo_producto_nombre = updates.regaloProductoNombre
-  if (updates.regaloProductoCada !== undefined) mapped.regalo_producto_cada = updates.regaloProductoCada
-  if (updates.regaloProductoCantidad !== undefined) mapped.regalo_producto_cantidad = updates.regaloProductoCantidad
   if ((updates as any).base !== undefined) mapped.base = (updates as any).base
   if ((updates as any).marca !== undefined) mapped.brand = (updates as any).marca
   if ((updates as any).sinTacc !== undefined) mapped.sin_tacc = (updates as any).sinTacc

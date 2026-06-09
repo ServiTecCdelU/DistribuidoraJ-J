@@ -137,7 +137,6 @@ function NuevaVentaContent({
           imageUrl: "",
           category: p.rubro || p.categoria,
           descuento: p.descuento ?? 0,
-          descuentoCantidad: p.descuentoCantidad ?? null,
           productoId: p.productoId,
           createdAt: new Date(),
         } as any;
@@ -485,8 +484,7 @@ const ProductListItem = memo(function ProductListItem({
   const unidadesPorBulto = (product as any).unidadesPorBulto;
   const stockLocal = product.stockLocal;
   const descuento = (product as any).descuento ?? 0;
-  const descuentoCantidad = (product as any).descuentoCantidad;
-  const ofertaActiva = descuento > 0 && (descuentoCantidad == null || descuentoCantidad > 0);
+  const ofertaActiva = descuento > 0;
   const unidadesLote = unidadesPorBulto
     ? (seDivideEn && seDivideEn > 1 ? Math.floor(unidadesPorBulto / seDivideEn) : unidadesPorBulto)
     : null;
@@ -504,7 +502,7 @@ const ProductListItem = memo(function ProductListItem({
         {ofertaActiva && (
           <Badge className="h-5 px-1.5 text-[10px] shrink-0 gap-0.5 bg-teal-100 text-teal-700 hover:bg-teal-100 border border-teal-200">
             <Percent className="h-2.5 w-2.5" />
-            {descuento}% dto.{descuentoCantidad != null ? ` · ${descuentoCantidad}u` : ""}
+            hasta {descuento}% dto.
           </Badge>
         )}
       </div>

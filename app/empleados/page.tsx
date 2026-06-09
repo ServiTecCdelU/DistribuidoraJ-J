@@ -102,7 +102,6 @@ export default function EmpleadosPage() {
     isTransportista: false,
     commissionRate: 10,
     transportistaCommissionRate: 10,
-    maxDiscount: 30,
     isActive: true,
   })
   const [saving, setSaving] = useState(false)
@@ -148,7 +147,6 @@ export default function EmpleadosPage() {
       isTransportista: false,
       commissionRate: 10,
       transportistaCommissionRate: 10,
-      maxDiscount: 30,
       isActive: true,
     })
     setModalOpen(true)
@@ -165,7 +163,6 @@ export default function EmpleadosPage() {
       isTransportista: seller.employeeType === 'transportista' || seller.employeeType === 'ambos',
       commissionRate: seller.commissionRate,
       transportistaCommissionRate: seller.transportistaCommissionRate ?? 10,
-      maxDiscount: seller.maxDiscount ?? 30,
       isActive: seller.isActive,
     })
     setModalOpen(true)
@@ -247,7 +244,6 @@ export default function EmpleadosPage() {
       codigoVendedor: formData.codigoVendedor.trim() || undefined,
       employeeType,
       commissionRate: formData.isVendedor ? formData.commissionRate : 0,
-      maxDiscount: formData.isVendedor ? formData.maxDiscount : 0,
       isActive: formData.isActive,
     }
     if (formData.isTransportista) {
@@ -597,11 +593,6 @@ export default function EmpleadosPage() {
                                   <Truck className="h-2.5 w-2.5 mr-1" />{seller.transportistaCommissionRate ?? 0}%
                                 </span>
                               )}
-                              {(seller.employeeType === 'vendedor' || seller.employeeType === 'ambos') && (
-                                <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-orange-100 text-orange-700 dark:bg-orange-900/30 dark:text-orange-400 border border-orange-200 dark:border-orange-800">
-                                  <Percent className="h-2.5 w-2.5 mr-1" />dto. máx. {seller.maxDiscount ?? 30}%
-                                </span>
-                              )}
                             </div>
                           </td>
                           <td className="p-4 text-right">
@@ -892,24 +883,6 @@ export default function EmpleadosPage() {
                   </div>
                 </div>
               </div>
-              {formData.isVendedor && (
-                <div className="grid gap-2">
-                  <Label htmlFor="maxDiscount">Descuento máximo que puede hacer (%)</Label>
-                  <div className="flex items-center gap-2">
-                    <Input
-                      id="maxDiscount"
-                      type="number"
-                      min="0"
-                      max="100"
-                      step="1"
-                      value={formData.maxDiscount}
-                      onChange={(e) => setFormData({ ...formData, maxDiscount: Number(e.target.value) })}
-                      className="w-24 text-center"
-                    />
-                    <span className="text-sm text-muted-foreground">% máximo en ventas</span>
-                  </div>
-                </div>
-              )}
               <div className="grid gap-2">
                 <Label htmlFor="email">Email</Label>
                 <Input
@@ -995,12 +968,6 @@ export default function EmpleadosPage() {
                   <span className={`inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium ${getCommissionColor(selectedSeller.transportistaCommissionRate ?? 0)}`}>
                     <Truck className="h-3 w-3 mr-1" />
                     {selectedSeller.transportistaCommissionRate ?? 0}% transportista
-                  </span>
-                )}
-                {(selectedSeller.employeeType === 'vendedor' || selectedSeller.employeeType === 'ambos') && (
-                  <span className="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium bg-orange-100 text-orange-700 dark:bg-orange-900/30 dark:text-orange-400 border border-orange-200 dark:border-orange-800">
-                    <Percent className="h-3 w-3 mr-1" />
-                    dto. máx. {selectedSeller.maxDiscount ?? 30}%
                   </span>
                 )}
                 {selectedSeller.phone && (

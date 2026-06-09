@@ -33,6 +33,5 @@ export async function GET(request: Request) {
     found: true,
     sellerId: doc.id,
     sellerName: doc.name || "",
-    sellerMaxDiscount: doc.descuento_maximo ?? 0,
   });
 }

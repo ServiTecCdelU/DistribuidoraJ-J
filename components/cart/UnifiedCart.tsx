@@ -36,7 +36,6 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
-import { unidadesRegalo } from "@/lib/utils/promo";
 import type { UserRole, CartState, CartActions } from "@/hooks/useCart";
 
 
@@ -182,8 +181,6 @@ export function UnifiedCart({ role, state, actions, onConfirmSale, allowDiscount
   const hasItemDiscounts = cart.some((item) => (item.itemDiscount ?? 0) > 0);
   // ¿Hay descuento general activo?
   const hasGeneralDiscount = discountValue > 0;
-  const maxDiscountAllowed = state.sellerMaxDiscount;
-
   return (
     <div className="flex flex-col h-full">
       {/* Step indicator — solo admin/seller */}
@@ -223,8 +220,8 @@ export function UnifiedCart({ role, state, actions, onConfirmSale, allowDiscount
               const cantidadPendiente = Math.max(0, item.quantity - stockLocal);
               const lineTotal = item.product.price * item.quantity;
               const lineFinal = item.itemDiscount ? lineTotal * (1 - item.itemDiscount / 100) : lineTotal;
-              const regalo = unidadesRegalo(item.quantity, item.product.regaloCada, item.product.regaloCantidad);
-              const regaloCruzadoCant = unidadesRegalo(item.quantity, item.product.regaloProductoCada, item.product.regaloProductoCantidad);
+              const regalo = item.regalo ?? 0;
+              const regaloCruzadoCant = item.regaloOtroCantidad ?? 0;
               return (
                 <li key={item.product.id} className="px-3 py-2 hover:bg-muted/20 transition-colors space-y-1.5">
                   {/* Nombre + eliminar */}
@@ -305,14 +302,33 @@ export function UnifiedCart({ role, state, actions, onConfirmSale, allowDiscount
                     </div>
                   )}
                   {/* Descuento por producto — admin/seller */}
-                  {role !== null && (
+                  {role !== null && (item.product.descuento ?? 0) > 0 && (
                     <ItemDiscountRow
                       item={item}
                       role={role}
-                      maxDiscountAllowed={maxDiscountAllowed}
+                      maxDiscountAllowed={item.product.descuento ?? 0}
                       lineTotal={lineTotal}
                       actions={actions}
                     />
+                  )}
+                  {/* Regalos manuales — admin/seller */}
+                  {role !== null && item.product.regaloMismo && (
+                    <div className="flex items-center gap-2 mt-1">
+                      <span className="text-[10px] text-muted-foreground">Regalar (mismo):</span>
+                      <input type="number" min={0}
+                        value={item.regalo ?? ""}
+                        onChange={(e) => actions.setItemRegaloMismo(item.product.id, Number(e.target.value) || 0)}
+                        className="h-7 w-16 rounded-lg border border-input bg-background px-2 text-center text-xs" />
+                    </div>
+                  )}
+                  {role !== null && item.product.regaloProductoId && (
+                    <div className="flex items-center gap-2 mt-1">
+                      <span className="text-[10px] text-muted-foreground">Regalar {item.product.regaloProductoNombre}:</span>
+                      <input type="number" min={0}
+                        value={item.regaloOtroCantidad ?? ""}
+                        onChange={(e) => actions.setItemRegaloOtro(item.product.id, Number(e.target.value) || 0)}
+                        className="h-7 w-16 rounded-lg border border-input bg-background px-2 text-center text-xs" />
+                    </div>
                   )}
                 </li>
               );
@@ -763,13 +779,10 @@ function ItemDiscountRow({
   lineTotal: number;
   actions: CartActions;
 }) {
-  const adminDto = item.adminDiscount ?? 0;
-  const sellerDto = Math.max(0, (item.itemDiscount ?? 0) - adminDto);
-  const maxSeller = Math.max(0, maxDiscountAllowed - adminDto);
+  const adminDto = 0;
+  const sellerDto = item.itemDiscount ?? 0;
+  const maxSeller = maxDiscountAllowed;
   const basePrice = item.product.price;
-  const regaloCada = item.product.regaloCada ?? 0;
-  const regaloCantidad = item.product.regaloCantidad && item.product.regaloCantidad > 0 ? item.product.regaloCantidad : 1;
-  const regalo = unidadesRegalo(item.quantity, item.product.regaloCada, item.product.regaloCantidad);
   const computedPrecio = Math.round(basePrice * (1 - (item.itemDiscount ?? 0) / 100) * 100) / 100;
 
   const [precioInput, setPrecioInput] = useState<string>("");
@@ -785,22 +798,12 @@ function ItemDiscountRow({
     const precio = Number(precioInput) || 0;
     if (!basePrice || precio <= 0) { actions.setItemDiscount(item.product.id, 0); return; }
     const pctTotal = Math.max(0, Math.min(100, (1 - precio / basePrice) * 100));
-    actions.setItemDiscount(item.product.id, Math.round((pctTotal - adminDto) * 100) / 100);
+    actions.setItemDiscount(item.product.id, Math.round(pctTotal * 100) / 100);
   };
 
   return (
     <div className="flex items-center gap-1.5 flex-wrap">
-      {adminDto > 0 && (
-        <span className="text-[10px] font-medium text-teal-600 bg-teal-50 border border-teal-200 rounded px-1">
-          Producto {adminDto}%
-        </span>
-      )}
-      {regaloCada > 0 && (
-        <span className="text-[10px] font-medium text-fuchsia-600 bg-fuchsia-50 border border-fuchsia-200 rounded px-1">
-          Regalo cada {regaloCada} +{regaloCantidad}{regalo > 0 ? ` (+${regalo})` : ""}
-        </span>
-      )}
-      <span className="text-[10px] text-muted-foreground">{adminDto > 0 ? "Vendedor:" : "Dto.:"}</span>
+      <span className="text-[10px] text-muted-foreground">Dto.:</span>
       <Input
         type="number" min="0" max={maxSeller} placeholder="0"
         value={sellerDto || ""}
