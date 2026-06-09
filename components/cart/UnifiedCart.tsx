@@ -301,12 +301,13 @@ export function UnifiedCart({ role, state, actions, onConfirmSale, allowDiscount
                       <span>Regala {regaloCruzadoCant}× {item.product.regaloProductoNombre || "otro producto"} gratis</span>
                     </div>
                   )}
-                  {/* Descuento por producto — admin/seller */}
-                  {role !== null && (item.product.descuento ?? 0) > 0 && (
+                  {/* Descuento por producto — admin/seller. Si el producto tiene
+                      un máximo configurado se respeta; si no, queda libre (100%). */}
+                  {role !== null && (
                     <ItemDiscountRow
                       item={item}
                       role={role}
-                      maxDiscountAllowed={item.product.descuento ?? 0}
+                      maxDiscountAllowed={(item.product.descuento ?? 0) > 0 ? (item.product.descuento as number) : 100}
                       lineTotal={lineTotal}
                       actions={actions}
                     />

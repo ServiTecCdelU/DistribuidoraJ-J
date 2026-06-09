@@ -558,7 +558,8 @@ export function useCart(role: UserRole, userEmail?: string, externalProducts?: P
   const setItemDiscount = useCallback((productId: string, discount: number) => {
     setCart((prev) => prev.map((item) => {
       if (item.product.id !== productId) return item;
-      const max = item.product.descuento ?? 0;
+      // Si el producto tiene un máximo configurado se respeta; si no, libre (100%).
+      const max = (item.product.descuento ?? 0) > 0 ? (item.product.descuento as number) : 100;
       if (discount > max) toast.error(`Descuento máximo del producto: ${max}%`);
       const clamped = Math.max(0, Math.min(max, discount));
       if (clamped > 0) {
