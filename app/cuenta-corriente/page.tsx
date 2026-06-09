@@ -42,7 +42,7 @@ import { formatCurrency, formatDate } from '@/lib/utils/format'
 import {
   Users, FileCheck, CheckCircle2, XCircle, Clock, Loader2, ExternalLink,
   ChevronLeft, DollarSign, ArrowDownCircle, ArrowUpCircle, Search, X,
-  Banknote, CreditCard, Image as ImageIcon, AlertTriangle, Ban,
+  Banknote, CreditCard, Image as ImageIcon, AlertTriangle, Ban, Printer,
 } from 'lucide-react'
 import { toast } from 'sonner'
 
@@ -388,6 +388,70 @@ export default function CuentaCorrientePage() {
       toast.success(`Clasificación cambiada a ${labels[classification]}`)
     } catch {
       toast.error('Error al cambiar clasificación')
+    }
+  }
+
+  // Imprimir listado de cobranza del vendedor filtrado
+  const handlePrintCobranza = () => {
+    const conDeuda = filteredClients.filter((c) => c.currentBalance > 0)
+    if (conDeuda.length === 0) {
+      toast.error('No hay clientes con deuda para imprimir')
+      return
+    }
+    const vendedorName = sellers.find((s) => s.id === filterSeller)?.name || conDeuda[0].sellerName || 'Vendedor'
+    const total = conDeuda.reduce((acc, c) => acc + c.currentBalance, 0)
+    const now = new Date()
+    const dateStr = new Intl.DateTimeFormat('es-AR', { day: '2-digit', month: 'long', year: 'numeric' }).format(now)
+
+    const rows = conDeuda.map((c, i) => {
+      const cod = c.codigo ? ` <span class="cod">(${c.codigo})</span>` : ''
+      return `<tr>
+        <td class="center">${i + 1}</td>
+        <td><b>${c.name}</b>${cod}</td>
+        <td class="right deuda">${formatCurrency(c.currentBalance)}</td>
+      </tr>`
+    }).join('')
+
+    const html = `<!DOCTYPE html><html><head><title>Cobranza ${vendedorName}</title><style>
+*{margin:0;padding:0;box-sizing:border-box;-webkit-print-color-adjust:exact;print-color-adjust:exact}
+body{font-family:-apple-system,sans-serif;padding:24px;font-size:13px;color:#1f2937}
+.header{display:flex;justify-content:space-between;align-items:flex-end;margin-bottom:14px;padding-bottom:8px;border-bottom:2px solid #1f2937}
+.header h2{font-size:18px;line-height:1.2}
+.header .vend{font-size:13px;font-weight:600;color:#0d9488;margin-top:2px}
+.header .meta{text-align:right;font-size:11px;color:#6b7280}
+table{width:100%;border-collapse:collapse}
+th,td{padding:8px 10px;border-bottom:1px solid #f3f4f6;vertical-align:top}
+th{font-size:10px;font-weight:700;color:#6b7280;background:#f9fafb;border-bottom:1px solid #e5e7eb;text-transform:uppercase;letter-spacing:.05em}
+td.right,th.right{text-align:right}
+td.center,th.center{text-align:center}
+.deuda{font-weight:700;color:#dc2626;white-space:nowrap}
+.cod{font-size:11px;color:#6b7280;font-weight:400}
+.tfoot td{border-top:2px solid #d1d5db;background:#f3f4f6;font-weight:800;font-size:14px}
+.footer{margin-top:18px;font-size:10px;color:#9ca3af;border-top:1px solid #e5e7eb;padding-top:8px}
+tr{page-break-inside:avoid}
+@media print{body{padding:16px}}
+</style></head><body>
+<div class="header">
+  <div><h2>Listado de Cobranza</h2><div class="vend">${vendedorName}</div></div>
+  <div class="meta"><div style="font-weight:600;color:#1f2937;font-size:13px">${dateStr}</div><div>${conDeuda.length} clientes</div></div>
+</div>
+<table>
+<thead><tr><th class="center">#</th><th>Cliente</th><th class="right">Deuda</th></tr></thead>
+<tbody>${rows}</tbody>
+<tfoot><tr class="tfoot"><td></td><td>TOTAL A COBRAR</td><td class="right deuda">${formatCurrency(total)}</td></tr></tfoot>
+</table>
+<div class="footer">Generado el ${new Intl.DateTimeFormat('es-AR', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' }).format(now)}</div>
+</body></html>`
+
+    const iframe = document.createElement('iframe')
+    iframe.style.cssText = 'position:fixed;top:0;left:0;width:0;height:0;border:0;opacity:0;'
+    document.body.appendChild(iframe)
+    const doc = iframe.contentWindow?.document
+    if (!doc) { document.body.removeChild(iframe); return }
+    doc.open(); doc.write(html); doc.close()
+    iframe.onload = () => {
+      iframe.contentWindow?.print()
+      setTimeout(() => document.body.removeChild(iframe), 1000)
     }
   }
 
@@ -966,6 +1030,12 @@ export default function CuentaCorrientePage() {
                 ))}
               </SelectContent>
             </Select>
+            {filterSeller !== 'all' && (
+              <Button onClick={handlePrintCobranza} className="rounded-xl gap-2 shrink-0">
+                <Printer className="h-4 w-4" />
+                Imprimir cobranza
+              </Button>
+            )}
           </div>
 
           {/* Lista de clientes con deuda */}
