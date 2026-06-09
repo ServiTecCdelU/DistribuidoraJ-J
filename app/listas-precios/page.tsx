@@ -31,6 +31,7 @@ import {
   Tag,
   Percent,
 } from "lucide-react";
+import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { priceListApi, auditApi, productsApi } from "@/lib/api";
 import { useAuth } from "@/hooks/use-auth";
 import type { PriceList, PriceListType, Product } from "@/lib/types";
@@ -51,6 +52,7 @@ export default function ListasPreciosPage() {
   const [showModal, setShowModal] = useState(false);
   const [editing, setEditing] = useState<PriceList | null>(null);
   const [saving, setSaving] = useState(false);
+  const [deleteTarget, setDeleteTarget] = useState<PriceList | null>(null);
 
   // Form
   const [name, setName] = useState("");
@@ -163,8 +165,9 @@ export default function ListasPreciosPage() {
     }
   };
 
-  const handleDelete = async (list: PriceList) => {
-    if (!confirm(`Eliminar lista "${list.name}"?`) || !user) return;
+  const confirmDelete = async () => {
+    if (!deleteTarget || !user) return;
+    const list = deleteTarget;
     try {
       await priceListApi.delete(list.id);
       await auditApi.log({
@@ -178,6 +181,8 @@ export default function ListasPreciosPage() {
       loadData();
     } catch (error) {
       toast.error("Error al eliminar lista de precios");
+    } finally {
+      setDeleteTarget(null);
     }
   };
 
@@ -248,7 +253,7 @@ export default function ListasPreciosPage() {
                           variant="ghost"
                           size="icon"
                           className="h-7 w-7 text-destructive"
-                          onClick={() => handleDelete(list)}
+                          onClick={() => setDeleteTarget(list)}
                         >
                           <Trash2 className="h-3.5 w-3.5" />
                         </Button>
@@ -367,6 +372,16 @@ export default function ListasPreciosPage() {
             </DialogFooter>
           </DialogContent>
         </Dialog>
+
+        <ConfirmDialog
+          open={!!deleteTarget}
+          onOpenChange={(open) => !open && setDeleteTarget(null)}
+          title="Eliminar lista de precios"
+          description={`¿Eliminar la lista "${deleteTarget?.name ?? ""}"? Esta acción no se puede deshacer.`}
+          confirmText="Eliminar"
+          variant="destructive"
+          onConfirm={confirmDelete}
+        />
       </div>
     </MainLayout>
   );

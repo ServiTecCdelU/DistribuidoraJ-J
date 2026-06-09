@@ -51,8 +51,6 @@
     "cmdk": "1.0.4",
     "date-fns": "4.1.0",
     "embla-carousel-react": "8.5.1",
-    "firebase": "^12.8.0",
-    "firebase-admin": "^10.3.0",
     "googleapis": "^171.4.0",
     "html2canvas-pro": "^1.6.7",
     "input-otp": "1.4.1",

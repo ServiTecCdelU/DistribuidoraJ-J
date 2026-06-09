@@ -1,252 +1,284 @@
-# Plan de Mejoras Integral — Distribuidora Patricia
+# Plan de Mejoras — Distribuidora Patricia
 
-> Estado: PROPUESTA (no ejecutado). Marcar `[x]` a medida que se avanza.
-> Cada ítem indica **Por qué** se hace y **En qué afecta** la mejora.
-> Orden por prioridad: Seguridad → Estabilidad/Datos → Rendimiento → Mantenibilidad → Calidad de código → UX/DevEx.
+> Estado: PROPUESTA. Marcar `[x]` a medida que se avanza.
+> Relevado: 2026-06-09. Cada ítem indica **Por qué** y **Afecta**.
+> Orden por prioridad: Seguridad → Datos/Estabilidad → Rendimiento → Arquitectura → Calidad → Limpieza.
+
+## Estado real medido (2026-06-09)
+- 19 rutas API: **0 validan con zod**, solo 11 verifican auth.
+- **51** usos de `select('*')` en `services/`.
+- **165** `any` en `app/services/hooks/lib`.
+- **1 solo test** (`lib/__tests__/gastos-constants.test.ts`) — Vitest instalado.
+- **38 scripts** `diag-*`/`fix-*` sueltos en `scripts/` (de 66 totales).
+- `firebase` y `firebase-admin` siguen en `package.json` **sin uso**.
+- 22 `console.log/debug` en código productivo.
+- 6 pages > 1500 líneas (`productos` 2294, `pedidos` 2105, `caja` 1823, `mayorista` 1739, `tienda` 1619, `cuenta-corriente` 1418).
+
+**UX/Estilo medido:**
+- Radius inconsistente: 175 `rounded-xl`, 133 `rounded-lg`, 73 `rounded-md` vs **solo 63 `rounded-2xl`** (el estándar del proyecto).
+- Dark mode **muerto**: variables `.dark` en `globals.css` + 121 clases `dark:` pero `ThemeProvider` (`components/theme-provider.tsx`) **no está montado** en `app/layout.tsx`.
+- Borrados sin confirmación consistente: 8 handlers de delete, **0 `AlertDialog`**, 1 `confirm()` nativo (`listas-precios`).
+- Solo **10** botones con estado loading/disabled → doble-submit posible (riesgo: venta/cobranza duplicada).
+- Debounce solo en **6** archivos → búsquedas sobre miles de productos filtran en cada tecla.
+- Accesibilidad: **8** `aria-*` fuera de `components/ui/`; `focus-visible` custom solo 20.
+- Loading mezclado: 24 archivos con `Skeleton`, 31 con spinner `animate-spin` (dos patrones conviviendo).
+- `<img>` crudo en `cuenta-corriente/page.tsx` y `payment-modal.tsx` (resto usa `next/image`).
+- 8 componentes con vistas duplicadas desktop/mobile (`hidden lg:block`) — doble mantenimiento.
 
 ---
 
-## 1. SEGURIDAD (crítico — hacer primero)
+## 1. SEGURIDAD (crítico — primero)
 
-### 1.1 Verificar y blindar RLS en Supabase ⚠️ APLICAR EL LUNES 2026-06-01
-- [ ] **CONFIRMADO 2026-05-29: RLS está DESHABILITADO en todas las tablas.** Riesgo crítico abierto en producción.
-- [ ] Aplicar RLS con políticas por rol (ver plan de ejecución abajo).
-- [ ] Testear login admin + seller inmediatamente después. Tener rollback a mano.
+### 1.1 RLS en Supabase ⚠️ DEADLINE VENCIDO (era 2026-06-01)
+- [ ] **Confirmar en vivo** si RLS sigue deshabilitado (no se pudo verificar por MCP sin token). Si lo está, es el riesgo más grave abierto.
+- [ ] Aplicar RLS por rol con helper `is_staff()` (SQL borrador abajo).
+- [ ] Testear login admin + seller justo después. Tener rollback a mano.
 
-**Por qué:** Todos los `services/*.ts` consultan Supabase desde el navegador con la `NEXT_PUBLIC_SUPABASE_ANON_KEY`, que es pública y visible en el bundle del cliente. Con RLS deshabilitado, cualquiera que abra devtools, copie la anon key y pegue al endpoint REST de Supabase puede hacer `select * from clientes / ventas / caja / comisiones` y también modificar/borrar datos, sin pasar por la app ni loguearse.
+**Por qué:** todos los `services/*.ts` consultan Supabase desde el navegador con la `ANON_KEY` (pública, visible en el bundle). Sin RLS, cualquiera con devtools puede leer/modificar `clientes`, `ventas`, `caja`, `comisiones` sin loguearse.
+**Afecta:** evita fuga total de datos del negocio y manipulación de stock/ventas.
 
-**En qué afecta:** Evita fuga total de datos del negocio (clientes, deudas, facturación, caja) y manipulación de stock/ventas. Es el riesgo más grave del proyecto.
-
-#### Contexto relevado (para ejecutar seguro)
-- Solo `admin` y `seller` entran a la app — `app/page.tsx` manda cualquier otro rol a `/login`. El rol `customer` no se usa en el código.
-- La tienda es 100% pública vía `/api/public/*` (service_role en el server) → no usa la anon key.
-- Las rutas API usan `supabaseAdmin` (service_role) → **RLS no las afecta**, siguen funcionando.
-- El cliente (admin/seller) lee/escribe con la anon key + su JWT de sesión → en políticas se puede usar `auth.uid()`.
-- **Punto delicado:** el login (`services/users-service.ts` → `ensureUserProfile`/`getUserProfile`) escribe/lee `usuarios` y `vendedores` con la anon key durante el bootstrap (primer admin, vinculación de seller). Si RLS lo bloquea mal, **se rompe el login para todos**.
-
-#### Decisión pendiente (elegir el lunes)
-- **Opción A (robusta):** mover `getUserProfile`/`ensureUserProfile` a una ruta API con service_role (el cliente deja de escribir `usuarios` con anon key). Luego RLS con `is_staff()` queda limpio. Más trabajo, menor riesgo de agujeros.
-- **Opción B (rápida):** activar RLS con `is_staff()` y políticas permisivas en `usuarios`/`vendedores` para no tocar el código del login. Más veloz, cierra el agujero anónimo, pero `usuarios` queda algo más laxa (auto-provisionamiento posible).
-
-#### SQL base propuesto (borrador — revisar antes de correr)
 ```sql
--- 1) Función helper: ¿el usuario actual es staff activo?
+-- Helper: ¿usuario actual es staff activo? (usuarios.id/auth_uid son TEXT → castear)
 create or replace function public.is_staff()
 returns boolean language sql security definer stable as $$
   select exists (
     select 1 from public.usuarios u
     where (u.id = auth.uid()::text or u.auth_uid = auth.uid()::text)
-      and u.role in ('admin','seller')
-      and coalesce(u.is_active, true) = true
+      and u.role in ('admin','seller') and coalesce(u.is_active,true)=true
   );
 $$;
-
--- 2) Por cada tabla de negocio (ventas, clientes, productos, vendedores,
---    pedidos, comisiones, caja, auditoria, listas_precios, mayorista_productos,
---    stock_movimientos, transacciones, pedidos_mayorista, configuracion):
+-- Por cada tabla de negocio:
 alter table public.<tabla> enable row level security;
-create policy staff_all on public.<tabla>
-  for all to authenticated
+create policy staff_all on public.<tabla> for all to authenticated
   using (public.is_staff()) with check (public.is_staff());
-
--- 3) usuarios: requiere política especial para el bootstrap de login
---    (definir según Opción A o B antes de correr).
-
--- ROLLBACK de emergencia (si se rompe el login / la app):
--- alter table public.<tabla> disable row level security;
+-- ROLLBACK: alter table public.<tabla> disable row level security;
 ```
+Tablas: `ventas, clientes, productos, vendedores, pedidos, comisiones, caja, auditoria, listas_precios, mayorista_productos, stock_movimientos, transacciones, pedidos_mayorista, configuracion`.
+- Rutas API usan `supabaseAdmin` (service_role) → **RLS no las rompe**.
+- `/api/public/*` usa service_role en server → la tienda sigue OK.
+- **Punto delicado:** login (`ensureUserProfile`/`getUserProfile`) escribe `usuarios`/`vendedores` con anon key. Política especial o moverlo a ruta API service_role (preferido).
 
-**Notas:**
-- `usuarios.id`/`auth_uid` son TEXT; `auth.uid()` es UUID → castear a `::text`.
-- service_role (rutas API y tienda pública) ignora RLS, no se rompe.
-- Aplicar tabla por tabla y probar la app después de cada bloque.
+### 1.2 Rotar secreto Supabase hardcodeado
+- [ ] Hay un secreto Supabase en `settings.local.json` (allow-list de curl). Rotarlo y quitarlo. Ver `CLAUDE.local.md`.
 
-### 1.2 Validación de entrada en API routes (zod)
-- [ ] Agregar validación con `zod` (ya está en deps) en `app/api/ventas/emitir`, `app/api/facturacion/*`, `app/api/public/pedidos`, `app/api/import-productos`, `app/api/remitos`.
+**Por qué/Afecta:** secreto expuesto en archivo del repo local → posible filtración de service_role.
 
-**Por qué:** Ninguna ruta API valida el `body` con schema (`grep` de zod en `app/api` = 0 resultados). Se confía en datos externos crudos. `app/api/public/pedidos` crea pedidos sin auth (correcto para tienda) pero sin validar estructura/tipos/montos.
+### 1.3 Validación zod en rutas API (0/19)
+- [ ] Validar `body`/`params` con zod en TODAS las rutas que mutan estado, empezando por `ventas/emitir`, `facturacion/*`, `import-productos`, `apply-ganancia`, `remitos`.
 
-**En qué afecta:** Previene corrupción de datos, inyección de campos inesperados y errores 500 por payloads malformados. Mejora robustez de la facturación AFIP (un payload malo puede emitir mal un comprobante fiscal).
+**Por qué:** hoy se confía en el body crudo. **Afecta:** previene datos corruptos, inyección lógica y crashes.
 
-### 1.3 Verificación de ROL en rutas protegidas, no solo de sesión
-- [x] Helper `lib/api-auth.ts` (`requireAuth`) que valida token + resuelve rol en `usuarios` (lookup dual id/auth_uid) y bloquea `customer` e inactivos.
-- [x] Aplicado a `ventas/emitir`, `facturacion/*`, `afip/*`, `drive`, `remitos` (bloquea `customer`).
-- [x] `apply-ganancia` e `import-productos` ahora requieren rol `admin` (antes NO tenían auth: cualquiera modificaba precios o cargaba productos). Callers actualizados para enviar el token.
-- [x] Bug colateral corregido: `remitos` antes ignoraba el resultado de `getUser` (token inválido pasaba igual).
+### 1.4 Verificación de ROL (no solo sesión) en rutas protegidas
+- [ ] En rutas sensibles (facturación, ventas, apply-ganancia, import) verificar `role === 'admin'`/`seller` en server, no solo que haya sesión.
 
-**Por qué:** Hoy las rutas protegidas solo chequean que el token sea válido (`supabaseAdmin.auth.getUser`). Cualquier usuario autenticado (incluido un `customer` de la tienda) podría llamar endpoints de facturación o aplicar ganancia global.
+**Por qué:** un seller no debería emitir/alterar lo de admin. **Afecta:** evita escalada de privilegios.
 
-**En qué afecta:** Cierra escalada de privilegios. Un cliente no debería poder emitir facturas ni modificar precios mayoristas.
+### 1.5 Rate limiting en rutas públicas
+- [ ] Aplicar `lib/rate-limit.ts` a `/api/public/*` (clientes, productos, pedidos, vendedores).
 
-### 1.4 Rate limiting en TODAS las rutas públicas
-- [x] Agregado `rateLimit` (60/min por IP) a `app/api/public/productos` y `app/api/public/mas-vendidos`.
+**Por qué:** endpoints anónimos scrapeables. **Afecta:** mitiga scraping/abuso. (Limitación: in-memory, se resetea en redeploy → documentar.)
 
-**Por qué:** Endpoints públicos sin límite permiten scraping masivo del catálogo y abuso/DoS.
+### 1.6 Validar variables de entorno al iniciar
+- [x] **Hecho (2026-06-09):** `lib/env.ts` valida `NEXT_PUBLIC_SUPABASE_URL` + `SUPABASE_SERVICE_ROLE_KEY` con zod (lazy, cacheado), cableado en `lib/supabase-admin.ts`. Falla con mensaje claro si faltan.
+- [ ] Pendiente: extender el schema a `BIT_INGENIERIA_*` y credenciales Drive donde se consumen.
 
-**En qué afecta:** Protege costos de Supabase/Vercel y disponibilidad. Nota: el rate-limit es in-memory y se resetea en cada redeploy (limitación conocida, ver 6.4).
-
-### 1.5 Validación de variables de entorno al iniciar
-- [ ] Crear `lib/env.ts` que valide con zod las env requeridas (`SUPABASE_*`, `BIT_INGENIERIA_*`, Google Drive) y falle rápido si falta alguna.
-
-**Por qué:** Hoy se usan con `!` (`process.env.X!`) asumiendo que existen. Si falta una, el error aparece tarde y confuso en runtime.
-
-**En qué afecta:** Despliegues más seguros; errores claros en build/arranque en vez de fallos crípticos en producción (ej: facturación rota por CUIT faltante).
+**Por qué:** hoy un env faltante rompe en runtime con error oscuro. **Afecta:** fallo temprano y diagnosticable.
 
 ---
 
-## 2. ESTABILIDAD Y DATOS
+## 2. DATOS Y ESTABILIDAD
 
 ### 2.1 Manejo de errores consistente en services
-- [ ] Estandarizar retorno de errores en `services/*` (envelope `{ data, error }` o throw tipado). Reemplazar `catch` que silencian.
-- [ ] Revisar los 13 `console.log` de producción y reemplazar por logger condicional o quitarlos.
+- [ ] Unificar manejo: no tragar errores en silencio, propagar con mensaje, loguear contexto en server. Revisar los 51 `select('*')` que asumen éxito.
 
-**Por qué:** Mezcla de patrones de error entre services dificulta el manejo en UI. `console.log` en producción ensucia y puede filtrar datos.
+**Afecta:** menos estados inconsistentes y bugs silenciosos.
 
-**En qué afecta:** Menos errores silenciosos, mejores mensajes al usuario, logs más limpios.
+### 2.2 Error/loading boundaries
+- [ ] Agregar `error.tsx`/`loading.tsx` en rutas pesadas (`productos`, `pedidos`, `caja`, `mayorista`, `cuenta-corriente`).
 
-### 2.2 Error/loading boundaries faltantes
-- [ ] Agregar `error.tsx` y `loading.tsx` a páginas sin ellos: `caja`, `cobranzas`, `cuenta-corriente`, `mayorista`, `comisiones`, `transporte`, `reportes`, `vendedor`, `tienda`.
+**Afecta:** una query que falla no rompe toda la página.
 
-**Por qué:** Solo 6 páginas tienen `error.tsx` (`clientes`, `dashboard`, `empleados`, `pedidos`, `productos`, `ventas`) y ninguna tiene `loading.tsx`. Un error en `caja` o `cuenta-corriente` (módulos de dinero) rompe la pantalla sin recuperación.
+### 2.3 Integridad de ventas/stock
+- [ ] Verificar que TODO descuento de stock/comisión pase por RPC `process_sale()` (no inserts sueltos). Auditar `sales-service.ts` y mayorista.
 
-**En qué afecta:** UX más robusta: estados de carga y pantallas de error recuperables en módulos financieros críticos.
-
-### 2.3 Limpiar dependencias muertas
-- [ ] Quitar `firebase` y `firebase-admin` de `package.json` (ya no se importan en el código).
-- [ ] Revisar duplicados de PDF: `jspdf`, `pdf-lib`, `@react-pdf/renderer`, `puppeteer` + `puppeteer-core`, `html2canvas-pro` — consolidar.
-
-**Por qué:** `firebase`/`firebase-admin` están sin uso (confirmado, 0 imports). `puppeteer` completo (~300MB) además de `puppeteer-core` infla el deploy. Hay 3-4 librerías de PDF coexistiendo.
-
-**En qué afecta:** Build más rápido, bundle/función serverless más liviana, menos superficie de vulnerabilidades, `npm install` más rápido.
+**Por qué:** los muchos `fix-*` scripts sugieren descuadres históricos. **Afecta:** evita stock/comisiones inconsistentes.
 
 ---
 
 ## 3. RENDIMIENTO
 
-### 3.1 Eliminar `select('*')` innecesarios
-- [ ] Reemplazar los 42 `select('*')` por selección explícita de columnas, sobre todo en listados grandes (`productos` ~2013 filas, `mayorista_productos` ~7400).
+### 3.1 Eliminar `select('*')` innecesarios (51 casos)
+- [ ] Seleccionar solo columnas usadas en listados grandes (productos ~7400, ventas, clientes).
 
-**Por qué:** Traer todas las columnas de tablas grandes transfiere datos de más y satura el cliente. En productos/mayorista esto pesa.
-
-**En qué afecta:** Cargas más rápidas, menos ancho de banda, menos consumo de memoria en el navegador.
+**Afecta:** menos payload, render más rápido, menos memoria.
 
 ### 3.2 Paginación / virtualización en listados grandes
-- [ ] Paginar o virtualizar `app/productos` (2210 líneas, lista completa), `app/mayorista` (~7400 productos), `app/tienda`.
+- [ ] Paginar o virtualizar `productos`, `mayorista`, `cuenta-corriente`, `ventas`.
 
-**Por qué:** Renderizar miles de filas/cards de una vez bloquea el hilo principal y degrada el INP.
+**Afecta:** evita traer miles de filas y bloquear el render.
 
-**En qué afecta:** Mejora Core Web Vitals (INP, LCP), fluidez del scroll, uso de memoria, especialmente en mobile (vendedores en campo).
-
-### 3.3 Revisar waterfalls de fetch en páginas
-- [ ] Auditar `useEffect` encadenados en `app/productos` (6), `app/pedidos` (4) y paralelizar fetches independientes con `Promise.all`.
-- [ ] En `dashboard-service` (7 queries) verificar que las independientes corran en paralelo.
-
-**Por qué:** Fetches secuenciales que podrían ser paralelos suman latencia innecesaria.
-
-**En qué afecta:** Dashboard y listados cargan notablemente más rápido.
-
-### 3.4 Evaluar capa de caché de datos del servidor
-- [ ] Considerar TanStack Query o SWR para server-state (catálogo, clientes, pedidos) en vez de `useEffect` + `useState` manual.
-
-**Por qué (consultar antes — implica librería nueva):** Hoy cada navegación re-fetchea todo manualmente. Una capa SWR da cache, revalidación y menos código repetido. **Requiere aprobación** (regla: no instalar librerías sin consultar).
-
-**En qué afecta:** Menos llamadas redundantes a Supabase, navegación instantánea entre páginas, menos boilerplate de fetching.
+### 3.3 Optimización de imágenes
+- [ ] `images.unoptimized:true` está forzado. Evaluar dimensiones explícitas y lazy en catálogo/tienda. (No tocar `next.config.mjs` sin confirmar.)
 
 ---
 
-## 4. MANTENIBILIDAD Y ARQUITECTURA
+## 4. ARQUITECTURA Y MANTENIBILIDAD
 
-### 4.1 Dividir archivos gigantes (>800 líneas)
-- [ ] `app/productos/page.tsx` (2210) → extraer tabla, filtros, modales, hooks de datos.
-- [ ] `app/mayorista/page.tsx` (1636), `app/tienda/page.tsx` (1619), `app/caja/page.tsx` (1614), `app/pedidos/page.tsx` (1577), `app/cuenta-corriente/page.tsx` (1335), `app/transporte/page.tsx` (1308), `app/dashboard/page.tsx` (1177), `app/empleados/page.tsx` (1126).
-- [ ] `components/cart/UnifiedCart.tsx` (1244), `hooks/useCart.ts` (1081), `hooks/useGenerarPdf.tsx` (1057).
+### 4.1 Dividir pages gigantes (>800 líneas)
+- [ ] Prioridad: `productos/page.tsx` (2294), `pedidos/page.tsx` (2105), `caja/page.tsx` (1823), `mayorista/page.tsx` (1739), `tienda/page.tsx` (1619), `cuenta-corriente/page.tsx` (1418), `useGenerarPdf.tsx` (1363), `UnifiedCart.tsx` (1352).
+- [ ] Extraer subcomponentes/hooks por feature, sin cambiar comportamiento.
 
-**Por qué:** 11 archivos superan 800 líneas (máximo recomendado). Archivos de 1500-2200 líneas mezclan UI, estado, fetching y lógica de negocio. Difíciles de leer, testear y modificar sin romper.
-
-**En qué afecta:** Cambios más rápidos y seguros, menos riesgo de regresiones, código revisable. Base para poder testear (ver 5.2).
+**Afecta:** mantenibilidad, menos riesgo al editar, mejor reuso.
 
 ### 4.2 Respetar la fachada `lib/api.ts`
-- [ ] Auditar que las pages importen desde `@/lib/api` y no directo desde `services/*` (decisión de arquitectura documentada en CLAUDE.md).
-
-**Por qué:** La regla del proyecto dice que pages usan `@/lib/api`. Saltarla acopla la UI a la implementación de services.
-
-**En qué afecta:** Mantiene la capa de abstracción; permite cambiar services sin tocar pages.
+- [ ] Auditar que las pages NO importen directo de `services/`. Corregir las que lo hagan.
 
 ### 4.3 Centralizar tipo `Venta` duplicado
-- [ ] Unificar el tipo `Venta` (hoy duplicado entre `app/ventas/types.ts` y `hooks/useVentas.ts`).
+- [ ] Unificar `app/ventas/types.ts` vs `hooks/useVentas.ts` (hoy divergen en `afipData`/base64).
 
-**Por qué:** Tipos duplicados divergen con el tiempo y causan bugs sutiles de datos.
-
-**En qué afecta:** Un solo lugar de verdad para el modelo de venta; menos errores de tipos inconsistentes.
+**Afecta:** evita bugs de tipos y conversiones inconsistentes.
 
 ---
 
 ## 5. CALIDAD DE CÓDIGO Y TIPOS
 
-### 5.1 Reducir `any` y reactivar chequeo de tipos
-- [ ] Reducir progresivamente los 155 `: any` empezando por services y lib (lógica de negocio/dinero).
-- [ ] Quitar el único `@ts-nocheck` (`hooks/useGenerarPdf.tsx`) tras tiparlo.
-- [ ] Plan a futuro: poder quitar `typescript.ignoreBuildErrors: true` (NO tocar `next.config.mjs` sin acuerdo — ver CLAUDE.md).
+### 5.1 Reducir `any` (165) y reactivar chequeo de tipos
+- [ ] Tipar gradualmente services/hooks críticos. Quitar `@ts-nocheck` de `useGenerarPdf.tsx`.
+- [ ] Correr `tsc --noEmit` aparte del build (el build ignora errores TS).
 
-**Por qué:** `ignoreBuildErrors: true` hace que el build pase aunque haya errores de tipos reales. Con 155 `any` y errores ignorados, el compilador no protege contra bugs (ej: pasar un número como string a AFIP).
+**Afecta:** detecta bugs en compile-time en vez de producción.
 
-**En qué afecta:** Detecta bugs en build en vez de en producción, sobre todo en facturación y cálculos de dinero/comisiones.
+### 5.2 Tests (solo hay 1)
+- [ ] Cubrir lógica de negocio pura primero: `lib/utils/promo.ts`, `lib/utils/format.ts`, cálculo de comisiones, descuentos, mayorista.
+- [ ] Luego `hooks/useCart.ts`, `hooks/useVentas.ts`, helpers de facturación. Mockear Supabase, no pegarle a BD real.
 
-### 5.2 Introducir tests (no hay ninguno)
-- [ ] Empezar por tests unitarios de la lógica crítica sin UI: `lib/facturacion-helper.ts`, cálculo de comisiones (`commissions-service`), `lib/utils/format.ts`, lógica de `useCart`.
+**Afecta:** evita regresiones en plata (ventas/comisiones/stock).
 
-**Por qué (consultar framework antes):** El proyecto no tiene tests. La lógica de dinero (facturación AFIP, comisiones, caja, cuenta corriente) no tiene red de seguridad. Cualquier refactor (sección 4) es arriesgado sin tests.
-
-**En qué afecta:** Permite refactorizar con confianza, previene regresiones en cálculos fiscales/financieros. **Requiere acordar** framework (Vitest sería el natural para Next).
+### 5.3 Quitar `console.log` de debug (22)
+- [ ] Limpiar logs de debug en código productivo.
 
 ---
 
-## 6. UX Y DEVEX
+## 6. LIMPIEZA Y DEVEX
 
-### 6.1 Optimización de imágenes
-- [ ] Evaluar habilitar el optimizador de Next (`images.unoptimized: true` está forzado) o usar formatos AVIF/WebP en catálogo/tienda.
+### 6.1 Quitar dependencias muertas
+- [x] **Hecho (2026-06-09):** eliminados `firebase` y `firebase-admin` de `package.json` (0 imports). `npm install` removió 188 paquetes. Build verde.
 
-**Por qué:** Con `unoptimized: true` se sirven imágenes a tamaño completo. En tienda y catálogo (muchas imágenes) esto pesa en LCP, sobre todo mobile.
+**Afecta:** bundle/instalación más livianos, menos superficie.
 
-**En qué afecta:** Carga más rápida de tienda y catálogo. (Verificar primero por qué se desactivó — puede ser por hosting de imágenes externo.)
+### 6.2 Ordenar scripts sueltos (38 diag/fix en raíz de `scripts/`)
+- [ ] Mover `diag-*`/`fix-*` a `scripts/diagnostico/` y `scripts/fixes/` (o borrar los ya resueltos). No son tests.
 
-### 6.2 Accesibilidad básica
-- [ ] Revisar foco de teclado, `aria-label` en botones de íconos, contraste en estados de deuda (amber/rojo) en pedidos.
+**Afecta:** repo más limpio, menos ruido en git status.
 
-**Por qué:** Módulos densos (pedidos, caja) usan color como único indicador de estado (deuda/moroso/incobrable). Color solo no es accesible.
+### 6.3 Limpiar archivos sueltos en raíz
+- [ ] Revisar/borrar `clientes_Nueva Zona.csv`, xlsx/jpg de prueba. Agregar patrones a `.gitignore`.
 
-**En qué afecta:** Usabilidad para todos los empleados, cumplimiento básico de accesibilidad.
+---
 
-### 6.3 Limpieza de archivos sueltos en raíz
-- [ ] Mover/eliminar archivos de prueba y datos de la raíz: `test_remito.jpg`, `pedido-mayorista.xlsx`, `update.js`, `update-clients-taxCategory.js`, `fetch_wiki_images.js`, `proxy.ts`, `spa.traineddata`, `Boleta`.
+## 7. ESTILO VISUAL (consistencia del design system)
 
-**Por qué:** Scripts y archivos de datos en la raíz ensucian el repo y confunden sobre qué es código de la app vs utilidades one-off.
+### 7.1 Unificar border-radius al estándar `rounded-2xl`
+- [ ] Hoy conviven 4 escalas (md/lg/xl/2xl) y el estándar declarado es el MENOS usado (63 de ~444). Definir regla final: `rounded-2xl` para cards/modales/contenedores, `rounded-xl` para inputs/botones, `rounded-full` para badges/avatares.
+- [ ] Migrar por módulo (empezar por las pages más vistas: caja, pedidos, ventas, productos). Ajustar `--radius` en `globals.css` si conviene resolverlo por token en vez de clase por clase.
 
-**En qué afecta:** Repo más claro; mover scripts a `scripts/` y datos fuera del control de versiones.
+**Afecta:** identidad visual coherente; hoy cada pantalla se ve de una "época" distinta.
 
-### 6.4 Documentar limitación del rate-limit in-memory
-- [ ] Documentar (o migrar a futuro) que `lib/rate-limit.ts` se resetea en cada redeploy y no es compartido entre instancias serverless de Vercel.
+### 7.2 Resolver dark mode: activarlo o eliminarlo
+- [ ] Decidir: (A) montar `ThemeProvider` en `app/layout.tsx` + toggle en sidebar/header, validando las 121 clases `dark:` existentes; o (B) borrar las variables `.dark` y clases `dark:` muertas.
+- [ ] Recomendado: **(A)** — el CSS ya está hecho, falta solo el wiring. Probar legibilidad en caja/pedidos (colores de estado amber/rojo/verde sobre fondo oscuro).
 
-**Por qué:** En Vercel cada función puede correr en instancias distintas; el límite in-memory es por instancia, no global. Es poco efectivo.
+**Afecta:** hoy es código muerto que confunde; activado, es una mejora visible para uso nocturno (reparto/caja).
 
-**En qué afecta:** Expectativa realista del rate-limit. Migración futura a Upstash/Redis si se necesita límite real (requiere consultar — librería/servicio nuevo).
+### 7.3 Sistema de colores semánticos de estado
+- [ ] Ya existen tokens `--success`/`--warning` en `globals.css`. Crear helper/`cva` único para los estados que se repiten en todo el sistema: deuda (amber), moroso (rojo), incobrable (rojo oscuro), al día (verde), estados de pedido (pending/preparation/delivery/completed), tipos de pago.
+- [ ] Reemplazar los hex/clases ad-hoc dispersos en pedidos, clientes, cuenta-corriente, caja por ese helper.
+
+**Afecta:** el mismo concepto (ej. "moroso") se ve igual en TODAS las pantallas; cambiar un color es 1 línea.
+
+### 7.4 Unificar patrón de loading
+- [ ] Conviven `Skeleton` (24 archivos) y spinners (31). Regla: **Skeleton para carga de páginas/listados** (mantiene el layout, no salta), **spinner solo dentro de botones**.
+- [ ] Crear 2-3 skeletons reutilizables (tabla, card de producto, lista mobile) y usarlos en todas las pages.
+
+**Afecta:** percepción de velocidad y cero saltos de layout (CLS).
+
+### 7.5 Jerarquía tipográfica consistente
+- [ ] Auditar títulos de página/sección/card: hoy cada page define tamaños a mano. Definir 3 niveles (`text-2xl font-bold` página, `text-lg font-semibold` sección, `text-sm font-medium text-muted-foreground` label) y aplicarlos.
+
+**Afecta:** lectura más rápida; las pantallas densas (caja, cuenta corriente) lo necesitan.
+
+---
+
+## 8. UX (flujos y fricción)
+
+### 8.1 Confirmación de acciones destructivas — GLOBAL
+- [~] **Parcial (2026-06-09):** ya existía `components/ui/confirm-dialog.tsx` (usado en 4 lugares). Reemplazado el `confirm()` nativo de `listas-precios` por `ConfirmDialog`. **Falta** aplicarlo en el resto de deletes: productos, clientes, gastos, empleados, ofertas.
+- [ ] Para acciones de plata (anular venta, reabrir caja, eliminar cobranza) el dialog debe mostrar el impacto: "Se restaurará stock de N productos, se revertirá comisión de $X".
+
+**Afecta:** previene borrados accidentales en datos de negocio — la causa de varios scripts `fix-*` históricos.
+
+### 8.2 Anti doble-submit en operaciones de dinero — CRÍTICO UX
+- [ ] Solo 10 botones tienen estado loading. Auditar TODOS los submits que mutan plata/stock (procesar venta, cobranza, pago de pedido, cierre de caja, emisión AFIP) y garantizar: `disabled` durante el request + spinner en el botón + no cerrar modal hasta respuesta.
+- [ ] Patrón único: hook `useSubmitting()` o estado local estándar.
+
+**Afecta:** elimina ventas/cobranzas duplicadas (ya hubo: `fix-villagran-duplicado`, `diag-joannas-doble`, `diag-pedidos-duplicados`).
+
+### 8.3 Búsquedas con debounce + feedback
+- [~] **Parcial (2026-06-09):** creado hook reutilizable `hooks/use-debounce.ts`. **Falta** aplicarlo en las búsquedas de productos (~7400 mayorista), clientes, ventas, tienda.
+- [ ] Mostrar contador de resultados ("128 productos") y empty state con acción ("No hay resultados para X — limpiar filtros").
+
+**Afecta:** la búsqueda deja de trabarse en catálogos grandes; el usuario sabe qué pasó.
+
+### 8.4 Empty states accionables
+- [ ] Unificar los 25 empty states dispersos en un componente `EmptyState` (ícono + mensaje + CTA). Ej: pedidos vacío → "Crear pedido"; clientes sin movimientos → link a nueva venta.
+
+**Afecta:** pantallas vacías guían en vez de parecer rotas.
+
+### 8.5 Optimistic UI + revalidación en acciones frecuentes
+- [ ] En cambios de estado de pedidos ("a preparación", "a reparto"), marcar visualmente al instante y revertir con toast si falla, en vez de esperar el round-trip.
+- [ ] Tras crear/editar en modales, actualizar la lista local sin refetch completo de la página.
+
+**Afecta:** el flujo diario de pedidos (la operación más repetida) se siente instantáneo.
+
+### 8.6 Mobile-first real en flujos de campo
+- [ ] Vendedor (`app/vendedor/`) y transportista (`/pedidos`) trabajan desde el teléfono. Auditar: targets táctiles ≥44px, botones de acción primarios fijos abajo (thumb zone), evitar tablas con scroll horizontal donde una card list funciona mejor.
+- [ ] Consolidar las 8 vistas duplicadas `hidden lg:block` donde sea posible (una sola estructura responsive > dos árboles a mantener).
+
+**Afecta:** menos errores de dedo en la calle; mitad de código de UI que mantener.
+
+### 8.7 Accesibilidad mínima viable
+- [ ] `aria-label` en botones de solo ícono (editar/borrar/descargar en tablas — hoy casi ninguno tiene).
+- [ ] Verificar contraste de los colores de estado (amber sobre blanco suele fallar AA).
+- [ ] Foco visible al navegar con teclado en tablas y modales (hoy 20 usos custom en todo el código).
+
+**Afecta:** usabilidad general; el contraste también ayuda al sol en reparto.
+
+### 8.8 Tienda pública: primera impresión y velocidad
+- [ ] `app/tienda/page.tsx` (1619 líneas) es 100% client-side: el cliente ve blanco hasta que carga el JS. Mover catálogo inicial a Server Component con datos pre-cargados (los componentes interactivos quedan client).
+- [ ] Reemplazar `<img>` por `next/image` con dimensiones en `cuenta-corriente` y `payment-modal`; lazy en grillas de catálogo.
+- [ ] Carrito: feedback al agregar (badge animado en el ícono), y persistencia si recarga.
+
+**Afecta:** la tienda es la cara pública — hoy es la página más lenta del sistema.
+
+### 8.9 Navegación y orientación
+- [ ] Decidir destino de los items comentados del sidebar (Dashboard, Reportes, Cobranzas, Transporte, Listas de Precios, Auditoría): habilitarlos o borrarlos del código.
+- [ ] Breadcrumb o título consistente por página (hoy algunos módulos no indican dónde estás en mobile).
+- [ ] Indicador activo del sidebar visible también en mobile.
+
+**Afecta:** menos código zombie; orientación clara en pantallas chicas.
+
+### 8.10 Formularios: validación visible y persistencia
+- [ ] Donde hay `react-hook-form` + zod, mostrar errores inline bajo el campo (no solo toast). Auditar product-modal, client-modal, gastos.
+- [ ] En modales largos (producto con 1135 líneas de modal), avisar antes de cerrar con cambios sin guardar.
+
+**Afecta:** menos datos cargados a medias, menos re-trabajo.
 
 ---
 
 ## Resumen de prioridades
+1. **Ahora:** 1.1 RLS, 1.2 rotar secreto, 8.2 anti doble-submit (ya causó datos duplicados).
+2. **Esta semana:** 1.3 zod, 1.4 rol, 1.5 rate-limit, 1.6 env, 8.1 ConfirmDialog global.
+3. **Siguiente:** 2.x errores/integridad, 3.1–3.2 rendimiento, 8.3 debounce, 8.8 tienda.
+4. **Continuo:** 4.x dividir archivos, 5.x tipos+tests, 6.x limpieza, 7.x estilo (por módulo, al tocar cada page), 8.4–8.10 UX incremental.
 
-| # | Bloque | Impacto | Esfuerzo | Urgencia |
-|---|--------|---------|----------|----------|
-| 1.1 | RLS Supabase | Crítico | Medio | YA |
-| 1.2 | Validación zod API | Alto | Medio | Alta |
-| 1.3 | Verificación de rol | Alto | Bajo | Alta |
-| 1.4 | Rate limit faltante | Medio | Bajo | Alta |
-| 2.2 | Error/loading boundaries | Medio | Bajo | Media |
-| 2.3 | Deps muertas (firebase/puppeteer) | Medio | Bajo | Media |
-| 3.1/3.2 | select(*) + paginación | Alto | Medio | Media |
-| 4.1 | Dividir archivos gigantes | Alto | Alto | Media |
-| 5.1/5.2 | Tipos + tests | Alto | Alto | Media |
-
-**Recomendación de orden de ejecución:** 1.1 → 1.3 → 1.4 → 1.2 → 2.3 → 2.2 → 3.1 → 5.2 (tests de lógica de dinero) → 4.1 (refactor con tests ya cubriendo) → resto.
-
-> Ítems que requieren tu aprobación antes de ejecutar (librerías/servicios nuevos): 3.4 (SWR/TanStack), 5.2 (framework de tests), 6.4 (Redis/Upstash).
+> Regla práctica para 7.x/8.x: NO hacer un "big bang" visual. Cada vez que se toque un módulo por otra razón, aplicarle el estándar (radius, loading, confirmaciones, empty states). Los únicos transversales que valen la pena de una sola pasada: ConfirmDialog (8.1), anti doble-submit (8.2) y debounce (8.3).
