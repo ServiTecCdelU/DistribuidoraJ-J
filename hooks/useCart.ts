@@ -553,6 +553,7 @@ export function useCart(role: UserRole, userEmail?: string, externalProducts?: P
     setCart((prev) => prev.filter((item) => item.product.id !== productId));
   }, []);
 
+  // Solo un beneficio por producto: aplicar descuento limpia los regalos y viceversa.
   // El máximo es el % configurado en el producto (product.descuento). 0 = no admite.
   const setItemDiscount = useCallback((productId: string, discount: number) => {
     setCart((prev) => prev.map((item) => {
@@ -560,7 +561,10 @@ export function useCart(role: UserRole, userEmail?: string, externalProducts?: P
       const max = item.product.descuento ?? 0;
       if (discount > max) toast.error(`Descuento máximo del producto: ${max}%`);
       const clamped = Math.max(0, Math.min(max, discount));
-      return { ...item, itemDiscount: clamped || undefined };
+      if (clamped > 0) {
+        return { ...item, itemDiscount: clamped, regalo: undefined, regaloOtroCantidad: undefined };
+      }
+      return { ...item, itemDiscount: undefined };
     }));
   }, []);
 
@@ -574,7 +578,10 @@ export function useCart(role: UserRole, userEmail?: string, externalProducts?: P
         toast.error("Stock insuficiente para ese regalo");
         val = Math.max(0, item.product.stock - item.quantity);
       }
-      return { ...item, regalo: val || undefined };
+      if (val > 0) {
+        return { ...item, regalo: val, itemDiscount: undefined, regaloOtroCantidad: undefined };
+      }
+      return { ...item, regalo: undefined };
     }));
   }, []);
 
@@ -584,7 +591,10 @@ export function useCart(role: UserRole, userEmail?: string, externalProducts?: P
       const max = item.product.regaloOtroMax ?? Infinity;
       let val = Math.max(0, Math.floor(n || 0));
       if (val > max) { toast.error(`Máximo a regalar: ${max}`); val = max; }
-      return { ...item, regaloOtroCantidad: val || undefined };
+      if (val > 0) {
+        return { ...item, regaloOtroCantidad: val, itemDiscount: undefined, regalo: undefined };
+      }
+      return { ...item, regaloOtroCantidad: undefined };
     }));
   }, []);
 

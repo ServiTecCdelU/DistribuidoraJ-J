@@ -137,6 +137,11 @@ function NuevaVentaContent({
           imageUrl: "",
           category: p.rubro || p.categoria,
           descuento: p.descuento ?? 0,
+          regaloMismo: p.regaloMismo ?? false,
+          regaloMismoMax: p.regaloMismoMax ?? null,
+          regaloOtroMax: p.regaloOtroMax ?? null,
+          regaloProductoId: p.regaloProductoId ?? null,
+          regaloProductoNombre: p.regaloProductoNombre ?? null,
           productoId: p.productoId,
           createdAt: new Date(),
         } as any;

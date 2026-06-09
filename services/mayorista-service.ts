@@ -136,7 +136,11 @@ export interface VentaProductSearchResult {
     precioVenta: number
     stockLocal: number
     descuento: number
-    descuentoCantidad: number | null
+    regaloMismo?: boolean
+    regaloMismoMax?: number | null
+    regaloOtroMax?: number | null
+    regaloProductoId?: string | null
+    regaloProductoNombre?: string | null
   }>
   total: number
   page: number
@@ -162,9 +166,12 @@ export const searchProductosParaVenta = async (params: VentaProductSearchParams)
     query = query.eq('rubro', rubro)
   }
 
-  // Solo productos con descuento activo (descuento > 0), sin distinción de vendedor.
+  // Solo productos con alguna oferta activa (descuento o regalo), sin distinción de vendedor.
   if (soloDescuento) {
-    const conDto = await supabase.from('productos').select('id').gt('descuento', 0)
+    const conDto = await supabase
+      .from('productos')
+      .select('id')
+      .or('descuento.gt.0,regalo_mismo.eq.true,regalo_producto_id.not.is.null')
     const ids = (conDto.data ?? []).map((p: any) => p.id)
     if (ids.length === 0) {
       return { data: [], total: 0, page, pageSize, totalPages: 0 }
@@ -186,7 +193,7 @@ export const searchProductosParaVenta = async (params: VentaProductSearchParams)
   if (prodIds.length > 0) {
     const { data: prodRows } = await supabase
       .from('productos')
-      .select('id, precio_venta, price, stock, unidades_por_bulto, se_divide_en, descuento')
+      .select('id, precio_venta, price, stock, unidades_por_bulto, se_divide_en, descuento, regalo_mismo, regalo_mismo_max, regalo_otro_max, regalo_producto_id, regalo_producto_nombre')
       .in('id', prodIds)
     ;(prodRows ?? []).forEach((p: any) => productosMap.set(p.id, p))
   }
@@ -208,7 +215,11 @@ export const searchProductosParaVenta = async (params: VentaProductSearchParams)
       precioVenta,
       stockLocal: prod?.stock ?? 0,
       descuento,
-      descuentoCantidad: null,
+      regaloMismo: prod?.regalo_mismo ?? false,
+      regaloMismoMax: prod?.regalo_mismo_max != null ? Number(prod.regalo_mismo_max) : null,
+      regaloOtroMax: prod?.regalo_otro_max != null ? Number(prod.regalo_otro_max) : null,
+      regaloProductoId: prod?.regalo_producto_id ?? null,
+      regaloProductoNombre: prod?.regalo_producto_nombre ?? null,
     }
   })
 
