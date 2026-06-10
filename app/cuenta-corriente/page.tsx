@@ -38,6 +38,7 @@ import type { TransaccionMayorista } from '@/services/mayorista-cuenta-service'
 import { useAuth } from '@/hooks/use-auth'
 import type { Client, ComprobantePago, DebtClassification, Sale, Seller, Transaction } from '@/lib/types'
 import { MovimientoDeudaCard } from '@/components/cuenta-corriente/movimiento-deuda-card'
+import { ModalReciboPago } from '@/components/cuenta-corriente/modal-recibo-pago'
 import { formatCurrency, formatDate } from '@/lib/utils/format'
 import {
   Users, FileCheck, CheckCircle2, XCircle, Clock, Loader2, ExternalLink,
@@ -65,6 +66,16 @@ export default function CuentaCorrientePage() {
   const [clientSales, setClientSales] = useState<Sale[]>([])
   const [clientComprobantes, setClientComprobantes] = useState<ComprobantePago[]>([])
   const [loadingDetail, setLoadingDetail] = useState(false)
+
+  // Modal de recibo de pago
+  const [reciboModal, setReciboModal] = useState<{
+    open: boolean
+    numero: string
+    base64: string | null
+    monto: number
+    clientName?: string
+    clientPhone?: string
+  }>({ open: false, numero: '', base64: null, monto: 0 })
 
   // Dialog states
   const [approveDialog, setApproveDialog] = useState<ComprobantePago | null>(null)
@@ -238,11 +249,32 @@ export default function CuentaCorrientePage() {
         ? `${methods[payMethod] || methods.otro} — ${payNotes}`
         : methods[payMethod] || methods.otro
 
-      await paymentsApi.registerCashPayment({
+      const result = await paymentsApi.registerCashPayment({
         clientId: selectedClient.id,
         amount,
         description: desc,
       })
+
+      // Generar y guardar el recibo de pago
+      let reciboBase64: string | null = null
+      try {
+        const { generarReciboPago } = await import('@/hooks/useGenerarPdf')
+        reciboBase64 = await generarReciboPago({
+          reciboNumero: result.reciboNumero,
+          fecha: result.date,
+          clientName: selectedClient.name,
+          clientAddress: selectedClient.address,
+          clientPhone: selectedClient.phone,
+          monto: amount,
+          metodo: methods[payMethod] || methods.otro,
+          saldoAnterior: result.saldoAnterior,
+          saldoNuevo: result.saldoNuevo,
+        })
+        await paymentsApi.saveReciboPdf(result.id, reciboBase64)
+      } catch (e) {
+        console.error('Error generando recibo de pago', e)
+        toast.error('Pago registrado, pero falló la generación del recibo')
+      }
 
       // Actualizar estado local
       const newBalance = Math.max(0, selectedClient.currentBalance - amount)
@@ -261,6 +293,16 @@ export default function CuentaCorrientePage() {
       setPayMethod('efectivo')
       setPayNotes('')
       toast.success(`Pago de ${formatCurrency(amount)} registrado`)
+
+      // Abrir modal del recibo
+      setReciboModal({
+        open: true,
+        numero: result.reciboNumero,
+        base64: reciboBase64,
+        monto: amount,
+        clientName: selectedClient.name,
+        clientPhone: selectedClient.phone,
+      })
     } catch (err: any) {
       toast.error(err.message || 'Error al registrar pago')
     } finally {
@@ -1389,6 +1431,16 @@ tr{page-break-inside:avoid}
           )}
         </>
       )}
+
+      <ModalReciboPago
+        open={reciboModal.open}
+        onOpenChange={(open) => setReciboModal((prev) => ({ ...prev, open }))}
+        reciboNumero={reciboModal.numero}
+        base64={reciboModal.base64}
+        monto={reciboModal.monto}
+        clientName={reciboModal.clientName}
+        clientPhone={reciboModal.clientPhone}
+      />
     </MainLayout>
   )
 }

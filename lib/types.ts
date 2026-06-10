@@ -80,6 +80,8 @@ export interface Transaction {
   date: Date;
   saleId?: string;
   cuenta?: 'minorista' | 'mayorista';
+  reciboNumero?: string;
+  reciboPdfBase64?: string;
 }
 
 export interface CartItem {
