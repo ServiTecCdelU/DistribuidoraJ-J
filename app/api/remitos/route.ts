@@ -1,18 +1,21 @@
 import { NextRequest, NextResponse } from "next/server";
+import { z } from "zod";
 import { supabaseAdmin } from "@/lib/supabase-admin";
 import { requireAuth } from "@/lib/api-auth";
+import { parseJsonBody } from "@/lib/api-validation";
+
+const remitoSchema = z.object({
+  saleId: z.string().min(1, "Falta saleId"),
+});
 
 export async function POST(request: NextRequest) {
   try {
     const auth = await requireAuth(request);
     if (!auth.ok) return auth.response;
 
-    const body = await request.json();
-    const { saleId } = body;
-
-    if (!saleId) {
-      return NextResponse.json({ message: "Falta saleId" }, { status: 400 });
-    }
+    const parsed = await parseJsonBody(request, remitoSchema, "message");
+    if (!parsed.ok) return parsed.response;
+    const { saleId } = parsed.data;
 
     // Obtener venta
     const { data: venta, error: ventaError } = await supabaseAdmin

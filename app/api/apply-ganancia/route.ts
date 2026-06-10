@@ -1,16 +1,22 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { z } from 'zod'
 import { supabaseAdmin } from '@/lib/supabase-admin'
 import { requireAuth } from '@/lib/api-auth'
+import { parseJsonBody } from '@/lib/api-validation'
+
+const gananciaSchema = z.object({
+  porcentaje: z.number().min(0, 'Porcentaje inválido'),
+  scope: z.string().optional(),
+})
 
 export async function POST(req: NextRequest) {
   try {
     const auth = await requireAuth(req, { roles: ['admin'] })
     if (!auth.ok) return auth.response
 
-    const { porcentaje, scope } = await req.json()
-    if (typeof porcentaje !== 'number' || porcentaje < 0) {
-      return NextResponse.json({ error: 'Porcentaje inválido' }, { status: 400 })
-    }
+    const parsed = await parseJsonBody(req, gananciaSchema)
+    if (!parsed.ok) return parsed.response
+    const { porcentaje, scope } = parsed.data
 
     const rpcName = scope === 'medicamentos' ? 'apply_ganancia_medicamentos' : 'apply_ganancia_global'
     const { data, error } = await supabaseAdmin.rpc(rpcName, {

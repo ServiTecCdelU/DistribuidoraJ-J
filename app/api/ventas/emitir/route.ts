@@ -1,17 +1,25 @@
 // app/api/ventas/emitir/route.ts
 import { NextRequest, NextResponse } from "next/server";
+import { z } from "zod";
 import { procesarEmision } from "@/lib/facturacion-helper";
 import { requireAuth } from "@/lib/api-auth";
+import { parseJsonBody } from "@/lib/api-validation";
+
+const emitirSchema = z.object({
+  saleId: z.string().min(1, "Falta saleId"),
+  client: z.any().optional(),
+  emitirAfip: z.boolean().optional(),
+  collection: z.string().optional(),
+});
 
 export async function POST(request: NextRequest) {
   try {
     const auth = await requireAuth(request);
     if (!auth.ok) return auth.response;
 
-    const { saleId, client, emitirAfip, collection: collectionName } = await request.json();
-    if (!saleId) {
-      return NextResponse.json({ message: "Falta saleId" }, { status: 400 });
-    }
+    const parsed = await parseJsonBody(request, emitirSchema, "message");
+    if (!parsed.ok) return parsed.response;
+    const { saleId, client, emitirAfip, collection: collectionName } = parsed.data;
 
     const result = await procesarEmision(saleId, client, emitirAfip, collectionName || "ventas");
 

@@ -1,14 +1,23 @@
 import { NextRequest, NextResponse } from "next/server";
+import { z } from "zod";
 import { google } from "googleapis";
 import { Readable } from "stream";
 import { requireAuth } from "@/lib/api-auth";
+import { parseJsonBody } from "@/lib/api-validation";
+
+const driveSchema = z.object({
+  base64: z.string().min(1, "base64 requerido"),
+  filename: z.string().min(1, "filename requerido"),
+});
 
 export async function POST(req: NextRequest) {
   try {
     const authResult = await requireAuth(req);
     if (!authResult.ok) return authResult.response;
 
-    const { base64, filename } = await req.json();
+    const parsed = await parseJsonBody(req, driveSchema);
+    if (!parsed.ok) return parsed.response;
+    const { base64, filename } = parsed.data;
 
     const auth = new google.auth.OAuth2(
       process.env.GOOGLE_CLIENT_ID,

@@ -1,23 +1,23 @@
 // app/api/facturacion/consultar-cuit/route.ts
 // Consulta datos fiscales de un CUIT via Bit Ingeniería -> AFIP
 import { NextRequest, NextResponse } from "next/server";
+import { z } from "zod";
 import { consultarCuit } from "@/lib/bitingenieria";
 import { requireAuth } from "@/lib/api-auth";
+import { parseJsonBody } from "@/lib/api-validation";
+
+const cuitSchema = z.object({
+  cuit: z.union([z.string().min(1, "CUIT es requerido"), z.number()]),
+});
 
 export async function POST(request: NextRequest) {
   try {
     const auth = await requireAuth(request);
     if (!auth.ok) return auth.response;
 
-    const body = await request.json();
-    const { cuit } = body;
-
-    if (!cuit) {
-      return NextResponse.json(
-        { error: "CUIT es requerido" },
-        { status: 400 }
-      );
-    }
+    const parsed = await parseJsonBody(request, cuitSchema);
+    if (!parsed.ok) return parsed.response;
+    const { cuit } = parsed.data;
 
     const resultado = await consultarCuit(cuit);
 

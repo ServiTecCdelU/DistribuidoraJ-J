@@ -1,9 +1,28 @@
 // app/api/public/pedidos/route.ts
 import { NextResponse } from "next/server";
+import { z } from "zod";
 import { supabaseAdmin } from "@/lib/supabase-admin";
 import { rateLimit } from "@/lib/rate-limit";
+import { parseJsonBody } from "@/lib/api-validation";
 
 export const runtime = "nodejs";
+
+const pedidoPublicoSchema = z
+  .object({
+    items: z.array(z.unknown()).min(1, "Items requeridos"),
+    client: z.record(z.string(), z.unknown()).optional(),
+    clientId: z.string().nullish(),
+    clientPhone: z.string().optional(),
+    clientEmail: z.string().optional(),
+    deliveryMethod: z.string().optional(),
+    address: z.string().optional(),
+    city: z.string().nullish(),
+    lat: z.number().nullish(),
+    lng: z.number().nullish(),
+    discount: z.number().nullish(),
+    discountType: z.string().nullish(),
+  })
+  .passthrough();
 
 function slugify(text: string): string {
   return text
@@ -39,12 +58,11 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Demasiadas solicitudes" }, { status: 429 });
   }
 
-  const body = await request.json().catch(() => null);
-  if (!body?.items || !Array.isArray(body.items) || body.items.length === 0) {
-    return NextResponse.json({ message: "Items requeridos" }, { status: 400 });
-  }
+  const parsed = await parseJsonBody(request, pedidoPublicoSchema, "message");
+  if (!parsed.ok) return parsed.response;
+  const body = parsed.data;
 
-  const client = body.client || {};
+  const client: Record<string, unknown> = body.client || {};
   const name = String(client.name || "").trim();
   const phone = String(client.phone || body.clientPhone || "").trim();
   const email = String(client.email || body.clientEmail || "").trim();

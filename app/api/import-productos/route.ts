@@ -1,20 +1,31 @@
 import { NextResponse } from "next/server";
+import { z } from "zod";
 import { supabaseAdmin } from "@/lib/supabase-admin";
 import { requireAuth } from "@/lib/api-auth";
+import { parseJsonBody } from "@/lib/api-validation";
+
+const importSchema = z.object({
+  productos: z
+    .array(
+      z
+        .object({
+          codigo: z.string().optional(),
+          nombre: z.string().optional(),
+          categoria: z.string().optional(),
+        })
+        .passthrough(),
+    )
+    .min(1, "Se requiere un array de productos"),
+});
 
 export async function POST(req: Request) {
   try {
     const auth = await requireAuth(req, { roles: ["admin"] });
     if (!auth.ok) return auth.response;
 
-    const { productos } = await req.json();
-
-    if (!Array.isArray(productos) || productos.length === 0) {
-      return NextResponse.json(
-        { error: "Se requiere un array de productos" },
-        { status: 400 }
-      );
-    }
+    const parsed = await parseJsonBody(req, importSchema);
+    if (!parsed.ok) return parsed.response;
+    const { productos } = parsed.data;
 
     let count = 0;
     const batch: any[] = [];

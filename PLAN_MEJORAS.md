@@ -63,13 +63,14 @@ Tablas: `ventas, clientes, productos, vendedores, pedidos, comisiones, caja, aud
 
 **Por qué/Afecta:** secreto expuesto en archivo del repo local → posible filtración de service_role.
 
-### 1.3 Validación zod en rutas API (0/19)
-- [ ] Validar `body`/`params` con zod en TODAS las rutas que mutan estado, empezando por `ventas/emitir`, `facturacion/*`, `import-productos`, `apply-ganancia`, `remitos`.
+### 1.3 Validación zod en rutas API
+- [x] **Hecho (2026-06-09):** helper `lib/api-validation.ts` (`parseJsonBody`) que valida con zod y devuelve 400 consistente respetando el campo de error de cada ruta. Aplicado en las **11 rutas que reciben body JSON**: `ventas/emitir`, `facturacion`, `facturacion/comprobantes`, `facturacion/consultar-cuit`, `facturacion/reimprimir`, `apply-ganancia`, `import-productos`, `remitos`, `drive`, `productos/[id]/movimiento` y `public/pedidos` (entrada anónima). Build verde.
+- Nota: `parse-remito` recibe archivo/formData (no JSON) → no aplica este helper.
 
-**Por qué:** hoy se confía en el body crudo. **Afecta:** previene datos corruptos, inyección lógica y crashes.
+**Por qué:** antes se confiaba en el body crudo. **Afecta:** previene datos corruptos, inyección lógica y crashes.
 
 ### 1.4 Verificación de ROL (no solo sesión) en rutas protegidas
-- [ ] En rutas sensibles (facturación, ventas, apply-ganancia, import) verificar `role === 'admin'`/`seller` en server, no solo que haya sesión.
+- [~] **Parcial:** `apply-ganancia` e `import-productos` ya verifican `roles: ['admin']`. **Falta decidir** quién factura (¿sellers emiten?) antes de restringir `ventas/emitir` y `facturacion/*` — hoy exigen sesión válida. Restringir sin confirmar podría romper el flujo de vendedores.
 
 **Por qué:** un seller no debería emitir/alterar lo de admin. **Afecta:** evita escalada de privilegios.
 

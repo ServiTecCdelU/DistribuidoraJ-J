@@ -1,23 +1,26 @@
 // app/api/facturacion/comprobantes/route.ts
 // Consulta comprobantes emitidos en AFIP via Bit Ingeniería
 import { NextRequest, NextResponse } from "next/server";
+import { z } from "zod";
 import { consultarComprobantes, obtenerUltimoNumero } from "@/lib/bitingenieria";
 import { requireAuth } from "@/lib/api-auth";
+import { parseJsonBody } from "@/lib/api-validation";
+
+const comprobantesSchema = z.object({
+  tipoComprobante: z.union([z.string(), z.number()]),
+  nroInicial: z.number().optional(),
+  nroFinal: z.number().optional(),
+  ptoVta: z.union([z.string(), z.number()]).optional(),
+});
 
 export async function POST(request: NextRequest) {
   try {
     const auth = await requireAuth(request);
     if (!auth.ok) return auth.response;
 
-    const body = await request.json();
-    const { tipoComprobante, nroInicial, nroFinal, ptoVta } = body;
-
-    if (!tipoComprobante) {
-      return NextResponse.json(
-        { error: "tipoComprobante es requerido" },
-        { status: 400 }
-      );
-    }
+    const parsed = await parseJsonBody(request, comprobantesSchema);
+    if (!parsed.ok) return parsed.response;
+    const { tipoComprobante, nroInicial, nroFinal, ptoVta } = parsed.data;
 
     // Si no se pasa rango, consultar los últimos 10
     let inicio = nroInicial;

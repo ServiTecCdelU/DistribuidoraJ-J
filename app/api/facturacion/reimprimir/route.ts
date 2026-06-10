@@ -1,24 +1,24 @@
 // app/api/facturacion/reimprimir/route.ts
 // Reimprime el PDF de un comprobante ya emitido via Bit Ingeniería
 import { NextRequest, NextResponse } from "next/server";
+import { z } from "zod";
 import { supabaseAdmin } from "@/lib/supabase-admin";
 import { reimprimirPdf, buildPdfRequest, BitCustomerData } from "@/lib/bitingenieria";
 import { requireAuth } from "@/lib/api-auth";
+import { parseJsonBody } from "@/lib/api-validation";
+
+const reimprimirSchema = z.object({
+  saleId: z.string().min(1, "saleId es requerido"),
+});
 
 export async function POST(request: NextRequest) {
   try {
     const auth = await requireAuth(request);
     if (!auth.ok) return auth.response;
 
-    const body = await request.json();
-    const { saleId } = body;
-
-    if (!saleId) {
-      return NextResponse.json(
-        { error: "saleId es requerido" },
-        { status: 400 }
-      );
-    }
+    const parsed = await parseJsonBody(request, reimprimirSchema);
+    if (!parsed.ok) return parsed.response;
+    const { saleId } = parsed.data;
 
     // Buscar la venta
     const { data: sale, error: saleError } = await supabaseAdmin
