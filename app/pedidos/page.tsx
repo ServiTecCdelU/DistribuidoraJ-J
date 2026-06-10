@@ -9,7 +9,7 @@ import { DataTableSkeleton } from "@/components/ui/data-table-skeleton";
 import { ClientModal } from "@/components/clientes/client-modal";
 import { ordersApi, salesApi, clientsApi, sellersApi, productsApi, faltantesApi } from "@/lib/api";
 import type { Order, OrderStatus, Client, Seller } from "@/lib/types";
-import { Package, Filter, Loader2, ClipboardList, FileText, Eye, ArrowRightCircle, ArrowLeftCircle, Ban, TrendingUp, ChevronDown, ChevronRight, MapPin, Phone } from "lucide-react";
+import { Package, Filter, Loader2, ClipboardList, FileText, Eye, ArrowRightCircle, ArrowLeftCircle, Ban, TrendingUp, ChevronDown, ChevronRight, MapPin, Phone, AlertTriangle } from "lucide-react";
 import { toast } from "sonner";
 import { useAuth } from "@/hooks/use-auth";
 import { useRouter } from "next/navigation";
@@ -1650,11 +1650,11 @@ th.center,td.center{text-align:center}
             size="sm"
             onClick={handleSyncPrices}
             disabled={syncingPrices}
-            className="gap-2 border-red-300 bg-red-50 text-red-700 hover:bg-red-100 animate-pulse"
+            className="gap-2 border-2 border-red-600 bg-red-600 text-white font-bold shadow-lg shadow-red-300 hover:bg-red-700 animate-pulse ring-2 ring-red-400 ring-offset-1"
             title="Hay pedidos con precios por debajo del precio de venta actual"
           >
-            {syncingPrices ? <Loader2 className="h-4 w-4 animate-spin" /> : <TrendingUp className="h-4 w-4" />}
-            <span>Actualizar precios ({outdatedPriceOrders.length})</span>
+            {syncingPrices ? <Loader2 className="h-4 w-4 animate-spin" /> : <AlertTriangle className="h-4 w-4" />}
+            <span>¡Actualizar precios! ({outdatedPriceOrders.length})</span>
           </Button>
         )}
         {filterStatus !== "pending" && (
