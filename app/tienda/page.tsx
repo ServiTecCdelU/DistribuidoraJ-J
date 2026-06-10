@@ -53,6 +53,7 @@ import {
 } from "lucide-react";
 import Image from "next/image";
 import { useAuth } from "@/hooks/use-auth";
+import { useDebounce } from "@/hooks/use-debounce";
 import { signOut } from "@/services/auth-service";
 import { BackgroundImage } from "@/components/ui/background-image";
 import { HeroCarousel } from "@/components/tienda/hero-carousel";
@@ -145,15 +146,8 @@ export function StoreFront({
   const cart = cartState.cart;
   const loading = cartState.loading;
 
-  const [searchInput, setSearchInput] = useState("");
   const [search, setSearch] = useState("");
-  const debounceRef = useRef<NodeJS.Timeout | null>(null);
-
-  const handleSearchChange = useCallback((value: string) => {
-    setSearchInput(value);
-    if (debounceRef.current) clearTimeout(debounceRef.current);
-    debounceRef.current = setTimeout(() => setSearch(value), 300);
-  }, []);
+  const debouncedSearch = useDebounce(search, 300);
   const [categoryFilter, setCategoryFilter] = useState("all");
   const [priceFilter, setPriceFilter] = useState("all");
   const [marcaFilter, setMarcaFilter] = useState("all");
@@ -227,8 +221,8 @@ export function StoreFront({
     if ((p as any).disabled === true) return false;
 
     const matchesSearch =
-      p.name.toLowerCase().includes(search.toLowerCase()) ||
-      p.category.toLowerCase().includes(search.toLowerCase());
+      p.name.toLowerCase().includes(debouncedSearch.toLowerCase()) ||
+      p.category.toLowerCase().includes(debouncedSearch.toLowerCase());
     const matchesCategory =
       categoryFilter === "all" || p.category === categoryFilter;
     const matchesBase = marcaFilter === "all" || (p as any).marca === marcaFilter;
@@ -266,9 +260,9 @@ export function StoreFront({
     if (marcaA === "MIO" && marcaB !== "MIO") return -1;
     if (marcaB === "MIO" && marcaA !== "MIO") return 1;
     return 0;
-  }), [products, search, categoryFilter, marcaFilter, sinTaccFilter, onlyInStock, onlyLowStock, priceFilter, sortOption]);
+  }), [products, debouncedSearch, categoryFilter, marcaFilter, sinTaccFilter, onlyInStock, onlyLowStock, priceFilter, sortOption]);
   // Reset page when filters, search or sort change
-  useEffect(() => { setPage(1); }, [search, categoryFilter, priceFilter, marcaFilter, sinTaccFilter, onlyInStock, onlyLowStock, sortOption]);
+  useEffect(() => { setPage(1); }, [debouncedSearch, categoryFilter, priceFilter, marcaFilter, sinTaccFilter, onlyInStock, onlyLowStock, sortOption]);
 
   const totalPages = Math.ceil(filteredProducts.length / PAGE_SIZE);
   const pagedProducts = filteredProducts.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);

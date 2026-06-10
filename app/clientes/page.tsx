@@ -29,6 +29,7 @@ import {
 } from '@/components/ui/select'
 import type { Client } from '@/lib/types'
 import { formatCurrency, normalizeCuit } from '@/lib/utils/format'
+import { useDebounce } from '@/hooks/use-debounce'
 import {
   Plus,
   Search,
@@ -62,6 +63,7 @@ export default function ClientesPage() {
   const [sellers, setSellers] = useState<{ id: string; name: string }[]>([])
   const [loading, setLoading] = useState(true)
   const [searchQuery, setSearchQuery] = useState('')
+  const debouncedSearch = useDebounce(searchQuery, 300)
   const [categoryFilter, setCategoryFilter] = useState<string>('all')
   const [modalOpen, setModalOpen] = useState(false)
   const [editingClient, setEditingClient] = useState<Client | null>(null)
@@ -182,8 +184,8 @@ export default function ClientesPage() {
   }
 
   const filteredClients = clients.filter(client => {
-    const query = searchQuery.toLowerCase()
-    const queryDigits = normalizeCuit(searchQuery)
+    const query = debouncedSearch.toLowerCase()
+    const queryDigits = normalizeCuit(debouncedSearch)
     const cuitDigits = normalizeCuit(client.cuit)
     const dniDigits = normalizeCuit(client.dni)
     const matchesSearch =
@@ -196,7 +198,7 @@ export default function ClientesPage() {
   })
 
   // Reset to page 1 when filters change
-  useEffect(() => { setCurrentPage(1) }, [searchQuery, categoryFilter])
+  useEffect(() => { setCurrentPage(1) }, [debouncedSearch, categoryFilter])
 
   const pagedClients = useMemo(
     () => filteredClients.slice((currentPage - 1) * pageSize, currentPage * pageSize),

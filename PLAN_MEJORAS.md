@@ -212,7 +212,8 @@ Tablas: `ventas, clientes, productos, vendedores, pedidos, comisiones, caja, aud
 ## 8. UX (flujos y fricción)
 
 ### 8.1 Confirmación de acciones destructivas — GLOBAL
-- [~] **Parcial (2026-06-09):** ya existía `components/ui/confirm-dialog.tsx` (usado en 4 lugares). Reemplazado el `confirm()` nativo de `listas-precios` por `ConfirmDialog`. **Falta** aplicarlo en el resto de deletes: productos, clientes, gastos, empleados, ofertas.
+- [x] **Hecho (2026-06-09):** todos los borrados destructivos de datos ya pasan por `ConfirmDialog`: empleados, gastos, listas-precios, pedidos (deleteOrder) y productos. Reemplazado el único `confirm()` nativo (listas-precios). No quedan `confirm()`/`alert()` nativos en el código.
+- Nota: borrados livianos/reversibles se dejaron sin modal a propósito para no agregar fricción (quitar faltante del historial en `clientes/[id]` — optimista y revierte si falla; eliminar remito en pedidos — reversible, "podés generarlo de nuevo").
 - [ ] Para acciones de plata (anular venta, reabrir caja, eliminar cobranza) el dialog debe mostrar el impacto: "Se restaurará stock de N productos, se revertirá comisión de $X".
 
 **Afecta:** previene borrados accidentales en datos de negocio — la causa de varios scripts `fix-*` históricos.
@@ -224,7 +225,8 @@ Tablas: `ventas, clientes, productos, vendedores, pedidos, comisiones, caja, aud
 **Afecta:** elimina ventas/cobranzas duplicadas (ya hubo: `fix-villagran-duplicado`, `diag-joannas-doble`, `diag-pedidos-duplicados`).
 
 ### 8.3 Búsquedas con debounce + feedback
-- [~] **Parcial (2026-06-09):** creado hook reutilizable `hooks/use-debounce.ts`. **Falta** aplicarlo en las búsquedas de productos (~7400 mayorista), clientes, ventas, tienda.
+- [x] **Hecho (2026-06-09):** hook `hooks/use-debounce.ts` aplicado en `clientes` (no tenía) y `tienda` (su debounce estaba MUERTO — `searchInput`/`handleSearchChange` definidos pero sin uso; reconectado vía el hook y eliminado el código muerto). Ya tenían debounce manual funcional: productos, descuentos, mayorista, ventas/nueva.
+- [ ] Pendiente menor: feedback de contador de resultados ("128 productos") y empty state accionable en las búsquedas (parte de 8.4).
 - [ ] Mostrar contador de resultados ("128 productos") y empty state con acción ("No hay resultados para X — limpiar filtros").
 
 **Afecta:** la búsqueda deja de trabarse en catálogos grandes; el usuario sabe qué pasó.
