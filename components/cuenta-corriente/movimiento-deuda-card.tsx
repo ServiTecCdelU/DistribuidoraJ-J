@@ -4,7 +4,7 @@ import { useState } from 'react'
 import { Card, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import {
-  ArrowDownCircle, ArrowUpCircle, ChevronDown, Download, Package, Truck, Receipt,
+  ArrowDownCircle, ArrowUpCircle, ChevronDown, Download, Package, Truck,
 } from 'lucide-react'
 import { formatCurrency, formatDate } from '@/lib/utils/format'
 import { descargarDocumento } from '@/lib/utils/doc-actions'
@@ -31,7 +31,6 @@ export function MovimientoDeudaCard({ tx, sale }: MovimientoDeudaCardProps) {
   const isPayment = tx.type === 'payment'
   const expandable = !isPayment && !!sale
   const tieneRemito = !!sale?.remitoNumber
-  const tieneRecibo = isPayment && !!tx.reciboNumero
 
   return (
     <Card>
@@ -57,11 +56,6 @@ export function MovimientoDeudaCard({ tx, sale }: MovimientoDeudaCardProps) {
                   <Truck className="h-3 w-3" />{sale!.remitoNumber}
                 </span>
               )}
-              {tieneRecibo && (
-                <span className="inline-flex items-center gap-1 text-green-600">
-                  <Receipt className="h-3 w-3" />{tx.reciboNumero}
-                </span>
-              )}
             </p>
           </div>
           <p className={`font-bold tabular-nums ${isPayment ? 'text-green-600' : 'text-red-600'}`}>
@@ -71,18 +65,6 @@ export function MovimientoDeudaCard({ tx, sale }: MovimientoDeudaCardProps) {
             <ChevronDown className={`h-4 w-4 text-muted-foreground shrink-0 transition-transform ${expanded ? 'rotate-180' : ''}`} />
           )}
         </div>
-
-        {tieneRecibo && tx.reciboPdfBase64 && (
-          <Button
-            variant="outline"
-            size="sm"
-            className="w-full gap-1.5 text-xs mt-2"
-            onClick={() => descargarDocumento(tx.reciboPdfBase64, 'recibo', tx.reciboNumero, undefined)}
-          >
-            <Download className="h-3.5 w-3.5" />
-            Descargar recibo {tx.reciboNumero}
-          </Button>
-        )}
 
         {expandable && expanded && sale && (
           <div className="mt-3 pt-3 border-t space-y-2">

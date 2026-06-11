@@ -67,7 +67,7 @@ export function InventoryValueHistory({ open, onOpenChange, history }: Inventory
               </div>
             </div>
 
-            <ScrollArea className="max-h-[400px] pr-4">
+            <ScrollArea className="max-h-[min(400px,55vh)] pr-4">
               <div className="space-y-2">
                 {[...history].reverse().map((snapshot, index, arr) => {
                   const prevSnapshot = arr[index + 1]

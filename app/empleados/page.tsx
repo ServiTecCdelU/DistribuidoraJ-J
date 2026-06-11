@@ -1033,7 +1033,7 @@ export default function EmpleadosPage() {
                     <p>No tiene pedidos activos</p>
                   </div>
                 ) : (
-                  <div className="space-y-4 max-h-[360px] overflow-y-auto">
+                  <div className="space-y-4 max-h-[min(360px,45vh)] overflow-y-auto">
                     {orderDays.map((dayKey) => {
                       const day = ordersByDay[dayKey]
                       const clientNames = Object.keys(day.clients)
@@ -1187,7 +1187,7 @@ export default function EmpleadosPage() {
                     <p>No hay comisiones registradas</p>
                   </div>
                 ) : (
-                  <div className="space-y-2 max-h-[300px] overflow-y-auto">
+                  <div className="space-y-2 max-h-[min(300px,40vh)] overflow-y-auto">
                     {commissions.map((commission) => (
                       <div
                         key={commission.id}
