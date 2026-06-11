@@ -8,7 +8,7 @@ import "@/app/globals.css";
 const _geist = Geist({ subsets: ["latin"] });
 const _geistMono = Geist_Mono({ subsets: ["latin"] });
 
-const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL || "https://servitec-cdelu.vercel.app";
+const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL || "https://distribuidora-patricia.vercel.app";
 const SITE_NAME = "ServiTec";
 const SITE_DESCRIPTION =
   "ServiTec — desarrollo de software de gestión para comercios, distribuidoras y kioscos en Concepción del Uruguay, Entre Ríos. Sistema de ventas, control de stock, cuenta corriente, comisiones, pedidos y facturación electrónica AFIP. Soluciones a medida para tu negocio.";
