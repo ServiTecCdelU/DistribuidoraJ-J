@@ -48,6 +48,11 @@ import {
 } from 'lucide-react'
 import { ChartContainer, ChartTooltip, ChartTooltipContent } from '@/components/ui/chart'
 import { Skeleton } from '@/components/ui/skeleton'
+import { MorosidadTab } from '@/components/dashboard/morosidad-tab'
+import { ReposicionTab } from '@/components/dashboard/reposicion-tab'
+import { RentabilidadTab } from '@/components/dashboard/rentabilidad-tab'
+import { InactivosTab } from '@/components/dashboard/inactivos-tab'
+import { ResumenDiaTab } from '@/components/dashboard/resumen-dia-tab'
 import { dashboardApi, ordersApi, transferApi } from '@/lib/api'
 import type { TransferConfig } from '@/lib/api'
 import { Label } from '@/components/ui/label'
@@ -101,7 +106,19 @@ const getNextAction = (currentStatus: OrderStatus): { label: string; nextStatus:
   }
 }
 
+type DashboardTab = 'resumen' | 'dia' | 'morosidad' | 'reposicion' | 'rentabilidad' | 'inactivos'
+
+const DASHBOARD_TABS: { id: DashboardTab; label: string }[] = [
+  { id: 'resumen', label: 'Resumen' },
+  { id: 'dia', label: 'Cierre del día' },
+  { id: 'morosidad', label: 'Morosidad' },
+  { id: 'reposicion', label: 'Reposición' },
+  { id: 'rentabilidad', label: 'Rentabilidad' },
+  { id: 'inactivos', label: 'Clientes en fuga' },
+]
+
 export default function DashboardPage() {
+  const [activeTab, setActiveTab] = useState<DashboardTab>('resumen')
   const [dateFilter, setDateFilter] = useState<'hoy' | 'semana' | 'mes' | 'custom'>('hoy')
   const [debtorQuery, setDebtorQuery] = useState('')
   const [debtorPage, setDebtorPage] = useState(1)
@@ -435,7 +452,7 @@ export default function DashboardPage() {
                       <div className="h-6 w-6 sm:h-7 sm:w-7 rounded-lg bg-sky-500/10 flex items-center justify-center shrink-0">
                         <Helado className="h-3 w-3 sm:h-3.5 sm:w-3.5 text-sky-600" />
                       </div>
-                      <span className="text-xs font-medium text-sky-700">Golloara</span>
+                      <span className="text-xs font-medium text-sky-700">Distribuidora Patricia</span>
                     </div>
                     <h2 className="text-lg sm:text-xl font-semibold text-foreground">Resumen ejecutivo</h2>
                     <p className="text-xs text-muted-foreground max-w-lg">
@@ -474,6 +491,32 @@ export default function DashboardPage() {
             </div>
           </div>
 
+          {/* Selector de vistas del panel admin */}
+          <div className="flex items-center gap-1 sm:gap-1.5 bg-white p-1 rounded-2xl border border-border/60 shadow-sm overflow-x-auto">
+            {DASHBOARD_TABS.map((tab) => (
+              <Button
+                key={tab.id}
+                size="sm"
+                variant={activeTab === tab.id ? 'default' : 'ghost'}
+                className={`rounded-xl text-xs font-medium transition-all whitespace-nowrap px-2.5 py-1 ${
+                  activeTab === tab.id
+                    ? 'bg-teal-600 hover:bg-teal-700 text-white shadow-sm'
+                    : 'text-muted-foreground hover:text-foreground'
+                }`}
+                onClick={() => setActiveTab(tab.id)}
+              >
+                {tab.label}
+              </Button>
+            ))}
+          </div>
+
+          {activeTab === 'dia' && <ResumenDiaTab />}
+          {activeTab === 'morosidad' && <MorosidadTab />}
+          {activeTab === 'reposicion' && <ReposicionTab />}
+          {activeTab === 'rentabilidad' && <RentabilidadTab />}
+          {activeTab === 'inactivos' && <InactivosTab />}
+
+          {activeTab === 'resumen' && (<>
           {/* KPIs Grid - Más compacto en móvil */}
           <section className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-2 sm:gap-3">
             {kpis.map((kpi) => {
@@ -996,6 +1039,7 @@ export default function DashboardPage() {
               </div>
             </CardContent>
           </Card>
+          </>)}
         </div>
       </div>
 

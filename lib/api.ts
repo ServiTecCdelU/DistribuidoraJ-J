@@ -86,6 +86,21 @@ import {
   getProductDistribution,
   getDashboardData,
 } from '@/services/dashboard-service'
+import {
+  getMorosidad,
+  getReposicion,
+  getRentabilidad,
+  getClientesInactivos,
+  getResumenDia,
+} from '@/services/admin-insights-service'
+import type {
+  MorosidadData,
+  ReposicionData,
+  ClienteInactivo,
+  ResumenDiaData,
+  DeudorAging,
+  ProductoReposicion,
+} from '@/services/admin-insights-service'
 import { logAudit, getAuditLog } from '@/services/audit-service'
 import {
   getPriceLists,
@@ -408,6 +423,15 @@ export const dashboardApi = {
     return getDashboardData()
   },
 }
+
+export const adminInsightsApi = {
+  getMorosidad,
+  getReposicion,
+  getRentabilidad,
+  getClientesInactivos,
+  getResumenDia,
+}
+export type { MorosidadData, ReposicionData, ClienteInactivo, ResumenDiaData, DeudorAging, ProductoReposicion }
 
 export const auditApi = {
   log: logAudit,
