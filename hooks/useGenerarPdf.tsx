@@ -1377,8 +1377,8 @@ export interface ReciboPagoData {
 
 // Recibo compacto: dos copias (Original/Duplicado) en una A4 para cortar al medio.
 const reciboStyles = StyleSheet.create({
-  page: { fontFamily: "Helvetica", backgroundColor: "white", color: "#1a1a1a" },
-  half: { height: "50%", padding: "10mm 14mm", flexDirection: "column" },
+  page: { fontFamily: "Helvetica", backgroundColor: "white", color: "#1a1a1a", flexDirection: "column" },
+  half: { flexGrow: 1, flexBasis: 0, padding: "10mm 14mm", flexDirection: "column" },
   cutLine: { borderBottom: "1px dashed #999", marginHorizontal: "14mm" },
   // Header
   header: { flexDirection: "row", justifyContent: "space-between", alignItems: "flex-start", borderBottom: "1.5px solid black", paddingBottom: 8, marginBottom: 8 },
