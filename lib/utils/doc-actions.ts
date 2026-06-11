@@ -1,9 +1,7 @@
 import { downloadBase64Pdf } from "@/services/pdf-service";
 import { toast } from "sonner";
 
-type TipoDoc = "boleta" | "remito" | "recibo";
-
-export function buildDocFilename(tipo: TipoDoc, numero: string | undefined, clientName?: string): string {
+export function buildDocFilename(tipo: "boleta" | "remito", numero: string | undefined, clientName?: string): string {
   const nombre = (clientName || "cliente")
     .toLowerCase()
     .normalize("NFD").replace(/[\u0300-\u036f]/g, "")
@@ -13,12 +11,13 @@ export function buildDocFilename(tipo: TipoDoc, numero: string | undefined, clie
   let nro = numero || "0";
   const match = nro.match(/(\d+)$/);
   if (match) nro = String(parseInt(match[1], 10));
-  return `${tipo}_N°${nro}_${nombre}.pdf`;
+  const prefix = tipo === "boleta" ? "boleta" : "remito";
+  return `${prefix}_N°${nro}_${nombre}.pdf`;
 }
 
 export function descargarDocumento(
   base64: string | undefined,
-  tipo: TipoDoc,
+  tipo: "boleta" | "remito",
   numero: string | undefined,
   clientName?: string,
 ) {
@@ -33,7 +32,7 @@ export function descargarDocumento(
 
 export async function enviarWhatsapp(
   base64: string | undefined,
-  tipo: TipoDoc,
+  tipo: "boleta" | "remito",
   numero: string | undefined,
   clientName?: string,
   clientPhone?: string,
@@ -53,7 +52,7 @@ export async function enviarWhatsapp(
   const file = new File([blob], filename, { type: "application/pdf" });
 
   const clientLabel = clientName || "cliente";
-  const docName = tipo === "boleta" ? "comprobante" : tipo === "recibo" ? "recibo" : "remito";
+  const docName = tipo === "boleta" ? "comprobante" : "remito";
 
   // Resolver teléfono
   let phone = clientPhone?.replace(/\D/g, "") || "";
