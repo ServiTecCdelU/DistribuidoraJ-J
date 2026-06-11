@@ -1419,7 +1419,7 @@ const ReciboCopia = ({ data, copia }: { data: ReciboPagoData; copia: string }) =
       {/* Header */}
       <View style={reciboStyles.header}>
         <View>
-          <Text style={reciboStyles.brandName}>Distribuidora Patricia</Text>
+          <Text style={reciboStyles.brandName}>Distribuidora J&J</Text>
           <Text style={reciboStyles.brandSub}>Comprobante de pago — no válido como factura</Text>
         </View>
         <View style={reciboStyles.headerRight}>
