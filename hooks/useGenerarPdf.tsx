@@ -1412,20 +1412,15 @@ const reciboStyles = StyleSheet.create({
   footer: { flexDirection: "row", justifyContent: "space-between", borderTop: "0.5px solid #ddd", paddingTop: 4, marginTop: 6, fontSize: 6, color: "#aaa" },
 });
 
-const ReciboCopia = ({ data, copia, logoSrc }: { data: ReciboPagoData; copia: string; logoSrc: string }) => {
+const ReciboCopia = ({ data, copia }: { data: ReciboPagoData; copia: string }) => {
   const clientName = data.clientName || "Consumidor Final";
   return (
     <>
       {/* Header */}
       <View style={reciboStyles.header}>
         <View>
-          <View style={reciboStyles.brandRow}>
-            <Image src={logoSrc} style={reciboStyles.logo} />
-            <View>
-              <Text style={reciboStyles.brandName}>Distribuidora Patricia</Text>
-              <Text style={reciboStyles.brandSub}>Comprobante de pago — no válido como factura</Text>
-            </View>
-          </View>
+          <Text style={reciboStyles.brandName}>Distribuidora Patricia</Text>
+          <Text style={reciboStyles.brandSub}>Comprobante de pago — no válido como factura</Text>
         </View>
         <View style={reciboStyles.headerRight}>
           <Text style={reciboStyles.reciboTitle}>RECIBO DE PAGO</Text>
@@ -1489,16 +1484,15 @@ const ReciboCopia = ({ data, copia, logoSrc }: { data: ReciboPagoData; copia: st
 };
 
 const ReciboPagoPDF = ({ data }: { data: ReciboPagoData }) => {
-  const logoSrc = typeof window !== "undefined" ? `${window.location.origin}/logo.png` : "/logo.png";
   return (
     <Document>
       <Page size="A4" style={reciboStyles.page}>
         <View style={reciboStyles.half}>
-          <ReciboCopia data={data} copia="ORIGINAL · Cliente" logoSrc={logoSrc} />
+          <ReciboCopia data={data} copia="ORIGINAL · Cliente" />
         </View>
         <View style={reciboStyles.cutLine} />
         <View style={reciboStyles.half}>
-          <ReciboCopia data={data} copia="DUPLICADO · Comercio" logoSrc={logoSrc} />
+          <ReciboCopia data={data} copia="DUPLICADO · Comercio" />
         </View>
       </Page>
     </Document>
