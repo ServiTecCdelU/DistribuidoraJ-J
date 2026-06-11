@@ -185,6 +185,9 @@ export default function PedidosPage() {
 
   const generateRemitoForOrder = useCallback(async (order: Order, excludeProductIds: string[] = [], replacements: Record<string, ReplacementOption> = {}, quantities: Record<string, number> = {}) => {
     setGeneratingDoc(true);
+    // El stock se descuenta al generar el remito (la mercadería sale del depósito). Si este pedido
+    // ya lo descontó antes (regenerar remito / reimprimir PDF), no volver a descontar.
+    const yaDescontado = order.stockDescontado === true;
     try {
       // Aplicar cantidades editadas y reemplazos por otra marca (mantiene descuento %, cambia producto/precio).
       // El descuento es un porcentaje: se preserva y se aplica sobre el nuevo precio.
@@ -261,11 +264,30 @@ export default function PedidosPage() {
         remitoNumber,
       };
 
-      // Stock se descuenta al completar el pedido (no al generar remito)
-
       const { generarPdfCliente } = await import("@/hooks/useGenerarPdf");
       const pdfBase64 = await generarPdfCliente(ventaData, "remito");
-      const updatedOrder = await ordersApi.saveRemitoToOrder(order.id, remitoNumber, pdfBase64);
+      let updatedOrder = await ordersApi.saveRemitoToOrder(order.id, remitoNumber, pdfBase64);
+
+      // Descontar stock de lo que va en el remito (sale del depósito). Una sola vez por pedido.
+      if (!yaDescontado) {
+        const { registrarMovimiento } = await import("@/services/stock-service");
+        for (const item of filteredItems as any[]) {
+          if (!item.productId) continue;
+          const cant = Number(item.quantity) || 0;
+          const regalo = Number(item.regalo) || 0; // regalo del mismo producto (si lo tuviera)
+          const totalSalida = cant + regalo;
+          if (totalSalida <= 0) continue;
+          await registrarMovimiento({
+            productoId: item.productId,
+            tipo: "venta",
+            cantidad: -totalSalida,
+            referencia: `Remito ${remitoNumber}`,
+          });
+        }
+        await ordersApi.markStockDescontado(order.id);
+        updatedOrder = { ...updatedOrder, stockDescontado: true };
+      }
+
       setOrders((prev) => prev.map((o) => (o.id === order.id ? updatedOrder : o)));
       if (detailOrder?.id === order.id) setDetailOrder(updatedOrder);
 
@@ -595,15 +617,33 @@ export default function PedidosPage() {
         })
         .filter(item => item.quantity > 0);
 
-      // Registrar roturas: descontar stock (el insert en transacciones se hace después de crear la venta para tener el saleNumber)
       const roturasAdj = adjustments.filter(a => a.type === "rotura");
       const faltantesAdj = adjustments.filter(a => a.type === "faltante");
       const noQuiereAdj = adjustments.filter(a => a.type === "no_quiere");
-      if (roturasAdj.length > 0) {
+
+      // ¿El stock ya se descontó al generar el remito? Entonces no se vuelve a descontar al cobrar.
+      const stockYaDescontado = selectedOrder.stockDescontado === true;
+
+      if (stockYaDescontado) {
+        // El stock salió completo en el remito. Reconciliar lo que NO se entregó:
+        // - faltante (no se cargó, vuelve al depósito) y no_quiere (devuelto) → REPONER al stock.
+        // - rotura → pérdida real: no se repone (ya descontada en el remito), solo queda en caja.
+        const reponer = [...faltantesAdj, ...noQuiereAdj];
+        if (reponer.length > 0) {
+          const { registrarMovimiento } = await import("@/services/stock-service");
+          for (const a of reponer) {
+            await registrarMovimiento({
+              productoId: a.productId,
+              tipo: "ajuste",
+              cantidad: a.quantity, // entrada: vuelve al stock
+              referencia: `Devolución/faltante cobro pedido #${selectedOrder.id} — ${a.productName}`,
+            });
+          }
+        }
+      } else if (roturasAdj.length > 0) {
+        // Pedido cobrado sin remito previo: el stock se descuenta acá. La rotura sale del stock.
         const { registrarMovimiento } = await import("@/services/stock-service");
         for (const r of roturasAdj) {
-          // registrarMovimiento ya descuenta productos.stock y mayorista_productos.stock_local.
-          // No descontar de nuevo acá (causaba doble descuento del stock).
           await registrarMovimiento({
             productoId: r.productId,
             tipo: "rotura",
@@ -716,6 +756,7 @@ export default function PedidosPage() {
         source: "order",
         createOrder: false,
         orderId: selectedOrder.id,
+        skipStock: stockYaDescontado, // el stock ya salió al generar el remito
         deliveryMethod:
           selectedOrder.address === "Retiro en local" ? "pickup" : "delivery",
         deliveryAddress: selectedOrder.address,

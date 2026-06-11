@@ -128,6 +128,8 @@ export const processSale = async (data: {
   orderId?: string
   deliveryMethod: 'pickup' | 'delivery'
   deliveryAddress: string
+  // Si el stock ya se descontó antes (ej: al generar el remito del pedido), no volver a descontarlo acá.
+  skipStock?: boolean
 }): Promise<Sale> => {
   const subtotal = data.items.reduce((acc, item) => {
     const base = item.product.price * item.quantity
@@ -226,8 +228,10 @@ export const processSale = async (data: {
   const { error: insertErr } = await supabase.from('ventas').insert(saleRow2)
   if (insertErr) throw new Error(`Error al crear venta: ${insertErr.message}`)
 
-  // Descontar stock — venta (lo pagado) y regalo (lo gratis) en movimientos separados
+  // Descontar stock — venta (lo pagado) y regalo (lo gratis) en movimientos separados.
+  // Si skipStock, el stock ya se descontó al generar el remito del pedido: no tocar acá.
   const { registrarMovimientoStock } = await import('@/services/stock-service')
+  if (!data.skipStock) {
   for (const item of data.items) {
     // Los pedidos usan IDs de mayorista_productos (mp_XXXX); stock vive en productos (prod_mp_XXXX)
     const prodId = item.product.id?.startsWith('mp_') ? `prod_${item.product.id}` : item.product.id
@@ -259,6 +263,7 @@ export const processSale = async (data: {
       await supabase.from('productos').update({ stock: stockPosterior }).eq('id', prodId)
       await registrarMovimientoStock({ productoId: prodId, tipo: 'regalo', cantidad: -r.cantidad, stockAnterior, stockPosterior, motivo: saleId })
     }
+  }
   }
 
   // Procesar credito

@@ -23,6 +23,7 @@ function mapOrder(d: Record<string, any>): Order {
     deliveryMethod: d.delivery_method ?? undefined,
     remitoNumber: d.remito_number ?? undefined,
     remitoPdfBase64: d.remito_pdf_base64 ?? undefined,
+    stockDescontado: d.stock_descontado ?? false,
     invoiceNumber: d.invoice_number ?? undefined,
     invoicePdfBase64: d.invoice_pdf_base64 ?? undefined,
     checkedItems: d.checked_items ?? [],
@@ -171,6 +172,12 @@ export const saveRemitoToOrder = async (id: string, remitoNumber: string, remito
 
   if (!data) throw new Error('Order not found')
   return mapOrder(data)
+}
+
+// Marca que el stock del pedido ya fue descontado (al generar el remito).
+// Idempotencia: evita descontar dos veces (regenerar remito, cobrar).
+export const markOrderStockDescontado = async (id: string): Promise<void> => {
+  await supabase.from('pedidos').update({ stock_descontado: true }).eq('id', id)
 }
 
 export const saveBoletaToOrder = async (

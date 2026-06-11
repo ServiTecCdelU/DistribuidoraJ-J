@@ -69,6 +69,7 @@ import {
   assignTransportista,
   removeTransportista,
   saveRemitoToOrder,
+  markOrderStockDescontado,
   saveBoletaToOrder,
   updateCheckedItems,
   deleteOrder,
@@ -210,6 +211,7 @@ export const salesApi = {
     orderId?: string
     deliveryMethod: 'pickup' | 'delivery'
     deliveryAddress: string
+    skipStock?: boolean
   }): Promise<Sale> {
     return processSale(data)
   },
@@ -315,6 +317,9 @@ export const ordersApi = {
   },
   async saveRemitoToOrder(id: string, remitoNumber: string, remitoPdfBase64: string): Promise<Order> {
     return saveRemitoToOrder(id, remitoNumber, remitoPdfBase64)
+  },
+  async markStockDescontado(id: string): Promise<void> {
+    return markOrderStockDescontado(id)
   },
   async saveBoletaToOrder(id: string, invoiceNumber: string, invoicePdfBase64: string): Promise<Order> {
     return saveBoletaToOrder(id, invoiceNumber, invoicePdfBase64)

@@ -160,6 +160,7 @@ export interface Order {
   deliveryMethod?: "pickup" | "delivery";
   remitoNumber?: string;
   remitoPdfBase64?: string;
+  stockDescontado?: boolean;
   invoiceNumber?: string;
   invoicePdfBase64?: string;
   checkedItems?: string[];
