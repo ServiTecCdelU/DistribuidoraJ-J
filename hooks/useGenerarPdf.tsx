@@ -1375,112 +1375,130 @@ export interface ReciboPagoData {
   saldoNuevo: number;
 }
 
+// Recibo compacto: dos copias (Original/Duplicado) en una A4 para cortar al medio.
 const reciboStyles = StyleSheet.create({
-  page: { padding: "12mm", fontFamily: "Helvetica", fontSize: 9, color: "#1a1a1a", backgroundColor: "white" },
+  page: { fontFamily: "Helvetica", backgroundColor: "white", color: "#1a1a1a" },
+  half: { height: "50%", padding: "10mm 14mm", flexDirection: "column" },
+  cutLine: { borderBottom: "1px dashed #999", marginHorizontal: "14mm" },
   // Header
-  headerBox: { border: "1.5px solid black", marginBottom: 12 },
-  headerRow: { flexDirection: "row", minHeight: 70 },
-  headerLeft: { width: "55%", padding: 10, borderRight: "1.5px solid black", justifyContent: "center" },
-  headerRight: { width: "45%", padding: 10, justifyContent: "center" },
-  logo: { width: 100, height: 40, objectFit: "contain", marginBottom: 6 },
-  infoText: { fontSize: 7.5, lineHeight: 1.6 },
-  reciboTitle: { fontSize: 16, fontWeight: "bold", marginBottom: 4 },
-  reciboInfo: { fontSize: 9, lineHeight: 1.7 },
+  header: { flexDirection: "row", justifyContent: "space-between", alignItems: "flex-start", borderBottom: "1.5px solid black", paddingBottom: 8, marginBottom: 8 },
+  brandRow: { flexDirection: "row", alignItems: "center", gap: 8 },
+  logo: { width: 34, height: 34, objectFit: "contain" },
+  brandName: { fontSize: 12, fontWeight: "bold" },
+  brandSub: { fontSize: 6.5, color: "#777", marginTop: 1 },
+  headerRight: { alignItems: "flex-end" },
+  reciboTitle: { fontSize: 13, fontWeight: "bold", letterSpacing: 0.5 },
+  reciboNro: { fontSize: 9, marginTop: 2 },
+  reciboFecha: { fontSize: 7.5, color: "#555", marginTop: 1 },
+  copiaLabel: { fontSize: 7, fontWeight: "bold", color: "#fff", backgroundColor: "#0d9488", paddingVertical: 1.5, paddingHorizontal: 5, borderRadius: 3, marginTop: 4 },
   bold: { fontWeight: "bold" },
-  // Cliente
-  clientSection: { border: "1px solid black", padding: "8px 10px", marginBottom: 12 },
-  text: { fontSize: 8.5, marginBottom: 2 },
-  // Cuerpo monto
-  montoBox: { border: "1px solid black", padding: 14, marginBottom: 12, alignItems: "center" },
-  montoLabel: { fontSize: 9, color: "#555", marginBottom: 4 },
-  montoValue: { fontSize: 26, fontWeight: "bold" },
-  metodo: { fontSize: 9, color: "#555", marginTop: 6 },
+  // Cuerpo
+  recibiRow: { fontSize: 9, marginBottom: 3 },
+  recibiMeta: { fontSize: 7, color: "#666", marginBottom: 6 },
+  montoBox: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", border: "1px solid black", paddingVertical: 7, paddingHorizontal: 10, marginBottom: 6 },
+  montoLabel: { fontSize: 8, color: "#555" },
+  montoValue: { fontSize: 17, fontWeight: "bold" },
+  metodoText: { fontSize: 7.5, color: "#555", marginBottom: 6 },
   // Saldos
-  saldosBox: { flexDirection: "row", justifyContent: "flex-end", marginBottom: 30 },
-  saldosInner: { width: "55%", border: "1px solid black", padding: 10 },
-  saldoRow: { flexDirection: "row", justifyContent: "space-between", marginBottom: 4, fontSize: 9 },
-  saldoRowFinal: { flexDirection: "row", justifyContent: "space-between", fontSize: 11, fontWeight: "bold", borderTop: "1.5px solid black", paddingTop: 6, marginTop: 4 },
-  // Firma
-  firmaSection: { flexDirection: "row", gap: 10, marginTop: "auto", paddingTop: 20 },
-  firmaBox: { flex: 1, borderTop: "1px solid black", paddingTop: 4 },
-  firmaLabel: { fontSize: 7, color: "#888", textAlign: "center" },
-  footer: { paddingTop: 8, borderTop: "0.5px solid #ccc", flexDirection: "row", justifyContent: "space-between", fontSize: 7, color: "#999", marginTop: 12 },
+  saldosRow: { flexDirection: "row", gap: 8, marginBottom: 4 },
+  saldoCell: { flex: 1, border: "0.5px solid #ccc", borderRadius: 3, paddingVertical: 4, paddingHorizontal: 6 },
+  saldoCellFinal: { flex: 1, border: "1px solid black", borderRadius: 3, paddingVertical: 4, paddingHorizontal: 6 },
+  saldoLabel: { fontSize: 6.5, color: "#777" },
+  saldoValue: { fontSize: 9, fontWeight: "bold", marginTop: 1 },
+  // Firma + footer
+  firma: { marginTop: "auto", flexDirection: "row", justifyContent: "flex-end" },
+  firmaBox: { width: "55%", borderTop: "0.75px solid #333", paddingTop: 3 },
+  firmaLabel: { fontSize: 6.5, color: "#888", textAlign: "center" },
+  footer: { flexDirection: "row", justifyContent: "space-between", borderTop: "0.5px solid #ddd", paddingTop: 4, marginTop: 6, fontSize: 6, color: "#aaa" },
 });
 
-const ReciboPagoPDF = ({ data }: { data: ReciboPagoData }) => {
-  const logoSrc = typeof window !== "undefined" ? `${window.location.origin}/logo-small.png` : "/logo-small.png";
+const ReciboCopia = ({ data, copia, logoSrc }: { data: ReciboPagoData; copia: string; logoSrc: string }) => {
   const clientName = data.clientName || "Consumidor Final";
   return (
+    <>
+      {/* Header */}
+      <View style={reciboStyles.header}>
+        <View>
+          <View style={reciboStyles.brandRow}>
+            <Image src={logoSrc} style={reciboStyles.logo} />
+            <View>
+              <Text style={reciboStyles.brandName}>Distribuidora Patricia</Text>
+              <Text style={reciboStyles.brandSub}>Comprobante de pago — no válido como factura</Text>
+            </View>
+          </View>
+        </View>
+        <View style={reciboStyles.headerRight}>
+          <Text style={reciboStyles.reciboTitle}>RECIBO DE PAGO</Text>
+          <Text style={reciboStyles.reciboNro}><Text style={reciboStyles.bold}>N° </Text>{data.reciboNumero}</Text>
+          <Text style={reciboStyles.reciboFecha}>{safeFormatDate(data.fecha)}  {safeFormatTime(data.fecha)}</Text>
+          <Text style={reciboStyles.copiaLabel}>{copia}</Text>
+        </View>
+      </View>
+
+      {/* Recibí de */}
+      <Text style={reciboStyles.recibiRow}>
+        <Text style={reciboStyles.bold}>Recibí de: </Text>{clientName}
+      </Text>
+      {(data.clientAddress || data.clientPhone) && (
+        <Text style={reciboStyles.recibiMeta}>
+          {[data.clientAddress, data.clientPhone].filter(Boolean).join("  ·  ")}
+        </Text>
+      )}
+
+      {/* Monto */}
+      <View style={reciboStyles.montoBox}>
+        <Text style={reciboStyles.montoLabel}>Son</Text>
+        <Text style={reciboStyles.montoValue}>{formatCurrency(data.monto)}</Text>
+      </View>
+      {data.metodo && (
+        <Text style={reciboStyles.metodoText}>
+          <Text style={reciboStyles.bold}>Forma de pago: </Text>{data.metodo}
+        </Text>
+      )}
+
+      {/* Saldos */}
+      <View style={reciboStyles.saldosRow}>
+        <View style={reciboStyles.saldoCell}>
+          <Text style={reciboStyles.saldoLabel}>Saldo anterior</Text>
+          <Text style={reciboStyles.saldoValue}>{formatCurrency(data.saldoAnterior)}</Text>
+        </View>
+        <View style={reciboStyles.saldoCell}>
+          <Text style={reciboStyles.saldoLabel}>Este pago</Text>
+          <Text style={reciboStyles.saldoValue}>-{formatCurrency(data.monto)}</Text>
+        </View>
+        <View style={reciboStyles.saldoCellFinal}>
+          <Text style={reciboStyles.saldoLabel}>Saldo actual</Text>
+          <Text style={reciboStyles.saldoValue}>{formatCurrency(data.saldoNuevo)}</Text>
+        </View>
+      </View>
+
+      {/* Firma */}
+      <View style={reciboStyles.firma}>
+        <View style={reciboStyles.firmaBox}>
+          <Text style={reciboStyles.firmaLabel}>Firma y aclaración — Recibí conforme</Text>
+        </View>
+      </View>
+
+      {/* Footer */}
+      <View style={reciboStyles.footer}>
+        <Text>{data.reciboNumero}</Text>
+        <Text>{copia}</Text>
+      </View>
+    </>
+  );
+};
+
+const ReciboPagoPDF = ({ data }: { data: ReciboPagoData }) => {
+  const logoSrc = typeof window !== "undefined" ? `${window.location.origin}/logo.png` : "/logo.png";
+  return (
     <Document>
-      <Page size="A5" orientation="landscape" style={reciboStyles.page}>
-        {/* Header */}
-        <View style={reciboStyles.headerBox}>
-          <View style={reciboStyles.headerRow}>
-            <View style={reciboStyles.headerLeft}>
-              <Image src={logoSrc} style={reciboStyles.logo} />
-              <Text style={reciboStyles.infoText}>
-                {"DOMINGUEZ MARIO CESAR\n"}
-                {"DR. BASTIAN 1049 - SAN JOSE\n"}
-                {"CUIT: 20-14598383-6 - IVA Responsable Inscripto"}
-              </Text>
-            </View>
-            <View style={reciboStyles.headerRight}>
-              <Text style={reciboStyles.reciboTitle}>RECIBO DE PAGO</Text>
-              <Text style={reciboStyles.reciboInfo}>
-                <Text style={reciboStyles.bold}>N°: </Text>{data.reciboNumero}{"\n"}
-                <Text style={reciboStyles.bold}>Fecha: </Text>{safeFormatDate(data.fecha)} {safeFormatTime(data.fecha)}
-              </Text>
-            </View>
-          </View>
+      <Page size="A4" style={reciboStyles.page}>
+        <View style={reciboStyles.half}>
+          <ReciboCopia data={data} copia="ORIGINAL · Cliente" logoSrc={logoSrc} />
         </View>
-
-        {/* Cliente */}
-        <View style={reciboStyles.clientSection}>
-          <Text style={reciboStyles.text}><Text style={reciboStyles.bold}>Recibí de: </Text>{clientName}</Text>
-          {data.clientAddress && (
-            <Text style={reciboStyles.text}><Text style={reciboStyles.bold}>Domicilio: </Text>{data.clientAddress}</Text>
-          )}
-          {data.clientPhone && (
-            <Text style={reciboStyles.text}><Text style={reciboStyles.bold}>Teléfono: </Text>{data.clientPhone}</Text>
-          )}
-        </View>
-
-        {/* Monto */}
-        <View style={reciboStyles.montoBox}>
-          <Text style={reciboStyles.montoLabel}>La suma de</Text>
-          <Text style={reciboStyles.montoValue}>{formatCurrency(data.monto)}</Text>
-          {data.metodo && <Text style={reciboStyles.metodo}>{data.metodo}</Text>}
-        </View>
-
-        {/* Saldos */}
-        <View style={reciboStyles.saldosBox}>
-          <View style={reciboStyles.saldosInner}>
-            <View style={reciboStyles.saldoRow}>
-              <Text>Saldo anterior:</Text>
-              <Text>{formatCurrency(data.saldoAnterior)}</Text>
-            </View>
-            <View style={reciboStyles.saldoRow}>
-              <Text>Este pago:</Text>
-              <Text>-{formatCurrency(data.monto)}</Text>
-            </View>
-            <View style={reciboStyles.saldoRowFinal}>
-              <Text>Saldo actual:</Text>
-              <Text>{formatCurrency(data.saldoNuevo)}</Text>
-            </View>
-          </View>
-        </View>
-
-        {/* Firma */}
-        <View style={reciboStyles.firmaSection}>
-          <View style={reciboStyles.firmaBox}>
-            <Text style={reciboStyles.firmaLabel}>Firma y aclaración - Recibí conforme</Text>
-          </View>
-        </View>
-
-        {/* Footer */}
-        <View style={reciboStyles.footer}>
-          <Text>Documento no válido como factura fiscal</Text>
-          <Text>Distribuidora Patricia</Text>
+        <View style={reciboStyles.cutLine} />
+        <View style={reciboStyles.half}>
+          <ReciboCopia data={data} copia="DUPLICADO · Comercio" logoSrc={logoSrc} />
         </View>
       </Page>
     </Document>
