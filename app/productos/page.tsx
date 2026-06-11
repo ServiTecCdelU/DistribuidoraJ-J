@@ -29,7 +29,7 @@ import { productsApi } from "@/lib/api";
 import { supabase } from "@/lib/supabase";
 import { generateReadableId } from "@/services/supabase-helpers";
 import { getAuthToken } from "@/services/auth-service";
-import { registrarMovimiento } from "@/services/stock-service";
+import { registrarMovimiento, getProductosARevisar, type ProductoARevisar } from "@/services/stock-service";
 import type { Product, MayoristaProducto } from "@/lib/types";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { formatCurrency, formatCompactNumber } from "@/lib/utils/format";
@@ -70,6 +70,8 @@ import {
   Percent,
   RefreshCw,
   Pill,
+  ChevronDown,
+  AlertTriangle,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -172,6 +174,9 @@ export default function ProductosPage() {
     useState<Product | null>(null);
   const [showInventoryHistory, setShowInventoryHistory] = useState(false);
 
+  const [productosARevisar, setProductosARevisar] = useState<ProductoARevisar[]>([]);
+  const [showRevisar, setShowRevisar] = useState(true);
+
   // Paginación server-side
   const [currentPage, setCurrentPage] = useState(1);
   const [pageSize, setPageSize] = useState(10);
@@ -208,6 +213,7 @@ export default function ProductosPage() {
   useEffect(() => {
     loadStockHistory();
     loadInventoryHistory();
+    getProductosARevisar().then(setProductosARevisar).catch(() => {});
   }, []);
 
   const loadProducts = async () => {
@@ -1388,6 +1394,84 @@ tr.cat td{border:none}
           </div>
         </div>
       </div>
+
+      {/* Productos a revisar - irregularidades de stock */}
+      {productosARevisar.length > 0 && (
+        <div className="mb-4 sm:mb-6 rounded-2xl border border-amber-300 bg-amber-50 dark:border-amber-700/50 dark:bg-amber-950/30 overflow-hidden">
+          <button
+            type="button"
+            onClick={() => setShowRevisar((v) => !v)}
+            className="w-full flex items-center justify-between gap-2 px-4 py-3 text-left"
+          >
+            <div className="flex items-center gap-2">
+              <AlertTriangle className="h-4 w-4 text-amber-600 dark:text-amber-400" />
+              <span className="text-sm font-semibold text-amber-800 dark:text-amber-200">
+                Stock a revisar
+              </span>
+              <Badge className="bg-amber-600 hover:bg-amber-600 text-white h-5 px-2 text-xs">
+                {productosARevisar.length}
+              </Badge>
+            </div>
+            <ChevronDown
+              className={cn(
+                "h-4 w-4 text-amber-600 dark:text-amber-400 transition-transform",
+                showRevisar && "rotate-180",
+              )}
+            />
+          </button>
+          {showRevisar && (
+            <div className="px-2 pb-2 sm:px-3 sm:pb-3">
+              <p className="px-2 pt-1 pb-1.5 text-[11px] text-amber-700/80 dark:text-amber-300/70">
+                Se intentó descontar más stock del disponible (incluye descontar de 0). Ordenado por fecha. Revisá el conteo físico.
+              </p>
+              <div className="space-y-1.5 max-h-[60vh] overflow-y-auto pr-1">
+              {productosARevisar.map((p) => (
+                <div
+                  key={p.productoId}
+                  className="flex items-center justify-between gap-3 rounded-xl bg-card border border-amber-200/60 dark:border-amber-800/40 px-3 py-2"
+                >
+                  <div className="min-w-0">
+                    <p className="text-sm font-medium text-foreground truncate">{p.nombre}</p>
+                    <p className="text-[11px] text-muted-foreground">
+                      Cód. {p.codigo} · stock actual {p.stockActual} · {p.cantidadMovimientos}{" "}
+                      {p.cantidadMovimientos === 1 ? "movimiento" : "movimientos"}
+                    </p>
+                  </div>
+                  <div className="flex items-center gap-3 shrink-0">
+                    <div className="text-right">
+                      <p className="text-sm font-bold text-amber-600 dark:text-amber-400 tabular-nums">
+                        -{p.unidadesFaltantes}
+                      </p>
+                      <p className="text-[10px] text-muted-foreground">faltante</p>
+                    </div>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="h-8 w-8"
+                      title="Ver historial de stock"
+                      onClick={() => {
+                        const prod = products.find((x) => x.id === p.productoId);
+                        handleViewHistory(
+                          prod ??
+                            ({
+                              id: p.productoId,
+                              name: p.nombre,
+                              price: 0,
+                              stock: p.stockActual,
+                            } as Product),
+                        );
+                      }}
+                    >
+                      <History className="h-4 w-4" />
+                    </Button>
+                  </div>
+                </div>
+              ))}
+              </div>
+            </div>
+          )}
+        </div>
+      )}
 
 
       {/* Barra de selección masiva - AHORA CON "Deshabilitar" */}

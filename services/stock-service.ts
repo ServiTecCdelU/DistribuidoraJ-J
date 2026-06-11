@@ -82,6 +82,93 @@ export const registrarMovimiento = async (params: {
     .eq('id', prodId)
 }
 
+export interface ProductoARevisar {
+  productoId: string // prod_mp_XXXX
+  mayoristaProductoId: string // mp_XXXX
+  nombre: string
+  codigo: string
+  stockActual: number
+  cantidadMovimientos: number
+  unidadesFaltantes: number
+  ultimaFecha: Date
+  ultimoMotivo: string
+}
+
+/**
+ * Productos con irregularidad de stock: movimientos de salida donde se intentó
+ * descontar más de lo disponible (incluye "descontar de 0"). El sistema frena el
+ * stock en 0 (Math.max(0, ...)), ocultando el descuento; este faltante queda
+ * registrado como stock_anterior + cantidad < 0.
+ */
+export const getProductosARevisar = async (): Promise<ProductoARevisar[]> => {
+  // Candidatos: salidas que quedaron clampeadas en 0.
+  const { data: movs } = await supabase
+    .from('stock_movimientos')
+    .select('mayorista_producto_id, cantidad, stock_anterior, stock_posterior, motivo, created_at')
+    .eq('stock_posterior', 0)
+    .lt('cantidad', 0)
+    .order('created_at', { ascending: false })
+
+  if (!movs || movs.length === 0) return []
+
+  // Solo los que realmente intentaron descontar más de lo que había.
+  const irregulares = movs.filter(
+    (m) => Number(m.stock_anterior) + Number(m.cantidad) < 0
+  )
+  if (irregulares.length === 0) return []
+
+  // Agrupar por producto.
+  const porProducto = new Map<
+    string,
+    { cantidad: number; faltante: number; ultimaFecha: Date; ultimoMotivo: string }
+  >()
+  for (const m of irregulares) {
+    const mpId = String(m.mayorista_producto_id)
+    if (!mpId) continue
+    const faltanteMov = -(Number(m.stock_anterior) + Number(m.cantidad))
+    const prev = porProducto.get(mpId)
+    if (prev) {
+      prev.cantidad += 1
+      prev.faltante += faltanteMov
+    } else {
+      porProducto.set(mpId, {
+        cantidad: 1,
+        faltante: faltanteMov,
+        ultimaFecha: new Date(m.created_at), // primer registro = más reciente (orden desc)
+        ultimoMotivo: m.motivo ?? '',
+      })
+    }
+  }
+
+  const mpIds = [...porProducto.keys()]
+  const prodIds = mpIds.map((id) => `prod_${id}`)
+
+  const { data: prods } = await supabase
+    .from('productos')
+    .select('id, name, codigo, stock')
+    .in('id', prodIds)
+
+  const prodById = new Map((prods ?? []).map((p) => [String(p.id), p]))
+
+  return mpIds
+    .map((mpId) => {
+      const agg = porProducto.get(mpId)!
+      const p = prodById.get(`prod_${mpId}`)
+      return {
+        productoId: `prod_${mpId}`,
+        mayoristaProductoId: mpId,
+        nombre: p?.name ?? mpId,
+        codigo: String(p?.codigo ?? mpId.replace(/^mp_/, '')),
+        stockActual: Number(p?.stock ?? 0),
+        cantidadMovimientos: agg.cantidad,
+        unidadesFaltantes: agg.faltante,
+        ultimaFecha: agg.ultimaFecha,
+        ultimoMotivo: agg.ultimoMotivo,
+      }
+    })
+    .sort((a, b) => b.ultimaFecha.getTime() - a.ultimaFecha.getTime())
+}
+
 /**
  * Descuenta stock de multiples productos en una misma operacion (venta).
  */
@@ -121,33 +208,6 @@ export const descontarStockRegalo = async (
         })
       )
   )
-}
-
-/**
- * Registra un movimiento de stock en stock_movimientos usando los valores de productos.stock.
- * No falla ni interrumpe el flujo si hay error (FK sin mayorista, etc.).
- */
-export const registrarMovimientoStock = async (params: {
-  productoId: string
-  tipo: 'venta' | 'apertura_bulto' | 'ajuste' | 'rotura' | 'regalo'
-  cantidad: number
-  stockAnterior: number
-  stockPosterior: number
-  motivo?: string
-}): Promise<void> => {
-  const mayoristId = params.productoId.replace(/^prod_/, '')
-  try {
-    await supabase.from('stock_movimientos').insert({
-      mayorista_producto_id: mayoristId,
-      tipo: params.tipo,
-      cantidad: params.cantidad,
-      stock_anterior: params.stockAnterior,
-      stock_posterior: params.stockPosterior,
-      motivo: params.motivo ?? null,
-    })
-  } catch {
-    // no interrumpir el flujo
-  }
 }
 
 /**

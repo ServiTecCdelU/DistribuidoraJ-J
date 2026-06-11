@@ -228,42 +228,27 @@ export const processSale = async (data: {
   const { error: insertErr } = await supabase.from('ventas').insert(saleRow2)
   if (insertErr) throw new Error(`Error al crear venta: ${insertErr.message}`)
 
-  // Descontar stock — venta (lo pagado) y regalo (lo gratis) en movimientos separados.
+  // Descontar stock con registrarMovimiento: lee el stock fresco de la BD, actualiza
+  // productos.stock + mayorista_productos.stock_local y registra el movimiento en una sola
+  // operación encapsulada (la misma vía sana que usa el remito). Evita el desfase que
+  // producía hacer update + insert por separado con un stock leído una sola vez.
   // Si skipStock, el stock ya se descontó al generar el remito del pedido: no tocar acá.
-  const { registrarMovimientoStock } = await import('@/services/stock-service')
+  const { registrarMovimiento } = await import('@/services/stock-service')
   if (!data.skipStock) {
-  for (const item of data.items) {
-    // Los pedidos usan IDs de mayorista_productos (mp_XXXX); stock vive en productos (prod_mp_XXXX)
-    const prodId = item.product.id?.startsWith('mp_') ? `prod_${item.product.id}` : item.product.id
-    const regaloMismo = item.regalo ?? 0
-    const { data: prod } = await supabase.from('productos').select('stock').eq('id', prodId).single()
-    if (prod) {
-      let stockActual = prod.stock || 0
-      // Venta (lo pagado)
-      const stockTrasVenta = Math.max(0, stockActual - item.quantity)
-      await supabase.from('productos').update({ stock: stockTrasVenta }).eq('id', prodId)
-      await registrarMovimientoStock({ productoId: prodId, tipo: 'venta', cantidad: -item.quantity, stockAnterior: stockActual, stockPosterior: stockTrasVenta, motivo: saleId })
-      stockActual = stockTrasVenta
-      // Regalo del mismo producto (promo "cada X +N")
+    // Venta (lo pagado) y regalo del mismo producto (promo "cada X +N").
+    for (const item of data.items) {
+      if (!item.product.id) continue
+      const regaloMismo = item.regalo ?? 0
+      await registrarMovimiento({ productoId: item.product.id, tipo: 'venta', cantidad: -item.quantity, referencia: saleId })
       if (regaloMismo > 0) {
-        const stockTrasRegalo = Math.max(0, stockActual - regaloMismo)
-        await supabase.from('productos').update({ stock: stockTrasRegalo }).eq('id', prodId)
-        await registrarMovimientoStock({ productoId: prodId, tipo: 'regalo', cantidad: -regaloMismo, stockAnterior: stockActual, stockPosterior: stockTrasRegalo, motivo: saleId })
+        await registrarMovimiento({ productoId: item.product.id, tipo: 'regalo', cantidad: -regaloMismo, referencia: saleId })
       }
     }
-  }
 
-  // Descontar stock de los productos regalados (promo cruzada) — tipo regalo
-  for (const r of regalosCruzados) {
-    const prodId = r.productoId.startsWith('mp_') ? `prod_${r.productoId}` : r.productoId
-    const { data: prod } = await supabase.from('productos').select('stock').eq('id', prodId).single()
-    if (prod) {
-      const stockAnterior = prod.stock || 0
-      const stockPosterior = Math.max(0, stockAnterior - r.cantidad)
-      await supabase.from('productos').update({ stock: stockPosterior }).eq('id', prodId)
-      await registrarMovimientoStock({ productoId: prodId, tipo: 'regalo', cantidad: -r.cantidad, stockAnterior, stockPosterior, motivo: saleId })
+    // Regalos de OTRO producto (promo cruzada) — tipo regalo.
+    for (const r of regalosCruzados) {
+      await registrarMovimiento({ productoId: r.productoId, tipo: 'regalo', cantidad: -r.cantidad, referencia: saleId })
     }
-  }
   }
 
   // Procesar credito
