@@ -8,43 +8,45 @@ import "@/app/globals.css";
 const _geist = Geist({ subsets: ["latin"] });
 const _geistMono = Geist_Mono({ subsets: ["latin"] });
 
-const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL || "https://distribuidorajj.vercel.app";
-const SITE_NAME = "Distribuidora J&J";
+const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL || "https://servitec-cdelu.vercel.app";
+const SITE_NAME = "ServiTec";
 const SITE_DESCRIPTION =
-  "Distribuidora J&J — venta mayorista y minorista de productos de almacén, bebidas, limpieza, kiosco y golosinas en San José y la región. Precios mayoristas, amplio stock, reparto y atención personalizada.";
+  "ServiTec — desarrollo de software de gestión para comercios, distribuidoras y kioscos en Concepción del Uruguay, Entre Ríos. Sistema de ventas, control de stock, cuenta corriente, comisiones, pedidos y facturación electrónica AFIP. Soluciones a medida para tu negocio.";
 
 export const metadata: Metadata = {
   metadataBase: new URL(SITE_URL),
   title: {
-    default: `${SITE_NAME} — Venta mayorista y minorista de almacén, bebidas y kiosco`,
+    default: "ServiTec — Sistemas de gestión para comercios y distribuidoras",
     template: `%s | ${SITE_NAME}`,
   },
   description: SITE_DESCRIPTION,
   applicationName: SITE_NAME,
   generator: "Next.js",
   keywords: [
-    "Distribuidora J&J",
-    "distribuidora",
-    "distribuidora mayorista",
-    "venta mayorista",
-    "venta minorista",
-    "almacén",
-    "bebidas",
-    "gaseosas",
-    "limpieza",
-    "kiosco",
-    "golosinas",
-    "fiambres",
-    "reparto a domicilio",
-    "precios mayoristas",
-    "San José",
+    "ServiTec",
+    "ServiTec Concepción del Uruguay",
+    "software de gestión",
+    "sistema de gestión",
+    "sistema de ventas",
+    "software para comercios",
+    "software para distribuidoras",
+    "software para kioscos",
+    "sistema de stock",
+    "control de stock",
+    "cuenta corriente",
+    "gestión de pedidos",
+    "facturación electrónica AFIP",
+    "software a medida",
+    "desarrollo de software",
+    "sistema de punto de venta",
+    "Concepción del Uruguay",
     "Entre Ríos",
     "Argentina",
   ],
   authors: [{ name: SITE_NAME }],
   creator: SITE_NAME,
   publisher: SITE_NAME,
-  category: "shopping",
+  category: "technology",
   alternates: {
     canonical: "/",
   },
@@ -53,20 +55,20 @@ export const metadata: Metadata = {
     locale: "es_AR",
     url: SITE_URL,
     siteName: SITE_NAME,
-    title: `${SITE_NAME} — Venta mayorista y minorista`,
+    title: "ServiTec — Sistemas de gestión para comercios y distribuidoras",
     description: SITE_DESCRIPTION,
     images: [
       {
         url: "/og-image.png",
         width: 1200,
         height: 630,
-        alt: `${SITE_NAME} — Distribuidora mayorista y minorista`,
+        alt: "ServiTec — Software de gestión para comercios y distribuidoras",
       },
     ],
   },
   twitter: {
     card: "summary_large_image",
-    title: `${SITE_NAME} — Venta mayorista y minorista`,
+    title: "ServiTec — Sistemas de gestión para comercios y distribuidoras",
     description: SITE_DESCRIPTION,
     images: ["/og-image.png"],
   },
