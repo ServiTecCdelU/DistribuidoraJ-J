@@ -1,12 +1,15 @@
 import { supabase } from '@/lib/supabase'
 import { generateReadableId } from '@/services/supabase-helpers'
 
+export type Distribucion = 1 | 2
+
 export interface TransaccionMayorista {
   id: string
   type: 'debt' | 'payment'
   amount: number
   description: string
   date: Date
+  distribucion: Distribucion   // cuenta del proveedor: Distribución 1 o 2
   saldo?: number   // solo en deudas: cuánto queda por pagar
   debtId?: string   // solo en pagos: a qué boleta se aplicó
 }
@@ -18,16 +21,21 @@ function mapRow(d: Record<string, any>): TransaccionMayorista {
     amount: Number(d.amount) || 0,
     description: d.description ?? '',
     date: new Date(d.date),
+    distribucion: (Number(d.distribucion) === 2 ? 2 : 1) as Distribucion,
     saldo: d.saldo != null ? Number(d.saldo) : undefined,
     debtId: d.debt_id ?? undefined,
   }
 }
 
-export const getTransaccionesMayorista = async (): Promise<TransaccionMayorista[]> => {
-  const { data, error } = await supabase
+export const getTransaccionesMayorista = async (
+  distribucion?: Distribucion
+): Promise<TransaccionMayorista[]> => {
+  let query = supabase
     .from('transacciones_mayorista')
     .select('*')
     .order('date', { ascending: false })
+  if (distribucion) query = query.eq('distribucion', distribucion)
+  const { data, error } = await query
   if (error) {
     console.error('[mayorista-cuenta] Error leyendo transacciones:', error)
     return []
@@ -37,6 +45,7 @@ export const getTransaccionesMayorista = async (): Promise<TransaccionMayorista[
 
 export const addDeudaMayorista = async (data: {
   amount: number
+  distribucion: Distribucion
   description?: string
   boleta?: string
   date?: string   // 'YYYY-MM-DD' o ISO; default hoy
@@ -57,10 +66,11 @@ export const addDeudaMayorista = async (data: {
     saldo: data.amount,
     description: desc,
     date: dateIso,
+    distribucion: data.distribucion,
   }
   const { error } = await supabase.from('transacciones_mayorista').insert(row)
   if (error) throw error
-  return { ...row, type: 'debt', date: new Date(dateIso) }
+  return { ...row, type: 'debt', date: new Date(dateIso), distribucion: data.distribucion }
 }
 
 export const pagarBoleta = async (data: {
@@ -68,16 +78,17 @@ export const pagarBoleta = async (data: {
   amount: number
   description?: string
 }): Promise<TransaccionMayorista> => {
-  // Leer saldo actual de la boleta
+  // Leer saldo actual de la boleta (y su distribución, que hereda el pago)
   const { data: debtRow, error: readErr } = await supabase
     .from('transacciones_mayorista')
-    .select('saldo, description')
+    .select('saldo, description, distribucion')
     .eq('id', data.debtId)
     .single()
   if (readErr || !debtRow) throw new Error('Boleta no encontrada')
 
   const saldoActual = Number(debtRow.saldo) || 0
   if (data.amount > saldoActual) throw new Error('El monto supera el saldo de la boleta')
+  const distribucion: Distribucion = Number(debtRow.distribucion) === 2 ? 2 : 1
 
   // Decrementar saldo
   const nuevoSaldo = Math.max(0, saldoActual - data.amount)
@@ -97,15 +108,17 @@ export const pagarBoleta = async (data: {
     description: desc,
     date: new Date().toISOString(),
     debt_id: data.debtId,
+    distribucion,
   }
   const { error: insErr } = await supabase.from('transacciones_mayorista').insert(row)
-  if (insErr) throw error
-  return { ...row, type: 'payment', date: new Date(), debtId: data.debtId }
+  if (insErr) throw insErr
+  return { ...row, type: 'payment', date: new Date(), debtId: data.debtId, distribucion }
 }
 
-// Mantener por compatibilidad con cargar deuda manual
+// Mantener por compatibilidad con cargar pago manual
 export const addPagoMayorista = async (data: {
   amount: number
+  distribucion: Distribucion
   description?: string
 }): Promise<TransaccionMayorista> => {
   const docId = await generateReadableId('transacciones_mayorista', 'txmay', 'pago')
@@ -115,14 +128,15 @@ export const addPagoMayorista = async (data: {
     amount: data.amount,
     description: data.description || 'Pago a mayorista',
     date: new Date().toISOString(),
+    distribucion: data.distribucion,
   }
   const { error } = await supabase.from('transacciones_mayorista').insert(row)
   if (error) throw error
-  return { ...row, type: 'payment', date: new Date() }
+  return { ...row, type: 'payment', date: new Date(), distribucion: data.distribucion }
 }
 
-export const getBalanceMayorista = async (): Promise<number> => {
-  const txs = await getTransaccionesMayorista()
+export const getBalanceMayorista = async (distribucion?: Distribucion): Promise<number> => {
+  const txs = await getTransaccionesMayorista(distribucion)
   return txs.reduce((acc, tx) => {
     return tx.type === 'debt' ? acc + tx.amount : acc - tx.amount
   }, 0)

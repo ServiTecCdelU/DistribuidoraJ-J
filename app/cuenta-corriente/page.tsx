@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState, useCallback } from 'react'
+import { useEffect, useState, useCallback, useMemo } from 'react'
 import { MainLayout } from '@/components/layout/main-layout'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
@@ -91,6 +91,8 @@ export default function CuentaCorrientePage() {
   // Mayorista — deuda con proveedor
   const [mayTxs, setMayTxs] = useState<TransaccionMayorista[]>([])
   const [mayBalance, setMayBalance] = useState(0)
+  // Distribución activa (1 o 2): el proveedor tiene dos cuentas que se pagan por separado
+  const [mayDist, setMayDist] = useState<1 | 2>(1)
   const [mayDeudaDialog, setMayDeudaDialog] = useState(false)
   const [mayPagoDialog, setMayPagoDialog] = useState(false)
   const [mayAmount, setMayAmount] = useState('')
@@ -98,6 +100,13 @@ export default function CuentaCorrientePage() {
   const [mayBoleta, setMayBoleta] = useState('')
   const [mayDate, setMayDate] = useState('')
   const [mayProcessing, setMayProcessing] = useState(false)
+
+  // Movimientos y balance de la distribución activa
+  const mayTxsDist = useMemo(() => mayTxs.filter((t) => t.distribucion === mayDist), [mayTxs, mayDist])
+  const mayBalanceDist = useMemo(
+    () => mayTxsDist.reduce((acc, tx) => (tx.type === 'debt' ? acc + tx.amount : acc - tx.amount), 0),
+    [mayTxsDist]
+  )
 
   // Preview imagen comprobante
   const [previewUrl, setPreviewUrl] = useState<string | null>(null)
@@ -276,6 +285,7 @@ export default function CuentaCorrientePage() {
     try {
       const tx = await mayoristaCuentaApi.addDeuda({
         amount,
+        distribucion: mayDist,
         description: mayDesc || undefined,
         boleta: mayBoleta || undefined,
         date: mayDate || undefined,
@@ -1179,13 +1189,38 @@ tr{page-break-inside:avoid}
           <>
           {/* ═══ CUENTA CON MAYORISTA (proveedor) ═══ */}
           <div className="space-y-4">
+            {/* Sub-pestañas por distribución (dos cuentas que se pagan por separado) */}
+            <div className="flex gap-2">
+              {([1, 2] as const).map((d) => {
+                const bal = mayTxs
+                  .filter((t) => t.distribucion === d)
+                  .reduce((acc, tx) => (tx.type === 'debt' ? acc + tx.amount : acc - tx.amount), 0)
+                return (
+                  <Button
+                    key={d}
+                    variant={mayDist === d ? 'default' : 'outline'}
+                    size="sm"
+                    className={`rounded-xl gap-2 ${mayDist === d ? 'bg-purple-600 hover:bg-purple-700' : ''}`}
+                    onClick={() => setMayDist(d)}
+                  >
+                    Distribución {d}
+                    {bal > 0 && (
+                      <Badge variant="secondary" className="text-[10px] bg-red-100 text-red-700">
+                        {formatCurrency(bal)}
+                      </Badge>
+                    )}
+                  </Button>
+                )
+              })}
+            </div>
+
             {/* Balance y botones */}
             <div className="flex items-center justify-between flex-wrap gap-3">
               <div className="flex items-center gap-3">
-                <span className={`text-2xl font-bold ${mayBalance > 0 ? 'text-red-600' : 'text-green-600'}`}>
-                  {mayBalance > 0 ? formatCurrency(mayBalance) : 'Sin deuda'}
+                <span className={`text-2xl font-bold ${mayBalanceDist > 0 ? 'text-red-600' : 'text-green-600'}`}>
+                  {mayBalanceDist > 0 ? formatCurrency(mayBalanceDist) : 'Sin deuda'}
                 </span>
-                <span className="text-sm text-muted-foreground">deuda total</span>
+                <span className="text-sm text-muted-foreground">deuda Distribución {mayDist}</span>
               </div>
               <div className="flex gap-2">
                 <Button
@@ -1205,7 +1240,7 @@ tr{page-break-inside:avoid}
                   className="gap-2 rounded-xl bg-green-600 hover:bg-green-700"
                   size="sm"
                   onClick={() => { setMaySelectedDebt(null); setMayAmount(''); setMayDesc(''); setMayPagoDialog(true) }}
-                  disabled={mayBalance <= 0}
+                  disabled={mayBalanceDist <= 0}
                 >
                   <ArrowDownCircle className="h-4 w-4" />
                   Registrar pago
@@ -1213,7 +1248,7 @@ tr{page-break-inside:avoid}
               </div>
             </div>
 
-            {mayTxs.length === 0 ? (
+            {mayTxsDist.length === 0 ? (
               <p className="text-sm text-muted-foreground text-center py-4">Sin movimientos</p>
             ) : (
               <Card className="p-0">
@@ -1229,7 +1264,7 @@ tr{page-break-inside:avoid}
                       </TableRow>
                     </TableHeader>
                     <TableBody>
-                      {mayTxs.map((tx) => (
+                      {mayTxsDist.map((tx) => (
                         <TableRow key={tx.id}>
                           <TableCell className="text-xs py-2 whitespace-nowrap">{formatDate(tx.date)}</TableCell>
                           <TableCell className="text-xs py-2">{tx.description}</TableCell>
@@ -1274,7 +1309,7 @@ tr{page-break-inside:avoid}
           <Dialog open={mayDeudaDialog} onOpenChange={(open) => !open && setMayDeudaDialog(false)}>
             <DialogContent className="sm:max-w-sm">
               <DialogHeader>
-                <DialogTitle>Cargar deuda con mayorista</DialogTitle>
+                <DialogTitle>Cargar deuda — Distribución {mayDist}</DialogTitle>
               </DialogHeader>
               <div className="space-y-4">
                 <div className="space-y-2">
@@ -1324,10 +1359,10 @@ tr{page-break-inside:avoid}
               </DialogHeader>
               {!maySelectedDebt ? (
                 <div className="space-y-2 max-h-[300px] overflow-y-auto">
-                  {mayTxs.filter((tx) => tx.type === 'debt' && (tx.saldo ?? tx.amount) > 0).length === 0 ? (
+                  {mayTxsDist.filter((tx) => tx.type === 'debt' && (tx.saldo ?? tx.amount) > 0).length === 0 ? (
                     <p className="text-sm text-muted-foreground text-center py-4">No hay boletas pendientes</p>
                   ) : (
-                    mayTxs.filter((tx) => tx.type === 'debt' && (tx.saldo ?? tx.amount) > 0).map((tx) => (
+                    mayTxsDist.filter((tx) => tx.type === 'debt' && (tx.saldo ?? tx.amount) > 0).map((tx) => (
                       <div
                         key={tx.id}
                         className="flex items-center justify-between p-3 rounded-xl border cursor-pointer hover:bg-muted/50 transition-colors"

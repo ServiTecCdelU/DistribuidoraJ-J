@@ -540,7 +540,9 @@ export function RemitoImportModal({
             remitoSenor || null,
           ].filter(Boolean);
           const desc = parts.length > 0 ? parts.join(" — ") : `Remito ${fileName}`;
-          await mayoristaCuentaApi.addDeuda({ amount: remitoTotal, description: desc });
+          // Detectar la distribución (1 o 2) del destinatario del remito; default 1
+          const distribucion: 1 | 2 = /DISTRIBUC\w*\s*2/i.test(`${remitoSenor ?? ""} ${desc}`) ? 2 : 1;
+          await mayoristaCuentaApi.addDeuda({ amount: remitoTotal, description: desc, distribucion });
           toast.success(`Deuda de ${formatCurrency(remitoTotal)} cargada en cuenta mayorista`);
         } catch {
           toast.error("Stock actualizado pero no se pudo registrar la deuda mayorista");
