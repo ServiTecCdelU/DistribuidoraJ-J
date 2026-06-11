@@ -23,6 +23,7 @@ import { StockCheckModal, type StockCheckItem, type ReplacementOption } from "@/
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { statusConfig } from "@/lib/order-constants";
 import { formatCurrency as formatPrice } from "@/lib/utils/format";
+import { salidasRemito, reconciliarCobro, reposicionEliminarRemito } from "@/lib/utils/stock-remito";
 
 export const generateOrderNumber = (date: Date, index: number) => {
   const d = new Date(date);
@@ -271,16 +272,11 @@ export default function PedidosPage() {
       // Descontar stock de lo que va en el remito (sale del depósito). Una sola vez por pedido.
       if (!yaDescontado) {
         const { registrarMovimiento } = await import("@/services/stock-service");
-        for (const item of filteredItems as any[]) {
-          if (!item.productId) continue;
-          const cant = Number(item.quantity) || 0;
-          const regalo = Number(item.regalo) || 0; // regalo del mismo producto (si lo tuviera)
-          const totalSalida = cant + regalo;
-          if (totalSalida <= 0) continue;
+        for (const mov of salidasRemito(filteredItems as any[])) {
           await registrarMovimiento({
-            productoId: item.productId,
+            productoId: mov.productId,
             tipo: "venta",
-            cantidad: -totalSalida,
+            cantidad: mov.cantidad,
             referencia: `Remito ${remitoNumber}`,
           });
         }
@@ -409,16 +405,14 @@ export default function PedidosPage() {
     try {
       // Si el stock ya se había descontado al generar el remito, reponerlo: eliminar el remito
       // revierte la salida. Al regenerar se vuelve a descontar con las cantidades correctas.
-      if (order.stockDescontado === true) {
+      const reposiciones = reposicionEliminarRemito(order.stockDescontado === true, order.items as any[]);
+      if (reposiciones.length > 0) {
         const { registrarMovimiento } = await import("@/services/stock-service");
-        for (const item of order.items as any[]) {
-          if (!item.productId) continue;
-          const cant = (Number(item.quantity) || 0) + (Number(item.regalo) || 0);
-          if (cant <= 0) continue;
+        for (const mov of reposiciones) {
           await registrarMovimiento({
-            productoId: item.productId,
+            productoId: mov.productId,
             tipo: "ajuste",
-            cantidad: cant, // entrada: vuelve al stock
+            cantidad: mov.cantidad, // entrada: vuelve al stock
             referencia: `Eliminación remito ${order.remitoNumber ?? ""} pedido #${order.id}`.trim(),
           });
         }
@@ -640,31 +634,22 @@ export default function PedidosPage() {
       // ¿El stock ya se descontó al generar el remito? Entonces no se vuelve a descontar al cobrar.
       const stockYaDescontado = selectedOrder.stockDescontado === true;
 
-      if (stockYaDescontado) {
-        // El stock salió completo en el remito. Reconciliar lo que NO se entregó:
-        // - faltante (no se cargó, vuelve al depósito) y no_quiere (devuelto) → REPONER al stock.
-        // - rotura → pérdida real: no se repone (ya descontada en el remito), solo queda en caja.
-        const reponer = [...faltantesAdj, ...noQuiereAdj];
-        if (reponer.length > 0) {
-          const { registrarMovimiento } = await import("@/services/stock-service");
-          for (const a of reponer) {
-            await registrarMovimiento({
-              productoId: a.productId,
-              tipo: "ajuste",
-              cantidad: a.quantity, // entrada: vuelve al stock
-              referencia: `Devolución/faltante cobro pedido #${selectedOrder.id} — ${a.productName}`,
-            });
-          }
-        }
-      } else if (roturasAdj.length > 0) {
-        // Pedido cobrado sin remito previo: el stock se descuenta acá. La rotura sale del stock.
+      // Reconciliar stock al cobrar: si ya se descontó en el remito, repone faltante/no_quiere
+      // (rotura queda como pérdida); si no, descuenta la rotura. Lógica pura en stock-remito.ts.
+      const movsCobro = reconciliarCobro(
+        stockYaDescontado,
+        adjustments.map((a) => ({ productId: a.productId, type: a.type as any, quantity: a.quantity })),
+      );
+      if (movsCobro.length > 0) {
         const { registrarMovimiento } = await import("@/services/stock-service");
-        for (const r of roturasAdj) {
+        const nombreDe = new Map(adjustments.map((a) => [a.productId, a.productName]));
+        for (const mov of movsCobro) {
+          const esReposicion = mov.cantidad > 0;
           await registrarMovimiento({
-            productoId: r.productId,
-            tipo: "rotura",
-            cantidad: -r.quantity,
-            referencia: `Rotura pedido #${selectedOrder.id} — ${r.productName}`,
+            productoId: mov.productId,
+            tipo: esReposicion ? "ajuste" : "rotura",
+            cantidad: mov.cantidad,
+            referencia: `${esReposicion ? "Devolución/faltante" : "Rotura"} cobro pedido #${selectedOrder.id} — ${nombreDe.get(mov.productId) ?? ""}`.trim(),
           });
         }
       }
