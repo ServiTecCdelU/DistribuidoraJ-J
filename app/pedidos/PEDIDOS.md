@@ -33,8 +33,9 @@ Los `completed` NO se muestran en Pedidos (pasan a Ventas).
   - **rotura** → pérdida real: NO se repone (ya salió en el remito), solo queda registrada en caja.
 - Si un pedido se cobra SIN remito previo (`stock_descontado = false`), el stock se descuenta al cobrar
   como antes (comportamiento legacy).
-- **Borrar el remito** (`deleteRemitoFromOrder`) NO repone stock: `stock_descontado` queda en `true`.
-  Si hace falta rehacer cantidades, ajustar stock a mano.
+- **Borrar el remito** (`handleDeleteRemito` → `deleteRemitoFromOrder`) REPONE el stock descontado
+  (entrada tipo `ajuste`) y resetea `stock_descontado=false`. Al regenerar el remito se vuelve a
+  descontar con las cantidades correctas. Así corregir un remito (eliminar → regenerar) ajusta bien el stock.
 
 ## Generar remito (con reemplazos / cambio de cantidad)
 

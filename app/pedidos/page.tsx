@@ -407,10 +407,26 @@ export default function PedidosPage() {
 
   const handleDeleteRemito = useCallback(async (order: Order) => {
     try {
+      // Si el stock ya se había descontado al generar el remito, reponerlo: eliminar el remito
+      // revierte la salida. Al regenerar se vuelve a descontar con las cantidades correctas.
+      if (order.stockDescontado === true) {
+        const { registrarMovimiento } = await import("@/services/stock-service");
+        for (const item of order.items as any[]) {
+          if (!item.productId) continue;
+          const cant = (Number(item.quantity) || 0) + (Number(item.regalo) || 0);
+          if (cant <= 0) continue;
+          await registrarMovimiento({
+            productoId: item.productId,
+            tipo: "ajuste",
+            cantidad: cant, // entrada: vuelve al stock
+            referencia: `Eliminación remito ${order.remitoNumber ?? ""} pedido #${order.id}`.trim(),
+          });
+        }
+      }
       const updated = await ordersApi.deleteRemito(order.id);
       setOrders((prev) => prev.map((o) => (o.id === order.id ? updated : o)));
       if (detailOrder?.id === order.id) setDetailOrder(updated);
-      toast.success("Remito eliminado — podés generarlo de nuevo");
+      toast.success("Remito eliminado — stock repuesto, podés generarlo de nuevo");
       // Confirmar contra la BD para que no quede mostrándose en el listado de carga
       loadData();
     } catch {

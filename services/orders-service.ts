@@ -138,11 +138,13 @@ export const deleteOrder = async (id: string): Promise<void> => {
   if (error) throw error
 }
 
-// Borra el remito de un pedido (numero + PDF) para poder regenerarlo
+// Borra el remito de un pedido (numero + PDF) para poder regenerarlo.
+// Resetea stock_descontado: al regenerar el remito se vuelve a descontar (con las cantidades nuevas).
+// La reposición del stock ya descontado se hace en el caller (page.tsx) antes de llamar acá.
 export const deleteRemitoFromOrder = async (id: string): Promise<Order> => {
   const { data, error } = await supabase
     .from('pedidos')
-    .update({ remito_number: null, remito_pdf_base64: null })
+    .update({ remito_number: null, remito_pdf_base64: null, stock_descontado: false })
     .eq('id', id)
     .select()
     .single()
