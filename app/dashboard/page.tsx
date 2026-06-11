@@ -21,11 +21,10 @@ const Pie = dynamic(() => import('recharts').then(mod => ({ default: mod.Pie }))
 const PieChart = dynamic(() => import('recharts').then(mod => ({ default: mod.PieChart })), { ssr: false })
 const ResponsiveContainer = dynamic(() => import('recharts').then(mod => ({ default: mod.ResponsiveContainer })), { ssr: false })
 const XAxis = dynamic(() => import('recharts').then(mod => ({ default: mod.XAxis })), { ssr: false })
-import { 
-  AlertTriangle, 
-  ArrowRight, 
-  Calendar, 
-  CreditCard, 
+import {
+  AlertTriangle,
+  ArrowRight,
+  CreditCard,
   DollarSign, 
   Store as Helado,
   Package as Paquete, 
@@ -43,7 +42,6 @@ import {
   ChevronLeft, 
   ChevronRight as ChevronRightIcon,
   Loader2,
-  Sliders,
   ArrowLeftRight
 } from 'lucide-react'
 import { ChartContainer, ChartTooltip, ChartTooltipContent } from '@/components/ui/chart'
@@ -119,21 +117,23 @@ const DASHBOARD_TABS: { id: DashboardTab; label: string }[] = [
 
 export default function DashboardPage() {
   const [activeTab, setActiveTab] = useState<DashboardTab>('resumen')
-  const [dateFilter, setDateFilter] = useState<'hoy' | 'semana' | 'mes' | 'custom'>('hoy')
   const [debtorQuery, setDebtorQuery] = useState('')
   const [debtorPage, setDebtorPage] = useState(1)
   const [selectedOrder, setSelectedOrder] = useState<Order | null>(null)
   const [loading, setLoading] = useState(true)
-  const [showDateRangePicker, setShowDateRangePicker] = useState(false)
-  const [dateRange, setDateRange] = useState({
-    start: '',
-    end: ''
-  })
-  
+
   // Estados para datos reales
-  const [dashboardStats, setDashboardStats] = useState({
+  const [dashboardStats, setDashboardStats] = useState<{
+    todaySales: number
+    todayOrders: number
+    todaySalesChange: number | null
+    lowStockProducts: number
+    totalDebt: number
+    pendingOrders: number
+  }>({
     todaySales: 0,
     todayOrders: 0,
+    todaySalesChange: null,
     lowStockProducts: 0,
     totalDebt: 0,
     pendingOrders: 0,
@@ -143,6 +143,7 @@ export default function DashboardPage() {
   const [debtors, setDebtors] = useState<Client[]>([])
   const [pendingOrders, setPendingOrders] = useState<Order[]>([])
   const [salesLastDays, setSalesLastDays] = useState<{day: string; total: number}[]>([])
+  const [salesWeekly, setSalesWeekly] = useState<{day: string; current: number; previous: number}[]>([])
   const [salesByHour, setSalesByHour] = useState<{hour: string; total: number}[]>([])
   const [monthlyComparison, setMonthlyComparison] = useState<{month: string; total: number}[]>([])
   const [topProducts, setTopProducts] = useState<any[]>([])
@@ -153,53 +154,54 @@ export default function DashboardPage() {
   const [aliasConfig, setAliasConfig] = useState<TransferConfig>({ alias: '', titular: '', banco: '' })
   const [aliasSaving, setAliasSaving] = useState(false)
 
-  // KPIs dinámicos memoizados — solo se recalculan cuando cambian los datos
+  // KPIs dinámicos memoizados — comparativa y sparkline con datos reales
   const kpis = useMemo(() => [
-    { 
-      id: 'ventas', 
-      title: 'Ventas hoy', 
-      value: formatCurrency(dashboardStats.todaySales), 
-      change: dashboardStats.todaySales > 0 ? 12.4 : 0,
-      positive: true, 
-      detail: `${dashboardStats.todayOrders} órdenes procesadas`, 
-      icon: DollarSign, 
-      sparkline: [12, 18, 24, 22, 28, 30, 36], 
-      color: 'sky' 
+    {
+      id: 'ventas',
+      title: 'Ventas hoy',
+      value: formatCurrency(dashboardStats.todaySales),
+      // vs mismo día de la semana pasada; null = sin base de comparación
+      change: dashboardStats.todaySalesChange,
+      positive: (dashboardStats.todaySalesChange ?? 0) >= 0,
+      detail: `${dashboardStats.todayOrders} órdenes procesadas`,
+      icon: DollarSign,
+      sparkline: salesLastDays.map((d) => d.total),
+      color: 'sky'
     },
-    { 
-      id: 'stock', 
-      title: 'Stock bajo', 
-      value: `${dashboardStats.lowStockProducts} productos`, 
-      change: -8.2, 
-      positive: false, 
-      detail: `${lowStockProducts.filter(p => p.stock < 5).length} críticos`, 
-      icon: AlertTriangle, 
-      sparkline: [9, 11, 10, 8, 7, 6, 7], 
-      color: 'rose' 
+    {
+      id: 'stock',
+      title: 'Stock bajo',
+      value: `${dashboardStats.lowStockProducts} productos`,
+      change: null,
+      positive: false,
+      detail: `${lowStockProducts.filter(p => p.stock < 5).length} críticos`,
+      icon: AlertTriangle,
+      sparkline: null,
+      color: 'rose'
     },
-    { 
-      id: 'deuda', 
-      title: 'Deudores', 
-      value: formatCurrency(dashboardStats.totalDebt), 
-      change: 4.1, 
-      positive: false, 
-      detail: `${debtors.length} clientes con saldo`, 
-      icon: Usuarios, 
-      sparkline: [6, 7, 8, 9, 10, 11, 12], 
-      color: 'orange' 
+    {
+      id: 'deuda',
+      title: 'Deudores',
+      value: formatCurrency(dashboardStats.totalDebt),
+      change: null,
+      positive: false,
+      detail: `${debtors.length} clientes con saldo`,
+      icon: Usuarios,
+      sparkline: null,
+      color: 'orange'
     },
-    { 
-      id: 'pendientes', 
-      title: 'Pedidos pendientes', 
-      value: `${dashboardStats.pendingOrders}`, 
-      change: 6.7, 
-      positive: true, 
-      detail: `${pendingOrders.filter(o => o.status === 'delivery').length} en camino`, 
-      icon: Camion, 
-      sparkline: [8, 9, 11, 10, 12, 13, 14], 
+    {
+      id: 'pendientes',
+      title: 'Pedidos pendientes',
+      value: `${dashboardStats.pendingOrders}`,
+      change: null,
+      positive: true,
+      detail: `${pendingOrders.filter(o => o.status === 'delivery').length} en camino`,
+      icon: Camion,
+      sparkline: null,
       color: 'emerald'
     },
-  ], [dashboardStats, lowStockProducts, debtors, pendingOrders])
+  ], [dashboardStats, lowStockProducts, debtors, pendingOrders, salesLastDays])
 
   // Cargar todos los datos del dashboard en una sola llamada batch
   const loadDashboardData = useCallback(async (isMounted?: () => boolean) => {
@@ -218,6 +220,7 @@ export default function DashboardPage() {
       setDebtors(data.lists.debtors)
       setPendingOrders(orders.filter(o => o.status && o.status !== 'completed' && Array.isArray(o.items)))
       setSalesLastDays(data.charts.salesLastDays)
+      setSalesWeekly(data.charts.salesWeekComparison ?? [])
       setSalesByHour(data.charts.salesByHourToday)
       setMonthlyComparison(data.charts.salesLastMonths)
       setTopProducts(data.lists.topProducts || [])
@@ -236,14 +239,7 @@ export default function DashboardPage() {
     let mounted = true
     loadDashboardData(() => mounted)
     return () => { mounted = false }
-  }, [loadDashboardData, dateFilter])
-
-  // Formatear datos para gráficos — memoizado para evitar recálculo en cada render
-  const salesWeekly = useMemo(() => salesLastDays.map((item, index, array) => ({
-    day: item.day,
-    current: item.total,
-    previous: index > 0 ? array[index - 1].total * 0.85 : item.total * 0.85
-  })), [salesLastDays])
+  }, [loadDashboardData])
 
   const filteredDebtors = useMemo(() => {
     return debtors.filter((debtor) => 
@@ -300,19 +296,6 @@ export default function DashboardPage() {
       toast.error('Error al guardar configuracion de transferencia')
     } finally {
       setAliasSaving(false)
-    }
-  }
-
-  const handleCustomDateRange = () => {
-    setShowDateRangePicker(true)
-  }
-
-  const applyDateRange = () => {
-    if (dateRange.start && dateRange.end) {
-      setDateFilter('custom')
-      setShowDateRangePicker(false)
-      // Aquí iría la lógica para cargar datos con el rango personalizado
-      // Rango de fechas aplicado
     }
   }
 
@@ -376,9 +359,11 @@ export default function DashboardPage() {
     )
   }
 
-  // Calcular porcentaje de cambio para el badge de ventas semanales
-  const weeklyChange = salesLastDays.length >= 2 
-    ? ((salesLastDays[salesLastDays.length - 1].total - salesLastDays[salesLastDays.length - 2].total) / salesLastDays[salesLastDays.length - 2].total) * 100
+  // Cambio real: total de esta semana vs total de la semana anterior
+  const currentWeekTotal = salesWeekly.reduce((acc, d) => acc + d.current, 0)
+  const previousWeekTotal = salesWeekly.reduce((acc, d) => acc + d.previous, 0)
+  const weeklyChange = previousWeekTotal > 0
+    ? ((currentWeekTotal - previousWeekTotal) / previousWeekTotal) * 100
     : 0
 
   return (
@@ -403,41 +388,6 @@ export default function DashboardPage() {
                 >
                   <ArrowLeftRight className="h-3 w-3" />
                   {aliasConfig.alias ? aliasConfig.alias : "Alias"}
-                </Button>
-              </div>
-              
-              {/* Date Filter Pills - Más compactos */}
-              <div className="flex items-center gap-1 sm:gap-1.5 bg-white p-0.5 sm:p-1 rounded-lg border border-border/60 shadow-sm overflow-x-auto">
-                {(['hoy', 'semana', 'mes'] as const).map((option) => (
-                  <Button
-                    key={option}
-                    size="sm"
-                    variant={dateFilter === option ? 'default' : 'ghost'}
-                    className={`rounded text-xs font-medium transition-all whitespace-nowrap px-2 py-1 ${
-                      dateFilter === option
-                        ? 'bg-slate-900 text-white shadow-sm'
-                        : 'text-muted-foreground hover:text-foreground'
-                    }`}
-                    onClick={() => setDateFilter(option)}
-                  >
-                    {option}
-                  </Button>
-                ))}
-                <Button
-                  size="sm"
-                  variant={dateFilter === 'custom' ? 'default' : 'ghost'}
-                  className={`rounded text-xs font-medium transition-all whitespace-nowrap px-2 py-1 ${
-                    dateFilter === 'custom'
-                      ? 'bg-slate-900 text-white shadow-sm'
-                      : 'text-muted-foreground hover:text-foreground'
-                  }`}
-                  onClick={handleCustomDateRange}
-                >
-                  <span className="flex items-center gap-1">
-                    <Sliders className="h-3 w-3" />
-                    <span className="hidden sm:inline">Personalizado</span>
-                    <span className="sm:hidden">Pers.</span>
-                  </span>
                 </Button>
               </div>
             </div>
@@ -549,45 +499,49 @@ export default function DashboardPage() {
                       </div>
                     </div>
                     
-                    <div className="flex items-center gap-1 flex-wrap">
-                      <span
-                        className={`inline-flex items-center gap-0.5 text-xs font-medium px-1 py-0.5 rounded-full ${
-                          isPositive
-                            ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
-                            : 'bg-rose-50 text-rose-700 border border-rose-200'
-                        }`}
-                      >
-                        {isPositive ? (
-                          <TendenciaAlAlza className="h-2 w-2 sm:h-2.5 sm:w-2.5" />
-                        ) : (
-                          <TendenciaALaBaja className="h-2 w-2 sm:h-2.5 sm:w-2.5" />
-                        )}
-                        {Math.abs(kpi.change)}%
-                      </span>
-                      <span className="text-xs text-muted-foreground hidden sm:inline">vs período anterior</span>
-                    </div>
-                    
+                    {kpi.change != null && (
+                      <div className="flex items-center gap-1 flex-wrap">
+                        <span
+                          className={`inline-flex items-center gap-0.5 text-xs font-medium px-1 py-0.5 rounded-full ${
+                            isPositive
+                              ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
+                              : 'bg-rose-50 text-rose-700 border border-rose-200'
+                          }`}
+                        >
+                          {isPositive ? (
+                            <TendenciaAlAlza className="h-2 w-2 sm:h-2.5 sm:w-2.5" />
+                          ) : (
+                            <TendenciaALaBaja className="h-2 w-2 sm:h-2.5 sm:w-2.5" />
+                          )}
+                          {Math.abs(kpi.change).toFixed(1)}%
+                        </span>
+                        <span className="text-xs text-muted-foreground hidden sm:inline">vs mismo día sem. pasada</span>
+                      </div>
+                    )}
+
                     <p className="text-xs text-muted-foreground truncate">{kpi.detail}</p>
-                    
-                    <div className="hidden sm:block h-6 sm:h-7 pt-0.5">
-                      <ResponsiveContainer width="100%" height="100%">
-                        <AreaChart data={kpi.sparkline.map((value, index) => ({ index, value }))}>
-                          <defs>
-                            <linearGradient id={`spark-${kpi.id}`} x1="0" y1="0" x2="0" y2="1">
-                              <stop offset="5%" stopColor={isPositive ? '#10b981' : '#f43f5e'} stopOpacity={0.3} />
-                              <stop offset="95%" stopColor={isPositive ? '#10b981' : '#f43f5e'} stopOpacity={0.05} />
-                            </linearGradient>
-                          </defs>
-                          <Area
-                            dataKey="value"
-                            type="monotone"
-                            stroke={isPositive ? '#10b981' : '#f43f5e'}
-                            fill={`url(#spark-${kpi.id})`}
-                            strokeWidth={1.5}
-                          />
-                        </AreaChart>
-                      </ResponsiveContainer>
-                    </div>
+
+                    {kpi.sparkline && kpi.sparkline.length > 0 && (
+                      <div className="hidden sm:block h-6 sm:h-7 pt-0.5">
+                        <ResponsiveContainer width="100%" height="100%">
+                          <AreaChart data={kpi.sparkline.map((value, index) => ({ index, value }))}>
+                            <defs>
+                              <linearGradient id={`spark-${kpi.id}`} x1="0" y1="0" x2="0" y2="1">
+                                <stop offset="5%" stopColor={isPositive ? '#10b981' : '#f43f5e'} stopOpacity={0.3} />
+                                <stop offset="95%" stopColor={isPositive ? '#10b981' : '#f43f5e'} stopOpacity={0.05} />
+                              </linearGradient>
+                            </defs>
+                            <Area
+                              dataKey="value"
+                              type="monotone"
+                              stroke={isPositive ? '#10b981' : '#f43f5e'}
+                              fill={`url(#spark-${kpi.id})`}
+                              strokeWidth={1.5}
+                            />
+                          </AreaChart>
+                        </ResponsiveContainer>
+                      </div>
+                    )}
                   </CardContent>
                 </Card>
               )
@@ -607,7 +561,14 @@ export default function DashboardPage() {
                     <CardTitle className="text-sm sm:text-base font-semibold">Ventas y comparativa semanal</CardTitle>
                     <p className="text-xs text-muted-foreground mt-0.5">Últimos 7 días</p>
                   </div>
-                  <Badge variant="secondary" className="rounded-md sm:rounded-lg bg-emerald-50 text-emerald-700 border-emerald-200 font-medium text-xs w-fit">
+                  <Badge
+                    variant="secondary"
+                    className={`rounded-md sm:rounded-lg font-medium text-xs w-fit ${
+                      weeklyChange >= 0
+                        ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
+                        : 'bg-rose-50 text-rose-700 border-rose-200'
+                    }`}
+                  >
                     {weeklyChange > 0 ? '+' : ''}{weeklyChange.toFixed(1)}% vs semana anterior
                   </Badge>
                 </CardHeader>
@@ -1108,59 +1069,6 @@ export default function DashboardPage() {
                 {getNextAction(selectedOrder.status).label}
               </Button>
             )}
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
-      {/* Date Range Picker Modal */}
-      <Dialog open={showDateRangePicker} onOpenChange={setShowDateRangePicker}>
-        <DialogContent className="sm:max-w-md rounded-xl sm:rounded-2xl border-slate-200 w-[calc(100vw-1rem)] sm:w-full">
-          <DialogHeader className="pb-2 sm:pb-3">
-            <DialogTitle className="text-sm sm:text-base font-semibold flex items-center gap-1.5 sm:gap-2">
-              <Calendar className="h-3.5 w-3.5 sm:h-4 sm:w-4 text-sky-500" />
-              Rango de fechas personalizado
-            </DialogTitle>
-          </DialogHeader>
-          <div className="space-y-3 sm:space-y-4">
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 sm:gap-3">
-              <div className="space-y-1.5">
-                <label className="text-xs sm:text-sm font-medium">Fecha de inicio</label>
-                <Input
-                  type="date"
-                  className="text-xs sm:text-sm h-8 sm:h-9"
-                  value={dateRange.start}
-                  onChange={(e) => setDateRange(prev => ({ ...prev, start: e.target.value }))}
-                />
-              </div>
-              <div className="space-y-1.5">
-                <label className="text-xs sm:text-sm font-medium">Fecha de fin</label>
-                <Input
-                  type="date"
-                  className="text-xs sm:text-sm h-8 sm:h-9"
-                  value={dateRange.end}
-                  onChange={(e) => setDateRange(prev => ({ ...prev, end: e.target.value }))}
-                />
-              </div>
-            </div>
-          </div>
-          <DialogFooter className="gap-1.5 sm:gap-2 pt-2 sm:pt-3">
-            <Button 
-              variant="outline" 
-              className="rounded text-xs h-7 sm:h-8 px-2 sm:px-3" 
-              onClick={() => {
-                setShowDateRangePicker(false)
-                setDateRange({ start: '', end: '' })
-              }}
-            >
-              Cancelar
-            </Button>
-            <Button 
-              className="rounded bg-sky-600 hover:bg-sky-700 text-xs h-7 sm:h-8 px-2 sm:px-3"
-              onClick={applyDateRange}
-              disabled={!dateRange.start || !dateRange.end}
-            >
-              Aplicar
-            </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>

@@ -76,27 +76,45 @@ async function fetchDashboardData() {
     return d >= todayStart && d <= todayEnd
   })
 
+  // Comparativa real: hoy vs mismo día de la semana pasada (mismo rango horario)
+  const DIA_MS = 24 * 60 * 60 * 1000
+  const lastWeekStart = new Date(todayStart.getTime() - 7 * DIA_MS)
+  const lastWeekCutoff = new Date(now.getTime() - 7 * DIA_MS)
+  const lastWeekSameDayTotal = sales
+    .filter((s) => {
+      const d = new Date(s.createdAt)
+      return d >= lastWeekStart && d <= lastWeekCutoff
+    })
+    .reduce((acc, s) => acc + (s.total ?? 0), 0)
+
+  const todayTotal = todaySales.reduce((acc, s) => acc + (s.total ?? 0), 0)
   const stats = {
-    todaySales: todaySales.reduce((acc, s) => acc + (s.total ?? 0), 0),
+    todaySales: todayTotal,
     todayOrders: todaySales.length,
+    // % de cambio vs mismo día de la semana pasada; null si no hay base de comparación
+    todaySalesChange: lastWeekSameDayTotal > 0
+      ? ((todayTotal - lastWeekSameDayTotal) / lastWeekSameDayTotal) * 100
+      : null,
     lowStockProducts: products.filter((p) => !p.disabled && p.stock < 10).length,
     totalDebt: debtors.reduce((acc, c) => acc + (c.currentBalance ?? 0), 0),
     pendingOrders: ordersRes.count ?? 0,
   }
 
-  // Ventas ultimos 7 dias
+  // Ventas ultimos 14 dias (7 actuales + 7 de la semana anterior para comparar)
   const formatter7 = new Intl.DateTimeFormat('es-AR', { weekday: 'short' })
-  const salesLastDays = Array.from({ length: 7 }, (_, i) => {
+  const salesLast14 = Array.from({ length: 14 }, (_, i) => {
     const d = new Date(todayStart)
-    d.setDate(todayStart.getDate() - (6 - i))
+    d.setDate(todayStart.getDate() - (13 - i))
     return { date: d, total: 0 }
   })
   sales.forEach((s) => {
     const sd = new Date(s.createdAt)
     sd.setHours(0, 0, 0, 0)
-    const bucket = salesLastDays.find((b) => b.date.getTime() === sd.getTime())
+    const bucket = salesLast14.find((b) => b.date.getTime() === sd.getTime())
     if (bucket) bucket.total += s.total ?? 0
   })
+  const salesPrevWeek = salesLast14.slice(0, 7)
+  const salesLastDays = salesLast14.slice(7)
 
   // Ventas por hora hoy
   const hourBuckets: { hour: string; total: number }[] = Array.from({ length: 24 }, (_, h) => ({
@@ -162,6 +180,12 @@ async function fetchDashboardData() {
     stats,
     charts: {
       salesLastDays: salesLastDays.map((b) => ({ day: formatter7.format(b.date), total: b.total })),
+      // Comparativa real día a día contra la semana anterior (mismo día de semana)
+      salesWeekComparison: salesLastDays.map((b, i) => ({
+        day: formatter7.format(b.date),
+        current: b.total,
+        previous: salesPrevWeek[i]?.total ?? 0,
+      })),
       salesByHourToday: hourBuckets.filter((b) => b.total > 0),
       salesLastMonths: salesLastMonths.map((b) => ({ month: formatterM.format(b.date), total: b.total })),
       productDistribution,
