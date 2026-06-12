@@ -838,12 +838,37 @@ export default function PedidosPage() {
       //   );
       // }
 
-      // Si el pedido ya tenía remito generado, transferirlo a la venta nueva
-      // (el PDF se baja on-demand: la lista liviana no lo trae)
+      // Regenerar el remito con los ítems y total FINALES de la venta (después de roturas/ajustes).
+      // Esto garantiza que el PDF descargable coincide con lo que se cobró.
       if (selectedOrder.remitoNumber) {
-        const remitoPdf = selectedOrder.remitoPdfBase64 || (await ordersApi.getRemitoPdf(selectedOrder.id));
-        if (remitoPdf) {
-          await salesApi.saveRemitoToSale(sale.id, selectedOrder.remitoNumber, remitoPdf);
+        try {
+          const { generarPdfCliente } = await import("@/hooks/useGenerarPdf");
+          const remitoData = {
+            id: sale.id,
+            clientName: sale.clientName || selectedOrder.clientName,
+            sellerName: sale.sellerName || selectedOrder.sellerName,
+            items: adjustedItems.map((i: any) => ({
+              name: i.name,
+              quantity: i.quantity,
+              price: i.price,
+              ...(i.codigo ? { codigo: i.codigo } : {}),
+              ...(i.itemDiscount ? { itemDiscount: i.itemDiscount } : {}),
+            })),
+            total: sale.total,
+            discount: (selectedOrder as any).discount ?? undefined,
+            discountType: (selectedOrder as any).discountType ?? undefined,
+            paymentType: "cash" as const,
+            createdAt: sale.createdAt,
+            deliveryAddress: selectedOrder.address,
+            remitoNumber: selectedOrder.remitoNumber,
+          };
+          const newRemitoPdf = await generarPdfCliente(remitoData, "remito");
+          await salesApi.saveRemitoToSale(sale.id, selectedOrder.remitoNumber, newRemitoPdf);
+          await ordersApi.saveRemitoToOrder(selectedOrder.id, selectedOrder.remitoNumber, newRemitoPdf);
+        } catch {
+          // Si falla la regeneración, copiar el PDF anterior como fallback
+          const remitoPdf = selectedOrder.remitoPdfBase64 || (await ordersApi.getRemitoPdf(selectedOrder.id));
+          if (remitoPdf) await salesApi.saveRemitoToSale(sale.id, selectedOrder.remitoNumber, remitoPdf);
         }
       }
 
