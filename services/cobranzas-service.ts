@@ -70,6 +70,7 @@ export const getDebtClients = async (sellerId?: string): Promise<(Client & { sel
     sellerId: d.seller_id ?? undefined,
     sellerName: d.seller_id ? (sellerMap[d.seller_id] || undefined) : undefined,
     debtClassification: d.debt_classification ?? 'normal',
+    diaCobro: d.dia_cobro ?? undefined,
     notes: d.notes ?? '',
     createdAt: new Date(d.created_at),
   }))

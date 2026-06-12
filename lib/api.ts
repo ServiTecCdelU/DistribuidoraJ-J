@@ -35,7 +35,7 @@ import {
   updateSaleInvoice,
   updateSaleRemito,
 } from '@/services/sales-service'
-import { registerCashPayment, registerMayoristaPayment } from '@/services/payments-service'
+import { registerCashPayment, registerMayoristaPayment, saveReciboPdf } from '@/services/payments-service'
 import {
   getTransaccionesMayorista,
   getBalanceMayorista,
@@ -244,6 +244,7 @@ export const paymentsApi = {
     clientId: string
     amount: number
     description?: string
+    debtTxId?: string
   }): Promise<Transaction> {
     return registerCashPayment(data)
   },
@@ -251,9 +252,11 @@ export const paymentsApi = {
     clientId: string
     amount: number
     description?: string
+    debtTxId?: string
   }): Promise<Transaction> {
     return registerMayoristaPayment(data)
   },
+  saveReciboPdf,
 }
 
 export const mayoristaCuentaApi = {

@@ -47,6 +47,7 @@ export function ClientModal({ open, onOpenChange, client, onSave, showCreditLimi
     notes: '',
     codigoExterno: '',
     sellerId: '',
+    diaCobro: '',
   })
 
   useEffect(() => {
@@ -63,6 +64,7 @@ export function ClientModal({ open, onOpenChange, client, onSave, showCreditLimi
         notes: client.notes || '',
         codigoExterno: client.codigoExterno || '',
         sellerId: client.sellerId || '',
+        diaCobro: client.diaCobro || '',
       })
     } else {
       setFormData({
@@ -77,6 +79,7 @@ export function ClientModal({ open, onOpenChange, client, onSave, showCreditLimi
         notes: defaultValues?.notes || '',
         codigoExterno: '',
         sellerId: '',
+        diaCobro: '',
       })
     }
     setErrors({})
@@ -118,6 +121,7 @@ export function ClientModal({ open, onOpenChange, client, onSave, showCreditLimi
         cuit: formatCuit(formData.cuit),
         sellerId: formData.sellerId || undefined,
         codigoExterno: formData.codigoExterno.trim() || undefined,
+        diaCobro: formData.diaCobro || undefined,
       })
     } finally {
       setLoading(false)
@@ -213,6 +217,24 @@ export function ClientModal({ open, onOpenChange, client, onSave, showCreditLimi
                   </select>
                 </div>
               )}
+              <div className="grid gap-2">
+                <Label htmlFor="diaCobro" className="text-foreground">Día de visita/cobro</Label>
+                <select
+                  id="diaCobro"
+                  className="flex h-10 w-full rounded-2xl border border-input bg-background px-3 py-2 text-sm"
+                  value={formData.diaCobro}
+                  onChange={(e) => setFormData({ ...formData, diaCobro: e.target.value })}
+                >
+                  <option value="">Sin asignar</option>
+                  <option value="lunes">Lunes</option>
+                  <option value="martes">Martes</option>
+                  <option value="miercoles">Miércoles</option>
+                  <option value="jueves">Jueves</option>
+                  <option value="viernes">Viernes</option>
+                  <option value="sabado">Sábado</option>
+                  <option value="domingo">Domingo</option>
+                </select>
+              </div>
             <div className="space-y-2">
               <Label htmlFor="taxCategory" className="text-foreground flex items-center gap-2">
                 <Building className="h-3.5 w-3.5" />

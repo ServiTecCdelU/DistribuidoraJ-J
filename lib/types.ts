@@ -65,6 +65,8 @@ export interface Client {
   sellerId?: string;
   sellerName?: string;
   debtClassification?: 'normal' | 'moroso' | 'incobrable';
+  /** Día de visita/cobro asignado (lunes..domingo) */
+  diaCobro?: string;
   notes?: string;
   createdAt: Date;
 }
@@ -84,6 +86,10 @@ export interface Transaction {
   saldo?: number | null;
   /** Pagos: id de la transacción de deuda a la que se imputó */
   debtId?: string;
+  /** Pagos: número de recibo emitido */
+  reciboNumero?: string;
+  /** Pagos: PDF del recibo (base64) */
+  reciboPdfBase64?: string;
 }
 
 export interface CartItem {

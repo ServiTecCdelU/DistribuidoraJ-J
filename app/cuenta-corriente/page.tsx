@@ -56,6 +56,8 @@ export default function CuentaCorrientePage() {
   const [sellers, setSellers] = useState<Seller[]>([])
   const [loading, setLoading] = useState(true)
   const [filterSeller, setFilterSeller] = useState<string>('all')
+  // Día de visita/cobro asignado al cliente ('all' = todos)
+  const [filterDiaCobro, setFilterDiaCobro] = useState<string>('all')
   const [filterClassification, setFilterClassification] = useState<string>('all')
   const [searchQuery, setSearchQuery] = useState('')
 
@@ -147,14 +149,15 @@ export default function CuentaCorrientePage() {
     const matchesSeller = filterSeller === 'all' || c.sellerId === filterSeller
     const matchesSearch = !searchQuery || c.name.toLowerCase().includes(searchQuery.toLowerCase())
     const matchesClassification = filterClassification === 'all' || (c.debtClassification ?? 'normal') === filterClassification
-    return matchesSeller && matchesSearch && matchesClassification
+    const matchesDia = filterDiaCobro === 'all' || (c.diaCobro ?? '') === filterDiaCobro
+    return matchesSeller && matchesSearch && matchesClassification && matchesDia
   })
 
   const totalPages = Math.ceil(filteredClients.length / PAGE_SIZE)
   const paginatedClients = filteredClients.slice((currentPage - 1) * PAGE_SIZE, currentPage * PAGE_SIZE)
 
   // Reset página al cambiar filtros
-  useEffect(() => { setCurrentPage(1) }, [searchQuery, filterSeller, filterClassification])
+  useEffect(() => { setCurrentPage(1) }, [searchQuery, filterSeller, filterClassification, filterDiaCobro])
 
   // Seleccionar cliente → cargar detalle
   const handleSelectClient = async (client: ClientWithSeller) => {
@@ -226,6 +229,31 @@ export default function CuentaCorrientePage() {
     }
   }
 
+  // Genera el PDF del recibo numerado, lo guarda en la transacción y lo descarga
+  const emitirRecibo = async (tx: Transaction, saldoAnterior: number, metodo: string) => {
+    try {
+      const { generarReciboPago } = await import('@/hooks/useGenerarPdf')
+      const base64 = await generarReciboPago({
+        reciboNumero: tx.reciboNumero || tx.id,
+        fecha: new Date(),
+        clientName: selectedClient?.name,
+        clientAddress: selectedClient?.address,
+        clientPhone: selectedClient?.phone,
+        monto: tx.amount,
+        metodo,
+        saldoAnterior,
+        saldoNuevo: Math.max(0, saldoAnterior - tx.amount),
+      })
+      await paymentsApi.saveReciboPdf(tx.id, base64)
+      const link = document.createElement('a')
+      link.href = `data:application/pdf;base64,${base64}`
+      link.download = `recibo-${tx.reciboNumero || tx.id}.pdf`
+      link.click()
+    } catch {
+      toast.info('Pago registrado — el recibo no pudo generarse')
+    }
+  }
+
   // Registrar pago manual (efectivo, etc)
   const handleRegisterPayment = async () => {
     if (!selectedClient || !payAmount || !user) return
@@ -255,12 +283,15 @@ export default function CuentaCorrientePage() {
         ? `${methods[payMethod] || methods.otro} — ${payNotes}`
         : methods[payMethod] || methods.otro}${refImputacion}`
 
-      await paymentsApi.registerCashPayment({
+      const txPago = await paymentsApi.registerCashPayment({
         clientId: selectedClient.id,
         amount,
         description: desc,
         debtTxId: payDebtId || undefined,
       })
+
+      // Recibo numerado: generar PDF, guardarlo y descargarlo
+      await emitirRecibo(txPago, selectedClient.currentBalance, methods[payMethod] || methods.otro)
 
       // Actualizar estado local
       const newBalance = Math.max(0, selectedClient.currentBalance - amount)
@@ -366,11 +397,13 @@ export default function CuentaCorrientePage() {
         ? `${methods[payMayoristaMethod] || methods.otro} — ${payMayoristaNotes}`
         : methods[payMayoristaMethod] || methods.otro
 
-      await paymentsApi.registerMayoristaPayment({
+      const txPagoMay = await paymentsApi.registerMayoristaPayment({
         clientId: selectedClient.id,
         amount,
         description: desc,
       })
+
+      await emitirRecibo(txPagoMay, balanceMayorista, methods[payMayoristaMethod] || methods.otro)
 
       const newBalance = Math.max(0, balanceMayorista - amount)
       setSelectedClient((prev) => prev ? { ...prev, currentBalanceMayorista: newBalance } : prev)
@@ -1084,6 +1117,21 @@ tr{page-break-inside:avoid}
                 ))}
               </SelectContent>
             </Select>
+            <Select value={filterDiaCobro} onValueChange={setFilterDiaCobro}>
+              <SelectTrigger className="w-full sm:w-[170px] rounded-xl">
+                <SelectValue placeholder="Día de cobro" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">Todos los días</SelectItem>
+                <SelectItem value="lunes">Lunes</SelectItem>
+                <SelectItem value="martes">Martes</SelectItem>
+                <SelectItem value="miercoles">Miércoles</SelectItem>
+                <SelectItem value="jueves">Jueves</SelectItem>
+                <SelectItem value="viernes">Viernes</SelectItem>
+                <SelectItem value="sabado">Sábado</SelectItem>
+                <SelectItem value="domingo">Domingo</SelectItem>
+              </SelectContent>
+            </Select>
             {filterSeller !== 'all' && (
               <Button onClick={handlePrintCobranza} className="rounded-xl gap-2 shrink-0">
                 <Printer className="h-4 w-4" />
@@ -1115,7 +1163,10 @@ tr{page-break-inside:avoid}
                         <div className="flex justify-between items-start">
                           <div className="min-w-0 flex-1">
                             <p className="font-semibold text-sm truncate">{c.name}</p>
-                            <p className="text-xs text-muted-foreground">{c.sellerName || 'Sin vendedor'}</p>
+                            <p className="text-xs text-muted-foreground">
+                              {c.sellerName || 'Sin vendedor'}
+                              {c.diaCobro && <span className="capitalize text-teal-600"> · {c.diaCobro}</span>}
+                            </p>
                             {(c.debtClassification ?? 'normal') !== 'normal' && (
                               <div className="mt-1">{classificationBadge(c.debtClassification!)}</div>
                             )}
@@ -1165,7 +1216,10 @@ tr{page-break-inside:avoid}
                             onClick={() => handleSelectClient(c)}
                           >
                             <TableCell className="font-medium">{c.name}</TableCell>
-                            <TableCell className="text-sm text-muted-foreground">{c.sellerName || 'Sin asignar'}</TableCell>
+                            <TableCell className="text-sm text-muted-foreground">
+                              {c.sellerName || 'Sin asignar'}
+                              {c.diaCobro && <span className="capitalize text-teal-600"> · {c.diaCobro}</span>}
+                            </TableCell>
                             <TableCell className="text-right">
                               {c.currentBalance > 0 ? (
                                 <span className="font-bold text-red-600">{formatCurrency(c.currentBalance)}</span>

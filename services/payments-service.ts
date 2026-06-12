@@ -68,6 +68,12 @@ const registerPayment = async (
     // Si la columna saldo aún no existe, el pago global sigue funcionando
   }
 
+  // Número de recibo atómico y consecutivo (función next_recibo_number en Postgres).
+  // Si la función no existe todavía, fallback con timestamp para no bloquear el pago.
+  let reciboNumero: string
+  const { data: nroRecibo, error: reciboErr } = await supabase.rpc('next_recibo_number')
+  reciboNumero = !reciboErr && nroRecibo ? String(nroRecibo) : `RC-${Date.now()}`
+
   const defaultDesc = cuenta === 'minorista' ? 'Pago en efectivo' : 'Pago en efectivo (mayorista)'
   const description = data.description || defaultDesc
   const clientName = (client as any)?.name || 'pago'
@@ -80,6 +86,7 @@ const registerPayment = async (
     description,
     date: new Date().toISOString(),
     cuenta,
+    recibo_numero: reciboNumero,
   }
   if (data.debtTxId) row.debt_id = data.debtTxId
   const { error } = await supabase.from('transacciones').insert(row)
@@ -98,7 +105,16 @@ const registerPayment = async (
     date: new Date(),
     cuenta,
     debtId: data.debtTxId,
+    reciboNumero,
   }
+}
+
+/** Guarda el PDF del recibo (base64) en la transacción de pago. */
+export const saveReciboPdf = async (txId: string, pdfBase64: string): Promise<void> => {
+  await supabase
+    .from('transacciones')
+    .update({ recibo_pdf_base64: pdfBase64, recibo_generado_at: new Date().toISOString() })
+    .eq('id', txId)
 }
 
 export const registerCashPayment = async (data: {

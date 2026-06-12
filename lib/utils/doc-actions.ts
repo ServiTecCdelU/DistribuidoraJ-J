@@ -1,7 +1,7 @@
 import { downloadBase64Pdf } from "@/services/pdf-service";
 import { toast } from "sonner";
 
-export function buildDocFilename(tipo: "boleta" | "remito", numero: string | undefined, clientName?: string): string {
+export function buildDocFilename(tipo: "boleta" | "remito" | "recibo", numero: string | undefined, clientName?: string): string {
   const nombre = (clientName || "cliente")
     .toLowerCase()
     .normalize("NFD").replace(/[\u0300-\u036f]/g, "")
@@ -11,13 +11,13 @@ export function buildDocFilename(tipo: "boleta" | "remito", numero: string | und
   let nro = numero || "0";
   const match = nro.match(/(\d+)$/);
   if (match) nro = String(parseInt(match[1], 10));
-  const prefix = tipo === "boleta" ? "boleta" : "remito";
+  const prefix = tipo === "boleta" ? "boleta" : tipo === "recibo" ? "recibo" : "remito";
   return `${prefix}_N°${nro}_${nombre}.pdf`;
 }
 
 export function descargarDocumento(
   base64: string | undefined,
-  tipo: "boleta" | "remito",
+  tipo: "boleta" | "remito" | "recibo",
   numero: string | undefined,
   clientName?: string,
 ) {

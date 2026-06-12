@@ -4,7 +4,7 @@ import { useState } from 'react'
 import { Card, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import {
-  ArrowDownCircle, ArrowUpCircle, ChevronDown, Download, Package, Truck,
+  ArrowDownCircle, ArrowUpCircle, ChevronDown, Download, Package, Receipt, Truck,
 } from 'lucide-react'
 import { formatCurrency, formatDate } from '@/lib/utils/format'
 import { descargarDocumento } from '@/lib/utils/doc-actions'
@@ -59,6 +59,25 @@ export function MovimientoDeudaCard({ tx, sale }: MovimientoDeudaCardProps) {
                 <span className="inline-flex items-center gap-1 text-blue-600">
                   <Truck className="h-3 w-3" />{sale!.remitoNumber}
                 </span>
+              )}
+              {isPayment && tx.reciboNumero && (
+                tx.reciboPdfBase64 ? (
+                  <button
+                    type="button"
+                    className="inline-flex items-center gap-1 text-teal-600 hover:underline"
+                    onClick={(e) => {
+                      e.stopPropagation()
+                      descargarDocumento(tx.reciboPdfBase64!, 'recibo', tx.reciboNumero)
+                    }}
+                    title="Descargar recibo"
+                  >
+                    <Receipt className="h-3 w-3" />{tx.reciboNumero}
+                  </button>
+                ) : (
+                  <span className="inline-flex items-center gap-1 text-teal-600">
+                    <Receipt className="h-3 w-3" />{tx.reciboNumero}
+                  </span>
+                )
               )}
             </p>
           </div>

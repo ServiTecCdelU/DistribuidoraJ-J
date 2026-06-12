@@ -22,6 +22,7 @@ function mapClient(d: Record<string, any>): Client {
     currentBalanceMayorista: Number(d.current_balance_mayorista) || 0,
     sellerId: d.seller_id ?? undefined,
     debtClassification: d.debt_classification ?? 'normal',
+    diaCobro: d.dia_cobro ?? undefined,
     notes: d.notes ?? '',
     createdAt: new Date(d.created_at),
   }
@@ -64,6 +65,7 @@ export const createClient = async (
     notes: client.notes ?? '',
     seller_id: client.sellerId || null,
     codigo_externo: client.codigoExterno || null,
+    dia_cobro: client.diaCobro || null,
   })
   return {
     ...client,
@@ -92,6 +94,7 @@ export const updateClient = async (id: string, updates: Partial<Client>): Promis
   if (updates.sellerId !== undefined) mapped.seller_id = updates.sellerId || null
   if (updates.debtClassification !== undefined) mapped.debt_classification = updates.debtClassification
   if (updates.codigoExterno !== undefined) mapped.codigo_externo = updates.codigoExterno || null
+  if (updates.diaCobro !== undefined) mapped.dia_cobro = updates.diaCobro || null
 
   await supabase.from('clientes').update(mapped).eq('id', id)
   const updated = await getClientById(id)
@@ -140,5 +143,7 @@ export const getClientTransactions = async (clientId: string): Promise<Transacti
     cuenta: (d.cuenta as 'minorista' | 'mayorista') ?? 'minorista',
     saldo: d.saldo != null ? Number(d.saldo) : null,
     debtId: d.debt_id ?? undefined,
+    reciboNumero: d.recibo_numero ?? undefined,
+    reciboPdfBase64: d.recibo_pdf_base64 ?? undefined,
   }))
 }
