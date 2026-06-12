@@ -1508,3 +1508,143 @@ export const generarReciboPago = async (data: ReciboPagoData): Promise<string> =
   for (let i = 0; i < bytes.byteLength; i++) binary += String.fromCharCode(bytes[i]);
   return btoa(binary);
 };
+
+// ===================== RECIBO DE DEVOLUCIÓN =====================
+export interface ReciboDevolucionItem {
+  name: string;
+  quantity: number;
+  price: number;
+  destino: "stock" | "perdida";
+}
+export interface ReciboDevolucionData {
+  reciboNumero: string;
+  fecha: any;
+  clientName?: string;
+  clientAddress?: string;
+  clientPhone?: string;
+  saleNumber?: string;
+  items: ReciboDevolucionItem[];
+  total: number;
+  saldoAnterior: number;
+  saldoNuevo: number;
+}
+
+const devStyles = StyleSheet.create({
+  itemsHead: { flexDirection: "row", borderBottom: "0.75px solid #333", paddingBottom: 2, marginBottom: 2, marginTop: 2 },
+  itemRow: { flexDirection: "row", paddingVertical: 1.5, borderBottom: "0.5px solid #eee" },
+  colCant: { width: "12%", fontSize: 7.5 },
+  colDesc: { width: "58%", fontSize: 7.5 },
+  colSub: { width: "30%", fontSize: 7.5, textAlign: "right" },
+  headTxt: { fontSize: 6.5, color: "#777", fontWeight: "bold" },
+  perdidaTag: { fontSize: 6, color: "#b45309" },
+});
+
+const ReciboDevolucionCopia = ({ data, copia }: { data: ReciboDevolucionData; copia: string }) => {
+  const clientName = data.clientName || "Consumidor Final";
+  return (
+    <>
+      {/* Header */}
+      <View style={reciboStyles.header}>
+        <View>
+          <Text style={reciboStyles.brandName}>Distribuidora J&J</Text>
+          <Text style={reciboStyles.brandSub}>Comprobante de devolución — no válido como factura</Text>
+        </View>
+        <View style={reciboStyles.headerRight}>
+          <Text style={reciboStyles.reciboTitle}>RECIBO DE DEVOLUCIÓN</Text>
+          <Text style={reciboStyles.reciboNro}><Text style={reciboStyles.bold}>N° </Text>{data.reciboNumero}</Text>
+          <Text style={reciboStyles.reciboFecha}>{safeFormatDate(data.fecha)}  {safeFormatTime(data.fecha)}</Text>
+          <Text style={reciboStyles.copiaLabel}>{copia}</Text>
+        </View>
+      </View>
+
+      {/* Cliente */}
+      <Text style={reciboStyles.recibiRow}>
+        <Text style={reciboStyles.bold}>Cliente: </Text>{clientName}
+        {data.saleNumber ? <Text style={reciboStyles.recibiMeta}>   ·   Venta #{data.saleNumber}</Text> : null}
+      </Text>
+      {(data.clientAddress || data.clientPhone) && (
+        <Text style={reciboStyles.recibiMeta}>
+          {[data.clientAddress, data.clientPhone].filter(Boolean).join("  ·  ")}
+        </Text>
+      )}
+
+      {/* Productos devueltos */}
+      <View style={devStyles.itemsHead}>
+        <Text style={[devStyles.colCant, devStyles.headTxt]}>Cant.</Text>
+        <Text style={[devStyles.colDesc, devStyles.headTxt]}>Producto devuelto</Text>
+        <Text style={[devStyles.colSub, devStyles.headTxt]}>Subtotal</Text>
+      </View>
+      {data.items.map((it, i) => (
+        <View key={i} style={devStyles.itemRow}>
+          <Text style={devStyles.colCant}>{it.quantity}</Text>
+          <Text style={devStyles.colDesc}>
+            {it.name}
+            {it.destino === "perdida" ? <Text style={devStyles.perdidaTag}>  (pérdida)</Text> : null}
+          </Text>
+          <Text style={devStyles.colSub}>{formatCurrency(it.price * it.quantity)}</Text>
+        </View>
+      ))}
+
+      {/* Monto total devuelto */}
+      <View style={reciboStyles.montoBox}>
+        <Text style={reciboStyles.montoLabel}>Total devuelto</Text>
+        <Text style={reciboStyles.montoValue}>{formatCurrency(data.total)}</Text>
+      </View>
+
+      {/* Saldos */}
+      <View style={reciboStyles.saldosRow}>
+        <View style={reciboStyles.saldoCell}>
+          <Text style={reciboStyles.saldoLabel}>Saldo anterior</Text>
+          <Text style={reciboStyles.saldoValue}>{formatCurrency(data.saldoAnterior)}</Text>
+        </View>
+        <View style={reciboStyles.saldoCell}>
+          <Text style={reciboStyles.saldoLabel}>Esta devolución</Text>
+          <Text style={reciboStyles.saldoValue}>-{formatCurrency(data.total)}</Text>
+        </View>
+        <View style={reciboStyles.saldoCellFinal}>
+          <Text style={reciboStyles.saldoLabel}>Saldo actual</Text>
+          <Text style={reciboStyles.saldoValue}>{formatCurrency(data.saldoNuevo)}</Text>
+        </View>
+      </View>
+
+      {/* Firma */}
+      <View style={reciboStyles.firma}>
+        <View style={reciboStyles.firmaBox}>
+          <Text style={reciboStyles.firmaLabel}>Firma y aclaración — Conforme devolución</Text>
+        </View>
+      </View>
+
+      {/* Footer */}
+      <View style={reciboStyles.footer}>
+        <Text>{data.reciboNumero}</Text>
+        <Text>{copia}</Text>
+      </View>
+    </>
+  );
+};
+
+const ReciboDevolucionPDF = ({ data }: { data: ReciboDevolucionData }) => {
+  return (
+    <Document>
+      <Page size="A4" style={reciboStyles.page}>
+        <View style={reciboStyles.half}>
+          <ReciboDevolucionCopia data={data} copia="ORIGINAL · Cliente" />
+        </View>
+        <View style={reciboStyles.cutLine} />
+        <View style={reciboStyles.half}>
+          <ReciboDevolucionCopia data={data} copia="DUPLICADO · Comercio" />
+        </View>
+      </Page>
+    </Document>
+  );
+};
+
+/** Genera el PDF del recibo de devolución en el cliente. Retorna base64. */
+export const generarReciboDevolucion = async (data: ReciboDevolucionData): Promise<string> => {
+  const pdfBlob = await pdf(<ReciboDevolucionPDF data={data} />).toBlob();
+  const arrayBuffer = await pdfBlob.arrayBuffer();
+  const bytes = new Uint8Array(arrayBuffer);
+  let binary = "";
+  for (let i = 0; i < bytes.byteLength; i++) binary += String.fromCharCode(bytes[i]);
+  return btoa(binary);
+};

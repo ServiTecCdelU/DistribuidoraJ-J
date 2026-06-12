@@ -26,8 +26,10 @@ import {
 import { toast } from "sonner";
 import { descargarDocumento, enviarWhatsapp } from "@/lib/utils/doc-actions";
 import type { Venta } from "../types";
-import { Scissors } from "lucide-react";
+import { Scissors, RotateCcw } from "lucide-react";
 import { supabase } from "@/lib/supabase";
+import { ModalDevolucion } from "@/components/ModalDevolucion";
+import { devolucionesApi, type Devolucion } from "@/lib/api";
 
 interface ModalDetalleVentaProps {
   abierto: boolean;
@@ -59,6 +61,21 @@ export function ModalDetalleVenta({
   const [generandoDoble, setGenerandoDoble] = useState(false);
   const [incidencias, setIncidencias] = useState<{ roturas: string[]; faltantes: string[]; noQuiere: string[] }>({ roturas: [], faltantes: [], noQuiere: [] });
   const [verTodosIncidencias, setVerTodosIncidencias] = useState(false);
+  const [modalDevAbierto, setModalDevAbierto] = useState(false);
+  const [devoluciones, setDevoluciones] = useState<Devolucion[]>([]);
+
+  const cargarDevoluciones = () => {
+    if (!venta?.id) return;
+    devolucionesApi.getBySale(venta.id).then(setDevoluciones).catch(() => {});
+  };
+
+  useEffect(() => {
+    if (!venta?.id || !abierto) {
+      setDevoluciones([]);
+      return;
+    }
+    devolucionesApi.getBySale(venta.id).then(setDevoluciones).catch(() => {});
+  }, [venta?.id, abierto]);
 
   useEffect(() => {
     if (!venta?.id || !abierto) return;
@@ -135,6 +152,17 @@ export function ModalDetalleVenta({
     } finally {
       setGenerando(null);
     }
+  };
+
+  const descargarRecibo = (dev: Devolucion) => {
+    if (!dev.reciboPdfBase64) {
+      toast.error("Esta devolución no tiene recibo guardado");
+      return;
+    }
+    const link = document.createElement("a");
+    link.href = `data:application/pdf;base64,${dev.reciboPdfBase64}`;
+    link.download = `recibo-devolucion-${dev.reciboNumero}.pdf`;
+    link.click();
   };
 
   return (
@@ -333,6 +361,50 @@ export function ModalDetalleVenta({
             </div>
           </div>
 
+          {/* Devoluciones registradas */}
+          {devoluciones.length > 0 && (
+            <div className="rounded-2xl border border-amber-200 bg-amber-50/40 overflow-hidden">
+              <p className="text-xs font-medium text-amber-700 uppercase tracking-wider px-4 pt-3 pb-2">
+                Devoluciones
+              </p>
+              <div className="divide-y divide-amber-100">
+                {devoluciones.map((dev) => (
+                  <div key={dev.id} className="flex items-center justify-between gap-2 px-4 py-2.5">
+                    <div className="min-w-0">
+                      <p className="text-sm font-medium text-amber-800">{dev.reciboNumero}</p>
+                      <p className="text-xs text-amber-700/80">
+                        {dev.items.reduce((a, i) => a + i.quantity, 0)} u. · {formatearMoneda(dev.total)}
+                        {dev.commissionAmount > 0 ? ` · comisión -${formatearMoneda(dev.commissionAmount)}` : ""}
+                      </p>
+                    </div>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="gap-1 text-xs shrink-0"
+                      onClick={() => descargarRecibo(dev)}
+                    >
+                      <Download className="h-3 w-3" />
+                      Recibo
+                    </Button>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Registrar devolución (solo admin) */}
+          {isAdmin && !venta.rechazado && venta.items.length > 0 && (
+            <Button
+              variant="outline"
+              size="sm"
+              className="w-full gap-1.5 text-xs border-amber-300 text-amber-700 hover:bg-amber-50"
+              onClick={() => setModalDevAbierto(true)}
+            >
+              <RotateCcw className="h-3.5 w-3.5" />
+              Registrar devolución
+            </Button>
+          )}
+
           {/* Pago mixto */}
           {venta.paymentType === "mixed" && (
             <div className="p-4 rounded-xl bg-amber-50/50 border border-amber-200 space-y-2">
@@ -446,6 +518,13 @@ export function ModalDetalleVenta({
           })()}
         </div>
       </DialogContent>
+
+      <ModalDevolucion
+        abierto={modalDevAbierto}
+        venta={venta}
+        onCerrar={() => setModalDevAbierto(false)}
+        onRegistrada={cargarDevoluciones}
+      />
     </Dialog>
   );
 }

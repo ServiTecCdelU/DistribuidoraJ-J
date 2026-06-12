@@ -114,6 +114,13 @@ import {
   getFaltantesByCliente,
 } from '@/services/faltantes-service'
 import type { Faltante } from '@/services/faltantes-service'
+import {
+  registrarDevolucion,
+  saveReciboToDevolucion,
+  getDevolucionesBySale,
+  getDevolucionesBySeller,
+} from '@/services/devoluciones-service'
+import type { Devolucion, DevolucionItem } from '@/services/devoluciones-service'
 
 export const productsApi = {
   async getAll(): Promise<Product[]> {
@@ -265,6 +272,15 @@ export const faltantesApi = {
 }
 
 export type { Faltante }
+
+export const devolucionesApi = {
+  registrar: registrarDevolucion,
+  saveRecibo: saveReciboToDevolucion,
+  getBySale: getDevolucionesBySale,
+  getBySeller: getDevolucionesBySeller,
+}
+
+export type { Devolucion, DevolucionItem }
 
 export const invoiceApi = {
   async createInvoice(saleId: string, client?: { name?: string; phone?: string; email?: string }) {
