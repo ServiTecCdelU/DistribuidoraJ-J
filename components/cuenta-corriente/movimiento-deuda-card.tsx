@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import {
@@ -11,6 +11,7 @@ import { formatCurrencyDecimals, formatDate } from '@/lib/utils/format'
 import { descargarDocumento } from '@/lib/utils/doc-actions'
 import type { Sale, Transaction } from '@/lib/types'
 import type { Devolucion } from '@/services/devoluciones-service'
+import { supabase } from '@/lib/supabase'
 
 interface MovimientoDeudaCardProps {
   tx: Transaction
@@ -136,6 +137,51 @@ export function MovimientoDeudaCard({
 }: MovimientoDeudaCardProps) {
   const [expanded, setExpanded] = useState(false)
   const [regenerando, setRegenerando] = useState(false)
+  const [legacyItems, setLegacyItems] = useState<TableRow[] | null>(null)
+
+  useEffect(() => {
+    if (!expanded || !sale?.id) return
+    if ((sale.itemsNoEntregados?.length ?? 0) > 0) return
+    if (legacyItems !== null) return
+    supabase
+      .from('transacciones')
+      .select('description')
+      .eq('sale_id', sale.id)
+      .or('description.like.[ROTURA]%,description.like.[FALTANTE]%,description.like.[NO_QUIERE]%')
+      .then(({ data }) => {
+        const rows: TableRow[] = []
+        for (const row of data ?? []) {
+          const desc = row.description || ''
+          let motivo: string
+          let stripped: string
+          if (desc.startsWith('[ROTURA]')) {
+            motivo = 'rotura'
+            stripped = desc.replace(/^\[ROTURA\]\s*#[\w-]+\s*—\s*/, '').replace(/^\[ROTURA\]\s*/, '')
+          } else if (desc.startsWith('[FALTANTE]')) {
+            motivo = 'faltante'
+            stripped = desc.replace(/^\[FALTANTE\]\s*#[\w-]+\s*—\s*/, '').replace(/^\[FALTANTE\]\s*/, '')
+          } else if (desc.startsWith('[NO_QUIERE]')) {
+            motivo = 'no_quiso'
+            stripped = desc.replace(/^\[NO_QUIERE\]\s*#[\w-]+\s*—\s*/, '').replace(/^\[NO_QUIERE\]\s*/, '')
+          } else continue
+          for (const part of stripped.split(', ')) {
+            const match = part.match(/^(.*)\s+x(\d+)$/)
+            if (!match) continue
+            const name = match[1].trim()
+            const qty = parseInt(match[2], 10)
+            const saleItem = sale.items?.find(i => i.name === name)
+            rows.push({
+              name,
+              quantity: qty,
+              price: saleItem?.price ?? 0,
+              itemDiscount: saleItem?.itemDiscount,
+              motivo,
+            })
+          }
+        }
+        setLegacyItems(rows)
+      })
+  }, [expanded, sale?.id])
 
   const isPayment = tx.type === 'payment'
   const expandable = !isPayment && !!sale
@@ -166,10 +212,9 @@ export function MovimientoDeudaCard({
     }))
   )
 
-  const noEntregadosUnified: TableRow[] = [
-    ...noEntregadosVenta,
-    ...devolucionRows,
-  ]
+  // Fallback para ventas históricas: usa datos de transacciones si itemsNoEntregados está vacío
+  const noEntregadosSource = noEntregadosVenta.length > 0 ? noEntregadosVenta : (legacyItems ?? [])
+  const noEntregadosUnified: TableRow[] = [...noEntregadosSource, ...devolucionRows]
   const tieneNoEntregados = noEntregadosUnified.length > 0
 
   // Cálculos de totales
