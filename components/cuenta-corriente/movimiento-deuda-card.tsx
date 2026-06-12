@@ -46,15 +46,21 @@ const MOTIVO_COLORS: Record<string, string> = {
 type TableRow = {
   name: string
   quantity: number
-  price: number
+  price: number        // precio base (o precio neto si priceIsNet)
   itemDiscount?: number
   esRegalo?: boolean
   motivo?: string
   destino?: 'stock' | 'perdida'
-  priceIsNet?: boolean  // precio ya descontado (devoluciones)
+  priceIsNet?: boolean // precio ya descontado (devoluciones: no mostrar Dto% ni c/Dto)
 }
 
-function ItemsTable({ items }: { items: TableRow[] }) {
+function ItemsTable({ items, showTotal = false }: { items: TableRow[]; showTotal?: boolean }) {
+  const grandTotal = items.reduce((acc, it) => {
+    const dto = it.itemDiscount ?? 0
+    const unit = it.priceIsNet ? it.price : it.price * (1 - dto / 100)
+    return acc + (it.esRegalo ? 0 : unit * it.quantity)
+  }, 0)
+
   return (
     <div className="overflow-x-auto">
       <table className="w-full text-[10px] border-collapse">
@@ -95,14 +101,15 @@ function ItemsTable({ items }: { items: TableRow[] }) {
                     <span className="truncate">{it.name}</span>
                   </div>
                 </td>
+                {/* P. Unit.: siempre muestra el precio base (o neto para devol) */}
                 <td className="py-0.5 px-1 text-right tabular-nums">
-                  {it.priceIsNet ? '—' : formatCurrencyDecimals(it.price)}
+                  {formatCurrencyDecimals(it.price)}
                 </td>
                 <td className="py-0.5 px-1 text-right tabular-nums text-muted-foreground">
-                  {it.priceIsNet ? '—' : (dto > 0 ? `${dto}%` : '—')}
+                  {!it.priceIsNet && dto > 0 ? `${dto}%` : '—'}
                 </td>
                 <td className="py-0.5 px-1 text-right tabular-nums">
-                  {(it.priceIsNet || dto > 0) ? formatCurrencyDecimals(unitConDto) : '—'}
+                  {!it.priceIsNet && dto > 0 ? formatCurrencyDecimals(unitConDto) : '—'}
                 </td>
                 <td className={`py-0.5 pl-1 text-right tabular-nums font-medium ${it.esRegalo ? 'text-green-600' : ''}`}>
                   {it.esRegalo ? 'GRATIS' : formatCurrencyDecimals(lineTotal)}
@@ -111,6 +118,16 @@ function ItemsTable({ items }: { items: TableRow[] }) {
             )
           })}
         </tbody>
+        {showTotal && items.length > 0 && (
+          <tfoot>
+            <tr className="border-t border-muted/60 bg-muted/30">
+              <td colSpan={5} className="py-0.5 px-1 text-right text-[10px] font-semibold text-muted-foreground">Total no entregado</td>
+              <td className="py-0.5 pl-1 text-right tabular-nums font-bold text-[10px] text-amber-700">
+                {formatCurrencyDecimals(grandTotal)}
+              </td>
+            </tr>
+          </tfoot>
+        )}
       </table>
     </div>
   )
@@ -140,12 +157,14 @@ export function MovimientoDeudaCard({
   }))
 
   // 2. Faltantes del pedido (fallback para ventas viejas sin items_no_entregados)
-  //    Cross-reference con sale.items para sacar precio
+  //    Cross-reference con sale.items para sacar precio (por productId o nombre)
   const saleItemsByProductId = new Map((sale?.items ?? []).map((i) => [i.productId, i]))
+  const saleItemsByName = new Map((sale?.items ?? []).map((i) => [i.name.toLowerCase().trim(), i]))
   const faltantesRows: TableRow[] = faltantes
     .filter((f) => !noEntregadosVenta.some((n) => n.name === f.productoNombre))
     .map((f) => {
       const saleItem = saleItemsByProductId.get(f.productoId)
+        ?? saleItemsByName.get(f.productoNombre.toLowerCase().trim())
       return {
         name: f.productoNombre,
         quantity: f.cantidad,
@@ -282,7 +301,7 @@ export function MovimientoDeudaCard({
                 <AlertTriangle className="h-3 w-3" />
                 No entregados / Devueltos
               </div>
-              <ItemsTable items={noEntregadosUnified} />
+              <ItemsTable items={noEntregadosUnified} showTotal />
             </div>
           )}
 
