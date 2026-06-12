@@ -121,6 +121,7 @@ import {
   saveReciboToDevolucion,
   getDevolucionesBySale,
   getDevolucionesBySeller,
+  getDevolucionesByClient,
 } from '@/services/devoluciones-service'
 import type { Devolucion, DevolucionItem } from '@/services/devoluciones-service'
 
@@ -283,6 +284,7 @@ export const devolucionesApi = {
   saveRecibo: saveReciboToDevolucion,
   getBySale: getDevolucionesBySale,
   getBySeller: getDevolucionesBySeller,
+  getByClient: getDevolucionesByClient,
 }
 
 export type { Devolucion, DevolucionItem }

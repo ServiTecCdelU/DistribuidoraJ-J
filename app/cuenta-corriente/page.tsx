@@ -33,8 +33,10 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table'
-import { cobranzasApi, clientsApi, paymentsApi, sellersApi, mayoristaCuentaApi, salesApi } from '@/lib/api'
+import { cobranzasApi, clientsApi, paymentsApi, sellersApi, mayoristaCuentaApi, salesApi, faltantesApi, devolucionesApi } from '@/lib/api'
 import type { TransaccionMayorista } from '@/services/mayorista-cuenta-service'
+import type { Faltante } from '@/services/faltantes-service'
+import type { Devolucion } from '@/services/devoluciones-service'
 import { useAuth } from '@/hooks/use-auth'
 import type { Client, ComprobantePago, DebtClassification, Sale, Seller, Transaction } from '@/lib/types'
 import { MovimientoDeudaCard } from '@/components/cuenta-corriente/movimiento-deuda-card'
@@ -43,6 +45,7 @@ import {
   Users, FileCheck, CheckCircle2, XCircle, Clock, Loader2, ExternalLink,
   ChevronLeft, DollarSign, ArrowDownCircle, ArrowUpCircle, Search, X,
   Banknote, CreditCard, Image as ImageIcon, AlertTriangle, Ban, Printer,
+  History, RotateCcw, Tag,
 } from 'lucide-react'
 import { toast } from 'sonner'
 
@@ -66,7 +69,10 @@ export default function CuentaCorrientePage() {
   const [clientTransactions, setClientTransactions] = useState<Transaction[]>([])
   const [clientSales, setClientSales] = useState<Sale[]>([])
   const [clientComprobantes, setClientComprobantes] = useState<ComprobantePago[]>([])
+  const [clientFaltantes, setClientFaltantes] = useState<Faltante[]>([])
+  const [clientDevoluciones, setClientDevoluciones] = useState<Devolucion[]>([])
   const [loadingDetail, setLoadingDetail] = useState(false)
+  const [historialOpen, setHistorialOpen] = useState(false)
 
   // Dialog states
   const [approveDialog, setApproveDialog] = useState<ComprobantePago | null>(null)
@@ -164,14 +170,18 @@ export default function CuentaCorrientePage() {
     setSelectedClient(client)
     setLoadingDetail(true)
     try {
-      const [txs, comps, sales] = await Promise.all([
+      const [txs, comps, sales, faltantes, devols] = await Promise.all([
         clientsApi.getTransactions(client.id),
         cobranzasApi.getComprobantes(),
         salesApi.getByClient(client.id),
+        faltantesApi.getByCliente(client.id),
+        devolucionesApi.getByClient(client.id),
       ])
       setClientTransactions(txs)
       setClientSales(sales)
       setClientComprobantes(comps.filter((c) => c.clientId === client.id))
+      setClientFaltantes(faltantes)
+      setClientDevoluciones(devols)
     } catch {
       toast.error('Error al cargar detalle del cliente')
     } finally {
@@ -641,7 +651,7 @@ tr{page-break-inside:avoid}
 
             {/* ── CUENTA MINORISTA ── */}
             <div className="rounded-2xl border p-4 space-y-4">
-              <div className="flex items-center justify-between">
+              <div className="flex items-center justify-between flex-wrap gap-2">
                 <h3 className="text-sm font-semibold flex items-center gap-2">
                   <DollarSign className="h-4 w-4 text-teal-600" />
                   Cuenta Minorista
@@ -651,26 +661,47 @@ tr{page-break-inside:avoid}
                 </span>
               </div>
 
-              <Button
-                className="w-full sm:w-auto gap-2 rounded-xl"
-                onClick={() => setPayDialog(true)}
-                disabled={selectedClient.currentBalance <= 0}
-              >
-                <Banknote className="h-4 w-4" />
-                Registrar pago
-              </Button>
+              <div className="flex flex-wrap gap-2">
+                <Button
+                  className="gap-2 rounded-xl"
+                  onClick={() => setPayDialog(true)}
+                  disabled={selectedClient.currentBalance <= 0}
+                >
+                  <Banknote className="h-4 w-4" />
+                  Registrar pago
+                </Button>
+                <Button
+                  variant="outline"
+                  className="gap-2 rounded-xl"
+                  onClick={() => setHistorialOpen(true)}
+                >
+                  <History className="h-4 w-4" />
+                  Historial de productos
+                </Button>
+              </div>
 
               {txMinorista.length === 0 ? (
                 <p className="text-sm text-muted-foreground text-center py-2">Sin movimientos</p>
               ) : (
-                <div className="flex flex-col gap-2">
-                  {txMinorista.map((tx) => (
-                    <MovimientoDeudaCard
-                      key={tx.id}
-                      tx={tx}
-                      sale={tx.saleId ? salesById.get(tx.saleId) : undefined}
-                    />
-                  ))}
+                <div className="flex flex-col gap-1">
+                  {txMinorista.map((tx) => {
+                    const sale = tx.saleId ? salesById.get(tx.saleId) : undefined
+                    const faltantesSale = sale?.orderId
+                      ? clientFaltantes.filter((f) => f.pedidoId === sale.orderId)
+                      : []
+                    const devolsSale = sale
+                      ? clientDevoluciones.filter((d) => d.saleId === sale.id)
+                      : []
+                    return (
+                      <MovimientoDeudaCard
+                        key={tx.id}
+                        tx={tx}
+                        sale={sale}
+                        faltantes={faltantesSale}
+                        devoluciones={devolsSale}
+                      />
+                    )
+                  })}
                 </div>
               )}
             </div>
@@ -948,6 +979,83 @@ tr{page-break-inside:avoid}
                 </a>
               </div>
             )}
+          </DialogContent>
+        </Dialog>
+
+        {/* Modal historial de productos: faltantes + devoluciones */}
+        <Dialog open={historialOpen} onOpenChange={setHistorialOpen}>
+          <DialogContent className="sm:max-w-lg max-h-[80vh] overflow-y-auto">
+            <DialogHeader>
+              <DialogTitle className="flex items-center gap-2">
+                <History className="h-4 w-4" />
+                Historial de productos — {selectedClient?.name}
+              </DialogTitle>
+            </DialogHeader>
+
+            {/* Faltantes / No quiso */}
+            <div className="space-y-2">
+              <h4 className="text-sm font-semibold flex items-center gap-2">
+                <AlertTriangle className="h-3.5 w-3.5 text-amber-500" />
+                No entregados / No quiso ({clientFaltantes.length})
+              </h4>
+              {clientFaltantes.length === 0 ? (
+                <p className="text-xs text-muted-foreground text-center py-2">Sin registros</p>
+              ) : (
+                <div className="flex flex-col gap-1">
+                  {clientFaltantes.map((f) => (
+                    <div key={f.id} className="flex items-center gap-2 text-xs px-2 py-1 rounded-lg bg-muted/50">
+                      <Badge
+                        variant="outline"
+                        className={`text-[10px] px-1.5 py-0 h-4 shrink-0 ${
+                          f.motivo === 'no_quiso'
+                            ? 'text-orange-600 border-orange-300 bg-orange-50'
+                            : 'text-amber-600 border-amber-300 bg-amber-50'
+                        }`}
+                      >
+                        {f.motivo === 'no_quiso' ? 'NO QUISO' : 'FALTÓ'}
+                      </Badge>
+                      <span className="flex-1 min-w-0 truncate font-medium">{f.productoNombre}</span>
+                      <span className="tabular-nums text-muted-foreground shrink-0">{f.cantidad} u.</span>
+                      <span className="text-muted-foreground shrink-0">{formatDate(new Date(f.fecha))}</span>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            {/* Devoluciones */}
+            <div className="space-y-2 mt-2">
+              <h4 className="text-sm font-semibold flex items-center gap-2">
+                <RotateCcw className="h-3.5 w-3.5 text-purple-500" />
+                Devoluciones ({clientDevoluciones.length})
+              </h4>
+              {clientDevoluciones.length === 0 ? (
+                <p className="text-xs text-muted-foreground text-center py-2">Sin registros</p>
+              ) : (
+                <div className="flex flex-col gap-2">
+                  {clientDevoluciones.map((dev) => (
+                    <div key={dev.id} className="rounded-lg border p-2 space-y-1">
+                      <div className="flex items-center justify-between text-xs">
+                        <span className="font-semibold text-purple-700">{dev.reciboNumero}</span>
+                        <span className="text-muted-foreground">{formatDate(dev.createdAt)}</span>
+                        <span className="font-bold tabular-nums text-purple-600">-{formatCurrency(dev.total)}</span>
+                      </div>
+                      {dev.items.map((it, i) => (
+                        <div key={i} className="flex items-center gap-1.5 text-[11px] text-muted-foreground pl-2">
+                          <span className="flex-1 truncate">{it.quantity}× {it.name}</span>
+                          <Badge variant="outline" className={`text-[9px] px-1 py-0 h-3.5 ${it.destino === 'stock' ? 'text-green-600 border-green-300' : 'text-red-500 border-red-300'}`}>
+                            {it.destino === 'stock' ? 'a stock' : 'pérdida'}
+                          </Badge>
+                        </div>
+                      ))}
+                      {dev.saleNumber && (
+                        <p className="text-[10px] text-muted-foreground pl-2">Venta #{dev.saleNumber}</p>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
           </DialogContent>
         </Dialog>
       </MainLayout>

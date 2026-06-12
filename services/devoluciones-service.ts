@@ -180,6 +180,16 @@ export async function getDevolucionesBySale(saleId: string): Promise<Devolucion[
   return (data ?? []).map(mapDevolucion)
 }
 
+export async function getDevolucionesByClient(clientId: string): Promise<Devolucion[]> {
+  if (!clientId) return []
+  const { data } = await supabase
+    .from('devoluciones')
+    .select('*')
+    .eq('client_id', clientId)
+    .order('created_at', { ascending: false })
+  return (data ?? []).map(mapDevolucion)
+}
+
 export async function getDevolucionesBySeller(sellerId: string): Promise<Devolucion[]> {
   if (!sellerId) return []
   const { data } = await supabase

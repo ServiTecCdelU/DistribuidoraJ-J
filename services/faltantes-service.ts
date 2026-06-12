@@ -4,6 +4,8 @@
 // Cuando en un remito posterior ese producto sí se le envía, se elimina del historial.
 import { supabase } from "@/lib/supabase";
 
+export type MotivoFaltante = 'faltante' | 'no_quiso'
+
 export interface Faltante {
   id: string;
   clienteId: string;
@@ -12,12 +14,14 @@ export interface Faltante {
   cantidad: number;
   pedidoId: string | null;
   fecha: string;
+  motivo: MotivoFaltante;
 }
 
-interface FaltanteItem {
+export interface FaltanteItem {
   productId: string;
   name: string;
   quantity: number;
+  motivo?: MotivoFaltante;
 }
 
 // Registra (o actualiza) los productos faltantes de un cliente.
@@ -37,6 +41,7 @@ export async function registrarFaltantes(
       cantidad: i.quantity,
       pedido_id: pedidoId ?? null,
       fecha: new Date().toISOString(),
+      motivo: i.motivo ?? 'faltante',
     }));
   if (rows.length === 0) return;
   await supabase.from("cliente_faltantes").upsert(rows, { onConflict: "cliente_id,producto_id" });
@@ -75,5 +80,6 @@ export async function getFaltantesByCliente(clienteId: string): Promise<Faltante
     cantidad: r.cantidad ?? 0,
     pedidoId: r.pedido_id ?? null,
     fecha: r.fecha,
+    motivo: (r.motivo ?? 'faltante') as MotivoFaltante,
   }));
 }
