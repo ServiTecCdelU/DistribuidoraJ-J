@@ -149,17 +149,31 @@ export function OrderDetailModal({
     }
   };
 
-  const handleDescargar = (type: "invoice" | "remito") => {
+  // El listado liviano no trae los PDFs base64: si falta, se baja on-demand
+  const resolverPdf = async (type: "invoice" | "remito"): Promise<string | undefined> => {
+    const enMemoria = type === "invoice" ? order.invoicePdfBase64 : order.remitoPdfBase64;
+    if (enMemoria) return enMemoria;
+    if (type === "remito" && order.remitoNumber) {
+      const { ordersApi } = await import("@/lib/api");
+      return ordersApi.getRemitoPdf(order.id);
+    }
+    return undefined;
+  };
+
+  const handleDescargar = async (type: "invoice" | "remito") => {
     setDownloading(type);
-    const base64 = type === "invoice" ? order.invoicePdfBase64 : order.remitoPdfBase64;
-    const tipo = type === "invoice" ? "boleta" as const : "remito" as const;
-    const numero = type === "invoice" ? order.invoiceNumber : order.remitoNumber;
-    descargarDocumento(base64, tipo, numero, order.clientName);
-    setDownloading(null);
+    try {
+      const base64 = await resolverPdf(type);
+      const tipo = type === "invoice" ? "boleta" as const : "remito" as const;
+      const numero = type === "invoice" ? order.invoiceNumber : order.remitoNumber;
+      descargarDocumento(base64, tipo, numero, order.clientName);
+    } finally {
+      setDownloading(null);
+    }
   };
 
   const handleWhatsapp = async (type: "invoice" | "remito") => {
-    const base64 = type === "invoice" ? order.invoicePdfBase64 : order.remitoPdfBase64;
+    const base64 = await resolverPdf(type);
     const tipo = type === "invoice" ? "boleta" as const : "remito" as const;
     const numero = type === "invoice" ? order.invoiceNumber : order.remitoNumber;
     await enviarWhatsapp(base64, tipo, numero, order.clientName);

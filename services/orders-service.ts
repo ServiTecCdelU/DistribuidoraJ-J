@@ -2,7 +2,14 @@ import { supabase } from '@/lib/supabase'
 import type { Order, OrderStatus, CartItem, City } from '@/lib/types'
 import { generateReadableId } from '@/services/supabase-helpers'
 
-function mapOrder(d: Record<string, any>): Order {
+// Columnas livianas: todo menos los PDFs base64 (remito/boleta), que pesan cientos de KB
+// por fila. Los PDFs se bajan on-demand con getRemitoPdf / getInvoicePdf.
+const LIGHT_COLUMNS =
+  'id, sale_id, client_id, client_name, client_phone, client_email, seller_id, seller_name, ' +
+  'transportista_id, transportista_name, items, status, city, address, lat, lng, delivery_method, ' +
+  'remito_number, stock_descontado, invoice_number, checked_items, held, notes, created_at, updated_at'
+
+export function mapOrder(d: Record<string, any>): Order {
   return {
     id: d.id,
     saleId: d.sale_id ?? undefined,
@@ -41,6 +48,28 @@ export const getOrders = async (): Promise<Order[]> => {
     .order('created_at', { ascending: false })
 
   return (data ?? []).map(mapOrder)
+}
+
+// Pedidos activos para la página de Pedidos: sin completados/rechazados y SIN los
+// PDFs base64 (egress). El PDF del remito se baja on-demand con getRemitoPdf.
+export const getActiveOrders = async (): Promise<Order[]> => {
+  const { data } = await supabase
+    .from('pedidos')
+    .select(LIGHT_COLUMNS)
+    .not('status', 'in', '("completed","rechazado")')
+    .order('created_at', { ascending: false })
+
+  return (data ?? []).map(mapOrder)
+}
+
+/** Baja solo el PDF del remito de un pedido (on-demand). */
+export const getRemitoPdf = async (orderId: string): Promise<string | undefined> => {
+  const { data } = await supabase
+    .from('pedidos')
+    .select('remito_pdf_base64')
+    .eq('id', orderId)
+    .maybeSingle()
+  return data?.remito_pdf_base64 ?? undefined
 }
 
 export const getOrdersByTransportista = async (transportistaId: string): Promise<Order[]> => {

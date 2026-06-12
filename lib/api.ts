@@ -58,6 +58,8 @@ import type { PagoComision } from '@/services/sellers-service'
 import { createInvoice, createRemito } from '@/services/invoice-service'
 import {
   getOrders,
+  getActiveOrders,
+  getRemitoPdf,
   getOrdersPaginated,
   getOrdersByTransportista,
   getOrdersBySeller,
@@ -305,6 +307,14 @@ export const remitoApi = {
 export const ordersApi = {
   async getAll(): Promise<Order[]> {
     return getOrders()
+  },
+  /** Pedidos activos sin PDFs base64 (liviano, para la página Pedidos) */
+  async getActive(): Promise<Order[]> {
+    return getActiveOrders()
+  },
+  /** PDF del remito on-demand */
+  async getRemitoPdf(orderId: string): Promise<string | undefined> {
+    return getRemitoPdf(orderId)
   },
   async getPaginated(pageSize?: number, lastDoc?: any) {
     return getOrdersPaginated(pageSize, lastDoc)

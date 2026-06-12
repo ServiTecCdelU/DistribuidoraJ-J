@@ -145,27 +145,42 @@ export default function PedidosPage() {
     paymentLabel?: string;
   } | null>(null);
 
+  // Solo pedidos activos (liviano: sin completados ni PDFs base64). Es lo único que se
+  // refresca: clientes/vendedores/productos se cargan una sola vez en loadStaticData.
   const loadData = useCallback(async (isMounted?: () => boolean) => {
     try {
-      const [ordersData, clientsData, sellersData, productsData] = await Promise.all([
-        ordersApi.getAll(),
-        clientsApi.getAll(),
-        sellersApi.getAll(),
-        productsApi.getAll(),
-      ]);
+      const ordersData = await ordersApi.getActive();
       if (isMounted && !isMounted()) return;
       const sortedOrders = ordersData.sort(
         (a, b) =>
           new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime(),
       );
       setOrders(sortedOrders);
-      setClients(clientsData);
-      setSellers(sellersData);
       // Reconstruir retenidos desde la BD (held) para que persistan entre admins y recargas
       const heldFromDb = new Set(
         sortedOrders.filter((o) => o.held && o.status !== "completed").map((o) => o.clientName || "Sin cliente")
       );
       setHeldClients(heldFromDb);
+    } catch (error) {
+      if (isMounted && !isMounted()) return;
+      toast.error("Error al cargar pedidos");
+    } finally {
+      if (isMounted && !isMounted()) return;
+      setLoading(false);
+    }
+  }, []);
+
+  // Datos que casi no cambian: una sola carga al montar la página
+  const loadStaticData = useCallback(async (isMounted?: () => boolean) => {
+    try {
+      const [clientsData, sellersData, productsData] = await Promise.all([
+        clientsApi.getAll(),
+        sellersApi.getAll(),
+        productsApi.getAll(),
+      ]);
+      if (isMounted && !isMounted()) return;
+      setClients(clientsData);
+      setSellers(sellersData);
       // Mapa de precio actual: indexado por id de producto (prod_mp_XXX) y su alias mayorista (mp_XXX)
       const pm = new Map<string, number>();
       productsData.forEach((p) => {
@@ -175,12 +190,8 @@ export default function PedidosPage() {
         if (p.id.startsWith("prod_")) pm.set(p.id.slice(5), precio);
       });
       setPriceMap(pm);
-    } catch (error) {
-      if (isMounted && !isMounted()) return;
-      toast.error("Error al cargar pedidos");
-    } finally {
-      if (isMounted && !isMounted()) return;
-      setLoading(false);
+    } catch {
+      // Si falla, la página sigue con los pedidos; los datos estáticos se reintentan al recargar
     }
   }, []);
 
@@ -290,13 +301,16 @@ export default function PedidosPage() {
   }, [detailOrder, orders]);
 
   const handleGenerateRemito = useCallback(async (order: Order) => {
-    // If remito already exists, just download it
-    if (order.remitoNumber && order.remitoPdfBase64) {
-      const link = document.createElement("a");
-      link.href = `data:application/pdf;base64,${order.remitoPdfBase64}`;
-      link.download = `remito-${order.remitoNumber}.pdf`;
-      link.click();
-      return;
+    // Si el remito ya existe, bajar su PDF on-demand (la lista no trae los base64)
+    if (order.remitoNumber) {
+      const pdf = order.remitoPdfBase64 || (await ordersApi.getRemitoPdf(order.id));
+      if (pdf) {
+        const link = document.createElement("a");
+        link.href = `data:application/pdf;base64,${pdf}`;
+        link.download = `remito-${order.remitoNumber}.pdf`;
+        link.click();
+        return;
+      }
     }
 
     // Verificar stock de cada producto
@@ -456,8 +470,47 @@ export default function PedidosPage() {
     let active = true;
     setMounted(true);
     loadData(() => active);
+    loadStaticData(() => active);
     return () => { active = false; };
-  }, [loadData]);
+  }, [loadData, loadStaticData]);
+
+  // Realtime: cambios en `pedidos` llegan por websocket — solo baja datos cuando algo cambia.
+  // Requiere la tabla agregada a la publicación supabase_realtime.
+  useEffect(() => {
+    const channel = supabase
+      .channel("pedidos-realtime")
+      .on("postgres_changes", { event: "*", schema: "public", table: "pedidos" }, async (payload) => {
+        const { mapOrder } = await import("@/services/orders-service");
+        if (payload.eventType === "DELETE") {
+          const oldId = (payload.old as any)?.id;
+          if (oldId) setOrders((prev) => prev.filter((o) => o.id !== oldId));
+          return;
+        }
+        const row = payload.new as Record<string, any>;
+        if (!row?.id) return;
+        const order = mapOrder(row);
+        // No mantener PDFs base64 en memoria (vienen en el payload del UPDATE)
+        order.remitoPdfBase64 = undefined;
+        order.invoicePdfBase64 = undefined;
+        setOrders((prev) => {
+          if (order.status === "completed" || order.status === "rechazado") {
+            return prev.filter((o) => o.id !== order.id);
+          }
+          const exists = prev.some((o) => o.id === order.id);
+          return exists ? prev.map((o) => (o.id === order.id ? order : o)) : [order, ...prev];
+        });
+        setHeldClients((prev) => {
+          const name = order.clientName || "Sin cliente";
+          if (order.held && order.status !== "completed") {
+            if (prev.has(name)) return prev;
+            const next = new Set(prev); next.add(name); return next;
+          }
+          return prev;
+        });
+      })
+      .subscribe();
+    return () => { supabase.removeChannel(channel); };
+  }, []);
 
   // El transportista entra directo a la solapa de reparto
   const [appliedTransportistaTab, setAppliedTransportistaTab] = useState(false);
@@ -469,14 +522,13 @@ export default function PedidosPage() {
     setAppliedTransportistaTab(true);
   }, [user, appliedTransportistaTab]);
 
-  // Refresco automatico cada 3 min y al volver a la pestaña.
-  // Solo recarga si la pestaña esta visible: evita descargas innecesarias
-  // (y consumo de egress) en pestañas abiertas en segundo plano.
+  // Fallback del realtime: refresco cada 10 min y al volver a la pestaña, por si el
+  // websocket se cayó. Solo recarga si la pestaña está visible (egress).
   useEffect(() => {
     const refreshIfVisible = () => {
       if (document.visibilityState === "visible") loadData();
     };
-    const interval = setInterval(refreshIfVisible, 180000);
+    const interval = setInterval(refreshIfVisible, 600000);
     document.addEventListener("visibilitychange", refreshIfVisible);
     return () => {
       clearInterval(interval);
@@ -787,12 +839,12 @@ export default function PedidosPage() {
       // }
 
       // Si el pedido ya tenía remito generado, transferirlo a la venta nueva
-      if (selectedOrder.remitoNumber && selectedOrder.remitoPdfBase64) {
-        await salesApi.saveRemitoToSale(
-          sale.id,
-          selectedOrder.remitoNumber,
-          selectedOrder.remitoPdfBase64,
-        );
+      // (el PDF se baja on-demand: la lista liviana no lo trae)
+      if (selectedOrder.remitoNumber) {
+        const remitoPdf = selectedOrder.remitoPdfBase64 || (await ordersApi.getRemitoPdf(selectedOrder.id));
+        if (remitoPdf) {
+          await salesApi.saveRemitoToSale(sale.id, selectedOrder.remitoNumber, remitoPdf);
+        }
       }
 
       // Subir comprobante de transferencia si se adjuntó
