@@ -20,6 +20,18 @@ pending → preparation → delivery → completed
 
 Los `completed` NO se muestran en Pedidos (pasan a Ventas).
 
+## Trazabilidad 1 pedido = 1 remito = 1 venta (regla vigente desde 2026-06-12)
+
+- Cada pedido es una fila propia en la lista: **NO se fusionan pedidos del mismo cliente** en
+  ningún lado (ni en la tabla, ni en el remito, ni en el cobro, ni en el listado de carga).
+- El remito se genera **solo sobre ese pedido** (sin consolidar ni borrar hermanos).
+- El cobro (`completed`) procesa **solo ese pedido** → genera **una venta** ligada a ese pedido
+  y ese remito.
+- **El remito es obligatorio para pasar a reparto**: `handleStatusChange`, "Todos a reparto" y
+  el pase seleccionado a reparto bloquean/filtran pedidos sin `remito_number`.
+- Esto reemplaza la consolidación por cliente anterior (ver sección histórica más abajo, que
+  queda como referencia del comportamiento viejo).
+
 ## ¿Cuándo se descuenta el stock?
 
 > **Al generar el remito** (la mercadería sale del depósito), NO al cobrar.

@@ -83,7 +83,7 @@ export default function PedidosPage() {
   const [processingPayment, setProcessingPayment] = useState(false);
   // Guarda sincrónica contra doble ejecución del cobro (evita ventas duplicadas)
   const completingRef = useRef(false);
-  // Todos los pedidos del cliente seleccionado para completar juntos
+  // Trazabilidad 1 pedido = 1 remito = 1 venta: el cobro es SIEMPRE de un solo pedido
   const [selectedClientOrders, setSelectedClientOrders] = useState<Order[]>([]);
 
   const [generandoExcel, setGenerandoExcel] = useState(false);
@@ -224,17 +224,8 @@ export default function PedidosPage() {
         } catch { /* tabla cliente_faltantes aún no creada — no bloquear el remito */ }
       }
 
-      // Consolidar: un cliente puede tener varios pedidos abiertos en el mismo estado. El remito
-      // se genera sobre los items YA fusionados del cliente (mergedOrder). Persistimos ese set en
-      // ESTE pedido y borramos los hermanos, para que quede 1 cliente = 1 pedido con remito y el
-      // listado de carga / cobro (que agrupan por cliente) coincidan SIEMPRE con el remito.
-      const siblingOrders = orders.filter((o) =>
-        o.id !== order.id &&
-        o.status !== "completed" &&
-        o.status === order.status &&
-        (o.clientName === order.clientName || (o.clientId && o.clientId === order.clientId))
-      );
-
+      // Trazabilidad 1 pedido = 1 remito = 1 venta: el remito se genera SOLO sobre este pedido.
+      // No se consolidan ni se borran otros pedidos del cliente.
       await supabase.from("pedidos").update({ items: filteredItems }).eq("id", order.id);
       order = { ...order, items: filteredItems };
       setOrders((prev) => prev.map((o) => (o.id === order.id ? order : o)));
@@ -286,13 +277,6 @@ export default function PedidosPage() {
 
       setOrders((prev) => prev.map((o) => (o.id === order.id ? updatedOrder : o)));
       if (detailOrder?.id === order.id) setDetailOrder(updatedOrder);
-
-      // Borrar los pedidos hermanos: sus items ya quedaron consolidados en este (cubiertos por el remito).
-      if (siblingOrders.length > 0) {
-        await Promise.all(siblingOrders.map((s) => ordersApi.deleteOrder(s.id).catch(() => {})));
-        const siblingIds = new Set(siblingOrders.map((s) => s.id));
-        setOrders((prev) => prev.filter((o) => !siblingIds.has(o.id)));
-      }
 
       const link = document.createElement("a");
       link.href = `data:application/pdf;base64,${pdfBase64}`;
@@ -515,58 +499,29 @@ export default function PedidosPage() {
     if (newStatus === "completed") {
       const order = orders.find((o) => o.id === orderId);
       if (order) {
-        // Pedidos del mismo cliente en el MISMO estado (no se juntan entre solapas)
-        const clientOrders = orders.filter(
-          (o) => o.status !== "completed" && o.status === order.status && (o.clientName === order.clientName || (o.clientId && o.clientId === order.clientId))
-        );
-        let ordersForClient = clientOrders.length > 0 ? clientOrders : [order];
-
-        // En reparto vale el remito: si hay pedidos con remito, los sin remito (fantasmas/duplicados)
-        // NO entran al cobro. Evita que un pedido sin remito infle el monto al sumar por cliente.
-        if (order.status === "delivery" && ordersForClient.length > 1) {
-          const conRemito = ordersForClient.filter((o) => o.remitoNumber);
-          if (conRemito.length > 0 && conRemito.length < ordersForClient.length) {
-            const excluidos = ordersForClient.length - conRemito.length;
-            ordersForClient = conRemito;
-            toast.warning(
-              `Se ${excluidos === 1 ? "excluyó 1 pedido sin remito" : `excluyeron ${excluidos} pedidos sin remito`} del cobro. En reparto solo se cobra lo del remito.`
-            );
-          }
-        }
-        // Robustez anti-fantasma: en reparto SOLO se cobra lo del remito. Si ningún pedido del
-        // cliente tiene remito, es un fantasma (pedido sin remito que quedó vivo). No se cobra:
-        // así no se generan ventas duplicadas como las que sumaban doble al mismo cliente.
-        if (order.status === "delivery" && !ordersForClient.some((o) => o.remitoNumber)) {
+        // Trazabilidad 1 pedido = 1 remito = 1 venta: se cobra SOLO este pedido,
+        // sin juntar otros pedidos del mismo cliente.
+        if (order.status === "delivery" && !order.remitoNumber) {
           toast.error("Este pedido no tiene remito. En reparto solo se cobra lo del remito: generá el remito o eliminá el pedido.");
           return;
         }
 
-        setSelectedClientOrders(ordersForClient);
-
-        // Construir merged order con items combinados (igual que en la lista)
-        const itemMap = new Map<string, Order["items"][0]>();
-        ordersForClient.forEach((o) => {
-          o.items.forEach((item) => {
-            const key = item.productId || item.name;
-            const existing = itemMap.get(key);
-            if (existing) {
-              itemMap.set(key, { ...existing, quantity: existing.quantity + item.quantity });
-            } else {
-              itemMap.set(key, { ...item });
-            }
-          });
-        });
-        const mergedItems = Array.from(itemMap.values());
-        // Base del merge: el pedido clickeado si sigue en la lista; si fue excluido, el primero válido.
-        const baseOrder = ordersForClient.find((o) => o.id === order.id) || ordersForClient[0];
-        const mergedOrder: Order = { ...baseOrder, items: mergedItems };
-
+        setSelectedClientOrders([order]);
         setActiveModal(null);
         setDetailOrder(null);
-        setSelectedOrder(mergedOrder);
+        setSelectedOrder(order);
         setActiveModal("payment");
       }
       return;
+    }
+
+    // Remito obligatorio antes de pasar a reparto
+    if (newStatus === "delivery") {
+      const order = orders.find((o) => o.id === orderId);
+      if (order && !order.remitoNumber) {
+        toast.error("El remito es obligatorio antes de pasar a reparto. Generá el remito primero.");
+        return;
+      }
     }
 
     try {
@@ -808,7 +763,7 @@ export default function PedidosPage() {
         }).then(() => {}).catch(() => {});
       }
 
-      // Completar TODOS los pedidos del cliente (incluido el principal y los adicionales)
+      // Completar SOLO el pedido cobrado (1 pedido = 1 venta)
       const ordersToComplete = selectedClientOrders.length > 0 ? selectedClientOrders : [selectedOrder];
       const completedOrders = await Promise.all(
         ordersToComplete.map((o) => ordersApi.completeOrder(o.id, sale.id))
@@ -819,35 +774,6 @@ export default function PedidosPage() {
           return completedVersion ?? o;
         }),
       );
-
-      // Robustez anti-fantasma: tras cobrar en reparto, eliminar de la BASE cualquier otro pedido
-      // del cliente que siga en reparto SIN remito. Se consulta Supabase (no la lista en memoria),
-      // así atrapa fantasmas que la sesión actual no tenía cargados (creados por otra vía o sesión).
-      // Sin esto, el fantasma quedaba vivo y se podía cobrar de nuevo → venta duplicada.
-      if (selectedOrder.status === "delivery") {
-        try {
-          const completedIds = new Set(ordersToComplete.map((o) => o.id));
-          let ghostQuery = supabase
-            .from("pedidos")
-            .select("id")
-            .eq("status", "delivery")
-            .is("remito_number", null);
-          ghostQuery = selectedOrder.clientId
-            ? ghostQuery.eq("client_id", selectedOrder.clientId)
-            : ghostQuery.eq("client_name", selectedOrder.clientName);
-          const { data: ghosts } = await ghostQuery;
-          const ghostIds = (ghosts || [])
-            .map((g: { id: string }) => g.id)
-            .filter((id: string) => !completedIds.has(id));
-          if (ghostIds.length > 0) {
-            await Promise.all(ghostIds.map((id) => ordersApi.deleteOrder(id).catch(() => {})));
-            const ghostSet = new Set(ghostIds);
-            setOrders((prev) => prev.filter((o) => !ghostSet.has(o.id)));
-          }
-        } catch {
-          // No bloquea el cobro: la limpieza es defensiva.
-        }
-      }
 
       // Boleta — deshabilitado temporalmente
       // if (selectedOrder.invoiceNumber && selectedOrder.invoicePdfBase64) {
@@ -1277,17 +1203,15 @@ tfoot td{border-top:2px solid #1f4e78;background:#f2f2f2;font-weight:700;font-si
   ]);
 
 
-  // Group orders by client name
+  // Trazabilidad 1 pedido = 1 remito = 1 venta: cada pedido es su propia fila.
+  // NO se fusionan pedidos del mismo cliente en ningún lado.
   const ordersGroupedByClient = useMemo(() => {
-    // Agrupar por cliente + estado: pedidos del mismo cliente en distinta solapa
-    // (pendiente / preparación / reparto) NO se juntan. Solo se agrupan los que
-    // comparten estado (ej. varios pedidos pendientes del mismo cliente sí se juntan).
     const groups: Record<string, Order[]> = {};
     const SEP = "|#|";
 
     filteredOrders.forEach((order) => {
       const client = order.clientName || "Sin cliente";
-      const key = `${client}${SEP}${order.status}`;
+      const key = `${client}${SEP}${order.status}${SEP}${order.id}`;
       if (!groups[key]) groups[key] = [];
       groups[key].push(order);
     });
@@ -1439,9 +1363,17 @@ tfoot td{border-top:2px solid #1f4e78;background:#f2f2f2;font-weight:700;font-si
   }, [outdatedPriceOrders, getCurrentPrice]);
 
   const handleMoveAll = useCallback(async (from: OrderStatus, to: OrderStatus) => {
-    const toMove = orders.filter((o) => o.status === from && !heldClients.has(o.clientName || "Sin cliente"));
+    let toMove = orders.filter((o) => o.status === from && !heldClients.has(o.clientName || "Sin cliente"));
+    // Remito obligatorio para pasar a reparto: los pedidos sin remito no avanzan
+    if (to === "delivery") {
+      const sinRemito = toMove.filter((o) => !o.remitoNumber).length;
+      toMove = toMove.filter((o) => o.remitoNumber);
+      if (sinRemito > 0) {
+        toast.warning(`${sinRemito} pedido(s) sin remito no pasan a reparto. El remito es obligatorio.`);
+      }
+    }
     if (toMove.length === 0) {
-      toast.info("No hay pedidos para mover (algunos pueden estar retenidos)");
+      toast.info("No hay pedidos para mover (retenidos o sin remito)");
       return;
     }
     setMovingAll(true);
@@ -1462,9 +1394,17 @@ tfoot td{border-top:2px solid #1f4e78;background:#f2f2f2;font-weight:700;font-si
   }, [orders, heldClients, loadData]);
 
   const handleMoveSelected = useCallback(async (from: OrderStatus, to: OrderStatus) => {
-    const toMove = orders.filter(
+    let toMove = orders.filter(
       (o) => o.status === from && selectedClients.has(o.clientName || "Sin cliente")
     );
+    // Remito obligatorio para pasar a reparto
+    if (to === "delivery") {
+      const sinRemito = toMove.filter((o) => !o.remitoNumber).length;
+      toMove = toMove.filter((o) => o.remitoNumber);
+      if (sinRemito > 0) {
+        toast.warning(`${sinRemito} pedido(s) sin remito no pasan a reparto. El remito es obligatorio.`);
+      }
+    }
     if (toMove.length === 0) {
       toast.info("No hay pedidos seleccionados para mover");
       return;
