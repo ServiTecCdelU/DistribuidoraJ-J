@@ -143,44 +143,67 @@ export function MovimientoDeudaCard({
     if (!expanded || !sale?.id) return
     if ((sale.itemsNoEntregados?.length ?? 0) > 0) return
     if (legacyItems !== null) return
-    supabase
-      .from('transacciones')
-      .select('description')
-      .eq('sale_id', sale.id)
-      .or('description.like.[ROTURA]%,description.like.[FALTANTE]%,description.like.[NO_QUIERE]%')
-      .then(({ data }) => {
-        const rows: TableRow[] = []
-        for (const row of data ?? []) {
-          const desc = row.description || ''
-          let motivo: string
-          let stripped: string
-          if (desc.startsWith('[ROTURA]')) {
-            motivo = 'rotura'
-            stripped = desc.replace(/^\[ROTURA\]\s*#[\w-]+\s*—\s*/, '').replace(/^\[ROTURA\]\s*/, '')
-          } else if (desc.startsWith('[FALTANTE]')) {
-            motivo = 'faltante'
-            stripped = desc.replace(/^\[FALTANTE\]\s*#[\w-]+\s*—\s*/, '').replace(/^\[FALTANTE\]\s*/, '')
-          } else if (desc.startsWith('[NO_QUIERE]')) {
-            motivo = 'no_quiso'
-            stripped = desc.replace(/^\[NO_QUIERE\]\s*#[\w-]+\s*—\s*/, '').replace(/^\[NO_QUIERE\]\s*/, '')
-          } else continue
-          for (const part of stripped.split(', ')) {
-            const match = part.match(/^(.*)\s+x(\d+)$/)
-            if (!match) continue
-            const name = match[1].trim()
-            const qty = parseInt(match[2], 10)
-            const saleItem = sale.items?.find(i => i.name === name)
-            rows.push({
-              name,
-              quantity: qty,
-              price: saleItem?.price ?? 0,
-              itemDiscount: saleItem?.itemDiscount,
-              motivo,
-            })
+
+    const loadLegacy = async () => {
+      const { data: txData } = await supabase
+        .from('transacciones')
+        .select('description')
+        .eq('sale_id', sale.id)
+        .or('description.like.[ROTURA]%,description.like.[FALTANTE]%,description.like.[NO_QUIERE]%')
+
+      type Parsed = { name: string; qty: number; motivo: string }
+      const parsed: Parsed[] = []
+
+      for (const row of txData ?? []) {
+        const desc = row.description || ''
+        let motivo: string
+        let stripped: string
+        if (desc.startsWith('[ROTURA]')) {
+          motivo = 'rotura'
+          stripped = desc.replace(/^\[ROTURA\]\s*#[\w-]+\s*—\s*/, '').replace(/^\[ROTURA\]\s*/, '')
+        } else if (desc.startsWith('[FALTANTE]')) {
+          motivo = 'faltante'
+          stripped = desc.replace(/^\[FALTANTE\]\s*#[\w-]+\s*—\s*/, '').replace(/^\[FALTANTE\]\s*/, '')
+        } else if (desc.startsWith('[NO_QUIERE]')) {
+          motivo = 'no_quiso'
+          stripped = desc.replace(/^\[NO_QUIERE\]\s*#[\w-]+\s*—\s*/, '').replace(/^\[NO_QUIERE\]\s*/, '')
+        } else continue
+        for (const part of stripped.split(', ')) {
+          const match = part.match(/^(.*)\s+x(\d+)$/)
+          if (!match) continue
+          parsed.push({ name: match[1].trim(), qty: parseInt(match[2], 10), motivo })
+        }
+      }
+
+      if (parsed.length === 0) { setLegacyItems([]); return }
+
+      // Lookup de precio: primero sale.items (entregas parciales), luego el pedido original (todo no entregado)
+      const priceByName = new Map<string, { price: number; itemDiscount?: number }>()
+      for (const item of sale.items ?? []) {
+        priceByName.set(item.name, { price: item.price, itemDiscount: item.itemDiscount })
+      }
+
+      const missingNames = parsed.filter(p => !priceByName.has(p.name)).map(p => p.name)
+      if (missingNames.length > 0 && sale.orderId) {
+        const { data: orderData } = await supabase
+          .from('pedidos')
+          .select('items')
+          .eq('id', sale.orderId)
+          .single()
+        for (const item of (orderData?.items as any[] | null) ?? []) {
+          if (missingNames.includes(item.name)) {
+            priceByName.set(item.name, { price: item.price, itemDiscount: item.itemDiscount })
           }
         }
-        setLegacyItems(rows)
-      })
+      }
+
+      setLegacyItems(parsed.map(p => {
+        const pi = priceByName.get(p.name)
+        return { name: p.name, quantity: p.qty, price: pi?.price ?? 0, itemDiscount: pi?.itemDiscount, motivo: p.motivo }
+      }))
+    }
+
+    loadLegacy()
   }, [expanded, sale?.id])
 
   const isPayment = tx.type === 'payment'
