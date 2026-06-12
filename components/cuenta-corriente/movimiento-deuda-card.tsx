@@ -183,7 +183,8 @@ export function MovimientoDeudaCard({
         priceByName.set(item.name, { price: item.price, itemDiscount: item.itemDiscount })
       }
 
-      const missingNames = parsed.filter(p => !priceByName.has(p.name)).map(p => p.name)
+      // 2. Pedido original para items completamente no entregados (qty→0, filtrados de sale.items)
+      let missingNames = parsed.filter(p => !priceByName.has(p.name)).map(p => p.name)
       if (missingNames.length > 0 && sale.orderId) {
         const { data: orderData } = await supabase
           .from('pedidos')
@@ -191,8 +192,24 @@ export function MovimientoDeudaCard({
           .eq('id', sale.orderId)
           .single()
         for (const item of (orderData?.items as any[] | null) ?? []) {
-          if (missingNames.includes(item.name)) {
-            priceByName.set(item.name, { price: item.price, itemDiscount: item.itemDiscount })
+          const itemName = item.name ?? item.product?.name
+          const itemPrice = item.price ?? item.product?.price
+          if (itemName && missingNames.includes(itemName)) {
+            priceByName.set(itemName, { price: itemPrice, itemDiscount: item.itemDiscount })
+          }
+        }
+        missingNames = parsed.filter(p => !priceByName.has(p.name)).map(p => p.name)
+      }
+
+      // 3. Precio actual de productos como último recurso
+      if (missingNames.length > 0) {
+        const { data: prodData } = await supabase
+          .from('productos')
+          .select('name, price')
+          .in('name', missingNames)
+        for (const prod of prodData ?? []) {
+          if (!priceByName.has(prod.name)) {
+            priceByName.set(prod.name, { price: prod.price, itemDiscount: undefined })
           }
         }
       }
