@@ -190,7 +190,7 @@ export default function DashboardPage() {
     try {
       const [data, orders, transferCfg] = await Promise.all([
         dashboardApi.getDashboardData(),
-        ordersApi.getAll(),
+        ordersApi.getActive(),
         transferApi.getConfig(),
       ])
       if (isMounted && !isMounted()) return

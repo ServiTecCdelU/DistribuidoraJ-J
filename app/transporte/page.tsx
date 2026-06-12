@@ -17,6 +17,7 @@ import {
 } from "@/components/ui/select";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { ordersApi, sellersApi } from "@/lib/api";
+import { supabase } from "@/lib/supabase";
 import type { Order, Seller } from "@/lib/types";
 import {
   Truck,
@@ -809,7 +810,7 @@ export default function TransportePage() {
   const loadData = useCallback(async (isMounted?: () => boolean) => {
     try {
       const [ordersData, sellersData] = await Promise.all([
-        ordersApi.getAll(),
+        ordersApi.getActive(),
         sellersApi.getAll(),
       ]);
       if (isMounted && !isMounted()) return;
@@ -835,14 +836,29 @@ export default function TransportePage() {
     return () => { active = false; };
   }, [loadData]);
 
-  // Auto-refresco cada 3 min y al volver a la pestaña: refleja pedidos/remitos
-  // eliminados, nuevos repartos y reasignaciones. Solo recarga si la pestaña
-  // esta visible para no consumir egress en segundo plano.
+  // Realtime: cualquier cambio en pedidos refresca la lista (liviana). Fallback de
+  // polling cada 10 min y al volver a la pestaña, por si el websocket se cae.
+  useEffect(() => {
+    let timer: ReturnType<typeof setTimeout> | null = null;
+    const channel = supabase
+      .channel("transporte-pedidos-realtime")
+      .on("postgres_changes", { event: "*", schema: "public", table: "pedidos" }, () => {
+        // Debounce: varios cambios seguidos (ej. "todos a reparto") → una sola recarga
+        if (timer) clearTimeout(timer);
+        timer = setTimeout(() => loadData(), 500);
+      })
+      .subscribe();
+    return () => {
+      if (timer) clearTimeout(timer);
+      supabase.removeChannel(channel);
+    };
+  }, [loadData]);
+
   useEffect(() => {
     const refreshIfVisible = () => {
       if (document.visibilityState === "visible") loadData();
     };
-    const interval = setInterval(refreshIfVisible, 180000);
+    const interval = setInterval(refreshIfVisible, 600000);
     document.addEventListener("visibilitychange", refreshIfVisible);
     return () => {
       clearInterval(interval);

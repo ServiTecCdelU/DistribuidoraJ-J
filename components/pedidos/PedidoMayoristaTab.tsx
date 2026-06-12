@@ -56,7 +56,7 @@ export function PedidoMayoristaTab() {
         getSalesPendientesMayorista(),
         getMayoristaProductos(),
         getPedidosMayorista(),
-        ordersApi.getAll(),
+        ordersApi.getActive(),
       ]);
       setVentasPendientes(ventas);
       const map = new Map<string, MayoristaProducto>();
