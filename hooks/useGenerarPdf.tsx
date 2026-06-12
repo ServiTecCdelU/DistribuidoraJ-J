@@ -634,9 +634,8 @@ const guiaStyles = StyleSheet.create({
     paddingHorizontal: 1,
     fontSize: 7,
   },
-  colCod:    { width: "8%",  textAlign: "center" },
   colCnt:    { width: "7%",  textAlign: "center" },
-  colDescr:  { width: "46%", paddingLeft: 2 },
+  colDescr:  { width: "54%", paddingLeft: 2 },
   colDto:    { width: "5%",  textAlign: "right" },
   colPrecio: { width: "17%", textAlign: "right" },
   colTotal:  { width: "17%", textAlign: "right" },
@@ -742,42 +741,28 @@ const GuiaCopia = ({
     <>
       {/* ══ ENCABEZADO ══ */}
       <View>
-        {/* Fila 1: espaciador + GUIA número completo (derecha) */}
-        <View style={guiaStyles.hRow}>
-          <View style={guiaStyles.hSpacer} />
-          <View style={guiaStyles.hRight}>
-            <View style={guiaStyles.guiaLine}>
-              <Text style={guiaStyles.guiaLabel}>GUIA</Text>
-              <Text style={guiaStyles.guiaFull}>{nroFull}</Text>
-            </View>
-          </View>
+        {/* Fila 1: Nro corto · GUIA completa · Fecha · Vendedor — todo en una línea */}
+        <View style={{ flexDirection: "row", alignItems: "baseline", gap: 6, marginBottom: 1 }}>
+          <Text style={guiaStyles.guiaShort}>{nroShort}</Text>
+          <Text style={guiaStyles.guiaLabel}>GUIA</Text>
+          <Text style={guiaStyles.guiaFull}>{nroFull}</Text>
+          <Text style={guiaStyles.fechaLine}>Fecha: {fmtDateGuia(venta.createdAt)}</Text>
+          {vendDepStr ? <Text style={guiaStyles.vendDepLine}>{vendDepStr}</Text> : null}
         </View>
-        {/* Fila 2: Fecha (izquierda) + número corto y Vend/Dep (derecha) */}
-        <View style={guiaStyles.hRow}>
-          <Text style={guiaStyles.fechaLine}>Fecha:  {fmtDateGuia(venta.createdAt)}</Text>
-          <View style={guiaStyles.hSpacer} />
-          <View style={guiaStyles.hRight}>
-            <Text style={guiaStyles.guiaShort}>{nroShort}</Text>
-            {vendDepStr ? (
-              <Text style={guiaStyles.vendDepLine}>{vendDepStr}</Text>
-            ) : null}
-          </View>
+        {/* Fila 2: Cliente · Dirección · Cond.Vta — todo en una línea */}
+        <View style={{ flexDirection: "row", alignItems: "baseline", gap: 6, marginBottom: 1 }}>
+          <Text style={guiaStyles.clienteNombre}>{clientName}</Text>
+          {clientAddress ? <Text style={guiaStyles.clienteDir}>{clientAddress}</Text> : null}
+          {ciudad ? <Text style={guiaStyles.clienteCiudad}>{ciudad}</Text> : null}
+          {zona ? <Text style={guiaStyles.zonaLine}>{zona}</Text> : null}
+          <Text style={guiaStyles.condVtaLine}>Cond.Vta: {condVenta}</Text>
         </View>
-        {/* Nombre del cliente */}
-        <Text style={guiaStyles.clienteNombre}>{clientName}</Text>
-        {clientAddress ? (
-          <Text style={guiaStyles.clienteDir}>{clientAddress}</Text>
-        ) : null}
-        {ciudad ? <Text style={guiaStyles.clienteCiudad}>{ciudad}</Text> : null}
-        {zona ? <Text style={guiaStyles.zonaLine}>Zona:   {zona}</Text> : null}
-        <Text style={guiaStyles.condVtaLine}>Cond.Vta: {condVenta}</Text>
       </View>
 
       {/* ══ TABLA ══ */}
       <View>
         {/* Header de columnas */}
         <View style={guiaStyles.tableHeader}>
-          <Text style={guiaStyles.colCod}>COD.</Text>
           <Text style={guiaStyles.colCnt}>CNT</Text>
           <Text style={guiaStyles.colDescr}>DESCRIPCION</Text>
           <Text style={guiaStyles.colDto}>DESC.</Text>
@@ -791,7 +776,6 @@ const GuiaCopia = ({
           const lineTotal = unitPrice * item.quantity;
           return (
             <View key={i} style={guiaStyles.tableRow} wrap={false}>
-              <Text style={guiaStyles.colCod}>{item.codigo || ""}</Text>
               <Text style={guiaStyles.colCnt}>{item.quantity}</Text>
               <Text style={guiaStyles.colDescr}>{truncDesc(item.name)}</Text>
               <Text style={guiaStyles.colDto}>
