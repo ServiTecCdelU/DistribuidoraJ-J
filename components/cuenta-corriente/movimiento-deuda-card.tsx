@@ -138,6 +138,24 @@ export function MovimientoDeudaCard({
   const [expanded, setExpanded] = useState(false)
   const [regenerando, setRegenerando] = useState(false)
   const [legacyItems, setLegacyItems] = useState<TableRow[] | null>(null)
+  const [linkedRemitos, setLinkedRemitos] = useState<{ id: string; remitoNumber: string; remitoPdfBase64?: string }[] | null>(null)
+
+  // Carga todos los remitos de pedidos vinculados a esta venta (cubre pedidos fusionados)
+  useEffect(() => {
+    if (!expanded || !sale?.id) return
+    if (linkedRemitos !== null) return
+    supabase
+      .from('pedidos')
+      .select('id, remito_number, remito_pdf_base64')
+      .eq('sale_id', sale.id)
+      .not('remito_number', 'is', null)
+      .then(({ data }) => {
+        const remitos = (data ?? [])
+          .filter(p => p.remito_number)
+          .map(p => ({ id: p.id, remitoNumber: p.remito_number, remitoPdfBase64: p.remito_pdf_base64 ?? undefined }))
+        setLinkedRemitos(remitos)
+      })
+  }, [expanded, sale?.id])
 
   useEffect(() => {
     if (!expanded || !sale?.id) return
@@ -443,6 +461,36 @@ export function MovimientoDeudaCard({
           </div>
           {!tieneRemito && (
             <p className="text-[11px] text-muted-foreground text-center">Sin remito</p>
+          )}
+
+          {/* Remitos de pedidos fusionados */}
+          {linkedRemitos && linkedRemitos.length > 1 && (
+            <div className="border-t pt-2">
+              <p className="text-[11px] text-muted-foreground mb-1.5 flex items-center gap-1">
+                <Truck className="h-3 w-3" />
+                Remitos de pedidos fusionados
+              </p>
+              <div className="flex flex-wrap gap-1.5">
+                {linkedRemitos.map(r => (
+                  <Button
+                    key={r.id}
+                    variant="outline"
+                    size="sm"
+                    className="gap-1 text-xs h-7"
+                    onClick={() => {
+                      if (r.remitoPdfBase64) {
+                        descargarDocumento(r.remitoPdfBase64, 'remito', r.remitoNumber, sale?.clientName)
+                      }
+                    }}
+                    disabled={!r.remitoPdfBase64}
+                    title={r.remitoPdfBase64 ? 'Descargar remito' : 'PDF no disponible'}
+                  >
+                    <Download className="h-3 w-3" />
+                    {r.remitoNumber}
+                  </Button>
+                ))}
+              </div>
+            </div>
           )}
         </div>
       )}
