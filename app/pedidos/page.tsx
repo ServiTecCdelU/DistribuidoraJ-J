@@ -1412,11 +1412,13 @@ tfoot td{border-top:2px solid #1f4e78;background:#f2f2f2;font-weight:700;font-si
     return p != null && p > 0 ? p : null;
   }, [priceMap]);
 
-  // Pedidos no completados con items por debajo del precio de venta actual
+  // Pedidos no completados con items por debajo del precio de venta actual.
+  // Los pedidos con remito ya generado se excluyen: el precio del remito es el precio comprometido con el cliente.
   const outdatedPriceOrders = useMemo(() => {
     if (priceMap.size === 0) return [] as Order[];
     return orders.filter((o) =>
       o.status !== "completed" &&
+      !o.remitoNumber &&
       o.items.some((it) => {
         // No tocar items vendidos por unidad fraccionada (precio distinto al de bulto)
         if (it.precioUnitarioMayorista != null) return false;
@@ -1433,6 +1435,8 @@ tfoot td{border-top:2px solid #1f4e78;background:#f2f2f2;font-weight:700;font-si
       let itemsActualizados = 0;
       const updatedOrders: Order[] = [];
       for (const order of outdatedPriceOrders) {
+        // Seguridad extra: nunca pisar precios de pedidos con remito
+        if (order.remitoNumber) continue;
         const newItems = order.items.map((it) => {
           if (it.precioUnitarioMayorista != null) return it;
           const current = getCurrentPrice(it.productId);
