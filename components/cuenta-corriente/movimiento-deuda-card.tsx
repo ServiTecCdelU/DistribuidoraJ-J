@@ -183,19 +183,20 @@ export function MovimientoDeudaCard({
         priceByName.set(item.name, { price: item.price, itemDiscount: item.itemDiscount })
       }
 
-      // 2. Pedido original para items completamente no entregados (qty→0, filtrados de sale.items)
+      // 2. Pedidos vinculados a esta venta (sale_id) — cubre pedidos fusionados y el pedido original
       let missingNames = parsed.filter(p => !priceByName.has(p.name)).map(p => p.name)
-      if (missingNames.length > 0 && sale.orderId) {
-        const { data: orderData } = await supabase
+      if (missingNames.length > 0) {
+        const { data: ordersData } = await supabase
           .from('pedidos')
           .select('items')
-          .eq('id', sale.orderId)
-          .single()
-        for (const item of (orderData?.items as any[] | null) ?? []) {
-          const itemName = item.name ?? item.product?.name
-          const itemPrice = item.price ?? item.product?.price
-          if (itemName && missingNames.includes(itemName)) {
-            priceByName.set(itemName, { price: itemPrice, itemDiscount: item.itemDiscount })
+          .eq('sale_id', sale.id)
+        for (const order of ordersData ?? []) {
+          for (const item of (order.items as any[] | null) ?? []) {
+            const itemName = item.name ?? item.product?.name
+            const itemPrice = item.price ?? item.product?.price
+            if (itemName && missingNames.includes(itemName)) {
+              priceByName.set(itemName, { price: itemPrice, itemDiscount: item.itemDiscount })
+            }
           }
         }
         missingNames = parsed.filter(p => !priceByName.has(p.name)).map(p => p.name)
