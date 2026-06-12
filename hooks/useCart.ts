@@ -331,7 +331,7 @@ export function useCart(role: UserRole, userEmail?: string, externalProducts?: P
         const productsData = mayoristaData.filter((p) => p.habilitado).map((p) => {
           const precioLote =
             p.unidadesPorBulto && p.seDivideEn && p.unidadesPorBulto > 0
-              ? Math.round(p.precioVenta * p.seDivideEn / p.unidadesPorBulto * 100) / 100
+              ? p.precioVenta * p.seDivideEn / p.unidadesPorBulto
               : p.precioVenta;
           return {
             id: p.id,

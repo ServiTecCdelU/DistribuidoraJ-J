@@ -5,9 +5,9 @@ import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import {
   ArrowDownCircle, ArrowUpCircle, ChevronDown, Download, Package, Receipt, Truck,
-  AlertTriangle, RotateCcw, Tag,
+  AlertTriangle, RotateCcw, Tag, PackageX,
 } from 'lucide-react'
-import { formatCurrency, formatDate } from '@/lib/utils/format'
+import { formatCurrencyDecimalsDecimals, formatDate } from '@/lib/utils/format'
 import { descargarDocumento } from '@/lib/utils/doc-actions'
 import type { Sale, Transaction } from '@/lib/types'
 import type { Faltante } from '@/services/faltantes-service'
@@ -18,6 +18,7 @@ interface MovimientoDeudaCardProps {
   sale?: Sale
   faltantes?: Faltante[]
   devoluciones?: Devolucion[]
+  roturas?: Transaction[]
 }
 
 function descargarRemito(sale: Sale) {
@@ -29,7 +30,7 @@ function descargarRemito(sale: Sale) {
   if (url) window.open(url, '_blank', 'noopener,noreferrer')
 }
 
-export function MovimientoDeudaCard({ tx, sale, faltantes = [], devoluciones = [] }: MovimientoDeudaCardProps) {
+export function MovimientoDeudaCard({ tx, sale, faltantes = [], devoluciones = [], roturas = [] }: MovimientoDeudaCardProps) {
   const [expanded, setExpanded] = useState(false)
   const isPayment = tx.type === 'payment'
   const expandable = !isPayment && !!sale
@@ -40,7 +41,8 @@ export function MovimientoDeudaCard({ tx, sale, faltantes = [], devoluciones = [
 
   const tieneFaltantes = faltantes.length > 0
   const tieneDevols = devoluciones.length > 0
-  const tieneExtra = tieneFaltantes || tieneDevols
+  const tieneRoturas = roturas.length > 0
+  const tieneExtra = tieneFaltantes || tieneDevols || tieneRoturas
 
   return (
     <div className="border rounded-lg overflow-hidden">
@@ -83,15 +85,16 @@ export function MovimientoDeudaCard({ tx, sale, faltantes = [], devoluciones = [
           <span className="flex gap-1 shrink-0">
             {tieneFaltantes && <Badge variant="outline" className="text-[10px] px-1 py-0 h-4 text-amber-600 border-amber-300">{faltantes.length} faltante{faltantes.length > 1 ? 's' : ''}</Badge>}
             {tieneDevols && <Badge variant="outline" className="text-[10px] px-1 py-0 h-4 text-purple-600 border-purple-300">{devoluciones.length} devol.</Badge>}
+            {tieneRoturas && <Badge variant="outline" className="text-[10px] px-1 py-0 h-4 text-red-600 border-red-300">rotura</Badge>}
           </span>
         )}
         <div className="text-right shrink-0">
           <span className={`text-xs font-bold tabular-nums ${isPayment ? 'text-green-600' : 'text-red-600'}`}>
-            {isPayment ? '-' : '+'}{formatCurrency(tx.amount)}
+            {isPayment ? '-' : '+'}{formatCurrencyDecimals(tx.amount)}
           </span>
           {saldo != null && (
             <span className={`ml-1 text-[11px] font-medium ${pagada ? 'text-green-600' : parcial ? 'text-amber-600' : 'text-red-500'}`}>
-              {pagada ? '✓' : `Saldo: ${formatCurrency(saldo)}`}
+              {pagada ? '✓' : `Saldo: ${formatCurrencyDecimals(saldo)}`}
             </span>
           )}
         </div>
@@ -127,7 +130,7 @@ export function MovimientoDeudaCard({ tx, sale, faltantes = [], devoluciones = [
                       </span>
                     )}
                     <span className={`tabular-nums shrink-0 ${it.esRegalo ? 'text-green-600' : ''}`}>
-                      {it.esRegalo ? 'GRATIS' : formatCurrency(subtotal)}
+                      {it.esRegalo ? 'GRATIS' : formatCurrencyDecimals(subtotal)}
                     </span>
                   </div>
                 )
@@ -135,12 +138,12 @@ export function MovimientoDeudaCard({ tx, sale, faltantes = [], devoluciones = [
             </div>
             <div className="flex justify-between text-[11px] font-semibold pt-1 border-t mt-1">
               <span>Total venta</span>
-              <span className="tabular-nums">{formatCurrency(sale.total)}</span>
+              <span className="tabular-nums">{formatCurrencyDecimals(sale.total)}</span>
             </div>
             {sale.discount && sale.discount > 0 && (
               <div className="flex items-center gap-1 text-[11px] text-amber-600 pt-0.5">
                 <Tag className="h-3 w-3" />
-                Descuento general: {sale.discountType === 'percent' ? `${sale.discount}%` : formatCurrency(sale.discount)}
+                Descuento general: {sale.discountType === 'percent' ? `${sale.discount}%` : formatCurrencyDecimals(sale.discount)}
               </div>
             )}
             {tieneRemito ? (
@@ -198,7 +201,7 @@ export function MovimientoDeudaCard({ tx, sale, faltantes = [], devoluciones = [
                   <div key={dev.id} className="flex flex-col gap-0.5">
                     <div className="flex items-center justify-between text-[11px]">
                       <span className="text-muted-foreground">{dev.reciboNumero} · {formatDate(dev.createdAt)}</span>
-                      <span className="text-purple-600 font-semibold tabular-nums">-{formatCurrency(dev.total)}</span>
+                      <span className="text-purple-600 font-semibold tabular-nums">-{formatCurrencyDecimals(dev.total)}</span>
                     </div>
                     {dev.items.map((it, i) => (
                       <div key={i} className="flex items-center gap-1 text-[10px] text-muted-foreground pl-2">
@@ -210,6 +213,30 @@ export function MovimientoDeudaCard({ tx, sale, faltantes = [], devoluciones = [
                     ))}
                   </div>
                 ))}
+              </div>
+            </div>
+          )}
+
+          {/* Roturas acreditadas al momento de entrega */}
+          {tieneRoturas && (
+            <div>
+              <div className="flex items-center gap-1 text-[11px] font-semibold text-red-700 mb-1">
+                <PackageX className="h-3 w-3" />
+                Rotura al entregar
+              </div>
+              <div className="flex flex-col gap-0.5">
+                {roturas.map((r) => {
+                  const detalle = r.description.replace(/^\[ROTURA\]\s*#\S+\s*—?\s*/, '')
+                  return (
+                    <div key={r.id} className="flex items-start justify-between gap-2 text-[11px]">
+                      <span className="text-muted-foreground flex-1 min-w-0">{detalle || r.description}</span>
+                      <span className="text-red-600 font-semibold tabular-nums shrink-0">-{formatCurrencyDecimals(Math.abs(r.amount))}</span>
+                    </div>
+                  )
+                })}
+              </div>
+              <div className="text-[10px] text-muted-foreground mt-1">
+                El remito muestra el total original antes de descontar la rotura.
               </div>
             </div>
           )}

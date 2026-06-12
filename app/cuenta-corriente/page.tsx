@@ -692,6 +692,11 @@ tr{page-break-inside:avoid}
                     const devolsSale = sale
                       ? clientDevoluciones.filter((d) => d.saleId === sale.id)
                       : []
+                    const roturasSale = sale
+                      ? txMinorista.filter(
+                          (t) => t.type === 'payment' && t.saleId === sale.id && t.description.startsWith('[ROTURA]')
+                        )
+                      : []
                     return (
                       <MovimientoDeudaCard
                         key={tx.id}
@@ -699,6 +704,7 @@ tr{page-break-inside:avoid}
                         sale={sale}
                         faltantes={faltantesSale}
                         devoluciones={devolsSale}
+                        roturas={roturasSale}
                       />
                     )
                   })}
