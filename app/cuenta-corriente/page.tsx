@@ -675,55 +675,6 @@ tr{page-break-inside:avoid}
               )}
             </div>
 
-            {/* ── CUENTA MAYORISTA ── */}
-            <div className="rounded-2xl border p-4 space-y-4">
-              <div className="flex items-center justify-between">
-                <h3 className="text-sm font-semibold flex items-center gap-2">
-                  <DollarSign className="h-4 w-4 text-purple-600" />
-                  Cuenta Mayorista
-                </h3>
-                <span className={`text-base font-bold ${balanceMayorista > 0 ? 'text-red-600' : 'text-green-600'}`}>
-                  {balanceMayorista > 0 ? formatCurrency(balanceMayorista) : 'Cancelada'}
-                </span>
-              </div>
-
-              <Button
-                className="w-full sm:w-auto gap-2 rounded-xl bg-purple-600 hover:bg-purple-700"
-                onClick={() => setPayMayoristaDialog(true)}
-                disabled={balanceMayorista <= 0}
-              >
-                <Banknote className="h-4 w-4" />
-                Registrar pago mayorista
-              </Button>
-
-              {txMayorista.length === 0 ? (
-                <p className="text-sm text-muted-foreground text-center py-2">Sin movimientos</p>
-              ) : (
-                <div className="flex flex-col gap-2">
-                  {txMayorista.map((tx) => (
-                    <Card key={tx.id}>
-                      <CardContent className="p-3 flex items-center gap-3">
-                        <div className={`h-8 w-8 rounded-full flex items-center justify-center shrink-0 ${
-                          tx.type === 'payment' ? 'bg-green-100 dark:bg-green-900/30' : 'bg-red-100 dark:bg-red-900/30'
-                        }`}>
-                          {tx.type === 'payment'
-                            ? <ArrowDownCircle className="h-4 w-4 text-green-600" />
-                            : <ArrowUpCircle className="h-4 w-4 text-red-600" />
-                          }
-                        </div>
-                        <div className="flex-1 min-w-0">
-                          <p className="text-sm font-medium truncate">{tx.description}</p>
-                          <p className="text-xs text-muted-foreground">{formatDate(tx.date)}</p>
-                        </div>
-                        <p className={`font-bold tabular-nums ${tx.type === 'payment' ? 'text-green-600' : 'text-red-600'}`}>
-                          {tx.type === 'payment' ? '-' : '+'}{formatCurrency(tx.amount)}
-                        </p>
-                      </CardContent>
-                    </Card>
-                  ))}
-                </div>
-              )}
-            </div>
 
             {/* Comprobantes procesados */}
             {clientHistory.length > 0 && (
