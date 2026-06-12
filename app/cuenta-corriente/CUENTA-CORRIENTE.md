@@ -10,6 +10,20 @@ Dos cuentas en una página, con tabs **Clientes** y **Mayorista**:
    registro de pagos manuales, clasificación de deuda.
 2. **Mayorista** (lo que le debemos al proveedor): deudas (boletas) y pagos a esas boletas.
 
+## Saldo por remito (desde 2026-06-12)
+
+Cada deuda en `transacciones` (una por venta/remito, gracias a 1 pedido = 1 remito = 1 venta)
+lleva su **saldo pendiente individual** (columna `saldo`):
+
+- Trigger `trg_set_debt_saldo`: toda deuda nueva arranca con `saldo = amount` (cubre `process_sale`).
+- SQL de columnas + backfill FIFO en `scripts/sql/saldo-por-remito.sql` (**ejecutar antes de usar**).
+- Pagos (`payments-service.ts`): con `debtTxId` se imputan a ese remito puntual (baja su saldo);
+  sin `debtTxId` aplican FIFO (deuda más antigua primero). El pago guarda `debt_id`.
+- `approveComprobante` también baja saldos FIFO.
+- UI detalle de cliente: cada deuda muestra "Saldo: $X" / "Pagado" debajo del monto
+  (`MovimientoDeudaCard`), y el diálogo "Registrar pago" tiene selector **Imputar a**
+  (remito específico o pago general FIFO).
+
 ## Cuenta de Clientes
 
 - Lista deudores (`cobranzasApi.getDebtClients`) con filtros por vendedor, clasificación y búsqueda.

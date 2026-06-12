@@ -31,6 +31,10 @@ export function MovimientoDeudaCard({ tx, sale }: MovimientoDeudaCardProps) {
   const isPayment = tx.type === 'payment'
   const expandable = !isPayment && !!sale
   const tieneRemito = !!sale?.remitoNumber
+  // Saldo pendiente del remito/venta (null = deuda legacy sin saldo individual)
+  const saldo = !isPayment && tx.saldo != null ? tx.saldo : null
+  const pagada = saldo != null && saldo <= 0
+  const parcial = saldo != null && saldo > 0 && saldo < tx.amount
 
   return (
     <Card>
@@ -58,9 +62,20 @@ export function MovimientoDeudaCard({ tx, sale }: MovimientoDeudaCardProps) {
               )}
             </p>
           </div>
-          <p className={`font-bold tabular-nums ${isPayment ? 'text-green-600' : 'text-red-600'}`}>
-            {isPayment ? '-' : '+'}{formatCurrency(tx.amount)}
-          </p>
+          <div className="text-right shrink-0">
+            <p className={`font-bold tabular-nums ${isPayment ? 'text-green-600' : 'text-red-600'}`}>
+              {isPayment ? '-' : '+'}{formatCurrency(tx.amount)}
+            </p>
+            {saldo != null && (
+              pagada ? (
+                <span className="text-[11px] font-medium text-green-600">Pagado</span>
+              ) : (
+                <span className={`text-[11px] font-medium ${parcial ? 'text-amber-600' : 'text-red-500'}`}>
+                  Saldo: {formatCurrency(saldo)}
+                </span>
+              )
+            )}
+          </div>
           {expandable && (
             <ChevronDown className={`h-4 w-4 text-muted-foreground shrink-0 transition-transform ${expanded ? 'rotate-180' : ''}`} />
           )}

@@ -77,6 +77,8 @@ export default function CuentaCorrientePage() {
   const [payAmount, setPayAmount] = useState('')
   const [payMethod, setPayMethod] = useState<string>('efectivo')
   const [payNotes, setPayNotes] = useState('')
+  // Imputación: id de la transacción de deuda (remito/venta) elegida, '' = FIFO
+  const [payDebtId, setPayDebtId] = useState('')
 
   // Registrar pago manual (mayorista)
   const [payMayoristaDialog, setPayMayoristaDialog] = useState(false)
@@ -243,14 +245,21 @@ export default function CuentaCorrientePage() {
         transferencia: 'Pago por transferencia bancaria',
         otro: 'Pago registrado manualmente',
       }
-      const desc = payNotes
+      // Referencia al remito imputado en la descripción del pago
+      const deudaImputada = payDebtId ? clientTransactions.find((t) => t.id === payDebtId) : undefined
+      const saleImputada = deudaImputada?.saleId ? clientSales.find((s) => s.id === deudaImputada.saleId) : undefined
+      const refImputacion = deudaImputada
+        ? ` (${saleImputada?.remitoNumber ? `Remito ${saleImputada.remitoNumber}` : deudaImputada.description})`
+        : ''
+      const desc = `${payNotes
         ? `${methods[payMethod] || methods.otro} — ${payNotes}`
-        : methods[payMethod] || methods.otro
+        : methods[payMethod] || methods.otro}${refImputacion}`
 
       await paymentsApi.registerCashPayment({
         clientId: selectedClient.id,
         amount,
         description: desc,
+        debtTxId: payDebtId || undefined,
       })
 
       // Actualizar estado local
@@ -269,6 +278,7 @@ export default function CuentaCorrientePage() {
       setPayAmount('')
       setPayMethod('efectivo')
       setPayNotes('')
+      setPayDebtId('')
       toast.success(`Pago de ${formatCurrency(amount)} registrado`)
     } catch (err: any) {
       toast.error(err.message || 'Error al registrar pago')
@@ -473,6 +483,15 @@ tr{page-break-inside:avoid}
     const txMayorista = clientTransactions.filter((tx) => tx.cuenta === 'mayorista')
     const balanceMayorista = selectedClient.currentBalanceMayorista ?? 0
     const salesById = new Map(clientSales.map((s) => [s.id, s]))
+    // Deudas (remitos/ventas) con saldo pendiente, para imputar pagos
+    const deudasPendientes = txMinorista
+      .filter((tx) => tx.type === 'debt' && tx.saldo != null && tx.saldo > 0)
+      .sort((a, b) => a.date.getTime() - b.date.getTime())
+    const etiquetaDeuda = (tx: Transaction) => {
+      const sale = tx.saleId ? salesById.get(tx.saleId) : undefined
+      const ref = sale?.remitoNumber ? `Remito ${sale.remitoNumber}` : tx.description
+      return `${ref} — saldo ${formatCurrency(tx.saldo ?? 0)}`
+    }
 
     return (
       <MainLayout allowedRoles={['admin']} title="Cuenta Corriente" description="Detalle de cliente">
@@ -765,7 +784,7 @@ tr{page-break-inside:avoid}
         </Dialog>
 
         {/* Dialog Registrar pago */}
-        <Dialog open={payDialog} onOpenChange={(open) => { if (!open) { setPayDialog(false); setPayAmount(''); setPayNotes(''); } }}>
+        <Dialog open={payDialog} onOpenChange={(open) => { if (!open) { setPayDialog(false); setPayAmount(''); setPayNotes(''); setPayDebtId(''); } }}>
           <DialogContent className="sm:max-w-sm">
             <DialogHeader>
               <DialogTitle>Registrar pago</DialogTitle>
@@ -774,6 +793,31 @@ tr{page-break-inside:avoid}
               </DialogDescription>
             </DialogHeader>
             <div className="space-y-4">
+              {deudasPendientes.length > 0 && (
+                <div className="space-y-2">
+                  <Label>Imputar a</Label>
+                  <Select
+                    value={payDebtId || 'fifo'}
+                    onValueChange={(v) => {
+                      setPayDebtId(v === 'fifo' ? '' : v)
+                      if (v !== 'fifo') {
+                        const d = deudasPendientes.find((t) => t.id === v)
+                        if (d?.saldo) setPayAmount(String(d.saldo))
+                      }
+                    }}
+                  >
+                    <SelectTrigger>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="fifo">Pago general (más antiguo primero)</SelectItem>
+                      {deudasPendientes.map((tx) => (
+                        <SelectItem key={tx.id} value={tx.id}>{etiquetaDeuda(tx)}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              )}
               <div className="space-y-2">
                 <Label>Forma de pago</Label>
                 <Select value={payMethod} onValueChange={setPayMethod}>

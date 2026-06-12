@@ -202,6 +202,26 @@ export const approveComprobante = async (id: string, reviewedBy: string): Promis
     .update({ current_balance: newBalance })
     .eq('id', comp.client_id)
 
+  // Bajar saldo de las deudas (remitos) más antiguas primero (FIFO)
+  try {
+    const { data: debts } = await supabase
+      .from('transacciones')
+      .select('id, saldo')
+      .eq('client_id', comp.client_id)
+      .eq('type', 'debt')
+      .gt('saldo', 0)
+      .or('cuenta.eq.minorista,cuenta.is.null')
+      .order('date', { ascending: true })
+    let restante = Number(comp.amount)
+    for (const d of debts ?? []) {
+      if (restante <= 0) break
+      const saldo = Number(d.saldo) || 0
+      const aplicado = Math.min(saldo, restante)
+      await supabase.from('transacciones').update({ saldo: saldo - aplicado }).eq('id', d.id)
+      restante -= aplicado
+    }
+  } catch { /* columna saldo aún no creada — no bloquear la aprobación */ }
+
   // Crear transacción
   const clientName = comp.clientes?.name || 'pago'
   const docId = await generateReadableId('transacciones', 'transaccion', clientName)

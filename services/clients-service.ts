@@ -138,5 +138,7 @@ export const getClientTransactions = async (clientId: string): Promise<Transacti
     date: new Date(d.date),
     saleId: d.sale_id ?? undefined,
     cuenta: (d.cuenta as 'minorista' | 'mayorista') ?? 'minorista',
+    saldo: d.saldo != null ? Number(d.saldo) : null,
+    debtId: d.debt_id ?? undefined,
   }))
 }

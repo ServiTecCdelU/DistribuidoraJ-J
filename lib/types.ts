@@ -80,6 +80,10 @@ export interface Transaction {
   date: Date;
   saleId?: string;
   cuenta?: 'minorista' | 'mayorista';
+  /** Deudas: saldo pendiente del remito/venta (null = legacy sin backfill) */
+  saldo?: number | null;
+  /** Pagos: id de la transacción de deuda a la que se imputó */
+  debtId?: string;
 }
 
 export interface CartItem {
