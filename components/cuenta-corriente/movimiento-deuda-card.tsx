@@ -10,13 +10,11 @@ import {
 import { formatCurrencyDecimals, formatDate } from '@/lib/utils/format'
 import { descargarDocumento } from '@/lib/utils/doc-actions'
 import type { Sale, Transaction } from '@/lib/types'
-import type { Faltante } from '@/services/faltantes-service'
 import type { Devolucion } from '@/services/devoluciones-service'
 
 interface MovimientoDeudaCardProps {
   tx: Transaction
   sale?: Sale
-  faltantes?: Faltante[]
   devoluciones?: Devolucion[]
   onRegenerarRemito?: (sale: Sale) => Promise<void>
 }
@@ -134,7 +132,7 @@ function ItemsTable({ items, showTotal = false }: { items: TableRow[]; showTotal
 }
 
 export function MovimientoDeudaCard({
-  tx, sale, faltantes = [], devoluciones = [], onRegenerarRemito,
+  tx, sale, devoluciones = [], onRegenerarRemito,
 }: MovimientoDeudaCardProps) {
   const [expanded, setExpanded] = useState(false)
   const [regenerando, setRegenerando] = useState(false)
@@ -156,25 +154,7 @@ export function MovimientoDeudaCard({
     motivo: it.motivo,
   }))
 
-  // 2. Faltantes del pedido (fallback para ventas viejas sin items_no_entregados)
-  //    Cross-reference con sale.items para sacar precio (por productId o nombre)
-  const saleItemsByProductId = new Map((sale?.items ?? []).map((i) => [i.productId, i]))
-  const saleItemsByName = new Map((sale?.items ?? []).map((i) => [i.name.toLowerCase().trim(), i]))
-  const faltantesRows: TableRow[] = faltantes
-    .filter((f) => !noEntregadosVenta.some((n) => n.name === f.productoNombre))
-    .map((f) => {
-      const saleItem = saleItemsByProductId.get(f.productoId)
-        ?? saleItemsByName.get(f.productoNombre.toLowerCase().trim())
-      return {
-        name: f.productoNombre,
-        quantity: f.cantidad,
-        price: saleItem?.price ?? 0,
-        itemDiscount: saleItem?.itemDiscount,
-        motivo: f.motivo,
-      }
-    })
-
-  // 3. Devoluciones (items devueltos de esta venta)
+  // 2. Devoluciones (items devueltos de esta venta)
   const devolucionRows: TableRow[] = devoluciones.flatMap((dev) =>
     dev.items.map((it) => ({
       name: it.name,
@@ -188,7 +168,6 @@ export function MovimientoDeudaCard({
 
   const noEntregadosUnified: TableRow[] = [
     ...noEntregadosVenta,
-    ...faltantesRows,
     ...devolucionRows,
   ]
   const tieneNoEntregados = noEntregadosUnified.length > 0
