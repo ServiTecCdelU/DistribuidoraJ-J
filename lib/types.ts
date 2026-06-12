@@ -142,6 +142,14 @@ export interface Sale {
   invoiceDriveFileId?: string;
   remitoDriveUrl?: string;
   remitoDriveFileId?: string;
+  itemsNoEntregados?: Array<{
+    name: string;
+    price: number;
+    quantity: number;
+    itemDiscount?: number;
+    codigo?: string;
+    motivo: 'rotura' | 'faltante' | 'no_quiso';
+  }>;
 }
 
 export type City = "Concepcion del Uruguay" | "Colon" | "Gualeguaychu" | "San Salvador";

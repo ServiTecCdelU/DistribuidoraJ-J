@@ -776,6 +776,22 @@ export default function PedidosPage() {
         transferencia_amount: transferencia > 0 ? transferencia : null,
       }).eq("id", sale.id).then(() => {}).catch(() => {});
 
+      // Guardar items no entregados (con precio completo) en la venta
+      if (adjustments.length > 0) {
+        const noEntregados = adjustments.map(adj => {
+          const orderItem = selectedOrder.items.find((i: any) => i.productId === adj.productId);
+          return {
+            name: adj.productName,
+            price: orderItem?.price ?? adj.unitPrice,
+            quantity: adj.quantity,
+            itemDiscount: orderItem?.itemDiscount ?? 0,
+            codigo: (orderItem as any)?.codigo ?? undefined,
+            motivo: adj.type === 'no_quiere' ? 'no_quiso' : adj.type,
+          };
+        });
+        supabase.from("ventas").update({ items_no_entregados: noEntregados }).eq("id", sale.id).then(() => {}).catch(() => {});
+      }
+
       // Registrar roturas y faltantes en transacciones usando el saleNumber
       if (roturasAdj.length > 0) {
         const totalPerdida = roturasAdj.reduce((acc, r) => acc + r.unitPrice * r.quantity, 0);

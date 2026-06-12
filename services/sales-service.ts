@@ -59,6 +59,7 @@ function mapSale(d: Record<string, any>): Sale {
     invoiceDriveFileId: d.invoice_drive_file_id ?? undefined,
     remitoDriveUrl: d.remito_drive_url ?? undefined,
     remitoDriveFileId: d.remito_drive_file_id ?? undefined,
+    itemsNoEntregados: d.items_no_entregados ?? [],
   }
 }
 
