@@ -7,7 +7,7 @@ import {
   ArrowDownCircle, ArrowUpCircle, ChevronDown, Download, Package, Receipt, Truck,
   AlertTriangle, RotateCcw, Tag, PackageX,
 } from 'lucide-react'
-import { formatCurrencyDecimalsDecimals, formatDate } from '@/lib/utils/format'
+import { formatCurrencyDecimals, formatDate } from '@/lib/utils/format'
 import { descargarDocumento } from '@/lib/utils/doc-actions'
 import type { Sale, Transaction } from '@/lib/types'
 import type { Faltante } from '@/services/faltantes-service'
