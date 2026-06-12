@@ -116,7 +116,7 @@ export interface Sale {
   sellerId?: string;
   sellerName?: string;
   source?: "direct" | "order";
-  items: { productId: string; quantity: number; price: number; name: string; itemDiscount?: number; regalo?: number; esRegalo?: boolean; regaloDe?: string }[];
+  items: { productId: string; quantity: number; price: number; name: string; itemDiscount?: number; regalo?: number; esRegalo?: boolean; regaloDe?: string; codigo?: string }[];
   total: number;
   paymentType: "cash" | "credit" | "mixed";
   paymentMethod?: "efectivo" | "transferencia";

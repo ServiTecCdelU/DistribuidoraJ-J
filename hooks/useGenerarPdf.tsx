@@ -586,58 +586,57 @@ const guiaStyles = StyleSheet.create({
   // Columna izquierda: borde derecho como separador
   colLeft: {
     width: "50%",
-    paddingTop: "7mm",
-    paddingBottom: "5mm",
-    paddingLeft: "9mm",
-    paddingRight: "8mm",
+    paddingTop: "3mm",
+    paddingBottom: "2mm",
+    paddingLeft: "5mm",
+    paddingRight: "4mm",
     flexDirection: "column",
     borderRight: "0.75px solid #aaa",
   },
   // Columna derecha
   colRight: {
     width: "50%",
-    paddingTop: "7mm",
-    paddingBottom: "5mm",
-    paddingLeft: "9mm",
-    paddingRight: "8mm",
+    paddingTop: "3mm",
+    paddingBottom: "2mm",
+    paddingLeft: "5mm",
+    paddingRight: "4mm",
     flexDirection: "column",
   },
   // ── Header ──
   hRow: { flexDirection: "row", marginBottom: 1 },
   hSpacer: { flex: 1 },
   hRight: { alignItems: "flex-end" },
-  guiaLine: { flexDirection: "row", gap: 5 },
-  guiaLabel: { fontSize: 8, fontWeight: "bold" },
-  guiaFull: { fontSize: 8 },
-  guiaShort: { fontSize: 11, fontWeight: "bold" },
-  fechaLine: { fontSize: 8 },
-  vendDepLine: { fontSize: 8, marginTop: 1 },
-  clienteNombre: { fontSize: 10, fontWeight: "bold", marginTop: 3, marginBottom: 1 },
-  clienteDir: { fontSize: 8, marginBottom: 1 },
-  clienteCiudad: { fontSize: 8 },
-  zonaLine: { fontSize: 8, marginTop: 3 },
-  condVtaLine: { fontSize: 8, marginTop: 1 },
+  guiaLine: { flexDirection: "row", gap: 4 },
+  guiaLabel: { fontSize: 7, fontWeight: "bold" },
+  guiaFull: { fontSize: 7 },
+  guiaShort: { fontSize: 10, fontWeight: "bold" },
+  fechaLine: { fontSize: 7 },
+  vendDepLine: { fontSize: 7, marginTop: 1 },
+  clienteNombre: { fontSize: 9, fontWeight: "bold", marginTop: 2, marginBottom: 1 },
+  clienteDir: { fontSize: 7, marginBottom: 1 },
+  clienteCiudad: { fontSize: 7 },
+  zonaLine: { fontSize: 7, marginTop: 1 },
+  condVtaLine: { fontSize: 7, marginTop: 1 },
   // ── Tabla ──
   tableHeader: {
     flexDirection: "row",
     borderTop: "0.75px solid black",
     borderBottom: "0.75px solid black",
-    paddingVertical: 3,
+    paddingVertical: 2,
     paddingHorizontal: 1,
     fontWeight: "bold",
-    fontSize: 8,
-    marginTop: 5,
+    fontSize: 7,
+    marginTop: 3,
   },
   tableRow: {
     flexDirection: "row",
-    paddingVertical: 2,
+    paddingVertical: 1,
     paddingHorizontal: 1,
-    fontSize: 8,
-    minHeight: 13,
+    fontSize: 7,
   },
   colCod:    { width: "8%",  textAlign: "center" },
   colCnt:    { width: "7%",  textAlign: "center" },
-  colDescr:  { width: "46%", paddingLeft: 3 },
+  colDescr:  { width: "46%", paddingLeft: 2 },
   colDto:    { width: "5%",  textAlign: "right" },
   colPrecio: { width: "17%", textAlign: "right" },
   colTotal:  { width: "17%", textAlign: "right" },
@@ -645,16 +644,16 @@ const guiaStyles = StyleSheet.create({
   footerWrap: {
     flexDirection: "row",
     justifyContent: "space-between",
-    alignItems: "flex-start",
+    alignItems: "center",
     borderTop: "0.75px solid black",
-    marginTop: 5,
-    paddingTop: 4,
-    fontSize: 8,
+    marginTop: 4,
+    paddingTop: 3,
+    fontSize: 7,
   },
-  footerLeft: { flexDirection: "row", gap: 10 },
-  footerRight: { alignItems: "flex-end" },
+  footerLeft: { flexDirection: "row", gap: 8 },
+  footerRight: { flexDirection: "row", gap: 10 },
   footerBold: { fontWeight: "bold" },
-  pageNum: { fontSize: 7, color: "#aaa", textAlign: "center", marginTop: 4 },
+  pageNum: { fontSize: 6, color: "#aaa", textAlign: "center", marginTop: 2 },
 });
 
 /** Trunca descripción a maxLen caracteres para evitar salto de línea. */
@@ -836,6 +835,7 @@ const GuiaCopia = ({
         </View>
       )}
 
+
       <Text style={guiaStyles.pageNum}>
         Página {pageNum} de {totalPages}
       </Text>
@@ -843,8 +843,8 @@ const GuiaCopia = ({
   );
 };
 
-// Máximo de ítems por página landscape (cabecera ~90pt + fila 13pt + pie ~30pt ≈ 25 filas en 595pt)
-const ITEMS_POR_GUIA = 25;
+// Máximo de ítems por página landscape (cabecera ~50pt + fila ~9pt + pie ~15pt ≈ 34 filas en 595pt)
+const ITEMS_POR_GUIA = 34;
 
 const chunk = <T,>(arr: T[], size: number): T[][] => {
   const out: T[][] = [];

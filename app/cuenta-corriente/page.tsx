@@ -522,16 +522,29 @@ tr{page-break-inside:avoid}
     if (!sale.remitoNumber) { toast.error('La venta no tiene número de remito'); return }
     try {
       const { generarPdfCliente } = await import('@/hooks/useGenerarPdf')
+      const noEntregados = (sale.itemsNoEntregados || [])
+        .filter((it) => it.motivo === 'no_quiso')
+        .map((it) => ({
+          name: `${it.name} (NO ENT.)`,
+          quantity: it.quantity,
+          price: 0,
+          codigo: it.codigo || '',
+          ...(it.itemDiscount ? { itemDiscount: it.itemDiscount } : {}),
+        }))
       const remitoData = {
         id: sale.id,
         clientName: sale.clientName,
         sellerName: sale.sellerName,
-        items: sale.items.map((it) => ({
-          name: it.name,
-          quantity: it.quantity,
-          price: it.price,
-          ...(it.itemDiscount ? { itemDiscount: it.itemDiscount } : {}),
-        })),
+        items: [
+          ...sale.items.map((it) => ({
+            name: it.name,
+            quantity: it.quantity,
+            price: it.price,
+            codigo: it.codigo || '',
+            ...(it.itemDiscount ? { itemDiscount: it.itemDiscount } : {}),
+          })),
+          ...noEntregados,
+        ],
         total: sale.total,
         discount: sale.discount,
         discountType: sale.discountType,
