@@ -719,6 +719,9 @@ tr{page-break-inside:avoid}
                 <div className="flex flex-col gap-1">
                   {txMinorista.map((tx) => {
                     const sale = tx.saleId ? salesById.get(tx.saleId) : undefined
+                    const faltantesSale = sale?.orderId
+                      ? clientFaltantes.filter((f) => f.pedidoId === sale.orderId)
+                      : []
                     const devolsSale = sale
                       ? clientDevoluciones.filter((d) => d.saleId === sale.id)
                       : []
@@ -727,6 +730,7 @@ tr{page-break-inside:avoid}
                         key={tx.id}
                         tx={tx}
                         sale={sale}
+                        faltantes={faltantesSale}
                         devoluciones={devolsSale}
                         onRegenerarRemito={handleRegenerarRemito}
                       />

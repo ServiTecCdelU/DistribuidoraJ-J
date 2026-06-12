@@ -10,11 +10,13 @@ import {
 import { formatCurrencyDecimals, formatDate } from '@/lib/utils/format'
 import { descargarDocumento } from '@/lib/utils/doc-actions'
 import type { Sale, Transaction } from '@/lib/types'
+import type { Faltante } from '@/services/faltantes-service'
 import type { Devolucion } from '@/services/devoluciones-service'
 
 interface MovimientoDeudaCardProps {
   tx: Transaction
   sale?: Sale
+  faltantes?: Faltante[]
   devoluciones?: Devolucion[]
   onRegenerarRemito?: (sale: Sale) => Promise<void>
 }
@@ -32,24 +34,32 @@ const MOTIVO_LABELS: Record<string, string> = {
   rotura: 'ROTURA',
   faltante: 'FALTÓ',
   no_quiso: 'NO QUISO',
+  devolucion: 'DEVOL.',
 }
 const MOTIVO_COLORS: Record<string, string> = {
   rotura: 'text-red-600 border-red-300',
   faltante: 'text-amber-600 border-amber-300',
   no_quiso: 'text-orange-600 border-orange-300',
+  devolucion: 'text-purple-600 border-purple-300',
 }
 
-function ItemsTable({
-  items,
-}: {
-  items: Array<{ name: string; price: number; quantity: number; itemDiscount?: number; codigo?: string; esRegalo?: boolean; motivo?: string }>
-}) {
+type TableRow = {
+  name: string
+  quantity: number
+  price: number
+  itemDiscount?: number
+  esRegalo?: boolean
+  motivo?: string
+  destino?: 'stock' | 'perdida'
+  priceIsNet?: boolean  // precio ya descontado (devoluciones)
+}
+
+function ItemsTable({ items }: { items: TableRow[] }) {
   return (
     <div className="overflow-x-auto">
       <table className="w-full text-[10px] border-collapse">
         <thead>
           <tr className="border-b text-muted-foreground">
-            <th className="text-left py-0.5 pr-1 w-10">Cod.</th>
             <th className="text-right py-0.5 px-1 w-8">Cant.</th>
             <th className="text-left py-0.5 px-1">Descripción</th>
             <th className="text-right py-0.5 px-1 w-16">P. Unit.</th>
@@ -61,18 +71,22 @@ function ItemsTable({
         <tbody>
           {items.map((it, i) => {
             const dto = it.itemDiscount ?? 0
-            const unitConDto = it.price * (1 - dto / 100)
+            const unitConDto = it.priceIsNet ? it.price : it.price * (1 - dto / 100)
             const lineTotal = unitConDto * it.quantity
-            const color = it.motivo ? MOTIVO_COLORS[it.motivo] ?? '' : ''
+            const color = it.motivo ? (MOTIVO_COLORS[it.motivo] ?? '') : ''
             return (
               <tr key={i} className="border-b border-muted/30 last:border-0">
-                <td className="py-0.5 pr-1 text-muted-foreground">{it.codigo || '—'}</td>
                 <td className="py-0.5 px-1 text-right tabular-nums">{it.quantity}</td>
                 <td className="py-0.5 px-1 max-w-0">
-                  <div className="flex items-center gap-1 min-w-0">
+                  <div className="flex items-center gap-1 min-w-0 flex-wrap">
                     {it.motivo && (
                       <Badge variant="outline" className={`text-[8px] px-0.5 py-0 h-3 shrink-0 ${color}`}>
                         {MOTIVO_LABELS[it.motivo] ?? it.motivo}
+                      </Badge>
+                    )}
+                    {it.destino && (
+                      <Badge variant="outline" className={`text-[8px] px-0.5 py-0 h-3 shrink-0 ${it.destino === 'stock' ? 'text-green-600 border-green-300' : 'text-red-500 border-red-300'}`}>
+                        {it.destino === 'stock' ? 'stock' : 'pérdida'}
                       </Badge>
                     )}
                     {it.esRegalo && (
@@ -81,12 +95,14 @@ function ItemsTable({
                     <span className="truncate">{it.name}</span>
                   </div>
                 </td>
-                <td className="py-0.5 px-1 text-right tabular-nums">{formatCurrencyDecimals(it.price)}</td>
+                <td className="py-0.5 px-1 text-right tabular-nums">
+                  {it.priceIsNet ? '—' : formatCurrencyDecimals(it.price)}
+                </td>
                 <td className="py-0.5 px-1 text-right tabular-nums text-muted-foreground">
-                  {dto > 0 ? `${dto}%` : '—'}
+                  {it.priceIsNet ? '—' : (dto > 0 ? `${dto}%` : '—')}
                 </td>
                 <td className="py-0.5 px-1 text-right tabular-nums">
-                  {dto > 0 ? formatCurrencyDecimals(unitConDto) : '—'}
+                  {(it.priceIsNet || dto > 0) ? formatCurrencyDecimals(unitConDto) : '—'}
                 </td>
                 <td className={`py-0.5 pl-1 text-right tabular-nums font-medium ${it.esRegalo ? 'text-green-600' : ''}`}>
                   {it.esRegalo ? 'GRATIS' : formatCurrencyDecimals(lineTotal)}
@@ -100,7 +116,9 @@ function ItemsTable({
   )
 }
 
-export function MovimientoDeudaCard({ tx, sale, devoluciones = [], onRegenerarRemito }: MovimientoDeudaCardProps) {
+export function MovimientoDeudaCard({
+  tx, sale, faltantes = [], devoluciones = [], onRegenerarRemito,
+}: MovimientoDeudaCardProps) {
   const [expanded, setExpanded] = useState(false)
   const [regenerando, setRegenerando] = useState(false)
 
@@ -111,24 +129,74 @@ export function MovimientoDeudaCard({ tx, sale, devoluciones = [], onRegenerarRe
   const pagada = saldo != null && saldo <= 0
   const parcial = saldo != null && saldo > 0 && saldo < tx.amount
 
-  const tieneDevols = devoluciones.length > 0
-  const noEntregados = sale?.itemsNoEntregados ?? []
-  const tieneNoEntregados = noEntregados.length > 0
+  // Construir lista unificada de no entregados
+  // 1. items_no_entregados de la venta (path nuevo, precio completo)
+  const noEntregadosVenta: TableRow[] = (sale?.itemsNoEntregados ?? []).map((it) => ({
+    name: it.name,
+    quantity: it.quantity,
+    price: it.price,
+    itemDiscount: it.itemDiscount,
+    motivo: it.motivo,
+  }))
+
+  // 2. Faltantes del pedido (fallback para ventas viejas sin items_no_entregados)
+  //    Cross-reference con sale.items para sacar precio
+  const saleItemsByProductId = new Map((sale?.items ?? []).map((i) => [i.productId, i]))
+  const faltantesRows: TableRow[] = faltantes
+    .filter((f) => !noEntregadosVenta.some((n) => n.name === f.productoNombre))
+    .map((f) => {
+      const saleItem = saleItemsByProductId.get(f.productoId)
+      return {
+        name: f.productoNombre,
+        quantity: f.cantidad,
+        price: saleItem?.price ?? 0,
+        itemDiscount: saleItem?.itemDiscount,
+        motivo: f.motivo,
+      }
+    })
+
+  // 3. Devoluciones (items devueltos de esta venta)
+  const devolucionRows: TableRow[] = devoluciones.flatMap((dev) =>
+    dev.items.map((it) => ({
+      name: it.name,
+      quantity: it.quantity,
+      price: it.price,
+      priceIsNet: true,
+      motivo: 'devolucion' as const,
+      destino: it.destino,
+    }))
+  )
+
+  const noEntregadosUnified: TableRow[] = [
+    ...noEntregadosVenta,
+    ...faltantesRows,
+    ...devolucionRows,
+  ]
+  const tieneNoEntregados = noEntregadosUnified.length > 0
 
   // Cálculos de totales
-  const entregados = sale?.items ?? []
-  const totalEntregado = entregados.reduce((acc, it) => {
-    const dto = it.itemDiscount ?? 0
-    return acc + it.price * (1 - dto / 100) * it.quantity
-  }, 0)
+  const entregados: TableRow[] = (sale?.items ?? []).map((it) => ({
+    name: it.name,
+    quantity: it.quantity,
+    price: it.price,
+    itemDiscount: it.itemDiscount,
+    esRegalo: it.esRegalo,
+  }))
+
   const totalDescuento = entregados.reduce((acc, it) => {
     const dto = it.itemDiscount ?? 0
     return acc + it.price * (dto / 100) * it.quantity
   }, 0)
-  const totalNoEntregado = noEntregados.reduce((acc, it) => {
+  const totalEntregadoConDto = entregados.reduce((acc, it) => {
     const dto = it.itemDiscount ?? 0
     return acc + it.price * (1 - dto / 100) * it.quantity
   }, 0)
+  const totalNoEntregado = noEntregadosUnified
+    .filter((it) => it.motivo !== 'devolucion')
+    .reduce((acc, it) => {
+      const dto = it.itemDiscount ?? 0
+      return acc + it.price * (1 - dto / 100) * it.quantity
+    }, 0)
 
   const handleRegenerar = async () => {
     if (!sale || !onRegenerarRemito) return
@@ -179,7 +247,7 @@ export function MovimientoDeudaCard({ tx, sale, devoluciones = [], onRegenerarRe
         )}
         {tieneNoEntregados && !expanded && (
           <Badge variant="outline" className="text-[10px] px-1 py-0 h-4 text-amber-600 border-amber-300 shrink-0">
-            {noEntregados.length} no entregado{noEntregados.length > 1 ? 's' : ''}
+            {noEntregadosUnified.length} no entregado{noEntregadosUnified.length > 1 ? 's' : ''}
           </Badge>
         )}
         <div className="text-right shrink-0">
@@ -207,14 +275,14 @@ export function MovimientoDeudaCard({ tx, sale, devoluciones = [], onRegenerarRe
             <ItemsTable items={entregados} />
           </div>
 
-          {/* Tabla de no entregados */}
+          {/* Tabla unificada: no entregados + devoluciones */}
           {tieneNoEntregados && (
             <div>
               <div className="flex items-center gap-1 text-[11px] font-semibold text-amber-700 mb-1">
                 <AlertTriangle className="h-3 w-3" />
-                No entregados
+                No entregados / Devueltos
               </div>
-              <ItemsTable items={noEntregados} />
+              <ItemsTable items={noEntregadosUnified} />
             </div>
           )}
 
@@ -234,16 +302,26 @@ export function MovimientoDeudaCard({ tx, sale, devoluciones = [], onRegenerarRe
                 <span className="tabular-nums text-amber-600">
                   -{formatCurrencyDecimals(
                     sale.discountType === 'percent'
-                      ? totalEntregado * sale.discount / 100
+                      ? totalEntregadoConDto * sale.discount / 100
                       : sale.discount
                   )}
                 </span>
               </div>
             )}
-            {tieneNoEntregados && (
+            {totalNoEntregado > 0 && (
               <div className="flex justify-between text-muted-foreground">
-                <span>Total no entregados</span>
+                <span>No entregado (sin cobrar)</span>
                 <span className="tabular-nums text-amber-600">{formatCurrencyDecimals(totalNoEntregado)}</span>
+              </div>
+            )}
+            {devoluciones.length > 0 && (
+              <div className="flex justify-between text-muted-foreground">
+                <span className="flex items-center gap-1"><RotateCcw className="h-3 w-3" />
+                  Devoluciones ({devoluciones.map((d) => d.reciboNumero).join(', ')})
+                </span>
+                <span className="tabular-nums text-purple-600">
+                  -{formatCurrencyDecimals(devoluciones.reduce((a, d) => a + d.total, 0))}
+                </span>
               </div>
             )}
             <div className="flex justify-between font-semibold border-t pt-1 mt-1">
@@ -251,34 +329,6 @@ export function MovimientoDeudaCard({ tx, sale, devoluciones = [], onRegenerarRe
               <span className="tabular-nums">{formatCurrencyDecimals(sale.total)}</span>
             </div>
           </div>
-
-          {/* Devoluciones */}
-          {tieneDevols && (
-            <div>
-              <div className="flex items-center gap-1 text-[11px] font-semibold text-purple-700 mb-1">
-                <RotateCcw className="h-3 w-3" />
-                Devoluciones
-              </div>
-              <div className="flex flex-col gap-0.5">
-                {devoluciones.map((dev) => (
-                  <div key={dev.id} className="flex flex-col gap-0.5">
-                    <div className="flex items-center justify-between text-[11px]">
-                      <span className="text-muted-foreground">{dev.reciboNumero} · {formatDate(dev.createdAt)}</span>
-                      <span className="text-purple-600 font-semibold tabular-nums">-{formatCurrencyDecimals(dev.total)}</span>
-                    </div>
-                    {dev.items.map((it, i) => (
-                      <div key={i} className="flex items-center gap-1 text-[10px] text-muted-foreground pl-2">
-                        <span className="flex-1 truncate">{it.quantity}× {it.name}</span>
-                        <Badge variant="outline" className={`text-[9px] px-1 py-0 h-3 ${it.destino === 'stock' ? 'text-green-600 border-green-300' : 'text-red-500 border-red-300'}`}>
-                          {it.destino === 'stock' ? 'a stock' : 'pérdida'}
-                        </Badge>
-                      </div>
-                    ))}
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
 
           {/* Botones */}
           <div className="flex gap-2 pt-1">
