@@ -518,6 +518,39 @@ tr{page-break-inside:avoid}
     }
   }
 
+  const handleRegenerarRemito = async (sale: Sale) => {
+    if (!sale.remitoNumber) { toast.error('La venta no tiene número de remito'); return }
+    try {
+      const { generarPdfCliente } = await import('@/hooks/useGenerarPdf')
+      const remitoData = {
+        id: sale.id,
+        clientName: sale.clientName,
+        sellerName: sale.sellerName,
+        items: sale.items.map((it) => ({
+          name: it.name,
+          quantity: it.quantity,
+          price: it.price,
+          ...(it.itemDiscount ? { itemDiscount: it.itemDiscount } : {}),
+        })),
+        total: sale.total,
+        discount: sale.discount,
+        discountType: sale.discountType,
+        paymentType: 'cash' as const,
+        createdAt: sale.createdAt,
+        deliveryAddress: sale.deliveryAddress,
+        remitoNumber: sale.remitoNumber,
+      }
+      const newPdf = await generarPdfCliente(remitoData, 'remito')
+      await salesApi.saveRemitoToSale(sale.id, sale.remitoNumber, newPdf)
+      // Refrescar ventas del cliente para que el botón "Descargar remito" tenga el nuevo base64
+      const updatedSales = await salesApi.getByClient(selectedClient!.id)
+      setClientSales(updatedSales)
+      toast.success(`Remito ${sale.remitoNumber} regenerado`)
+    } catch (err: any) {
+      toast.error(err.message || 'Error al regenerar remito')
+    }
+  }
+
   // Vista detalle de cliente
   if (selectedClient) {
     const clientPending = clientComprobantes.filter((c) => c.status === 'pending')
@@ -686,25 +719,16 @@ tr{page-break-inside:avoid}
                 <div className="flex flex-col gap-1">
                   {txMinorista.map((tx) => {
                     const sale = tx.saleId ? salesById.get(tx.saleId) : undefined
-                    const faltantesSale = sale?.orderId
-                      ? clientFaltantes.filter((f) => f.pedidoId === sale.orderId)
-                      : []
                     const devolsSale = sale
                       ? clientDevoluciones.filter((d) => d.saleId === sale.id)
-                      : []
-                    const roturasSale = sale
-                      ? txMinorista.filter(
-                          (t) => t.type === 'payment' && t.saleId === sale.id && t.description.startsWith('[ROTURA]')
-                        )
                       : []
                     return (
                       <MovimientoDeudaCard
                         key={tx.id}
                         tx={tx}
                         sale={sale}
-                        faltantes={faltantesSale}
                         devoluciones={devolsSale}
-                        roturas={roturasSale}
+                        onRegenerarRemito={handleRegenerarRemito}
                       />
                     )
                   })}

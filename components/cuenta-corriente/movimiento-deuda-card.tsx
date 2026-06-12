@@ -4,21 +4,19 @@ import { useState } from 'react'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import {
-  ArrowDownCircle, ArrowUpCircle, ChevronDown, Download, Package, Receipt, Truck,
-  AlertTriangle, RotateCcw, Tag, PackageX,
+  ArrowDownCircle, ArrowUpCircle, ChevronDown, Download, Receipt, Truck,
+  AlertTriangle, RotateCcw, Tag, RefreshCw, Loader2,
 } from 'lucide-react'
 import { formatCurrencyDecimals, formatDate } from '@/lib/utils/format'
 import { descargarDocumento } from '@/lib/utils/doc-actions'
 import type { Sale, Transaction } from '@/lib/types'
-import type { Faltante } from '@/services/faltantes-service'
 import type { Devolucion } from '@/services/devoluciones-service'
 
 interface MovimientoDeudaCardProps {
   tx: Transaction
   sale?: Sale
-  faltantes?: Faltante[]
   devoluciones?: Devolucion[]
-  roturas?: Transaction[]
+  onRegenerarRemito?: (sale: Sale) => Promise<void>
 }
 
 function descargarRemito(sale: Sale) {
@@ -30,8 +28,82 @@ function descargarRemito(sale: Sale) {
   if (url) window.open(url, '_blank', 'noopener,noreferrer')
 }
 
-export function MovimientoDeudaCard({ tx, sale, faltantes = [], devoluciones = [], roturas = [] }: MovimientoDeudaCardProps) {
+const MOTIVO_LABELS: Record<string, string> = {
+  rotura: 'ROTURA',
+  faltante: 'FALTÓ',
+  no_quiso: 'NO QUISO',
+}
+const MOTIVO_COLORS: Record<string, string> = {
+  rotura: 'text-red-600 border-red-300',
+  faltante: 'text-amber-600 border-amber-300',
+  no_quiso: 'text-orange-600 border-orange-300',
+}
+
+function ItemsTable({
+  items,
+}: {
+  items: Array<{ name: string; price: number; quantity: number; itemDiscount?: number; codigo?: string; esRegalo?: boolean; motivo?: string }>
+}) {
+  return (
+    <div className="overflow-x-auto">
+      <table className="w-full text-[10px] border-collapse">
+        <thead>
+          <tr className="border-b text-muted-foreground">
+            <th className="text-left py-0.5 pr-1 w-10">Cod.</th>
+            <th className="text-right py-0.5 px-1 w-8">Cant.</th>
+            <th className="text-left py-0.5 px-1">Descripción</th>
+            <th className="text-right py-0.5 px-1 w-16">P. Unit.</th>
+            <th className="text-right py-0.5 px-1 w-8">Dto%</th>
+            <th className="text-right py-0.5 px-1 w-16">c/Dto</th>
+            <th className="text-right py-0.5 pl-1 w-18">Total</th>
+          </tr>
+        </thead>
+        <tbody>
+          {items.map((it, i) => {
+            const dto = it.itemDiscount ?? 0
+            const unitConDto = it.price * (1 - dto / 100)
+            const lineTotal = unitConDto * it.quantity
+            const color = it.motivo ? MOTIVO_COLORS[it.motivo] ?? '' : ''
+            return (
+              <tr key={i} className="border-b border-muted/30 last:border-0">
+                <td className="py-0.5 pr-1 text-muted-foreground">{it.codigo || '—'}</td>
+                <td className="py-0.5 px-1 text-right tabular-nums">{it.quantity}</td>
+                <td className="py-0.5 px-1 max-w-0">
+                  <div className="flex items-center gap-1 min-w-0">
+                    {it.motivo && (
+                      <Badge variant="outline" className={`text-[8px] px-0.5 py-0 h-3 shrink-0 ${color}`}>
+                        {MOTIVO_LABELS[it.motivo] ?? it.motivo}
+                      </Badge>
+                    )}
+                    {it.esRegalo && (
+                      <Badge className="text-[8px] px-0.5 py-0 h-3 bg-green-100 text-green-700 border-0 shrink-0">REGALO</Badge>
+                    )}
+                    <span className="truncate">{it.name}</span>
+                  </div>
+                </td>
+                <td className="py-0.5 px-1 text-right tabular-nums">{formatCurrencyDecimals(it.price)}</td>
+                <td className="py-0.5 px-1 text-right tabular-nums text-muted-foreground">
+                  {dto > 0 ? `${dto}%` : '—'}
+                </td>
+                <td className="py-0.5 px-1 text-right tabular-nums">
+                  {dto > 0 ? formatCurrencyDecimals(unitConDto) : '—'}
+                </td>
+                <td className={`py-0.5 pl-1 text-right tabular-nums font-medium ${it.esRegalo ? 'text-green-600' : ''}`}>
+                  {it.esRegalo ? 'GRATIS' : formatCurrencyDecimals(lineTotal)}
+                </td>
+              </tr>
+            )
+          })}
+        </tbody>
+      </table>
+    </div>
+  )
+}
+
+export function MovimientoDeudaCard({ tx, sale, devoluciones = [], onRegenerarRemito }: MovimientoDeudaCardProps) {
   const [expanded, setExpanded] = useState(false)
+  const [regenerando, setRegenerando] = useState(false)
+
   const isPayment = tx.type === 'payment'
   const expandable = !isPayment && !!sale
   const tieneRemito = !!sale?.remitoNumber
@@ -39,10 +111,34 @@ export function MovimientoDeudaCard({ tx, sale, faltantes = [], devoluciones = [
   const pagada = saldo != null && saldo <= 0
   const parcial = saldo != null && saldo > 0 && saldo < tx.amount
 
-  const tieneFaltantes = faltantes.length > 0
   const tieneDevols = devoluciones.length > 0
-  const tieneRoturas = roturas.length > 0
-  const tieneExtra = tieneFaltantes || tieneDevols || tieneRoturas
+  const noEntregados = sale?.itemsNoEntregados ?? []
+  const tieneNoEntregados = noEntregados.length > 0
+
+  // Cálculos de totales
+  const entregados = sale?.items ?? []
+  const totalEntregado = entregados.reduce((acc, it) => {
+    const dto = it.itemDiscount ?? 0
+    return acc + it.price * (1 - dto / 100) * it.quantity
+  }, 0)
+  const totalDescuento = entregados.reduce((acc, it) => {
+    const dto = it.itemDiscount ?? 0
+    return acc + it.price * (dto / 100) * it.quantity
+  }, 0)
+  const totalNoEntregado = noEntregados.reduce((acc, it) => {
+    const dto = it.itemDiscount ?? 0
+    return acc + it.price * (1 - dto / 100) * it.quantity
+  }, 0)
+
+  const handleRegenerar = async () => {
+    if (!sale || !onRegenerarRemito) return
+    setRegenerando(true)
+    try {
+      await onRegenerarRemito(sale)
+    } finally {
+      setRegenerando(false)
+    }
+  }
 
   return (
     <div className="border rounded-lg overflow-hidden">
@@ -81,12 +177,10 @@ export function MovimientoDeudaCard({ tx, sale, faltantes = [], devoluciones = [
             </span>
           )
         )}
-        {tieneExtra && !expanded && (
-          <span className="flex gap-1 shrink-0">
-            {tieneFaltantes && <Badge variant="outline" className="text-[10px] px-1 py-0 h-4 text-amber-600 border-amber-300">{faltantes.length} faltante{faltantes.length > 1 ? 's' : ''}</Badge>}
-            {tieneDevols && <Badge variant="outline" className="text-[10px] px-1 py-0 h-4 text-purple-600 border-purple-300">{devoluciones.length} devol.</Badge>}
-            {tieneRoturas && <Badge variant="outline" className="text-[10px] px-1 py-0 h-4 text-red-600 border-red-300">rotura</Badge>}
-          </span>
+        {tieneNoEntregados && !expanded && (
+          <Badge variant="outline" className="text-[10px] px-1 py-0 h-4 text-amber-600 border-amber-300 shrink-0">
+            {noEntregados.length} no entregado{noEntregados.length > 1 ? 's' : ''}
+          </Badge>
         )}
         <div className="text-right shrink-0">
           <span className={`text-xs font-bold tabular-nums ${isPayment ? 'text-green-600' : 'text-red-600'}`}>
@@ -107,89 +201,58 @@ export function MovimientoDeudaCard({ tx, sale, faltantes = [], devoluciones = [
       {expandable && expanded && sale && (
         <div className="border-t bg-muted/20 px-3 pb-3 pt-2 space-y-3">
 
-          {/* Productos entregados */}
+          {/* Tabla de productos entregados */}
           <div>
-            <div className="flex items-center gap-1 text-[11px] font-semibold text-muted-foreground mb-1">
-              <Package className="h-3 w-3" />
-              Productos entregados
-            </div>
-            <div className="flex flex-col gap-0.5">
-              {sale.items.map((it, i) => {
-                const subtotal = it.price * it.quantity
-                return (
-                  <div key={i} className="flex items-center gap-1.5 text-[11px]">
-                    {it.esRegalo && (
-                      <Badge className="text-[9px] px-1 py-0 h-3.5 bg-green-100 text-green-700 border-0 shrink-0">REGALO</Badge>
-                    )}
-                    <span className="flex-1 min-w-0 truncate">
-                      {it.quantity}× {it.name}
-                    </span>
-                    {it.itemDiscount && it.itemDiscount > 0 && (
-                      <span className="inline-flex items-center gap-0.5 text-amber-600 shrink-0">
-                        <Tag className="h-2.5 w-2.5" />-{it.itemDiscount}%
-                      </span>
-                    )}
-                    <span className={`tabular-nums shrink-0 ${it.esRegalo ? 'text-green-600' : ''}`}>
-                      {it.esRegalo ? 'GRATIS' : formatCurrencyDecimals(subtotal)}
-                    </span>
-                  </div>
-                )
-              })}
-            </div>
-            <div className="flex justify-between text-[11px] font-semibold pt-1 border-t mt-1">
-              <span>Total venta</span>
-              <span className="tabular-nums">{formatCurrencyDecimals(sale.total)}</span>
-            </div>
-            {sale.discount && sale.discount > 0 && (
-              <div className="flex items-center gap-1 text-[11px] text-amber-600 pt-0.5">
-                <Tag className="h-3 w-3" />
-                Descuento general: {sale.discountType === 'percent' ? `${sale.discount}%` : formatCurrencyDecimals(sale.discount)}
-              </div>
-            )}
-            {tieneRemito ? (
-              <Button
-                variant="outline"
-                size="sm"
-                className="w-full gap-1.5 text-xs mt-2 h-7"
-                onClick={() => descargarRemito(sale)}
-              >
-                <Download className="h-3 w-3" />
-                Remito {sale.remitoNumber}
-              </Button>
-            ) : (
-              <p className="text-[11px] text-muted-foreground text-center mt-1">Sin remito</p>
-            )}
+            <div className="text-[11px] font-semibold text-muted-foreground mb-1">Productos entregados</div>
+            <ItemsTable items={entregados} />
           </div>
 
-          {/* Faltantes de esta entrega */}
-          {tieneFaltantes && (
+          {/* Tabla de no entregados */}
+          {tieneNoEntregados && (
             <div>
               <div className="flex items-center gap-1 text-[11px] font-semibold text-amber-700 mb-1">
                 <AlertTriangle className="h-3 w-3" />
-                No entregados en esta entrega
+                No entregados
               </div>
-              <div className="flex flex-col gap-0.5">
-                {faltantes.map((f) => (
-                  <div key={f.id} className="flex items-center gap-1.5 text-[11px]">
-                    <Badge
-                      variant="outline"
-                      className={`text-[9px] px-1 py-0 h-3.5 shrink-0 ${
-                        f.motivo === 'no_quiso'
-                          ? 'text-orange-600 border-orange-300'
-                          : 'text-amber-600 border-amber-300'
-                      }`}
-                    >
-                      {f.motivo === 'no_quiso' ? 'NO QUISO' : 'FALTÓ'}
-                    </Badge>
-                    <span className="flex-1 min-w-0 truncate">{f.productoNombre}</span>
-                    <span className="tabular-nums shrink-0 text-muted-foreground">{f.cantidad} u.</span>
-                  </div>
-                ))}
-              </div>
+              <ItemsTable items={noEntregados} />
             </div>
           )}
 
-          {/* Devoluciones de esta venta */}
+          {/* Totales */}
+          <div className="border-t pt-2 space-y-0.5 text-[11px]">
+            {totalDescuento > 0 && (
+              <div className="flex justify-between text-muted-foreground">
+                <span className="flex items-center gap-1"><Tag className="h-3 w-3" />Descuento ítem</span>
+                <span className="tabular-nums text-amber-600">-{formatCurrencyDecimals(totalDescuento)}</span>
+              </div>
+            )}
+            {sale.discount && sale.discount > 0 && (
+              <div className="flex justify-between text-muted-foreground">
+                <span className="flex items-center gap-1"><Tag className="h-3 w-3" />
+                  Dto. general {sale.discountType === 'percent' ? `(${sale.discount}%)` : ''}
+                </span>
+                <span className="tabular-nums text-amber-600">
+                  -{formatCurrencyDecimals(
+                    sale.discountType === 'percent'
+                      ? totalEntregado * sale.discount / 100
+                      : sale.discount
+                  )}
+                </span>
+              </div>
+            )}
+            {tieneNoEntregados && (
+              <div className="flex justify-between text-muted-foreground">
+                <span>Total no entregados</span>
+                <span className="tabular-nums text-amber-600">{formatCurrencyDecimals(totalNoEntregado)}</span>
+              </div>
+            )}
+            <div className="flex justify-between font-semibold border-t pt-1 mt-1">
+              <span>TOTAL</span>
+              <span className="tabular-nums">{formatCurrencyDecimals(sale.total)}</span>
+            </div>
+          </div>
+
+          {/* Devoluciones */}
           {tieneDevols && (
             <div>
               <div className="flex items-center gap-1 text-[11px] font-semibold text-purple-700 mb-1">
@@ -217,28 +280,35 @@ export function MovimientoDeudaCard({ tx, sale, faltantes = [], devoluciones = [
             </div>
           )}
 
-          {/* Roturas acreditadas al momento de entrega */}
-          {tieneRoturas && (
-            <div>
-              <div className="flex items-center gap-1 text-[11px] font-semibold text-red-700 mb-1">
-                <PackageX className="h-3 w-3" />
-                Rotura al entregar
-              </div>
-              <div className="flex flex-col gap-0.5">
-                {roturas.map((r) => {
-                  const detalle = r.description.replace(/^\[ROTURA\]\s*#\S+\s*—?\s*/, '')
-                  return (
-                    <div key={r.id} className="flex items-start justify-between gap-2 text-[11px]">
-                      <span className="text-muted-foreground flex-1 min-w-0">{detalle || r.description}</span>
-                      <span className="text-red-600 font-semibold tabular-nums shrink-0">-{formatCurrencyDecimals(Math.abs(r.amount))}</span>
-                    </div>
-                  )
-                })}
-              </div>
-              <div className="text-[10px] text-muted-foreground mt-1">
-                El remito muestra el total original antes de descontar la rotura.
-              </div>
-            </div>
+          {/* Botones */}
+          <div className="flex gap-2 pt-1">
+            {tieneRemito && (
+              <Button
+                variant="outline"
+                size="sm"
+                className="flex-1 gap-1.5 text-xs h-7"
+                onClick={() => descargarRemito(sale)}
+              >
+                <Download className="h-3 w-3" />
+                Remito {sale.remitoNumber}
+              </Button>
+            )}
+            {onRegenerarRemito && (
+              <Button
+                variant="outline"
+                size="sm"
+                className="gap-1.5 text-xs h-7 text-blue-600 border-blue-300 hover:bg-blue-50"
+                onClick={handleRegenerar}
+                disabled={regenerando}
+                title="Regenera el PDF del remito con los ítems y total actuales (sin modificar stock)"
+              >
+                {regenerando ? <Loader2 className="h-3 w-3 animate-spin" /> : <RefreshCw className="h-3 w-3" />}
+                Regenerar remito
+              </Button>
+            )}
+          </div>
+          {!tieneRemito && (
+            <p className="text-[11px] text-muted-foreground text-center">Sin remito</p>
           )}
         </div>
       )}
