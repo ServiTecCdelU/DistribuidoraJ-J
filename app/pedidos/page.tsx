@@ -228,7 +228,16 @@ export default function PedidosPage() {
         const faltantesParaRegistrar = order.items
           .filter((i: any) => excludeProductIds.includes(i.productId))
           .map((i: any) => ({ productId: i.productId, name: i.name, quantity: quantities[i.productId] ?? i.quantity }));
-        const enviados = filteredItems.map((i: any) => i.productId).filter(Boolean);
+        // Incluir tanto los IDs post-reemplazo como los IDs originales para limpiar faltantes
+        // aunque el producto A haya sido reemplazado por B (A faltante sigue en la tabla si solo se quita B).
+        const originalIdsNoExcluidos = order.items
+          .filter((i: any) => !excludeProductIds.includes(i.productId))
+          .map((i: any) => i.productId)
+          .filter(Boolean);
+        const enviados = [...new Set([
+          ...filteredItems.map((i: any) => i.productId),
+          ...originalIdsNoExcluidos,
+        ])].filter(Boolean);
         try {
           if (faltantesParaRegistrar.length > 0) await faltantesApi.registrar(clienteId, faltantesParaRegistrar, order.id);
           if (enviados.length > 0) await faltantesApi.quitar(clienteId, enviados);
@@ -775,6 +784,13 @@ export default function PedidosPage() {
         efectivo_amount: efectivo > 0 ? efectivo : null,
         transferencia_amount: transferencia > 0 ? transferencia : null,
       }).eq("id", sale.id).then(() => {}).catch(() => {});
+
+      // Limpiar del historial de faltantes los productos que sí se entregaron.
+      // Esto complementa el quitar en generateRemito para cubrir ventas directas y ajustes de cobro.
+      if (resolvedClientId && adjustedItems.length > 0) {
+        const entregadosIds = adjustedItems.map((i: any) => i.productId).filter(Boolean);
+        faltantesApi.quitar(resolvedClientId, entregadosIds).catch(() => {});
+      }
 
       // Guardar items no entregados (con precio completo) en la venta
       if (adjustments.length > 0) {
