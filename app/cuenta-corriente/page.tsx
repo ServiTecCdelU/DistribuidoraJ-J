@@ -1199,15 +1199,13 @@ tr{page-break-inside:avoid}
                         <TableHead>Cliente</TableHead>
                         <TableHead>Vendedor</TableHead>
                         <TableHead className="text-right">Deuda</TableHead>
-                        <TableHead className="text-right">Límite</TableHead>
-                        <TableHead className="text-center">% Usado</TableHead>
+
                         <TableHead className="text-center">Estado</TableHead>
                         <TableHead className="text-center">Comprobantes</TableHead>
                       </TableRow>
                     </TableHeader>
                     <TableBody>
                       {paginatedClients.map((c) => {
-                        const pct = c.creditLimit > 0 ? Math.round((c.currentBalance / c.creditLimit) * 100) : 100
                         const clientPending = comprobantes.filter((comp) => comp.clientId === c.id && comp.status === 'pending')
                         return (
                           <TableRow
@@ -1226,12 +1224,6 @@ tr{page-break-inside:avoid}
                               ) : (
                                 <Badge className="bg-green-100 text-green-700 text-xs"><CheckCircle2 className="h-3 w-3 mr-1" />Cancelada</Badge>
                               )}
-                            </TableCell>
-                            <TableCell className="text-right text-sm">{formatCurrency(c.creditLimit)}</TableCell>
-                            <TableCell className="text-center">
-                              <Badge variant={c.currentBalance === 0 ? 'outline' : pct >= 90 ? 'destructive' : pct >= 70 ? 'secondary' : 'outline'} className={c.currentBalance === 0 ? 'text-green-600' : ''}>
-                                {pct}%
-                              </Badge>
                             </TableCell>
                             <TableCell className="text-center">
                               {classificationBadge(c.debtClassification ?? 'normal')}

@@ -745,12 +745,7 @@ export function useCart(role: UserRole, userEmail?: string, externalProducts?: P
         if (deliveryAddress === "new" && !newAddress.trim()) return false;
       }
       if ((paymentType === "credit" || paymentType === "mixed") && !selectedClientData) return false;
-      if (selectedClientData && (paymentType === "credit" || paymentType === "mixed")) {
-        const amountToCredit = paymentType === "credit" ? finalTotal : creditAmountInput;
-        if (selectedClientData.currentBalance + amountToCredit > selectedClientData.creditLimit) {
-          return false;
-        }
-      }
+
       if (paymentType === "mixed" && (cashAmount <= 0 || cashAmount >= finalTotal)) return false;
     } else if (role === "seller") {
       if (deliveryMethod === "delivery" && deliveryAddress === "new" && !newAddress.trim()) return false;
