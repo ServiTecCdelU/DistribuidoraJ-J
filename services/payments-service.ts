@@ -1,12 +1,14 @@
 import { supabase } from '@/lib/supabase'
 import type { Transaction } from '@/lib/types'
 import { generateReadableId } from '@/services/supabase-helpers'
+import { imputarADeuda, imputarFIFO } from '@/lib/utils/saldo-imputacion'
 
 // Baja el saldo de las deudas (remitos/ventas) del cliente.
 // - Con debtTxId: imputa el pago a ESA deuda puntual.
 // - Sin debtTxId: FIFO — cancela las deudas más antiguas primero.
 // Las deudas legacy (saldo null, sin backfill) no se tocan.
-const aplicarPagoADeudas = async (
+// Exportada para reutilizar en devoluciones (que también bajan saldos).
+export const aplicarPagoADeudas = async (
   clientId: string,
   cuenta: 'minorista' | 'mayorista',
   amount: number,
@@ -20,7 +22,7 @@ const aplicarPagoADeudas = async (
       .single()
     if (!debt) return
     const saldoActual = debt.saldo != null ? Number(debt.saldo) : Number(debt.amount)
-    const nuevoSaldo = Math.max(0, saldoActual - amount)
+    const nuevoSaldo = imputarADeuda(saldoActual, amount)
     await supabase.from('transacciones').update({ saldo: nuevoSaldo }).eq('id', debtTxId)
     return
   }
@@ -34,13 +36,8 @@ const aplicarPagoADeudas = async (
     .or(cuenta === 'minorista' ? 'cuenta.eq.minorista,cuenta.is.null' : 'cuenta.eq.mayorista')
     .order('date', { ascending: true })
 
-  let restante = amount
-  for (const d of debts ?? []) {
-    if (restante <= 0) break
-    const saldo = Number(d.saldo) || 0
-    const aplicado = Math.min(saldo, restante)
-    await supabase.from('transacciones').update({ saldo: saldo - aplicado }).eq('id', d.id)
-    restante -= aplicado
+  for (const upd of imputarFIFO(debts ?? [], amount)) {
+    await supabase.from('transacciones').update({ saldo: upd.nuevoSaldo }).eq('id', upd.id)
   }
 }
 

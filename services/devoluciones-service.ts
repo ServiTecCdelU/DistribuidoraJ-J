@@ -9,6 +9,7 @@
 import { supabase } from '@/lib/supabase'
 import { generateReadableId } from '@/services/supabase-helpers'
 import { registrarMovimiento } from '@/services/stock-service'
+import { aplicarPagoADeudas } from '@/services/payments-service'
 
 export interface DevolucionItem {
   productId: string
@@ -143,6 +144,22 @@ export async function registrarDevolucion(data: {
       cuenta: 'minorista',
       sale_id: data.saleId ?? null,
     })
+
+    // Bajar el saldo del remito de esta venta (igual que un pago), para que
+    // el detalle (Σ saldos) coincida con current_balance arriba y en el listado.
+    // Imputa a la deuda de esta venta; si no la encuentra, FIFO.
+    let debtTxId: string | undefined
+    if (data.saleId) {
+      const { data: deudaVenta } = await supabase
+        .from('transacciones')
+        .select('id')
+        .eq('sale_id', data.saleId)
+        .eq('type', 'debt')
+        .limit(1)
+        .maybeSingle()
+      debtTxId = deudaVenta?.id
+    }
+    await aplicarPagoADeudas(data.clientId, 'minorista', total, debtTxId)
   }
 
   // 3. Comisión del vendedor: bajar running totals (la lista se deriva con devoluciones negativas)
