@@ -76,6 +76,7 @@ import {
   deleteOrder,
   deleteRemitoFromOrder,
   setClientOrdersHeld,
+  setOrderHeld,
 } from '@/services/orders-service'
 import {
   getDashboardStats,
@@ -362,6 +363,9 @@ export const ordersApi = {
   },
   async setClientOrdersHeld(clientName: string, held: boolean): Promise<void> {
     return setClientOrdersHeld(clientName, held)
+  },
+  async setOrderHeld(id: string, held: boolean): Promise<void> {
+    return setOrderHeld(id, held)
   },
   async createOrder(data: {
     clientId: string

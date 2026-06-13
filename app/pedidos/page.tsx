@@ -88,41 +88,38 @@ export default function PedidosPage() {
 
   const [generandoExcel, setGenerandoExcel] = useState(false);
 
-  // Pedidos retenidos (no avanzan con "Todos a...")
-  const [heldClients, setHeldClients] = useState<Set<string>>(new Set());
+  // Pedidos retenidos (no avanzan con "Todos a...") — por id de pedido
+  const [heldOrderIds, setHeldOrderIds] = useState<Set<string>>(new Set());
   // Confirmación de eliminación de pedido(s)
   const [pendingDelete, setPendingDelete] = useState<{ ids: string[]; label: string } | null>(null);
 
-  const toggleHeldClient = useCallback((clientName: string) => {
+  const toggleHeldOrder = useCallback((orderId: string, clientName: string) => {
     let willHold = false;
-    setHeldClients(prev => {
+    setHeldOrderIds(prev => {
       const next = new Set(prev);
-      if (next.has(clientName)) { next.delete(clientName); willHold = false; }
-      else { next.add(clientName); willHold = true; }
+      if (next.has(orderId)) { next.delete(orderId); willHold = false; }
+      else { next.add(orderId); willHold = true; }
       return next;
     });
     // Persistir en BD para que otros admins lo vean y no avance aunque pase el tiempo
-    ordersApi.setClientOrdersHeld(clientName, willHold).catch(() => {
+    ordersApi.setOrderHeld(orderId, willHold).catch(() => {
       toast.error("No se pudo guardar el estado retenido");
     });
-    // Al retener, ofrecer eliminar el pedido (modal del sistema)
+    // Al retener, ofrecer eliminar ese pedido (modal del sistema)
     if (willHold) {
-      const toDelete = orders.filter((o) => (o.clientName || "Sin cliente") === clientName && o.status !== "completed");
-      if (toDelete.length > 0) {
-        setPendingDelete({ ids: toDelete.map((o) => o.id), label: clientName });
-      }
+      setPendingDelete({ ids: [orderId], label: clientName });
     }
-  }, [orders]);
+  }, []);
 
-  // Selección de clientes para acciones en lote
-  const [selectedClients, setSelectedClients] = useState<Set<string>>(new Set());
+  // Selección de pedidos para acciones en lote — por id de pedido
+  const [selectedOrderIds, setSelectedOrderIds] = useState<Set<string>>(new Set());
   // Días tildados con el checkbox de día (para exportar/listar solo esos días)
   const [selectedDays, setSelectedDays] = useState<Set<string>>(new Set());
 
-  const toggleSelectedClient = useCallback((clientName: string) => {
-    setSelectedClients(prev => {
+  const toggleSelectedOrder = useCallback((orderId: string) => {
+    setSelectedOrderIds(prev => {
       const next = new Set(prev);
-      if (next.has(clientName)) next.delete(clientName); else next.add(clientName);
+      if (next.has(orderId)) next.delete(orderId); else next.add(orderId);
       return next;
     });
   }, []);
@@ -158,9 +155,9 @@ export default function PedidosPage() {
       setOrders(sortedOrders);
       // Reconstruir retenidos desde la BD (held) para que persistan entre admins y recargas
       const heldFromDb = new Set(
-        sortedOrders.filter((o) => o.held && o.status !== "completed").map((o) => o.clientName || "Sin cliente")
+        sortedOrders.filter((o) => o.held && o.status !== "completed").map((o) => o.id)
       );
-      setHeldClients(heldFromDb);
+      setHeldOrderIds(heldFromDb);
     } catch (error) {
       if (isMounted && !isMounted()) return;
       toast.error("Error al cargar pedidos");
@@ -441,7 +438,7 @@ export default function PedidosPage() {
     try {
       await Promise.all(ids.map((id) => ordersApi.deleteOrder(id)));
       setOrders((prev) => prev.filter((o) => !ids.includes(o.id)));
-      setHeldClients((prev) => { const n = new Set(prev); n.delete(label); return n; });
+      setHeldOrderIds((prev) => { const n = new Set(prev); ids.forEach((id) => n.delete(id)); return n; });
       setActiveModal(null);
       setDetailOrder(null);
       toast.success(ids.length > 1 ? "Pedidos eliminados" : "Pedido eliminado");
@@ -508,13 +505,12 @@ export default function PedidosPage() {
           const exists = prev.some((o) => o.id === order.id);
           return exists ? prev.map((o) => (o.id === order.id ? order : o)) : [order, ...prev];
         });
-        setHeldClients((prev) => {
-          const name = order.clientName || "Sin cliente";
-          if (order.held && order.status !== "completed") {
-            if (prev.has(name)) return prev;
-            const next = new Set(prev); next.add(name); return next;
-          }
-          return prev;
+        setHeldOrderIds((prev) => {
+          const isHeld = order.held && order.status !== "completed";
+          if (isHeld === prev.has(order.id)) return prev;
+          const next = new Set(prev);
+          if (isHeld) next.add(order.id); else next.delete(order.id);
+          return next;
         });
       })
       .subscribe();
@@ -1039,8 +1035,8 @@ export default function PedidosPage() {
         // actual, sin importar el día de cada pedido. La UI agrupa los pedidos de un cliente del
         // mismo estado en una sola fila bajo un único día; filtrar por createdAt acá dejaría afuera
         // pedidos de otros días que la fila sí muestra (ej: fernet de un pedido de otro día).
-        if (selectedClients.size > 0) {
-          if (!selectedClients.has(o.clientName || "Sin cliente")) return false;
+        if (selectedOrderIds.size > 0) {
+          if (!selectedOrderIds.has(o.id)) return false;
         } else if (selectedDays.size > 0 && !selectedDays.has(toLocalDay(o.createdAt))) {
           return false;
         }
@@ -1079,7 +1075,7 @@ export default function PedidosPage() {
       }
 
       if (acum.size === 0) {
-        toast.info(selectedClients.size > 0 ? "No hay pedidos en la selección" : "No hay pedidos activos para descargar");
+        toast.info(selectedOrderIds.size > 0 ? "No hay pedidos en la selección" : "No hay pedidos activos para descargar");
         return;
       }
 
@@ -1216,7 +1212,7 @@ tfoot td{border-top:2px solid #1f4e78;background:#f2f2f2;font-weight:700;font-si
     } finally {
       setGenerandoExcel(false);
     }
-  }, [orders, selectedClients, selectedDays, filterStatus, filterClient, filterSeller, filterDate]);
+  }, [orders, selectedOrderIds, selectedDays, filterStatus, filterClient, filterSeller, filterDate]);
 
 
   const clearFilters = useCallback(() => {
@@ -1411,14 +1407,6 @@ tfoot td{border-top:2px solid #1f4e78;background:#f2f2f2;font-weight:700;font-si
     [sellers]
   );
 
-  const toggleOrder = useCallback((id: string) => {
-    setSelectedOrderIds(prev => {
-      const next = new Set(prev);
-      if (next.has(id)) next.delete(id); else next.add(id);
-      return next;
-    });
-  }, []);
-
   const [movingAll, setMovingAll] = useState(false);
 
   // Precio actual de un item segun el mapa (soporta ids mayorista mp_ y prod_mp_)
@@ -1476,7 +1464,7 @@ tfoot td{border-top:2px solid #1f4e78;background:#f2f2f2;font-weight:700;font-si
   }, [outdatedPriceOrders, getCurrentPrice]);
 
   const handleMoveAll = useCallback(async (from: OrderStatus, to: OrderStatus) => {
-    let toMove = orders.filter((o) => o.status === from && !heldClients.has(o.clientName || "Sin cliente"));
+    let toMove = orders.filter((o) => o.status === from && !heldOrderIds.has(o.id));
     // Remito obligatorio para pasar a reparto: los pedidos sin remito no avanzan
     if (to === "delivery") {
       const sinRemito = toMove.filter((o) => !o.remitoNumber).length;
@@ -1494,7 +1482,7 @@ tfoot td{border-top:2px solid #1f4e78;background:#f2f2f2;font-weight:700;font-si
       await Promise.all(toMove.map((o) => ordersApi.updateStatus(o.id, to)));
       await loadData();
       const label = to === "preparation" ? "preparación" : to === "delivery" ? "reparto" : "pendiente";
-      const heldCount = orders.filter((o) => o.status === from && heldClients.has(o.clientName || "Sin cliente")).length;
+      const heldCount = orders.filter((o) => o.status === from && heldOrderIds.has(o.id)).length;
       const msg = heldCount > 0
         ? `${toMove.length} pedidos pasados a ${label} (${heldCount} retenidos)`
         : `${toMove.length} pedidos pasados a ${label}`;
@@ -1504,11 +1492,11 @@ tfoot td{border-top:2px solid #1f4e78;background:#f2f2f2;font-weight:700;font-si
     } finally {
       setMovingAll(false);
     }
-  }, [orders, heldClients, loadData]);
+  }, [orders, heldOrderIds, loadData]);
 
   const handleMoveSelected = useCallback(async (from: OrderStatus, to: OrderStatus) => {
     let toMove = orders.filter(
-      (o) => o.status === from && selectedClients.has(o.clientName || "Sin cliente")
+      (o) => o.status === from && selectedOrderIds.has(o.id)
     );
     // Remito obligatorio para pasar a reparto
     if (to === "delivery") {
@@ -1528,14 +1516,14 @@ tfoot td{border-top:2px solid #1f4e78;background:#f2f2f2;font-weight:700;font-si
       await loadData();
       const label = to === "preparation" ? "preparación" : to === "delivery" ? "reparto" : to;
       toast.success(`${toMove.length} pedido(s) pasados a ${label}`);
-      setSelectedClients(new Set());
+      setSelectedOrderIds(new Set());
       setSelectedDays(new Set());
     } catch {
       toast.error("Error al mover pedidos");
     } finally {
       setMovingAll(false);
     }
-  }, [orders, selectedClients, loadData]);
+  }, [orders, selectedOrderIds, loadData]);
 
   const printHtml = useCallback((html: string) => {
     const iframe = document.createElement("iframe");
@@ -1600,9 +1588,9 @@ th.center,td.center{text-align:center}
     // pedido no aparece ni suma (evita mostrar remitos/montos que ya no van).
     html += `<div class="section"><div class="section-title">Entregas por Cliente</div>`;
     ordersGroupedByClient
-      .filter(({ client }) => !heldClients.has(client))
-      .filter(({ client }) => selectedClients.size === 0 || selectedClients.has(client))
-      .map(({ client, orders }) => ({ client, orders: orders.filter((o) => o.remitoNumber) }))
+      .filter(({ orders }) => orders.some((o) => !heldOrderIds.has(o.id)))
+      .filter(({ orders }) => selectedOrderIds.size === 0 || orders.some((o) => selectedOrderIds.has(o.id)))
+      .map(({ client, orders }) => ({ client, orders: orders.filter((o) => o.remitoNumber && !heldOrderIds.has(o.id) && (selectedOrderIds.size === 0 || selectedOrderIds.has(o.id))) }))
       .filter(({ orders }) => orders.length > 0)
       .forEach(({ client, orders: clientOrders }) => {
       const firstOrder = clientOrders[0];
@@ -1634,7 +1622,7 @@ th.center,td.center{text-align:center}
     });
     html += `</div><div class="footer">Generado el ${stampStr}</div></body></html>`;
     printHtml(html);
-  }, [ordersGroupedByClient, clients, heldClients, selectedClients, printHtml]);
+  }, [ordersGroupedByClient, clients, heldOrderIds, selectedOrderIds, printHtml]);
 
 
   if (!mounted) {
@@ -1660,13 +1648,13 @@ th.center,td.center{text-align:center}
     ? { from: "delivery" as OrderStatus, to: "preparation" as OrderStatus, label: "preparación" }
     : null;
 
-  const toggleDaySelection = (dayGroups: { client: string }[], dayKey: string) => {
-    const clientsOfDay = dayGroups.map((g) => g.client);
-    const allSel = clientsOfDay.every((c) => selectedClients.has(c));
-    setSelectedClients((prev) => {
+  const toggleDaySelection = (dayGroups: { orders: Order[] }[], dayKey: string) => {
+    const idsOfDay = dayGroups.flatMap((g) => g.orders.map((o) => o.id));
+    const allSel = idsOfDay.length > 0 && idsOfDay.every((id) => selectedOrderIds.has(id));
+    setSelectedOrderIds((prev) => {
       const next = new Set(prev);
-      if (allSel) clientsOfDay.forEach((c) => next.delete(c));
-      else clientsOfDay.forEach((c) => next.add(c));
+      if (allSel) idsOfDay.forEach((id) => next.delete(id));
+      else idsOfDay.forEach((id) => next.add(id));
       return next;
     });
     setSelectedDays((prev) => {
@@ -1776,7 +1764,7 @@ th.center,td.center{text-align:center}
             <span className="hidden sm:inline">Descargar Pedido</span>
           </Button>
         )}
-        {selectedClients.size > 0 && selBack && (
+        {selectedOrderIds.size > 0 && selBack && (
           <Button
             variant="outline"
             size="sm"
@@ -1785,10 +1773,10 @@ th.center,td.center{text-align:center}
             className="gap-2 border-slate-300 text-slate-700 hover:bg-slate-50"
           >
             {movingAll ? <Loader2 className="h-4 w-4 animate-spin" /> : <ArrowLeftCircle className="h-4 w-4" />}
-            <span>Volver {selectedClients.size} a {selBack.label}</span>
+            <span>Volver {selectedOrderIds.size} a {selBack.label}</span>
           </Button>
         )}
-        {selectedClients.size > 0 && filterStatus !== "delivery" && (
+        {selectedOrderIds.size > 0 && filterStatus !== "delivery" && (
           <Button
             size="sm"
             onClick={() => handleMoveSelected(selMove.from, selMove.to)}
@@ -1796,10 +1784,10 @@ th.center,td.center{text-align:center}
             className="gap-2 bg-teal-600 hover:bg-teal-700 text-white"
           >
             {movingAll ? <Loader2 className="h-4 w-4 animate-spin" /> : <ArrowRightCircle className="h-4 w-4" />}
-            <span>Pasar {selectedClients.size} a {selMove.label}</span>
+            <span>Pasar {selectedOrderIds.size} a {selMove.label}</span>
           </Button>
         )}
-        {filterStatus === "pending" && filteredOrders.length > 0 && selectedClients.size === 0 && (
+        {filterStatus === "pending" && filteredOrders.length > 0 && selectedOrderIds.size === 0 && (
           <Button
             variant="outline"
             size="sm"
@@ -1811,7 +1799,7 @@ th.center,td.center{text-align:center}
             <span className="hidden sm:inline">Todos a preparación</span>
           </Button>
         )}
-        {filterStatus === "preparation" && filteredOrders.length > 0 && selectedClients.size === 0 && (
+        {filterStatus === "preparation" && filteredOrders.length > 0 && selectedOrderIds.size === 0 && (
           <Button
             variant="outline"
             size="sm"
@@ -1823,7 +1811,7 @@ th.center,td.center{text-align:center}
             <span className="hidden sm:inline">Todos a reparto</span>
           </Button>
         )}
-        {selBack && filteredOrders.length > 0 && selectedClients.size === 0 && (
+        {selBack && filteredOrders.length > 0 && selectedOrderIds.size === 0 && (
           <Button
             variant="outline"
             size="sm"
@@ -1856,9 +1844,9 @@ th.center,td.center{text-align:center}
         <div className="space-y-3">
           {ordersGroupedByDate.map((day) => {
             const isExpanded = expandedDays.has(day.key) || ordersGroupedByDate.length === 1;
-            const dayClients = day.groups.map((g) => g.client);
-            const daySelectedCount = dayClients.filter((c) => selectedClients.has(c)).length;
-            const dayAllSelected = dayClients.length > 0 && daySelectedCount === dayClients.length;
+            const dayOrderIds = day.groups.flatMap((g) => g.orders.map((o) => o.id));
+            const daySelectedCount = dayOrderIds.filter((id) => selectedOrderIds.has(id)).length;
+            const dayAllSelected = dayOrderIds.length > 0 && daySelectedCount === dayOrderIds.length;
 
             return (
               <div key={day.key} className="border rounded-2xl overflow-hidden shadow-sm">
@@ -1904,8 +1892,9 @@ th.center,td.center{text-align:center}
                         <tbody className="divide-y">
                           {day.groups.map(({ client, groupKey, orders: clientOrders }) => {
                             const { mergedItems, displayOrder, config, onView, deuda, clasificacion, codigo } = computeRow(clientOrders);
-                            const isHeld = heldClients.has(client);
-                            const isSelected = selectedClients.has(client);
+                            const orderId = clientOrders[0].id;
+                            const isHeld = heldOrderIds.has(orderId);
+                            const isSelected = selectedOrderIds.has(orderId);
 
                             return (
                               <tr key={groupKey} className={`transition-colors text-sm cursor-pointer ${isHeld ? "bg-red-50/60 opacity-60" : isSelected ? "bg-teal-50/60" : "hover:bg-muted/30"}`} onClick={onView}>
@@ -1913,14 +1902,14 @@ th.center,td.center{text-align:center}
                                   <input
                                     type="checkbox"
                                     checked={isSelected}
-                                    onChange={() => toggleSelectedClient(client)}
+                                    onChange={() => toggleSelectedOrder(orderId)}
                                     className="h-4 w-4 accent-teal-600 cursor-pointer align-middle"
                                     title="Seleccionar"
                                   />
                                 </td>
                                 <td className="px-2 py-2.5 text-center" onClick={(e) => e.stopPropagation()}>
                                   <button
-                                    onClick={() => toggleHeldClient(client)}
+                                    onClick={() => toggleHeldOrder(orderId, client)}
                                     className={`p-1 rounded-full transition-colors ${isHeld ? "text-red-500 bg-red-100 hover:bg-red-200" : "text-muted-foreground/40 hover:text-red-400 hover:bg-red-50"}`}
                                     title={isHeld ? "Quitar retención" : "Retener pedido"}
                                   >
@@ -1993,8 +1982,9 @@ th.center,td.center{text-align:center}
                     <div className="lg:hidden divide-y border-t">
                       {day.groups.map(({ client, groupKey, orders: clientOrders }) => {
                         const { mergedItems, displayOrder, config, onView, deuda, clasificacion, codigo, clientPhone } = computeRow(clientOrders);
-                        const isHeld = heldClients.has(client);
-                        const isSelected = selectedClients.has(client);
+                        const orderId = clientOrders[0].id;
+                        const isHeld = heldOrderIds.has(orderId);
+                        const isSelected = selectedOrderIds.has(orderId);
                         const notas = clientOrders.map((o) => o.notes?.trim()).filter(Boolean);
                         const deudaColor = clasificacion === "moroso" ? "text-red-600" : clasificacion === "incobrable" ? "text-red-800" : "text-amber-600";
 
@@ -2064,14 +2054,14 @@ th.center,td.center{text-align:center}
                               <input
                                 type="checkbox"
                                 checked={isSelected}
-                                onChange={() => toggleSelectedClient(client)}
+                                onChange={() => toggleSelectedOrder(orderId)}
                                 className="h-4 w-4 accent-teal-600 cursor-pointer align-middle"
                                 title="Seleccionar"
                               />
                             </div>
                             <div className="shrink-0" onClick={(e) => e.stopPropagation()}>
                               <button
-                                onClick={() => toggleHeldClient(client)}
+                                onClick={() => toggleHeldOrder(orderId, client)}
                                 className={`p-1 rounded-full transition-colors ${isHeld ? "text-red-500 bg-red-100" : "text-muted-foreground/40 hover:text-red-400"}`}
                               >
                                 <Ban className="h-3.5 w-3.5" />

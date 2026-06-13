@@ -193,6 +193,15 @@ export const setClientOrdersHeld = async (clientName: string, held: boolean): Pr
   if (error) throw error
 }
 
+// Marca/desmarca como retenido UN pedido puntual (persistente en BD)
+export const setOrderHeld = async (id: string, held: boolean): Promise<void> => {
+  const { error } = await supabase
+    .from('pedidos')
+    .update({ held })
+    .eq('id', id)
+  if (error) throw error
+}
+
 export const saveRemitoToOrder = async (id: string, remitoNumber: string, remitoPdfBase64: string): Promise<Order> => {
   const { data } = await supabase
     .from('pedidos')
