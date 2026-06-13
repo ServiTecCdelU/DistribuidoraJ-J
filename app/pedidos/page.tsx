@@ -24,6 +24,7 @@ import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { statusConfig } from "@/lib/order-constants";
 import { formatCurrency as formatPrice } from "@/lib/utils/format";
 import { salidasRemito, reconciliarCobro, reposicionEliminarRemito } from "@/lib/utils/stock-remito";
+import { ordersToMoveAll, ordersToMoveSelected } from "@/lib/utils/order-move";
 
 export const generateOrderNumber = (date: Date, index: number) => {
   const d = new Date(date);
@@ -1464,14 +1465,9 @@ tfoot td{border-top:2px solid #1f4e78;background:#f2f2f2;font-weight:700;font-si
   }, [outdatedPriceOrders, getCurrentPrice]);
 
   const handleMoveAll = useCallback(async (from: OrderStatus, to: OrderStatus) => {
-    let toMove = orders.filter((o) => o.status === from && !heldOrderIds.has(o.id));
-    // Remito obligatorio para pasar a reparto: los pedidos sin remito no avanzan
-    if (to === "delivery") {
-      const sinRemito = toMove.filter((o) => !o.remitoNumber).length;
-      toMove = toMove.filter((o) => o.remitoNumber);
-      if (sinRemito > 0) {
-        toast.warning(`${sinRemito} pedido(s) sin remito no pasan a reparto. El remito es obligatorio.`);
-      }
+    const { toMove, sinRemito } = ordersToMoveAll(orders, from, to, heldOrderIds);
+    if (sinRemito > 0) {
+      toast.warning(`${sinRemito} pedido(s) sin remito no pasan a reparto. El remito es obligatorio.`);
     }
     if (toMove.length === 0) {
       toast.info("No hay pedidos para mover (retenidos o sin remito)");
@@ -1495,16 +1491,9 @@ tfoot td{border-top:2px solid #1f4e78;background:#f2f2f2;font-weight:700;font-si
   }, [orders, heldOrderIds, loadData]);
 
   const handleMoveSelected = useCallback(async (from: OrderStatus, to: OrderStatus) => {
-    let toMove = orders.filter(
-      (o) => o.status === from && selectedOrderIds.has(o.id)
-    );
-    // Remito obligatorio para pasar a reparto
-    if (to === "delivery") {
-      const sinRemito = toMove.filter((o) => !o.remitoNumber).length;
-      toMove = toMove.filter((o) => o.remitoNumber);
-      if (sinRemito > 0) {
-        toast.warning(`${sinRemito} pedido(s) sin remito no pasan a reparto. El remito es obligatorio.`);
-      }
+    const { toMove, sinRemito } = ordersToMoveSelected(orders, from, to, selectedOrderIds);
+    if (sinRemito > 0) {
+      toast.warning(`${sinRemito} pedido(s) sin remito no pasan a reparto. El remito es obligatorio.`);
     }
     if (toMove.length === 0) {
       toast.info("No hay pedidos seleccionados para mover");
