@@ -20,6 +20,8 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
 import { clientsApi, sellersApi } from '@/lib/api'
+import { useAuth } from '@/hooks/use-auth'
+import { recordAudit } from '@/lib/audit'
 import {
   Select,
   SelectContent,
@@ -59,6 +61,7 @@ import { toast } from 'sonner'
 import { getAuthToken } from '@/services/auth-service'
 
 export default function ClientesPage() {
+  const { user } = useAuth()
   const [clients, setClients] = useState<Client[]>([])
   const [sellers, setSellers] = useState<{ id: string; name: string }[]>([])
   const [loading, setLoading] = useState(true)
@@ -160,6 +163,9 @@ export default function ClientesPage() {
       const updated = await clientsApi.update(selectedClient.id, { sellerId: sellerId || undefined })
       setClients((prev) => prev.map((c) => (c.id === updated.id ? updated : c)))
       setSelectedClient(updated)
+      recordAudit(user, 'client_updated',
+        sellerId ? `Asignó vendedor a "${updated.name}"` : `Quitó vendedor a "${updated.name}"`,
+        { type: 'cliente', id: updated.id })
       toast.success(sellerId ? 'Vendedor asignado' : 'Vendedor quitado')
     } catch {
       toast.error('Error al asignar vendedor')
@@ -171,10 +177,12 @@ export default function ClientesPage() {
       if (editingClient) {
         const updated = await clientsApi.update(editingClient.id, clientData)
         setClients(clients.map(c => c.id === editingClient.id ? updated : c))
+        recordAudit(user, 'client_updated', `Editó el cliente "${updated.name}"`, { type: 'cliente', id: updated.id })
         toast.success('Cliente actualizado correctamente')
       } else {
         const newClient = await clientsApi.create(clientData)
         setClients([newClient, ...clients])
+        recordAudit(user, 'client_created', `Creó el cliente "${newClient.name}"`, { type: 'cliente', id: newClient.id })
         toast.success('Cliente creado correctamente')
       }
       setModalOpen(false)

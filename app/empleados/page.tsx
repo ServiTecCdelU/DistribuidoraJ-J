@@ -26,6 +26,8 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
 import { sellersApi, ordersApi } from '@/lib/api'
+import { useAuth } from '@/hooks/use-auth'
+import { recordAudit } from '@/lib/audit'
 import type { Seller, SellerCommission, EmployeeType, Order } from '@/lib/types'
 import { formatCurrency, formatDate } from '@/lib/utils/format'
 import { statusConfig } from '@/lib/order-constants'
@@ -69,6 +71,7 @@ const EMPLOYEE_TYPE_BADGE: Record<EmployeeType, string> = {
 }
 
 export default function EmpleadosPage() {
+  const { user } = useAuth()
   const [sellers, setSellers] = useState<Seller[]>([])
   const [loading, setLoading] = useState(true)
   const [searchQuery, setSearchQuery] = useState('')
@@ -217,6 +220,7 @@ export default function EmpleadosPage() {
     try {
       await sellersApi.delete(sellerToDelete.id)
       setSellers(sellers.filter(s => s.id !== sellerToDelete.id))
+      recordAudit(user, 'seller_deleted', `Eliminó al empleado "${sellerToDelete.name}"`, { type: 'vendedor', id: sellerToDelete.id })
       toast.success('Empleado eliminado correctamente')
     } catch (error: any) {
       toast.error(error.message || 'Error al eliminar empleado')
@@ -253,10 +257,12 @@ export default function EmpleadosPage() {
       if (editingSeller) {
         const updated = await sellersApi.update(editingSeller.id, payload)
         setSellers(sellers.map(s => s.id === editingSeller.id ? updated : s))
+        recordAudit(user, 'seller_updated', `Editó al empleado "${updated.name}"`, { type: 'vendedor', id: updated.id })
         toast.success('Empleado actualizado correctamente')
       } else {
         const newSeller = await sellersApi.create(payload)
         setSellers([newSeller, ...sellers])
+        recordAudit(user, 'seller_created', `Creó al empleado "${newSeller.name}"`, { type: 'vendedor', id: newSeller.id })
         toast.success('Empleado creado correctamente')
       }
       setModalOpen(false)

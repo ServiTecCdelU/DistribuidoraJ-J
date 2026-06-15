@@ -14,6 +14,7 @@ export const logAudit = async (entry: {
 }) => {
   try {
     const docId = await generateReadableId('auditoria', 'auditoria', entry.userName)
+    // getAuditLog lee la descripción desde details.description, así que la guardamos ahí.
     await supabase.from('auditoria').insert({
       id: docId,
       action: entry.action,
@@ -21,7 +22,7 @@ export const logAudit = async (entry: {
       user_email: entry.userName,
       entity_type: entry.entityType ?? null,
       entity_id: entry.entityId ?? null,
-      details: entry.metadata ?? null,
+      details: { description: entry.description, ...(entry.metadata ?? {}) },
     })
   } catch (error) {
     console.error("[Audit] Error logging:", error)

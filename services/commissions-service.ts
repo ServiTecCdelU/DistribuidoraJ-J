@@ -1,5 +1,6 @@
 import { supabase } from '@/lib/supabase'
 import type { SellerCommission } from '@/lib/types'
+import { buildSellerCommissions } from '@/lib/utils/commissions'
 
 /**
  * Deriva comisiones desde la tabla `ventas` (source of truth).
@@ -35,54 +36,19 @@ export const getCommissionsBySeller = async (sellerId: string): Promise<SellerCo
 
   const paidCutoff = ultimoPago?.created_at ? new Date(ultimoPago.created_at) : null
 
-  const ventaEntries: SellerCommission[] = ventas.map((v) => {
-    const saleTotal = Number(v.total) || 0
-    const commissionAmount = saleTotal * (commissionRate / 100)
-    const createdAt = new Date(v.created_at)
-    const isPaid = paidCutoff ? createdAt <= paidCutoff : false
-
-    return {
-      id: v.id,
-      sellerId,
-      saleId: v.id,
-      saleNumber: v.sale_number ?? undefined,
-      clientName: v.client_name ?? undefined,
-      saleTotal,
-      commissionRate,
-      commissionAmount,
-      isPaid,
-      paidAt: isPaid && paidCutoff ? paidCutoff : undefined,
-      createdAt,
-    }
-  })
-
   // Devoluciones: descuentan comisión como entradas negativas
   const { data: devoluciones } = await supabase
     .from('devoluciones')
     .select('id, sale_id, sale_number, client_name, total, commission_amount, commission_rate, created_at')
     .eq('seller_id', sellerId)
 
-  const devEntries: SellerCommission[] = (devoluciones ?? []).map((d) => {
-    const createdAt = new Date(d.created_at)
-    const isPaid = paidCutoff ? createdAt <= paidCutoff : false
-    return {
-      id: d.id,
-      sellerId,
-      saleId: d.sale_id ?? d.id,
-      saleNumber: d.sale_number ? `Devolución #${d.sale_number}` : 'Devolución',
-      clientName: d.client_name ?? undefined,
-      saleTotal: -(Number(d.total) || 0),
-      commissionRate: Number(d.commission_rate) || commissionRate,
-      commissionAmount: -(Number(d.commission_amount) || 0),
-      isPaid,
-      paidAt: isPaid && paidCutoff ? paidCutoff : undefined,
-      createdAt,
-    }
+  return buildSellerCommissions({
+    sellerId,
+    commissionRate,
+    ventas: ventas ?? [],
+    devoluciones: devoluciones ?? [],
+    paidCutoff,
   })
-
-  return [...ventaEntries, ...devEntries].sort(
-    (a, b) => b.createdAt.getTime() - a.createdAt.getTime(),
-  )
 }
 
 export const getCommissionSummaryBySeller = async (sellerId: string) => {

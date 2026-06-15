@@ -128,14 +128,62 @@ export const deleteSeller = async (id: string): Promise<void> => {
 export { getCommissionsBySeller as getSellerCommissions } from '@/services/commissions-service'
 
 export const getAllCommissions = async (): Promise<SellerCommission[]> => {
-  // Traer todos los vendedores activos y derivar comisiones de ventas
-  const { getCommissionsBySeller } = await import('@/services/commissions-service')
-  const { data: sellers } = await supabase
-    .from('vendedores')
-    .select('id')
-  if (!sellers) return []
-  const all = await Promise.all(sellers.map(s => getCommissionsBySeller(s.id)))
-  return all.flat().sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime())
+  // Carga masiva: 4 queries totales en lugar de ~4 por vendedor (N+1).
+  const { buildSellerCommissions } = await import('@/lib/utils/commissions')
+
+  const [{ data: sellers }, { data: ventas }, { data: pagos }, { data: devoluciones }] =
+    await Promise.all([
+      supabase.from('vendedores').select('id, commission_rate'),
+      supabase
+        .from('ventas')
+        .select('id, sale_number, client_name, total, created_at, seller_id')
+        .not('seller_id', 'is', null)
+        .order('created_at', { ascending: false }),
+      supabase
+        .from('pagos_comisiones')
+        .select('seller_id, created_at')
+        .order('created_at', { ascending: false }),
+      supabase
+        .from('devoluciones')
+        .select('id, sale_id, sale_number, client_name, total, commission_amount, commission_rate, created_at, seller_id')
+        .not('seller_id', 'is', null),
+    ])
+
+  if (!sellers || sellers.length === 0) return []
+
+  // Último pago por vendedor = cutoff de "pagado" (orden desc → el primero es el más reciente).
+  const cutoffById = new Map<string, Date>()
+  for (const p of pagos ?? []) {
+    const sid = String(p.seller_id)
+    if (!cutoffById.has(sid)) cutoffById.set(sid, new Date(p.created_at))
+  }
+
+  const groupBy = <T extends { seller_id?: string | null }>(rows: T[]) => {
+    const m = new Map<string, T[]>()
+    for (const r of rows) {
+      const sid = String(r.seller_id)
+      const arr = m.get(sid)
+      if (arr) arr.push(r)
+      else m.set(sid, [r])
+    }
+    return m
+  }
+
+  const ventasBySeller = groupBy(ventas ?? [])
+  const devBySeller = groupBy(devoluciones ?? [])
+
+  const all = sellers.flatMap((s: any) => {
+    const sid = String(s.id)
+    return buildSellerCommissions({
+      sellerId: sid,
+      commissionRate: Number(s.commission_rate) || 10,
+      ventas: ventasBySeller.get(sid) ?? [],
+      devoluciones: devBySeller.get(sid) ?? [],
+      paidCutoff: cutoffById.get(sid) ?? null,
+    })
+  })
+
+  return all.sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime())
 }
 
 // ─── Reseteo de comisiones con registro de pago ──────────────────────────────

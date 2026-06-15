@@ -30,6 +30,7 @@ import { supabase } from "@/lib/supabase";
 import { generateReadableId } from "@/services/supabase-helpers";
 import { getAuthToken } from "@/services/auth-service";
 import { useAuth } from "@/hooks/use-auth";
+import { recordAudit } from "@/lib/audit";
 import { registrarMovimiento, getProductosARevisar, type ProductoARevisar } from "@/services/stock-service";
 import type { Product, MayoristaProducto } from "@/lib/types";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
@@ -619,6 +620,7 @@ tr.cat td{border:none}
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "Error del servidor");
+      recordAudit(user, 'price_list_updated', `Aplicó ganancia global del ${porc}% a ${data.updated} productos`);
       toast.success(`Ganancia del ${porc}% aplicada a ${data.updated} productos`);
       await fetchProducts(currentPage, searchQuery, categoryFilter, stockFilter);
     } catch (err: any) {
@@ -642,6 +644,7 @@ tr.cat td{border:none}
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "Error del servidor");
+      recordAudit(user, 'price_list_updated', `Aplicó ganancia del ${porc}% a ${data.updated} medicamentos`);
       toast.success(`Ganancia del ${porc}% aplicada a ${data.updated} medicamentos`);
       await fetchProducts(currentPage, searchQuery, categoryFilter, stockFilter);
     } catch (err: any) {
@@ -758,6 +761,8 @@ tr.cat td{border:none}
 
       // Sincronizar con mayorista_productos
       await sincronizarHabilitadoEnMayorista(productToDeactivate.id, false);
+
+      recordAudit(user, 'product_deleted', `Deshabilitó el producto "${productToDeactivate.name}"`, { type: 'producto', id: productToDeactivate.id });
 
       // Actualizar estado local
       setProducts((prev) =>
@@ -917,6 +922,7 @@ tr.cat td{border:none}
       } else {
         const newProduct = await productsApi.create(productData);
         setProducts([...products, newProduct]);
+        recordAudit(user, 'product_created', `Creó el producto "${newProduct.name}" (stock inicial ${newProduct.stock})`, { type: 'producto', id: newProduct.id });
 
         logStockMovement({
           productId: newProduct.id,
