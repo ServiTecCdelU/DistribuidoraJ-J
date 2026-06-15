@@ -1752,7 +1752,7 @@ tr.cat td{border:none}
               ) : (
                 /* Vista Lista — tabla compacta estilo mayorista */
                 <div className="rounded-2xl border overflow-hidden">
-                  <div className="overflow-x-auto">
+                  <div className="overflow-x-auto hidden lg:block">
                     <table className="w-full text-sm">
                       <thead className="bg-muted/50 border-b">
                         <tr>
@@ -1872,6 +1872,71 @@ tr.cat td{border:none}
                         })}
                       </tbody>
                     </table>
+                  </div>
+
+                  {/* Vista compacta — mobile */}
+                  <div className="lg:hidden divide-y">
+                    {paginatedProducts.map((product) => {
+                      const stockColor = getStockColor(product.stock);
+                      const isDisabled = (product as any).disabled;
+                      const precio = product.unidadesPorBulto && product.seDivideEn && product.unidadesPorBulto > 0
+                        ? Math.round(product.price * product.seDivideEn / product.unidadesPorBulto * 100) / 100
+                        : product.price;
+                      return (
+                        <div
+                          key={product.id}
+                          className={cn("p-3 flex items-start gap-3", isDisabled && "opacity-50")}
+                        >
+                          <div className="flex-1 min-w-0">
+                            <div className="flex items-center gap-2">
+                              <span className="font-medium text-sm truncate">{product.name}</span>
+                              {isDisabled && (
+                                <Badge variant="destructive" className="text-[10px] px-1.5 py-0 shrink-0">Off</Badge>
+                              )}
+                            </div>
+                            <div className="flex items-center gap-1.5 mt-0.5 text-[11px] text-muted-foreground min-w-0">
+                              <span className="font-mono shrink-0">{product.description || "—"}</span>
+                              {product.category && <span className="truncate">· {product.category}</span>}
+                            </div>
+                            <div className="flex items-center gap-2 mt-1.5">
+                              <span className="font-semibold text-teal-600 text-sm whitespace-nowrap">
+                                {formatCurrency(precio)}
+                                {product.unidadesPorBulto && product.seDivideEn && product.unidadesPorBulto > 0 && (
+                                  <span className="text-[10px] font-normal text-muted-foreground"> / lote</span>
+                                )}
+                              </span>
+                              <Badge
+                                variant={stockColor === "destructive" ? "destructive" : stockColor === "warning" ? "secondary" : "outline"}
+                                className={cn(
+                                  "text-xs font-medium",
+                                  stockColor === "warning" && "bg-amber-100 text-amber-800 border-amber-200",
+                                  stockColor === "success" && "bg-green-100 text-green-800 border-green-200",
+                                )}
+                              >
+                                Stock {product.stock}
+                              </Badge>
+                            </div>
+                          </div>
+                          <div className="flex items-center gap-0.5 shrink-0">
+                            <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => handleViewHistory(product)} title="Historial">
+                              <History className="h-4 w-4" />
+                            </Button>
+                            <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => handleEdit(product)} title="Editar">
+                              <Pencil className="h-4 w-4" />
+                            </Button>
+                            {isDisabled ? (
+                              <Button variant="ghost" size="icon" className="h-8 w-8 text-green-600 hover:text-green-700" onClick={() => handleEnable(product)} title="Habilitar">
+                                <CheckCircle2 className="h-4 w-4" />
+                              </Button>
+                            ) : (
+                              <Button variant="ghost" size="icon" className="h-8 w-8 text-amber-600 hover:text-amber-700" onClick={() => handleDeactivate(product)} title="Deshabilitar">
+                                <EyeOff className="h-4 w-4" />
+                              </Button>
+                            )}
+                          </div>
+                        </div>
+                      );
+                    })}
                   </div>
                 </div>
               )}
