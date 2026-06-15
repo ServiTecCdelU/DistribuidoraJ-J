@@ -22,7 +22,7 @@ export async function GET(
   // Query paginada
   let pageQuery = supabaseAdmin
     .from('stock_movimientos')
-    .select('id, tipo, cantidad, stock_anterior, stock_posterior, motivo, created_at', { count: 'exact' })
+    .select('id, tipo, cantidad, stock_anterior, stock_posterior, motivo, created_at, usuario_nombre', { count: 'exact' })
     .eq('mayorista_producto_id', mayoristId)
     .order('created_at', { ascending: false })
     .range(offset, offset + limit - 1)
@@ -79,6 +79,7 @@ export async function GET(
       saleNumber: venta?.saleNumber ?? null,
       sellerName: venta?.sellerName ?? null,
       clientName: venta?.clientName ?? null,
+      usuarioNombre: m.usuario_nombre ?? null,
       // Los regalos son gratis: no muestran monto
       ventaTotal: m.tipo === 'regalo' ? null : (venta?.ventaTotal ?? null),
     }

@@ -29,6 +29,7 @@ import { productsApi } from "@/lib/api";
 import { supabase } from "@/lib/supabase";
 import { generateReadableId } from "@/services/supabase-helpers";
 import { getAuthToken } from "@/services/auth-service";
+import { useAuth } from "@/hooks/use-auth";
 import { registrarMovimiento, getProductosARevisar, type ProductoARevisar } from "@/services/stock-service";
 import type { Product, MayoristaProducto } from "@/lib/types";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
@@ -122,6 +123,9 @@ export interface InventorySnapshot {
 
 export default function ProductosPage() {
   const router = useRouter();
+  const { user } = useAuth();
+  // Usuario que ejecuta el movimiento, para trazabilidad en stock_movimientos.
+  const movUsuario = () => ({ id: user?.id, nombre: user?.name });
   const [products, setProducts] = useState<Product[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchInput, setSearchInput] = useState("");
@@ -493,7 +497,11 @@ tr.cat td{border:none}
       await fetch(`/api/productos/${productId}/movimiento`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ tipo, cantidad, stockAnterior, stockPosterior, motivo }),
+        body: JSON.stringify({
+          tipo, cantidad, stockAnterior, stockPosterior, motivo,
+          usuarioId: user?.id ?? null,
+          usuarioNombre: user?.name ?? null,
+        }),
       })
     } catch { /* no interrumpir el flujo */ }
   }
@@ -664,6 +672,7 @@ tr.cat td{border:none}
         tipo: "apertura_bulto",
         cantidad,
         referencia: "Ingreso por remito proveedor",
+        usuario: movUsuario(),
       });
 
       logStockMovement({
@@ -862,6 +871,7 @@ tr.cat td{border:none}
               : "apertura_bulto",
             cantidad: stockAdjustment.type === "remove" ? -stockAdjustment.quantity : stockAdjustment.quantity,
             referencia: stockAdjustment.reason || undefined,
+            usuario: movUsuario(),
           });
           // Re-leer stock actualizado
           updated.stock = productData.stock;

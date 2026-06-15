@@ -279,6 +279,7 @@ export interface StockMovimiento {
   cantidad: number;
   referencia?: string;
   fecha: Date;
+  usuarioNombre?: string;
 }
 
 export interface PedidoMayorista {

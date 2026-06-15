@@ -1,5 +1,6 @@
 import { supabase } from '@/lib/supabase'
 import type { StockMovimiento } from '@/lib/types'
+import { buildMovimientoRow } from '@/lib/utils/stock-movimiento'
 
 function mapMovimiento(d: Record<string, any>): StockMovimiento {
   return {
@@ -9,6 +10,7 @@ function mapMovimiento(d: Record<string, any>): StockMovimiento {
     cantidad: d.cantidad ?? 0,
     referencia: d.motivo ?? undefined,
     fecha: new Date(d.created_at),
+    usuarioNombre: d.usuario_nombre ?? undefined,
   }
 }
 
@@ -31,8 +33,10 @@ export const registrarMovimiento = async (params: {
   tipo: StockMovimiento['tipo']
   cantidad: number
   referencia?: string
+  /** Usuario que ejecuta el movimiento (para trazabilidad de ajustes/ingresos/roturas). */
+  usuario?: { id?: string; nombre?: string }
 }): Promise<void> => {
-  const { productoId, tipo, cantidad, referencia } = params
+  const { productoId, tipo, cantidad, referencia, usuario } = params
 
   // Aceptar tanto "mp_XXXX" como "prod_mp_XXXX" y normalizar ambos IDs.
   const prodId = productoId.startsWith('prod_') ? productoId : `prod_${productoId}`
@@ -62,14 +66,9 @@ export const registrarMovimiento = async (params: {
   const stockPosterior = Math.max(0, stockAnterior + cantidad)
 
   // Registrar movimiento
-  await supabase.from('stock_movimientos').insert({
-    mayorista_producto_id: mpId,
-    tipo,
-    cantidad,
-    stock_anterior: stockAnterior,
-    stock_posterior: stockPosterior,
-    motivo: referencia ?? null,
-  })
+  await supabase.from('stock_movimientos').insert(
+    buildMovimientoRow({ mpId, tipo, cantidad, stockAnterior, stockPosterior, referencia, usuario })
+  )
 
   // Mantener ambas tablas sincronizadas con el mismo valor
   await supabase

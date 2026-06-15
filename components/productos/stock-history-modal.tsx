@@ -40,6 +40,7 @@ interface Movimiento {
   saleNumber: string | null
   sellerName: string | null
   clientName: string | null
+  usuarioNombre: string | null
   ventaTotal: number | null
 }
 
@@ -385,8 +386,18 @@ function MovimientoRow({ m }: { m: Movimiento }) {
             </div>
             {m.saleNumber && <div className="text-[10px] text-muted-foreground/70 mt-0.5">Venta #{m.saleNumber}</div>}
           </div>
-        ) : m.motivo ? (
-          <span className="text-[11px] italic text-muted-foreground line-clamp-2">{m.motivo}</span>
+        ) : (m.usuarioNombre || m.motivo) ? (
+          <div className="min-w-0 space-y-0.5">
+            {m.usuarioNombre && (
+              <span className="inline-flex items-center gap-1 text-foreground/80">
+                <User className="h-3 w-3 text-muted-foreground shrink-0" />
+                <span className="truncate max-w-[160px] font-medium">{m.usuarioNombre}</span>
+              </span>
+            )}
+            {m.motivo && (
+              <div className="text-[11px] italic text-muted-foreground line-clamp-2">{m.motivo}</div>
+            )}
+          </div>
         ) : <span className="text-muted-foreground">—</span>}
       </td>
       <td className="px-3 py-2.5 text-center border-b">
@@ -450,9 +461,17 @@ function MovimientoCard({ m }: { m: Movimiento }) {
         </div>
       )}
 
-      {/* Motivo libre (ajustes/roturas/ingresos) */}
-      {!m.sellerName && !m.clientName && m.motivo && m.tipo !== 'venta' && m.tipo !== 'regalo' && (
-        <p className="text-[11px] text-muted-foreground italic pl-0.5">{m.motivo}</p>
+      {/* Usuario + motivo libre (ajustes/roturas/ingresos) */}
+      {!m.sellerName && !m.clientName && m.tipo !== 'venta' && m.tipo !== 'regalo' && (m.usuarioNombre || m.motivo) && (
+        <div className="pl-0.5 space-y-0.5">
+          {m.usuarioNombre && (
+            <span className="flex items-center gap-0.5 text-[11px] text-foreground/80">
+              <User className="h-3 w-3 shrink-0" />
+              <span className="truncate max-w-[160px] font-medium">{m.usuarioNombre}</span>
+            </span>
+          )}
+          {m.motivo && <p className="text-[11px] text-muted-foreground italic">{m.motivo}</p>}
+        </div>
       )}
 
       {/* Fila 3: stock anterior → posterior */}
