@@ -32,7 +32,7 @@ export const logAudit = async (entry: {
 export const getAuditLog = async (maxEntries = 100): Promise<AuditEntry[]> => {
   const { data } = await supabase
     .from('auditoria')
-    .select('*')
+    .select('id, action, user_id, user_email, entity_type, entity_id, details, created_at')
     .order('created_at', { ascending: false })
     .limit(maxEntries)
 
@@ -55,7 +55,7 @@ export const getAuditByEntity = async (
 ): Promise<AuditEntry[]> => {
   const { data } = await supabase
     .from('auditoria')
-    .select('*')
+    .select('id, action, user_id, user_email, entity_type, entity_id, details, created_at')
     .eq('entity_type', entityType)
     .eq('entity_id', entityId)
     .order('created_at', { ascending: false })
