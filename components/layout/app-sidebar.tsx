@@ -21,6 +21,7 @@ import {
   Store,
   Percent,
   Wallet,
+  Shield,
 } from "lucide-react";
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
@@ -88,6 +89,7 @@ export function AppSidebar() {
       label: "Equipo & Análisis",
       items: [
         { href: "/empleados", label: "Empleados", icon: UserCheck, roles: ["admin"] },
+        { href: "/auditoria", label: "Auditoría", icon: Shield, roles: ["admin"] },
         // { href: "/reportes", label: "Reportes", icon: BarChart3, roles: ["admin"] },
       ],
     },
