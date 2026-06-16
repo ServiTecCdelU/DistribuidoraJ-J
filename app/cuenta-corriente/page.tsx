@@ -1234,45 +1234,58 @@ tr{page-break-inside:avoid}
 
           {activeTab === 'clientes' && (
           <>
-          {/* Resumen compacto */}
-          <Card className="mb-4">
-            <CardContent className="p-3 flex flex-wrap items-center gap-x-4 gap-y-2 text-sm">
-              <div className="flex items-center gap-1.5">
-                <Users className="h-4 w-4 text-muted-foreground" />
-                <span className="font-bold text-red-600 tabular-nums">{formatCurrency(totalDeuda)}</span>
-                <span className="text-xs text-muted-foreground">· {debtClients.length} clientes</span>
-              </div>
-              <div className="h-4 w-px bg-border" />
-              {ESTADO_META.map((e) => (
-                <button
-                  key={e.key}
-                  disabled={estadoCounts[e.key] === 0}
-                  onClick={() => setEstadoDetalle(e.key)}
-                  className="flex items-center gap-1.5 disabled:opacity-50 enabled:hover:underline"
-                >
-                  <span className={`h-2 w-2 rounded-full ${e.dot}`} />
-                  <span className="text-xs text-muted-foreground">{e.label}</span>
-                  <span className={`font-bold tabular-nums ${e.text}`}>{estadoCounts[e.key]}</span>
-                </button>
-              ))}
-              {estadoCounts.diaPago > 0 && (
-                <button
-                  onClick={() => setEstadoDetalle('dia_pago')}
-                  className="flex items-center gap-1.5 hover:underline"
-                >
-                  <Clock className="h-3.5 w-3.5 text-teal-600" />
-                  <span className="text-xs text-teal-700 font-medium">Día de pago hoy</span>
-                  <span className="font-bold tabular-nums text-teal-600">{estadoCounts.diaPago}</span>
-                </button>
-              )}
-              <div className="h-4 w-px bg-border" />
-              <div className="flex items-center gap-1.5">
-                <FileCheck className="h-4 w-4 text-muted-foreground" />
-                <span className="font-bold tabular-nums">{sellers.length}</span>
-                <span className="text-xs text-muted-foreground">vendedores</span>
-              </div>
-            </CardContent>
-          </Card>
+          {/* Cards resumen */}
+          <div className="grid grid-cols-2 md:grid-cols-3 gap-2 mb-4">
+            <Card>
+              <CardContent className="p-3">
+                <div className="flex items-center gap-1.5 text-xs text-muted-foreground mb-1">
+                  <Users className="h-3.5 w-3.5" />Deuda total
+                </div>
+                <div className="text-lg font-bold text-red-600 truncate leading-tight">{formatCurrency(totalDeuda)}</div>
+                <p className="text-[11px] text-muted-foreground">{debtClients.length} clientes</p>
+              </CardContent>
+            </Card>
+            <Card>
+              <CardContent className="p-3">
+                <div className="flex items-center gap-1.5 text-xs text-muted-foreground mb-1">
+                  <AlertTriangle className="h-3.5 w-3.5" />Estado
+                </div>
+                <div className="space-y-0.5">
+                  {ESTADO_META.map((e) => (
+                    <div key={e.key} className="flex items-center justify-between text-xs">
+                      <span className="flex items-center gap-1.5"><span className={`h-2 w-2 rounded-full ${e.dot}`} />{e.label}</span>
+                      <div className="flex items-center gap-1.5">
+                        <span className={`font-bold tabular-nums ${e.text}`}>{estadoCounts[e.key]}</span>
+                        {estadoCounts[e.key] > 0 && (
+                          <button onClick={() => setEstadoDetalle(e.key)} className="text-[11px] text-primary hover:underline">Ver</button>
+                        )}
+                      </div>
+                    </div>
+                  ))}
+                  {estadoCounts.diaPago > 0 && (
+                    <div className="flex items-center justify-between text-xs pt-1 mt-1 border-t">
+                      <span className="flex items-center gap-1.5 text-teal-700 font-medium">
+                        <Clock className="h-3 w-3 text-teal-600" />Día de pago (hoy)
+                      </span>
+                      <div className="flex items-center gap-1.5">
+                        <span className="font-bold tabular-nums text-teal-600">{estadoCounts.diaPago}</span>
+                        <button onClick={() => setEstadoDetalle('dia_pago')} className="text-[11px] text-primary hover:underline">Ver</button>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              </CardContent>
+            </Card>
+            <Card className="col-span-2 md:col-span-1">
+              <CardContent className="p-3">
+                <div className="flex items-center gap-1.5 text-xs text-muted-foreground mb-1">
+                  <FileCheck className="h-3.5 w-3.5" />Vendedores activos
+                </div>
+                <div className="text-lg font-bold leading-tight">{sellers.length}</div>
+                <p className="text-[11px] text-muted-foreground">con clientes asignados</p>
+              </CardContent>
+            </Card>
+          </div>
 
           {/* Filtros */}
           <div className="flex flex-col sm:flex-row gap-3 mb-4">

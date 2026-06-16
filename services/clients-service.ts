@@ -34,7 +34,30 @@ export const getClients = async (): Promise<Client[]> => {
     .select('*')
     .order('created_at', { ascending: false })
 
-  return (data ?? []).map(mapClient)
+  const clients = (data ?? []).map(mapClient)
+
+  // Fecha de la deuda pendiente más antigua por cliente (define la clasificación por días)
+  const deudores = clients.filter((c) => c.currentBalance > 0).map((c) => c.id)
+  if (deudores.length > 0) {
+    const { data: debts } = await supabase
+      .from('transacciones')
+      .select('client_id, date, saldo, amount')
+      .in('client_id', deudores)
+      .eq('type', 'debt')
+      .order('date', { ascending: true })
+      .limit(20000)
+    const debtSinceMap: Record<string, Date> = {}
+    for (const t of debts ?? []) {
+      const saldo = t.saldo != null ? Number(t.saldo) : Number(t.amount)
+      if (saldo <= 0) continue
+      if (!debtSinceMap[t.client_id]) debtSinceMap[t.client_id] = new Date(t.date)
+    }
+    for (const c of clients) {
+      if (debtSinceMap[c.id]) c.debtSince = debtSinceMap[c.id]
+    }
+  }
+
+  return clients
 }
 
 export const getClientById = async (id: string): Promise<Client | undefined> => {

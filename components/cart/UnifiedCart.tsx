@@ -35,6 +35,7 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
+import { clasificarDeuda } from "@/lib/utils/deuda";
 import type { UserRole, CartState, CartActions } from "@/hooks/useCart";
 
 
@@ -1026,25 +1027,7 @@ function ClientLookupSection({
                 </Button>
               </div>
             )}
-            {selectedClientData?.debtClassification && selectedClientData.debtClassification !== 'normal' && (
-              <div className={`mt-2 p-2.5 rounded-xl border flex items-start gap-2 ${
-                selectedClientData.debtClassification === 'incobrable'
-                  ? 'bg-red-50 border-red-200 text-red-800'
-                  : 'bg-amber-50 border-amber-200 text-amber-800'
-              }`}>
-                <AlertTriangle className="h-4 w-4 shrink-0 mt-0.5" />
-                <div className="text-xs">
-                  <p className="font-semibold">
-                    {selectedClientData.debtClassification === 'incobrable' ? 'Cliente INCOBRABLE' : 'Cliente MOROSO'}
-                  </p>
-                  <p className="mt-0.5 opacity-80">
-                    {selectedClientData.debtClassification === 'incobrable'
-                      ? 'Este cliente tiene deuda incobrable. Consultar con el administrador antes de vender.'
-                      : 'Este cliente tiene deuda en mora. Proceder con precaución.'}
-                  </p>
-                </div>
-              </div>
-            )}
+            <DebtAlert client={selectedClientData} />
           </div>
         )}
       </div>
@@ -1177,25 +1160,7 @@ function ClientLookupSection({
               </Button>
             </div>
           )}
-          {selectedClientData?.debtClassification && selectedClientData.debtClassification !== 'normal' && (
-            <div className={`mt-2 p-2.5 rounded-xl border flex items-start gap-2 ${
-              selectedClientData.debtClassification === 'incobrable'
-                ? 'bg-red-50 border-red-200 text-red-800'
-                : 'bg-amber-50 border-amber-200 text-amber-800'
-            }`}>
-              <AlertTriangle className="h-4 w-4 shrink-0 mt-0.5" />
-              <div className="text-xs">
-                <p className="font-semibold">
-                  {selectedClientData.debtClassification === 'incobrable' ? 'Cliente INCOBRABLE' : 'Cliente MOROSO'}
-                </p>
-                <p className="mt-0.5 opacity-80">
-                  {selectedClientData.debtClassification === 'incobrable'
-                    ? 'Este cliente tiene deuda incobrable. Consultar con el administrador antes de vender.'
-                    : 'Este cliente tiene deuda en mora. Proceder con precaución.'}
-                </p>
-              </div>
-            </div>
-          )}
+          <DebtAlert client={selectedClientData} />
         </div>
       ) : dniNotFound ? (
         <div className="p-3 rounded-lg bg-amber-50/50 border border-amber-200/50">
@@ -1347,6 +1312,44 @@ function PaymentAmountBox({
           </span>
         </div>
       )}
+    </div>
+  );
+}
+
+// Aviso de clasificación de deuda del cliente (atrasado / moroso / incobrable)
+const DEUDA_META: Record<string, { titulo: string; desc: string; cls: string }> = {
+  atrasado: {
+    titulo: "Cliente ATRASADO",
+    desc: "Este cliente tiene un pago atrasado.",
+    cls: "bg-yellow-50 border-yellow-200 text-yellow-800",
+  },
+  moroso: {
+    titulo: "Cliente MOROSO",
+    desc: "Este cliente tiene deuda en mora. Proceder con precaución.",
+    cls: "bg-amber-50 border-amber-200 text-amber-800",
+  },
+  incobrable: {
+    titulo: "Cliente INCOBRABLE",
+    desc: "Este cliente tiene deuda incobrable. Consultar con el administrador antes de vender.",
+    cls: "bg-red-50 border-red-200 text-red-800",
+  },
+};
+
+function DebtAlert({ client }: { client?: { debtSince?: Date; debtClassification?: string | null } | null }) {
+  if (!client) return null;
+  // Clasificación por días (igual que cuenta corriente); fallback al campo manual moroso/incobrable
+  const live = clasificarDeuda(client.debtSince);
+  const classification = live !== "normal" ? live : (client.debtClassification ?? "normal");
+  if (classification === "normal") return null;
+  const meta = DEUDA_META[classification];
+  if (!meta) return null;
+  return (
+    <div className={`mt-2 p-2.5 rounded-xl border flex items-start gap-2 ${meta.cls}`}>
+      <AlertTriangle className="h-4 w-4 shrink-0 mt-0.5" />
+      <div className="text-xs">
+        <p className="font-semibold">{meta.titulo}</p>
+        <p className="mt-0.5 opacity-80">{meta.desc}</p>
+      </div>
     </div>
   );
 }
