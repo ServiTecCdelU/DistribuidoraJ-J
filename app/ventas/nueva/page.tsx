@@ -38,6 +38,7 @@ import {
   Eye,
   ChevronLeft,
   ChevronRight,
+  ChevronDown,
   Percent,
   Tag,
 } from "lucide-react";
@@ -129,7 +130,7 @@ function NuevaVentaContent({
           name: p.nombre,
           description: p.codigo,
           price: precioLote,
-          stock: 9999,
+          stock: 9_999_999,
           stockLocal: p.stockLocal,
           unidadesPorBulto: p.unidadesPorBulto,
           seDivideEn: p.seDivideEn,
@@ -203,6 +204,33 @@ function NuevaVentaContent({
   }, [state.selectedSeller]);
 
   const [cartDialogOpen, setCartDialogOpen] = useState(false);
+
+  // Botón "ir abajo" del modal del carrito (cuando el scroll es largo)
+  const cartScrollRef = useRef<HTMLDivElement>(null);
+  const [showGoBottom, setShowGoBottom] = useState(false);
+
+  const updateGoBottom = useCallback(() => {
+    const el = cartScrollRef.current;
+    if (!el) return;
+    const distanceToBottom = el.scrollHeight - el.scrollTop - el.clientHeight;
+    setShowGoBottom(distanceToBottom > 120);
+  }, []);
+
+  const scrollCartToBottom = () => {
+    const el = cartScrollRef.current;
+    el?.scrollTo({ top: el.scrollHeight, behavior: "smooth" });
+  };
+
+  useEffect(() => {
+    if (!cartDialogOpen) return;
+    const el = cartScrollRef.current;
+    if (!el) return;
+    updateGoBottom();
+    const ro = new ResizeObserver(() => updateGoBottom());
+    ro.observe(el);
+    if (el.firstElementChild) ro.observe(el.firstElementChild);
+    return () => ro.disconnect();
+  }, [cartDialogOpen, updateGoBottom, state.cart.length]);
 
   // Abrir carrito automáticamente si viene desde tienda (?openCart=true)
   useEffect(() => {
@@ -445,10 +473,10 @@ function NuevaVentaContent({
       {/* Cart Dialog */}
       <Dialog open={cartDialogOpen} onOpenChange={setCartDialogOpen}>
         <DialogContent
-          className="max-w-sm sm:max-w-md max-h-[85vh] sm:max-h-[90vh] overflow-y-auto p-0 gap-0"
+          className="flex flex-col left-auto translate-x-0 right-2 sm:right-4 w-full max-w-[calc(100%-1rem)] sm:max-w-2xl lg:max-w-3xl max-h-[96dvh] sm:max-h-[97dvh] overflow-x-hidden overflow-y-hidden p-0 gap-0"
           onOpenAutoFocus={(e) => e.preventDefault()}
         >
-          <DialogHeader className="px-4 sm:px-5 py-3 sm:py-4 border-b border-border bg-muted/30">
+          <DialogHeader className="shrink-0 min-w-0 px-4 sm:px-5 py-3 sm:py-4 border-b border-border bg-muted/30">
             <DialogTitle className="flex items-center gap-2 text-base sm:text-lg">
               <ShoppingCart className="h-4 w-4 sm:h-5 sm:w-5 text-primary" />
               Carrito
@@ -458,7 +486,11 @@ function NuevaVentaContent({
             </DialogTitle>
             <DialogDescription className="sr-only">Revisa y gestiona los productos en tu carrito</DialogDescription>
           </DialogHeader>
-          <div className="px-4 sm:px-5 py-3 sm:py-4">
+          <div
+            ref={cartScrollRef}
+            onScroll={updateGoBottom}
+            className="flex-1 min-h-0 min-w-0 overflow-y-auto overflow-x-hidden px-4 sm:px-5 py-3 sm:py-4"
+          >
             <UnifiedCart
               role={cartRole}
               state={state}
@@ -466,6 +498,15 @@ function NuevaVentaContent({
               onConfirmSale={handleConfirmSale}
             />
           </div>
+          {showGoBottom && (
+            <button
+              type="button"
+              onClick={scrollCartToBottom}
+              className="absolute bottom-3 right-3 sm:bottom-4 sm:right-4 z-10 h-10 px-3.5 rounded-full bg-primary text-primary-foreground shadow-lg flex items-center gap-1.5 text-xs font-semibold hover:bg-primary/90 transition-colors"
+            >
+              <ChevronDown className="h-4 w-4" /> Ir abajo
+            </button>
+          )}
         </DialogContent>
       </Dialog>
 

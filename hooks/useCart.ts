@@ -338,7 +338,7 @@ export function useCart(role: UserRole, userEmail?: string, externalProducts?: P
             name: p.nombre,
             description: p.codigo,
             price: precioLote,
-            stock: 9999,
+            stock: 9_999_999,
             stockLocal: p.stockLocal,
             unidadesPorBulto: p.unidadesPorBulto,
             seDivideEn: p.seDivideEn,
@@ -510,7 +510,8 @@ export function useCart(role: UserRole, userEmail?: string, externalProducts?: P
       const existing = prev.find((item) => item.product.id === product.id);
       if (existing) {
         const regalo = existing.regalo ?? 0;
-        if (existing.quantity + 1 + regalo > product.stock) {
+        const esMayorista = product.stockLocal !== undefined;
+        if (!esMayorista && existing.quantity + 1 + regalo > product.stock) {
           toast.error("Stock insuficiente");
           return prev;
         }
@@ -529,7 +530,8 @@ export function useCart(role: UserRole, userEmail?: string, externalProducts?: P
           if (item.product.id !== productId) return item;
           const newQty = item.quantity + delta;
           if (newQty <= 0) return { ...item, quantity: 0 };
-          if (newQty + (item.regalo ?? 0) > item.product.stock) {
+          const esMayorista = item.product.stockLocal !== undefined;
+          if (!esMayorista && newQty + (item.regalo ?? 0) > item.product.stock) {
             toast.error("Stock insuficiente");
             return item;
           }
@@ -543,7 +545,10 @@ export function useCart(role: UserRole, userEmail?: string, externalProducts?: P
     setCart((prev) => {
       const item = prev.find((i) => i.product.id === productId);
       if (!item) return prev;
-      const maxPagable = Math.max(1, item.product.stock - (item.regalo ?? 0));
+      const esMayorista = item.product.stockLocal !== undefined;
+      const maxPagable = esMayorista
+        ? Number.MAX_SAFE_INTEGER
+        : Math.max(1, item.product.stock - (item.regalo ?? 0));
       const newQty = Math.max(1, Math.min(value, maxPagable));
       return prev.map((i) => (i.product.id === productId ? { ...i, quantity: newQty } : i));
     });

@@ -26,7 +26,6 @@ import {
   ArrowLeftRight,
   UserPlus,
   Sparkles,
-  Home,
   Truck,
   MapPin,
   Copy,
@@ -182,7 +181,7 @@ export function UnifiedCart({ role, state, actions, onConfirmSale, allowDiscount
   // ¿Hay descuento general activo?
   const hasGeneralDiscount = discountValue > 0;
   return (
-    <div className="flex flex-col h-full">
+    <div className="flex flex-col h-full min-w-0 w-full">
       {/* Step indicator — solo admin/seller */}
       {role !== null && (
         <div className="flex items-center gap-1 mb-3 pb-3 border-b border-border">
@@ -212,7 +211,7 @@ export function UnifiedCart({ role, state, actions, onConfirmSale, allowDiscount
       {/* Cart items — step 1 for admin/seller, always visible for public */}
       {(role === null || cartStep === "products") && (
       <div className="rounded-xl border border-border overflow-hidden">
-        <div className="overflow-y-auto max-h-[40vh] sm:max-h-[280px]">
+        <div className="min-w-0">
           <ul className="divide-y divide-border/50">
             {cart.map((item) => {
               const esMayorista = item.product.stockLocal !== undefined;
@@ -223,13 +222,13 @@ export function UnifiedCart({ role, state, actions, onConfirmSale, allowDiscount
               const regalo = item.regalo ?? 0;
               const regaloCruzadoCant = item.regaloOtroCantidad ?? 0;
               return (
-                <li key={item.product.id} className="px-3 py-2 hover:bg-muted/20 transition-colors space-y-1.5">
+                <li key={item.product.id} className="px-3 py-2 sm:px-4 sm:py-3 hover:bg-muted/20 transition-colors space-y-1.5">
                   {/* Nombre + eliminar */}
-                  <div className="flex items-start justify-between gap-2">
-                    <p className="font-medium text-xs leading-snug flex-1">{item.product.name}</p>
-                    <Button variant="ghost" size="icon" className="h-6 w-6 text-muted-foreground hover:text-destructive shrink-0 -mt-0.5"
+                  <div className="flex items-start justify-between gap-2 min-w-0">
+                    <p className="font-medium text-xs sm:text-sm leading-snug flex-1 min-w-0 break-words">{item.product.name}</p>
+                    <Button variant="ghost" size="icon" className="h-6 w-6 sm:h-8 sm:w-8 text-muted-foreground hover:text-destructive shrink-0 -mt-0.5"
                       onClick={() => actions.removeFromCart(item.product.id)}>
-                      <Trash2 className="h-3 w-3" />
+                      <Trash2 className="h-3 w-3 sm:h-4 sm:w-4" />
                     </Button>
                   </div>
                   {/* Stock local + lote */}
@@ -260,32 +259,46 @@ export function UnifiedCart({ role, state, actions, onConfirmSale, allowDiscount
                       })()}
                     </div>
                   )}
-                  {/* Controles cantidad + total */}
-                  <div className="flex items-center gap-2">
-                    <div className="flex items-center gap-0.5 ml-auto">
-                      <Button variant="ghost" size="icon" className="h-6 w-6 rounded-md"
-                        onClick={() => actions.updateQuantity(item.product.id, -1)}
-                        disabled={item.quantity <= 1}>
-                        <Minus className="h-2.5 w-2.5" />
-                      </Button>
-                      <Input
-                        type="number" min="1" max={item.product.stock}
-                        value={item.quantity}
-                        onChange={(e) => actions.setQuantityDirect(item.product.id, parseInt(e.target.value) || 1)}
-                        className="h-6 w-9 text-center text-xs font-semibold px-0.5 border-border/50"
-                      />
-                      <Button variant="ghost" size="icon" className="h-6 w-6 rounded-md"
-                        onClick={() => actions.updateQuantity(item.product.id, 1)}
-                        disabled={!esMayorista && item.quantity >= item.product.stock}>
-                        <Plus className="h-2.5 w-2.5" />
-                      </Button>
+                  {/* Cantidad + total y Dto. + Precio u. — 1 fila si entra, 2 si no.
+                      Orden: cantidad/total primero (arriba), descuento después (abajo). */}
+                  <div className="flex items-center gap-x-4 gap-y-2 flex-wrap">
+                    <div className="flex items-center gap-2">
+                      <div className="flex items-center gap-0.5 sm:gap-1">
+                        <Button variant="ghost" size="icon" className="h-7 w-7 sm:h-9 sm:w-9 rounded-md shrink-0"
+                          onClick={() => actions.updateQuantity(item.product.id, -1)}
+                          disabled={item.quantity <= 1}>
+                          <Minus className="h-2.5 w-2.5 sm:h-3.5 sm:w-3.5" />
+                        </Button>
+                        <Input
+                          type="number" min="1" max={esMayorista ? undefined : item.product.stock}
+                          value={item.quantity}
+                          onChange={(e) => actions.setQuantityDirect(item.product.id, parseInt(e.target.value) || 1)}
+                          className="h-7 w-14 sm:h-9 sm:w-20 text-center text-xs sm:text-base font-semibold px-1 border-border/50"
+                        />
+                        <Button variant="ghost" size="icon" className="h-7 w-7 sm:h-9 sm:w-9 rounded-md shrink-0"
+                          onClick={() => actions.updateQuantity(item.product.id, 1)}
+                          disabled={!esMayorista && item.quantity >= item.product.stock}>
+                          <Plus className="h-2.5 w-2.5 sm:h-3.5 sm:w-3.5" />
+                        </Button>
+                      </div>
+                      <span className="text-xs sm:text-sm font-semibold whitespace-nowrap shrink-0">
+                        {item.itemDiscount
+                          ? <span className="text-emerald-600">{actions.formatCurrency(lineFinal)}</span>
+                          : actions.formatCurrency(lineTotal)
+                        }
+                      </span>
                     </div>
-                    <span className="text-xs font-semibold whitespace-nowrap shrink-0 w-16 text-right">
-                      {item.itemDiscount
-                        ? <span className="text-emerald-600">{actions.formatCurrency(lineFinal)}</span>
-                        : actions.formatCurrency(lineTotal)
-                      }
-                    </span>
+                    {/* Descuento por producto — admin/seller. Si el producto tiene
+                        un máximo configurado se respeta; si no, queda libre (100%). */}
+                    {role !== null && (
+                      <ItemDiscountRow
+                        item={item}
+                        role={role}
+                        maxDiscountAllowed={(item.product.descuento ?? 0) > 0 ? (item.product.descuento as number) : 100}
+                        lineTotal={lineTotal}
+                        actions={actions}
+                      />
+                    )}
                   </div>
                   {/* Promo: unidades de regalo (paga {quantity}, lleva {quantity + regalo}) */}
                   {regalo > 0 && (
@@ -300,17 +313,6 @@ export function UnifiedCart({ role, state, actions, onConfirmSale, allowDiscount
                       <Sparkles className="h-2.5 w-2.5" />
                       <span>Regala {regaloCruzadoCant}× {item.product.regaloProductoNombre || "otro producto"} gratis</span>
                     </div>
-                  )}
-                  {/* Descuento por producto — admin/seller. Si el producto tiene
-                      un máximo configurado se respeta; si no, queda libre (100%). */}
-                  {role !== null && (
-                    <ItemDiscountRow
-                      item={item}
-                      role={role}
-                      maxDiscountAllowed={(item.product.descuento ?? 0) > 0 ? (item.product.descuento as number) : 100}
-                      lineTotal={lineTotal}
-                      actions={actions}
-                    />
                   )}
                   {/* Regalos manuales — admin/seller */}
                   {role !== null && item.product.regaloMismo && (
@@ -516,7 +518,7 @@ export function UnifiedCart({ role, state, actions, onConfirmSale, allowDiscount
           <React.Fragment>
           <div className="space-y-2">
           <Label className="text-xs font-medium text-foreground">Metodo de Entrega</Label>
-          <div className={cn("grid gap-2", role === "seller" ? "grid-cols-1" : "grid-cols-2")}>
+          <div className="grid gap-2 grid-cols-1">
             <Button
               type="button"
               variant={deliveryMethod === "delivery" ? "default" : "outline"}
@@ -529,6 +531,7 @@ export function UnifiedCart({ role, state, actions, onConfirmSale, allowDiscount
               <Truck className="h-3.5 w-3.5" />
               A domicilio
             </Button>
+            {/* Retiro en local — deshabilitado: solo entrega a domicilio
             {role !== "seller" && (
             <Button
               type="button"
@@ -543,6 +546,7 @@ export function UnifiedCart({ role, state, actions, onConfirmSale, allowDiscount
               Retiro en local
             </Button>
             )}
+            */}
           </div>
         </div>
 
@@ -798,24 +802,26 @@ function ItemDiscountRow({
     setEditing(false);
     const precio = Number(precioInput) || 0;
     if (!basePrice || precio <= 0) { actions.setItemDiscount(item.product.id, 0); return; }
+    // No redondear el % para que el precio unitario ingresado quede EXACTO
+    // (sino "1500" derivaba a "1499,97" al recalcular desde un % redondeado).
     const pctTotal = Math.max(0, Math.min(100, (1 - precio / basePrice) * 100));
-    actions.setItemDiscount(item.product.id, Math.round(pctTotal * 100) / 100);
+    actions.setItemDiscount(item.product.id, pctTotal);
   };
 
   return (
     <div className="flex items-center gap-1.5 flex-wrap">
-      <span className="text-[10px] text-muted-foreground">Dto.:</span>
+      <span className="text-[10px] sm:text-xs text-muted-foreground">Dto.:</span>
       <Input
         type="number" min="0" max={maxSeller} placeholder="0"
-        value={sellerDto || ""}
+        value={sellerDto ? Math.round(sellerDto * 100) / 100 : ""}
         onChange={(e) => actions.setItemDiscount(item.product.id, Number(e.target.value) || 0)}
-        className="h-5 w-10 text-center text-[10px] px-0.5"
+        className="h-5 w-14 sm:h-7 sm:w-20 text-center text-[10px] sm:text-xs px-0.5 sm:px-1"
         title={`Máximo vendedor ${maxSeller}%`}
       />
-      <span className="text-[10px] text-muted-foreground">%</span>
+      <span className="text-[10px] sm:text-xs text-muted-foreground">%</span>
       {role === "admin" && (
         <>
-          <span className="text-[10px] text-muted-foreground">Precio u.:</span>
+          <span className="text-[10px] sm:text-xs text-muted-foreground">Precio u.:</span>
           <Input
             type="number" min="0" step="0.01" placeholder={String(basePrice)}
             value={precioInput}
@@ -823,17 +829,11 @@ function ItemDiscountRow({
             onChange={(e) => setPrecioInput(e.target.value)}
             onBlur={applyPrecio}
             onKeyDown={(e) => { if (e.key === "Enter") (e.target as HTMLInputElement).blur(); }}
-            className="h-5 w-20 text-center text-[10px] px-1"
+            className="h-5 w-20 sm:h-7 sm:w-24 text-center text-[10px] sm:text-xs px-1"
             title="Precio unitario final — calcula el descuento al salir del campo"
           />
         </>
       )}
-      {item.itemDiscount ? (
-        <span className="text-[10px] font-semibold text-emerald-600">
-          −{actions.formatCurrency(lineTotal * item.itemDiscount / 100)}
-          <span className="text-muted-foreground font-normal"> ({Math.round(item.itemDiscount * 100) / 100}%)</span>
-        </span>
-      ) : null}
     </div>
   );
 }
