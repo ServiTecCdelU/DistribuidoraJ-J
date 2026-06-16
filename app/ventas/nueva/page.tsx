@@ -348,7 +348,7 @@ function NuevaVentaContent({
 
   return (
     <MainLayout allowedRoles={['admin', 'seller']} title="Nueva Venta" description="Registra una nueva venta">
-      <div className="space-y-4 pb-24 lg:pb-4">
+      <div className="space-y-4 pb-24">
         <PageHeader
           description={
             state.deliveryMethod === "delivery"
@@ -358,7 +358,7 @@ function NuevaVentaContent({
           stackOnMobile
         />
 
-        <div className="flex gap-2">
+        <div className="flex flex-col gap-2 lg:flex-row">
           <div className="relative flex-1">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
             <Input
@@ -373,51 +373,35 @@ function NuevaVentaContent({
               </Button>
             )}
           </div>
-          {rubros.length > 0 && (
-            <Select value={rubroFiltro || "todos"} onValueChange={handleRubroChange}>
-              <SelectTrigger className="w-32 sm:w-40 h-11 rounded-xl border-2">
-                <SelectValue placeholder="Rubro" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="todos">Todos los rubros</SelectItem>
-                {rubros.map((r) => (
-                  <SelectItem key={r} value={r}>{r}</SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          )}
-          {/* Filtro: solo productos con descuento */}
-          <Button
-            type="button"
-            variant={soloDescuento ? "default" : "outline"}
-            onClick={handleToggleDescuento}
-            className={cn(
-              "h-11 rounded-xl shrink-0 gap-1.5 px-3 border-2",
-              soloDescuento ? "bg-teal-600 hover:bg-teal-700 text-white border-teal-600" : "text-teal-700 border-teal-200 hover:bg-teal-50",
+          <div className="flex gap-2">
+            {rubros.length > 0 && (
+              <Select value={rubroFiltro || "todos"} onValueChange={handleRubroChange}>
+                <SelectTrigger className="flex-1 lg:w-40 h-11 rounded-xl border-2">
+                  <SelectValue placeholder="Rubro" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="todos">Todos los rubros</SelectItem>
+                  {rubros.map((r) => (
+                    <SelectItem key={r} value={r}>{r}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             )}
-            title="Mostrar solo productos con promociones"
-          >
-            <Tag className="h-4 w-4" />
-            <span className="hidden sm:inline text-sm">Promociones</span>
-          </Button>
-          {/* Carrito arriba (evita choque con el + del último producto y el paginado) */}
-          <Button
-            type="button"
-            size="icon"
-            className={cn(
-              "h-11 w-11 rounded-xl shrink-0 relative transition-all",
-              state.cart.length > 0 ? "bg-primary hover:bg-primary/90" : "bg-muted/50 opacity-50",
-            )}
-            onClick={() => setCartDialogOpen(true)}
-            disabled={state.cart.length === 0}
-          >
-            <ShoppingCart className="h-5 w-5 text-white" />
-            {state.cart.length > 0 && (
-              <span className="absolute -top-1.5 -right-1.5 h-5 min-w-5 px-1 rounded-full bg-destructive text-destructive-foreground flex items-center justify-center text-[10px] font-bold ring-2 ring-background">
-                {state.cartCount}
-              </span>
-            )}
-          </Button>
+            {/* Filtro: solo productos con descuento */}
+            <Button
+              type="button"
+              variant={soloDescuento ? "default" : "outline"}
+              onClick={handleToggleDescuento}
+              className={cn(
+                "h-11 rounded-xl shrink-0 gap-1.5 px-3 border-2",
+                soloDescuento ? "bg-teal-600 hover:bg-teal-700 text-white border-teal-600" : "text-teal-700 border-teal-200 hover:bg-teal-50",
+              )}
+              title="Mostrar solo productos con promociones"
+            >
+              <Tag className="h-4 w-4" />
+              <span className="text-sm">Promociones</span>
+            </Button>
+          </div>
         </div>
 
         {productsLoading ? (
@@ -509,6 +493,25 @@ function NuevaVentaContent({
           )}
         </DialogContent>
       </Dialog>
+
+      {/* Carrito flotante (todas las resoluciones) */}
+      <Button
+        type="button"
+        size="icon"
+        className={cn(
+          "fixed bottom-6 right-6 z-40 h-14 w-14 rounded-full shadow-xl transition-all",
+          state.cart.length > 0 ? "bg-primary hover:bg-primary/90 shadow-primary/30" : "bg-muted-foreground/40 opacity-60",
+        )}
+        onClick={() => setCartDialogOpen(true)}
+        disabled={state.cart.length === 0}
+      >
+        <ShoppingCart className="h-6 w-6 text-white" />
+        {state.cart.length > 0 && (
+          <span className="absolute -top-1 -right-1 h-6 min-w-6 px-1 rounded-full bg-destructive text-destructive-foreground flex items-center justify-center text-xs font-bold ring-2 ring-background">
+            {state.cartCount}
+          </span>
+        )}
+      </Button>
 
     </MainLayout>
   );
