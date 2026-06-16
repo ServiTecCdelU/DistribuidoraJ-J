@@ -101,6 +101,7 @@ import {
   saveTransferConfig,
 } from '@/services/transfer-config-service'
 import type { TransferConfig } from '@/services/transfer-config-service'
+import { assignHojaRuta } from '@/services/hoja-ruta-service'
 import {
   getClientsBySeller,
   getDebtClients,
@@ -461,6 +462,10 @@ export const transferApi = {
   saveConfig: saveTransferConfig,
 }
 export type { TransferConfig }
+
+export const hojaRutaApi = {
+  assign: assignHojaRuta,
+}
 
 export const cobranzasApi = {
   async getClientsBySeller(sellerId: string) {
