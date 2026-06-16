@@ -16,7 +16,9 @@ import { Label } from '@/components/ui/label'
 import type { Client } from '@/lib/types'
 import { formatCurrency, formatCuit, normalizeCuit } from '@/lib/utils/format'
 import { Textarea } from '@/components/ui/textarea'
-import { Loader2, User, FileText, Phone, Mail, MapPin, CreditCard, Building, StickyNote } from 'lucide-react'
+import { Loader2, User, FileText, Phone, Mail, MapPin, CreditCard, Building, StickyNote, Download } from 'lucide-react'
+import { getAuthToken } from '@/services/auth-service'
+import { toast } from 'sonner'
 
 interface ClientModalProps {
   open: boolean
@@ -34,6 +36,7 @@ interface ClientModalProps {
 
 export function ClientModal({ open, onOpenChange, client, onSave, showCreditLimit = true, showNotes = true, defaultValues, sellers }: ClientModalProps) {
   const [loading, setLoading] = useState(false)
+  const [arcaLoading, setArcaLoading] = useState(false)
   const [errors, setErrors] = useState<Record<string, string>>({})
   const [formData, setFormData] = useState({
     name: '',
@@ -128,6 +131,39 @@ export function ClientModal({ open, onOpenChange, client, onSave, showCreditLimi
     }
   }
 
+  const handleTraerDeAfip = async () => {
+    const cuitLimpio = normalizeCuit(formData.cuit)
+    if (cuitLimpio.length !== 11) {
+      toast.error('Ingresá un CUIT/CUIL válido de 11 dígitos')
+      return
+    }
+    setArcaLoading(true)
+    try {
+      const token = await getAuthToken()
+      if (!token) throw new Error('No autenticado')
+      const res = await fetch(`/api/afip/cuit?cuit=${cuitLimpio}`, {
+        headers: { Authorization: `Bearer ${token}` },
+      })
+      const data = await res.json()
+      if (!res.ok) {
+        toast.error(data.error || 'Error consultando AFIP')
+        return
+      }
+      setFormData((prev) => ({
+        ...prev,
+        name: data.nombre || prev.name,
+        address: data.domicilio || prev.address,
+        taxCategory: data.categoriaFiscal || prev.taxCategory,
+        cuit: formatCuit(cuitLimpio),
+      }))
+      toast.success(`Datos cargados desde AFIP${data.estadoClave ? ` — ${data.estadoClave}` : ''}`)
+    } catch (e: any) {
+      toast.error(e.message || 'Error consultando AFIP')
+    } finally {
+      setArcaLoading(false)
+    }
+  }
+
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-lg max-h-[90vh] overflow-y-auto">
@@ -181,13 +217,26 @@ export function ClientModal({ open, onOpenChange, client, onSave, showCreditLimi
                 <Label htmlFor="cuit" className="text-foreground">
                   CUIL / CUIT
                 </Label>
-                <Input
-                  id="cuit"
-                  value={formData.cuit}
-                  onChange={(e) => setFormData({ ...formData, cuit: e.target.value })}
-                  placeholder="20-12345678-9"
-                  className={errors.cuit ? 'border-destructive' : ''}
-                />
+                <div className="flex gap-2">
+                  <Input
+                    id="cuit"
+                    value={formData.cuit}
+                    onChange={(e) => setFormData({ ...formData, cuit: e.target.value })}
+                    placeholder="20-12345678-9"
+                    className={errors.cuit ? 'border-destructive' : ''}
+                  />
+                  <Button
+                    type="button"
+                    variant="outline"
+                    className="gap-2 shrink-0"
+                    onClick={handleTraerDeAfip}
+                    disabled={arcaLoading}
+                    title="Autocompletar razón social y condición fiscal desde AFIP/ARCA"
+                  >
+                    {arcaLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Download className="h-4 w-4" />}
+                    AFIP
+                  </Button>
+                </div>
                 {errors.cuit && <p className="text-xs text-destructive">{errors.cuit}</p>}
               </div>
             </div>
