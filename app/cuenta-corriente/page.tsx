@@ -63,6 +63,9 @@ const ESTADO_META: { key: DebtClassification; label: string; dot: string; text: 
 
 export default function CuentaCorrientePage() {
   const { user } = useAuth()
+  // Un vendedor solo ve la cuenta corriente de SUS clientes y en modo lectura.
+  const isSeller = user?.role === 'seller'
+  const canManage = !isSeller
   const [activeTab, setActiveTab] = useState<'clientes' | 'mayorista'>('clientes')
   const [debtClients, setDebtClients] = useState<ClientWithSeller[]>([])
   const [comprobantes, setComprobantes] = useState<ComprobantePago[]>([])
@@ -163,20 +166,26 @@ export default function CuentaCorrientePage() {
 
   useEffect(() => { loadData() }, [loadData])
 
-  const totalDeuda = debtClients.reduce((acc, c) => acc + c.currentBalance, 0)
+  // Vendedor: limitar a sus clientes. Admin: todos.
+  const scopedDebtClients = useMemo(
+    () => isSeller ? debtClients.filter((c) => c.sellerId === user?.sellerId) : debtClients,
+    [debtClients, isSeller, user?.sellerId]
+  )
+
+  const totalDeuda = scopedDebtClients.reduce((acc, c) => acc + c.currentBalance, 0)
 
   // Conteo de clientes con deuda por clasificación automática (según antigüedad)
   const estadoCounts = useMemo(() => {
     const counts = { normal: 0, atrasado: 0, moroso: 0, incobrable: 0, diaPago: 0 }
-    for (const c of debtClients) {
+    for (const c of scopedDebtClients) {
       if (c.currentBalance <= 0) continue
       counts[clasificarDeuda(c.debtSince)]++
       if (esDiaDePago(c.debtSince)) counts.diaPago++
     }
     return counts
-  }, [debtClients])
+  }, [scopedDebtClients])
 
-  const filteredClients = debtClients
+  const filteredClients = scopedDebtClients
     .filter((c) => {
       const matchesSeller = filterSeller === 'all' || c.sellerId === filterSeller
       const matchesSearch = !searchQuery || c.name.toLowerCase().includes(searchQuery.toLowerCase())
@@ -224,7 +233,7 @@ export default function CuentaCorrientePage() {
   }
 
   const handleApprove = async (comp: ComprobantePago) => {
-    if (!user) return
+    if (!user || !canManage) return
     setProcessing(true)
     try {
       const updated = await cobranzasApi.approveComprobante(comp.id, user.name || user.email)
@@ -257,7 +266,7 @@ export default function CuentaCorrientePage() {
   }
 
   const handleReject = async () => {
-    if (!rejectDialog || !rejectReason || !user) return
+    if (!rejectDialog || !rejectReason || !user || !canManage) return
     setProcessing(true)
     try {
       const updated = await cobranzasApi.rejectComprobante(rejectDialog.id, rejectReason, user.name || user.email)
@@ -333,7 +342,7 @@ export default function CuentaCorrientePage() {
 
   // Registrar pago manual (efectivo, etc)
   const handleRegisterPayment = async () => {
-    if (!selectedClient || !payAmount || !user) return
+    if (!selectedClient || !payAmount || !user || !canManage) return
     const amount = parseFloat(payAmount)
     if (isNaN(amount) || amount <= 0) {
       toast.error('Ingresá un monto válido')
@@ -397,6 +406,7 @@ export default function CuentaCorrientePage() {
 
   // Mayorista proveedor — cargar deuda
   const handleMayAddDeuda = async () => {
+    if (!canManage) return
     const amount = parseFloat(mayAmount)
     if (isNaN(amount) || amount <= 0) { toast.error('Ingresá un monto válido'); return }
     setMayProcessing(true)
@@ -425,7 +435,7 @@ export default function CuentaCorrientePage() {
   const [maySelectedDebt, setMaySelectedDebt] = useState<TransaccionMayorista | null>(null)
 
   const handleMayPagarBoleta = async () => {
-    if (!maySelectedDebt) return
+    if (!maySelectedDebt || !canManage) return
     const amount = parseFloat(mayAmount)
     if (isNaN(amount) || amount <= 0) { toast.error('Ingresá un monto válido'); return }
     const saldo = maySelectedDebt.saldo ?? 0
@@ -452,7 +462,7 @@ export default function CuentaCorrientePage() {
   }
 
   const handleRegisterMayoristaPayment = async () => {
-    if (!selectedClient || !payMayoristaAmount || !user) return
+    if (!selectedClient || !payMayoristaAmount || !user || !canManage) return
     const amount = parseFloat(payMayoristaAmount)
     if (isNaN(amount) || amount <= 0) {
       toast.error('Ingresá un monto válido')
@@ -659,7 +669,7 @@ tr{page-break-inside:avoid}
     }
 
     return (
-      <MainLayout allowedRoles={['admin']} title="Cuenta Corriente" description="Detalle de cliente">
+      <MainLayout allowedRoles={['admin', 'seller']} title="Cuenta Corriente" description="Detalle de cliente">
         {/* Header con botón volver */}
         <div className="flex items-center gap-3 mb-4">
           <Button variant="ghost" size="icon" className="rounded-xl" onClick={() => setSelectedClient(null)}>
@@ -744,6 +754,7 @@ tr{page-break-inside:avoid}
                             </Button>
                           )}
                         </div>
+                        {canManage && (
                         <div className="flex gap-2 mt-3">
                           <Button
                             size="sm"
@@ -761,6 +772,7 @@ tr{page-break-inside:avoid}
                             <XCircle className="h-3.5 w-3.5" />Rechazar
                           </Button>
                         </div>
+                        )}
                       </CardContent>
                     </Card>
                   ))}
@@ -781,6 +793,7 @@ tr{page-break-inside:avoid}
               </div>
 
               <div className="flex flex-wrap gap-2">
+                {canManage && (
                 <Button
                   className="gap-2 rounded-xl"
                   onClick={() => setPayDialog(true)}
@@ -789,6 +802,7 @@ tr{page-break-inside:avoid}
                   <Banknote className="h-4 w-4" />
                   Registrar pago
                 </Button>
+                )}
                 <Button
                   variant="outline"
                   className="gap-2 rounded-xl"
@@ -825,8 +839,8 @@ tr{page-break-inside:avoid}
                             tx={tx}
                             sale={sale}
                             devoluciones={devolsSale}
-                            onRegenerarRemito={handleRegenerarRemito}
-                            onRegenerarRecibo={handleRegenerarRecibo}
+                            onRegenerarRemito={canManage ? handleRegenerarRemito : undefined}
+                            onRegenerarRecibo={canManage ? handleRegenerarRecibo : undefined}
                           />
                         )
                       })}
@@ -1194,7 +1208,7 @@ tr{page-break-inside:avoid}
 
   // Vista principal: listado de deudores
   return (
-    <MainLayout allowedRoles={['admin']} title="Cuenta Corriente" description="Gestión de deudas y comprobantes de pago">
+    <MainLayout allowedRoles={['admin', 'seller']} title="Cuenta Corriente" description={isSeller ? 'Cuenta corriente de tus clientes' : 'Gestión de deudas y comprobantes de pago'}>
       {loading ? (
         <div className="space-y-6">
           <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
@@ -1209,7 +1223,8 @@ tr{page-break-inside:avoid}
         </div>
       ) : (
         <>
-          {/* Tabs Clientes / Mayorista */}
+          {/* Tabs Clientes / Mayorista — Mayorista solo admin */}
+          {canManage && (
           <div className="flex gap-2 mb-6">
             <Button
               variant={activeTab === 'clientes' ? 'default' : 'outline'}
@@ -1231,6 +1246,7 @@ tr{page-break-inside:avoid}
               )}
             </Button>
           </div>
+          )}
 
           {activeTab === 'clientes' && (
           <>
@@ -1242,7 +1258,7 @@ tr{page-break-inside:avoid}
                   <Users className="h-3.5 w-3.5" />Deuda total
                 </div>
                 <div className="text-lg font-bold text-red-600 truncate leading-tight">{formatCurrency(totalDeuda)}</div>
-                <p className="text-[11px] text-muted-foreground">{debtClients.length} clientes</p>
+                <p className="text-[11px] text-muted-foreground">{scopedDebtClients.length} clientes</p>
               </CardContent>
             </Card>
             <Card>
@@ -1276,6 +1292,7 @@ tr{page-break-inside:avoid}
                 </div>
               </CardContent>
             </Card>
+            {canManage && (
             <Card className="col-span-2 md:col-span-1">
               <CardContent className="p-3">
                 <div className="flex items-center gap-1.5 text-xs text-muted-foreground mb-1">
@@ -1285,6 +1302,7 @@ tr{page-break-inside:avoid}
                 <p className="text-[11px] text-muted-foreground">con clientes asignados</p>
               </CardContent>
             </Card>
+            )}
           </div>
 
           {/* Filtros */}
@@ -1324,6 +1342,7 @@ tr{page-break-inside:avoid}
                 <SelectItem value="incobrable">Incobrables</SelectItem>
               </SelectContent>
             </Select>
+            {canManage && (
             <Select value={filterSeller} onValueChange={setFilterSeller}>
               <SelectTrigger className="w-full sm:w-[200px] rounded-xl">
                 <SelectValue placeholder="Vendedor" />
@@ -1335,6 +1354,7 @@ tr{page-break-inside:avoid}
                 ))}
               </SelectContent>
             </Select>
+            )}
             <Select value={filterDiaCobro} onValueChange={setFilterDiaCobro}>
               <SelectTrigger className="w-full sm:w-[170px] rounded-xl">
                 <SelectValue placeholder="Día de cobro" />
@@ -1350,7 +1370,7 @@ tr{page-break-inside:avoid}
                 <SelectItem value="domingo">Domingo</SelectItem>
               </SelectContent>
             </Select>
-            {filterSeller !== 'all' && (
+            {(isSeller || filterSeller !== 'all') && (
               <Button onClick={handlePrintCobranza} className="rounded-xl gap-2 shrink-0">
                 <Printer className="h-4 w-4" />
                 Imprimir cobranza
@@ -1739,7 +1759,7 @@ tr{page-break-inside:avoid}
                 <DialogDescription>Clic en un cliente para ver su deuda</DialogDescription>
               </DialogHeader>
               {(() => {
-                const lista = debtClients
+                const lista = scopedDebtClients
                   .filter((c) => c.currentBalance > 0 && (
                     estadoDetalle === 'dia_pago'
                       ? esDiaDePago(c.debtSince)
