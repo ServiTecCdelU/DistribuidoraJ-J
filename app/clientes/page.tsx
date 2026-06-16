@@ -22,6 +22,8 @@ import {
 import { clientsApi, sellersApi } from '@/lib/api'
 import { useAuth } from '@/hooks/use-auth'
 import { recordAudit } from '@/lib/audit'
+import { buildDebtWhatsappUrl } from '@/lib/utils/whatsapp'
+import { MessageCircle } from 'lucide-react'
 import {
   Select,
   SelectContent,
@@ -785,6 +787,28 @@ export default function ClientesPage() {
                       </div>
                     )}
                   </div>
+                )
+              })()}
+
+              {/* Recordatorio de deuda por WhatsApp */}
+              {(() => {
+                const waUrl = buildDebtWhatsappUrl({
+                  phone: selectedClient.phone,
+                  clientName: selectedClient.name,
+                  balance: selectedClient.currentBalance || 0,
+                  montoFormateado: formatCurrency(selectedClient.currentBalance || 0),
+                })
+                if (!waUrl) return null
+                return (
+                  <a
+                    href={waUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="flex items-center justify-center gap-2 w-full rounded-2xl bg-green-600 hover:bg-green-700 text-white text-sm font-medium py-2.5 transition-colors"
+                  >
+                    <MessageCircle className="h-4 w-4" />
+                    Recordar deuda por WhatsApp
+                  </a>
                 )
               })()}
 
