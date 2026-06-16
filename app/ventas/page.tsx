@@ -18,7 +18,9 @@ function VentasInner() {
   const [clients, setClients] = useState<{ id: string; name: string; city?: string }[]>([]);
   const [sellers, setSellers] = useState<{ id: string; name: string }[]>([]);
 
-  const filterBySellerId = user?.role === "seller" ? user.sellerId : undefined;
+  // Un vendedor SOLO ve sus ventas. Si su sellerId aún no resolvió, filtrar con un
+  // sentinel para no mostrar todas las ventas por error.
+  const filterBySellerId = user?.role === "seller" ? (user.sellerId || "__sin_vendedor__") : undefined;
 
   // Cargar clientes y vendedores para filtros
   useEffect(() => {
