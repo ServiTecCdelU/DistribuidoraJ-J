@@ -183,7 +183,7 @@ function mapPedidoRechazado(d: Record<string, any>): Venta {
   };
 }
 
-export function useVentas(filterBySellerId?: string, clientCityMap?: Record<string, string>) {
+export function useVentas(filterBySellerId?: string, clientCityMap?: Record<string, string>, enabled: boolean = true) {
   const [ventas, setVentas] = useState<Venta[]>([]);
   const [cargando, setCargando] = useState(true);
   const [filtros, setFiltros] = useState<FiltrosVentas>({
@@ -209,6 +209,7 @@ export function useVentas(filterBySellerId?: string, clientCityMap?: Record<stri
   const [emitiendo, setEmitiendo] = useState(false);
 
   const cargarVentas = useCallback(async () => {
+    if (!enabled) return;
     try {
       setCargando(true);
       let q = supabase
@@ -241,7 +242,7 @@ export function useVentas(filterBySellerId?: string, clientCityMap?: Record<stri
     } finally {
       setCargando(false);
     }
-  }, [filterBySellerId]);
+  }, [filterBySellerId, enabled]);
 
   useEffect(() => {
     cargarVentas();

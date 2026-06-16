@@ -14,7 +14,7 @@ function VentasInner() {
   const searchParams = useSearchParams();
   const saleIdFromUrl = searchParams.get("saleId");
   const [mounted, setMounted] = useState(false);
-  const { user } = useAuth();
+  const { user, loading: authLoading } = useAuth();
   const [clients, setClients] = useState<{ id: string; name: string; city?: string }[]>([]);
   const [sellers, setSellers] = useState<{ id: string; name: string }[]>([]);
 
@@ -62,7 +62,7 @@ function VentasInner() {
     formatearFechaHora,
     etiquetaPago,
     claseBadgePago,
-  } = useVentas(filterBySellerId, clientCityMap);
+  } = useVentas(filterBySellerId, clientCityMap, !authLoading);
 
   useEffect(() => { setMounted(true); }, []);
 
