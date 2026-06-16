@@ -45,8 +45,9 @@ import {
   Users, FileCheck, CheckCircle2, XCircle, Clock, Loader2, ExternalLink,
   ChevronLeft, DollarSign, ArrowDownCircle, ArrowUpCircle, Search, X,
   Banknote, CreditCard, Image as ImageIcon, AlertTriangle, Ban, Printer,
-  History, RotateCcw, Tag,
+  History, RotateCcw, Tag, MessageCircle,
 } from 'lucide-react'
+import { buildDebtWhatsappUrl } from '@/lib/utils/whatsapp'
 import { toast } from 'sonner'
 
 type ClientWithSeller = Client & { sellerName?: string }
@@ -724,6 +725,26 @@ tr{page-break-inside:avoid}
                   <History className="h-4 w-4" />
                   Historial de productos
                 </Button>
+                {(() => {
+                  const waUrl = buildDebtWhatsappUrl({
+                    phone: selectedClient.phone,
+                    clientName: selectedClient.name,
+                    balance: selectedClient.currentBalance || 0,
+                    montoFormateado: formatCurrency(selectedClient.currentBalance || 0),
+                  })
+                  if (!waUrl) return null
+                  return (
+                    <a
+                      href={waUrl}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="inline-flex items-center gap-2 rounded-xl bg-green-600 hover:bg-green-700 text-white text-sm font-medium px-4 h-9 transition-colors"
+                    >
+                      <MessageCircle className="h-4 w-4" />
+                      Recordar por WhatsApp
+                    </a>
+                  )
+                })()}
               </div>
 
               {txMinorista.length === 0 ? (
