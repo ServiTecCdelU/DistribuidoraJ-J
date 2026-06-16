@@ -89,7 +89,7 @@ import {
   getProductDistribution,
   getDashboardData,
 } from '@/services/dashboard-service'
-import { logAudit, getAuditLog } from '@/services/audit-service'
+import { logAudit, getAuditLog, getAuditByEntity } from '@/services/audit-service'
 import {
   getPriceLists,
   createPriceList,
@@ -447,6 +447,7 @@ export const dashboardApi = {
 export const auditApi = {
   log: logAudit,
   getAll: getAuditLog,
+  getByEntity: getAuditByEntity,
 }
 
 export const priceListApi = {

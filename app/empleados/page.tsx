@@ -25,11 +25,11 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
-import { sellersApi, ordersApi } from '@/lib/api'
+import { sellersApi, ordersApi, auditApi } from '@/lib/api'
 import { useAuth } from '@/hooks/use-auth'
 import { recordAudit } from '@/lib/audit'
-import type { Seller, SellerCommission, EmployeeType, Order } from '@/lib/types'
-import { formatCurrency, formatDate } from '@/lib/utils/format'
+import type { Seller, SellerCommission, EmployeeType, Order, AuditEntry } from '@/lib/types'
+import { formatCurrency, formatDate, formatDateTime } from '@/lib/utils/format'
 import { statusConfig } from '@/lib/order-constants'
 import {
   Plus,
@@ -94,6 +94,10 @@ export default function EmpleadosPage() {
   const [activeOrders, setActiveOrders] = useState<Order[]>([])
   const [loadingOrders, setLoadingOrders] = useState(false)
   const [expandedOrderId, setExpandedOrderId] = useState<string | null>(null)
+
+  // Actividad del empleado (auditoría)
+  const [activity, setActivity] = useState<AuditEntry[]>([])
+  const [loadingActivity, setLoadingActivity] = useState(false)
 
   // Form state
   const [formData, setFormData] = useState({
@@ -181,8 +185,14 @@ export default function EmpleadosPage() {
     setDetailModalOpen(true)
     setExpandedOrderId(null)
     setActiveOrders([])
+    setActivity([])
     setLoadingCommissions(true)
     setLoadingOrders(true)
+    setLoadingActivity(true)
+    auditApi.getByEntity('vendedor', seller.id)
+      .then((data) => setActivity(data))
+      .catch(() => {})
+      .finally(() => setLoadingActivity(false))
     try {
       const [data, pagosData] = await Promise.all([
         sellersApi.getCommissions(seller.id),
@@ -1128,6 +1138,36 @@ export default function EmpleadosPage() {
                         </div>
                       )
                     })}
+                  </div>
+                )}
+              </div>
+
+              {/* Actividad reciente (auditoría) */}
+              <div>
+                <h4 className="font-semibold text-foreground mb-3 flex items-center gap-2">
+                  <Clock className="h-4 w-4 text-muted-foreground" />
+                  Actividad Reciente
+                </h4>
+                {loadingActivity ? (
+                  <div className="flex items-center justify-center py-6">
+                    <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
+                  </div>
+                ) : activity.length === 0 ? (
+                  <p className="text-sm text-muted-foreground py-2">
+                    Sin actividad registrada para este empleado.
+                  </p>
+                ) : (
+                  <div className="space-y-2 max-h-[220px] overflow-y-auto">
+                    {activity.map((a) => (
+                      <div key={a.id} className="flex items-start gap-3 rounded-lg border p-2.5">
+                        <div className="flex-1 min-w-0">
+                          <p className="text-sm">{a.description}</p>
+                          <p className="text-xs text-muted-foreground">
+                            {formatDateTime(a.createdAt)} · {a.userName}
+                          </p>
+                        </div>
+                      </div>
+                    ))}
                   </div>
                 )}
               </div>
