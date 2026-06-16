@@ -42,6 +42,25 @@ export const getDebtClients = async (sellerId?: string): Promise<(Client & { sel
 
   const { data } = await query
 
+  // Fecha de la deuda pendiente más antigua por cliente (entrada a cuenta corriente)
+  const clientIds = (data ?? []).map((d: any) => d.id)
+  const debtSinceMap: Record<string, Date> = {}
+  if (clientIds.length > 0) {
+    const { data: debts } = await supabase
+      .from('transacciones')
+      .select('client_id, date, saldo, amount')
+      .in('client_id', clientIds)
+      .eq('type', 'debt')
+      .order('date', { ascending: true })
+      .limit(20000)
+    for (const t of debts ?? []) {
+      const saldo = t.saldo != null ? Number(t.saldo) : Number(t.amount)
+      if (saldo <= 0) continue
+      // Orden ascendente: la primera deuda pendiente encontrada es la más antigua
+      if (!debtSinceMap[t.client_id]) debtSinceMap[t.client_id] = new Date(t.date)
+    }
+  }
+
   // Obtener nombres de vendedores si hay seller_ids
   const sellerIds = [...new Set((data ?? []).map((d: any) => d.seller_id).filter(Boolean))]
   let sellerMap: Record<string, string> = {}
@@ -71,6 +90,7 @@ export const getDebtClients = async (sellerId?: string): Promise<(Client & { sel
     sellerName: d.seller_id ? (sellerMap[d.seller_id] || undefined) : undefined,
     debtClassification: d.debt_classification ?? 'normal',
     diaCobro: d.dia_cobro ?? undefined,
+    debtSince: debtSinceMap[d.id] ?? undefined,
     notes: d.notes ?? '',
     createdAt: new Date(d.created_at),
   }))

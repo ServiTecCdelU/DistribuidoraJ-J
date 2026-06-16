@@ -9,6 +9,7 @@ import {
 } from 'lucide-react'
 import { formatCurrencyDecimals, formatDate } from '@/lib/utils/format'
 import { descargarDocumento } from '@/lib/utils/doc-actions'
+import { diaDePagoInfo, type EstadoDiaPago } from '@/lib/utils/deuda'
 import type { Sale, Transaction } from '@/lib/types'
 import type { Devolucion } from '@/services/devoluciones-service'
 import { supabase } from '@/lib/supabase'
@@ -18,6 +19,24 @@ interface MovimientoDeudaCardProps {
   sale?: Sale
   devoluciones?: Devolucion[]
   onRegenerarRemito?: (sale: Sale) => Promise<void>
+  onRegenerarRecibo?: (tx: Transaction) => Promise<void>
+}
+
+// Columnas compartidas entre el encabezado (en la page) y cada fila
+export const MOVIMIENTO_GRID =
+  'grid grid-cols-[minmax(8rem,1fr)_4.5rem_2.75rem_7rem_7rem_0.75rem] items-center gap-x-2'
+
+const COLOR_DIA: Record<EstadoDiaPago, string> = {
+  falta: 'text-green-600',
+  hoy: 'text-foreground',
+  atrasado: 'text-yellow-600',
+  moroso: 'text-orange-600',
+  incobrable: 'text-red-600',
+}
+
+function DiasCell({ date }: { date: Date }) {
+  const { numero, estado } = diaDePagoInfo(date)
+  return <span className={`text-[11px] font-bold tabular-nums ${COLOR_DIA[estado]}`}>{numero}</span>
 }
 
 function descargarRemito(sale: Sale) {
@@ -133,10 +152,11 @@ function ItemsTable({ items, showTotal = false }: { items: TableRow[]; showTotal
 }
 
 export function MovimientoDeudaCard({
-  tx, sale, devoluciones = [], onRegenerarRemito,
+  tx, sale, devoluciones = [], onRegenerarRemito, onRegenerarRecibo,
 }: MovimientoDeudaCardProps) {
   const [expanded, setExpanded] = useState(false)
   const [regenerando, setRegenerando] = useState(false)
+  const [regenerandoRecibo, setRegenerandoRecibo] = useState(false)
   const [legacyItems, setLegacyItems] = useState<TableRow[] | null>(null)
   const [linkedRemitos, setLinkedRemitos] = useState<{ id: string; remitoNumber: string; remitoPdfBase64?: string }[] | null>(null)
 
@@ -310,61 +330,105 @@ export function MovimientoDeudaCard({
     }
   }
 
+  const handleRegenerarRecibo = async (e: React.MouseEvent) => {
+    e.stopPropagation()
+    if (!onRegenerarRecibo) return
+    setRegenerandoRecibo(true)
+    try {
+      await onRegenerarRecibo(tx)
+    } finally {
+      setRegenerandoRecibo(false)
+    }
+  }
+
   return (
-    <div className="border rounded-lg overflow-hidden">
-      {/* Fila principal */}
+    <div>
+      {/* Fila principal (tabla) */}
       <div
-        className={`flex items-center gap-2 px-3 py-1.5 ${expandable ? 'cursor-pointer hover:bg-muted/30' : ''}`}
+        className={`${MOVIMIENTO_GRID} px-3 py-1.5 ${expandable ? 'cursor-pointer hover:bg-muted/30' : ''}`}
         onClick={expandable ? () => setExpanded((v) => !v) : undefined}
       >
-        {isPayment
-          ? <ArrowDownCircle className="h-3.5 w-3.5 text-green-600 shrink-0" />
-          : <ArrowUpCircle className="h-3.5 w-3.5 text-red-600 shrink-0" />
-        }
-        <span className="text-xs font-medium truncate flex-1 min-w-0">{tx.description}</span>
-        <span className="text-[11px] text-muted-foreground shrink-0">{formatDate(tx.date)}</span>
-        {tieneRemito && (
-          <span className="inline-flex items-center gap-0.5 text-[11px] text-blue-600 shrink-0">
-            <Truck className="h-3 w-3" />{sale!.remitoNumber}
-          </span>
-        )}
-        {isPayment && tx.reciboNumero && (
-          tx.reciboPdfBase64 ? (
-            <button
-              type="button"
-              className="inline-flex items-center gap-0.5 text-[11px] text-teal-600 hover:underline shrink-0"
-              onClick={(e) => {
-                e.stopPropagation()
-                descargarDocumento(tx.reciboPdfBase64!, 'recibo', tx.reciboNumero)
-              }}
-              title="Descargar recibo"
-            >
-              <Receipt className="h-3 w-3" />{tx.reciboNumero}
-            </button>
-          ) : (
-            <span className="inline-flex items-center gap-0.5 text-[11px] text-teal-600 shrink-0">
-              <Receipt className="h-3 w-3" />{tx.reciboNumero}
-            </span>
-          )
-        )}
-        {tieneNoEntregados && !expanded && (
-          <Badge variant="outline" className="text-[10px] px-1 py-0 h-4 text-amber-600 border-amber-300 shrink-0">
-            {noEntregadosUnified.length} no entregado{noEntregadosUnified.length > 1 ? 's' : ''}
-          </Badge>
-        )}
-        <div className="text-right shrink-0">
-          <span className={`text-xs font-bold tabular-nums ${isPayment ? 'text-green-600' : 'text-red-600'}`}>
-            {isPayment ? '-' : '+'}{formatCurrencyDecimals(tx.amount)}
-          </span>
-          {saldo != null && (
-            <span className={`ml-1 text-[11px] font-medium ${pagada ? 'text-green-600' : parcial ? 'text-amber-600' : 'text-red-500'}`}>
-              {pagada ? '✓' : `Saldo: ${formatCurrencyDecimals(saldo)}`}
+        {/* Concepto */}
+        <div className="flex items-center gap-1.5 min-w-0">
+          {isPayment
+            ? <ArrowDownCircle className="h-3.5 w-3.5 text-green-600 shrink-0" />
+            : <ArrowUpCircle className="h-3.5 w-3.5 text-red-600 shrink-0" />
+          }
+          <span className="text-xs font-medium truncate">{tx.description}</span>
+          {tieneRemito && (
+            <span className="inline-flex items-center gap-0.5 text-[11px] text-blue-600 shrink-0">
+              <Truck className="h-3 w-3" />{sale!.remitoNumber}
             </span>
           )}
+          {isPayment && (
+            tx.reciboPdfBase64 ? (
+              <>
+                <button
+                  type="button"
+                  className="inline-flex items-center gap-0.5 text-[11px] text-teal-600 hover:underline shrink-0"
+                  onClick={(e) => {
+                    e.stopPropagation()
+                    descargarDocumento(tx.reciboPdfBase64!, 'recibo', tx.reciboNumero)
+                  }}
+                  title="Descargar recibo"
+                >
+                  <Receipt className="h-3 w-3" />{tx.reciboNumero || 'Recibo'}
+                </button>
+                {onRegenerarRecibo && (
+                  <button
+                    type="button"
+                    className="inline-flex items-center text-[11px] text-muted-foreground hover:text-teal-600 shrink-0 disabled:opacity-50"
+                    onClick={handleRegenerarRecibo}
+                    disabled={regenerandoRecibo}
+                    title="Generar de nuevo el recibo"
+                  >
+                    {regenerandoRecibo ? <Loader2 className="h-3 w-3 animate-spin" /> : <RefreshCw className="h-3 w-3" />}
+                  </button>
+                )}
+              </>
+            ) : onRegenerarRecibo ? (
+              <button
+                type="button"
+                className="inline-flex items-center gap-0.5 text-[11px] text-teal-600 hover:underline shrink-0 disabled:opacity-50"
+                onClick={handleRegenerarRecibo}
+                disabled={regenerandoRecibo}
+                title="Generar y descargar el recibo de este pago"
+              >
+                {regenerandoRecibo ? <Loader2 className="h-3 w-3 animate-spin" /> : <Receipt className="h-3 w-3" />}
+                Generar recibo
+              </button>
+            ) : tx.reciboNumero ? (
+              <span className="inline-flex items-center gap-0.5 text-[11px] text-teal-600 shrink-0">
+                <Receipt className="h-3 w-3" />{tx.reciboNumero}
+              </span>
+            ) : null
+          )}
+          {tieneNoEntregados && !expanded && (
+            <Badge variant="outline" className="text-[10px] px-1 py-0 h-4 text-amber-600 border-amber-300 shrink-0">
+              {noEntregadosUnified.length} no entregado{noEntregadosUnified.length > 1 ? 's' : ''}
+            </Badge>
+          )}
         </div>
-        {expandable && (
-          <ChevronDown className={`h-3.5 w-3.5 text-muted-foreground shrink-0 transition-transform ${expanded ? 'rotate-180' : ''}`} />
-        )}
+        {/* Fecha */}
+        <span className="text-[11px] text-muted-foreground text-right tabular-nums">{formatDate(tx.date)}</span>
+        {/* Días en cuenta corriente (solo deudas pendientes) */}
+        <div className="text-center">
+          {!isPayment && !pagada ? <DiasCell date={tx.date} /> : null}
+        </div>
+        {/* Monto */}
+        <span className={`text-xs font-bold tabular-nums text-right ${isPayment ? 'text-green-600' : 'text-red-600'}`}>
+          {isPayment ? '-' : '+'}{formatCurrencyDecimals(tx.amount)}
+        </span>
+        {/* Saldo */}
+        <span className={`text-[11px] font-medium tabular-nums text-right ${saldo == null ? 'text-muted-foreground' : pagada ? 'text-green-600' : parcial ? 'text-amber-600' : 'text-red-500'}`}>
+          {saldo == null ? '—' : pagada ? '✓' : formatCurrencyDecimals(saldo)}
+        </span>
+        {/* Expandir */}
+        <div className="flex justify-center">
+          {expandable && (
+            <ChevronDown className={`h-3.5 w-3.5 text-muted-foreground transition-transform ${expanded ? 'rotate-180' : ''}`} />
+          )}
+        </div>
       </div>
 
       {/* Panel expandido */}

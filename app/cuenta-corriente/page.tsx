@@ -39,8 +39,10 @@ import type { Faltante } from '@/services/faltantes-service'
 import type { Devolucion } from '@/services/devoluciones-service'
 import { useAuth } from '@/hooks/use-auth'
 import type { Client, ComprobantePago, DebtClassification, Sale, Seller, Transaction } from '@/lib/types'
-import { MovimientoDeudaCard } from '@/components/cuenta-corriente/movimiento-deuda-card'
+import { MovimientoDeudaCard, MOVIMIENTO_GRID } from '@/components/cuenta-corriente/movimiento-deuda-card'
 import { formatCurrency, formatDate } from '@/lib/utils/format'
+import { clasificarDeuda, diasDesde, esDiaDePago, diaDePagoInfo } from '@/lib/utils/deuda'
+import { slugify } from '@/services/supabase-helpers'
 import {
   Users, FileCheck, CheckCircle2, XCircle, Clock, Loader2, ExternalLink,
   ChevronLeft, DollarSign, ArrowDownCircle, ArrowUpCircle, Search, X,
@@ -50,6 +52,14 @@ import {
 import { toast } from 'sonner'
 
 type ClientWithSeller = Client & { sellerName?: string }
+
+// Metadata de cada clasificación para la card de estado y su detalle
+const ESTADO_META: { key: DebtClassification; label: string; dot: string; text: string }[] = [
+  { key: 'normal', label: 'Normales', dot: 'bg-green-500', text: 'text-green-600' },
+  { key: 'atrasado', label: 'Atrasados', dot: 'bg-yellow-400', text: 'text-yellow-600' },
+  { key: 'moroso', label: 'Morosos', dot: 'bg-orange-500', text: 'text-orange-600' },
+  { key: 'incobrable', label: 'Incobrables', dot: 'bg-red-500', text: 'text-red-600' },
+]
 
 export default function CuentaCorrientePage() {
   const { user } = useAuth()
@@ -63,6 +73,8 @@ export default function CuentaCorrientePage() {
   const [filterDiaCobro, setFilterDiaCobro] = useState<string>('all')
   const [filterClassification, setFilterClassification] = useState<string>('all')
   const [searchQuery, setSearchQuery] = useState('')
+  // Orden de la lista: por deuda (más plata) o por días en cuenta corriente (más días)
+  const [sortBy, setSortBy] = useState<'deuda' | 'dias'>('deuda')
 
   // Cliente seleccionado
   const [selectedClient, setSelectedClient] = useState<ClientWithSeller | null>(null)
@@ -121,6 +133,9 @@ export default function CuentaCorrientePage() {
   // Preview imagen comprobante
   const [previewUrl, setPreviewUrl] = useState<string | null>(null)
 
+  // Detalle de estado: muestra la lista de clientes de una clasificación
+  const [estadoDetalle, setEstadoDetalle] = useState<DebtClassification | 'dia_pago' | null>(null)
+
   const loadData = useCallback(async () => {
     try {
       const [clientsData, compData, sellersData] = await Promise.all([
@@ -149,21 +164,40 @@ export default function CuentaCorrientePage() {
   useEffect(() => { loadData() }, [loadData])
 
   const totalDeuda = debtClients.reduce((acc, c) => acc + c.currentBalance, 0)
-  const pendingComprobantes = comprobantes.filter((c) => c.status === 'pending')
 
-  const filteredClients = debtClients.filter((c) => {
-    const matchesSeller = filterSeller === 'all' || c.sellerId === filterSeller
-    const matchesSearch = !searchQuery || c.name.toLowerCase().includes(searchQuery.toLowerCase())
-    const matchesClassification = filterClassification === 'all' || (c.debtClassification ?? 'normal') === filterClassification
-    const matchesDia = filterDiaCobro === 'all' || (c.diaCobro ?? '') === filterDiaCobro
-    return matchesSeller && matchesSearch && matchesClassification && matchesDia
-  })
+  // Conteo de clientes con deuda por clasificación automática (según antigüedad)
+  const estadoCounts = useMemo(() => {
+    const counts = { normal: 0, atrasado: 0, moroso: 0, incobrable: 0, diaPago: 0 }
+    for (const c of debtClients) {
+      if (c.currentBalance <= 0) continue
+      counts[clasificarDeuda(c.debtSince)]++
+      if (esDiaDePago(c.debtSince)) counts.diaPago++
+    }
+    return counts
+  }, [debtClients])
+
+  const filteredClients = debtClients
+    .filter((c) => {
+      const matchesSeller = filterSeller === 'all' || c.sellerId === filterSeller
+      const matchesSearch = !searchQuery || c.name.toLowerCase().includes(searchQuery.toLowerCase())
+      const matchesClassification = filterClassification === 'all' || clasificarDeuda(c.debtSince) === filterClassification
+      const matchesDia = filterDiaCobro === 'all' || (c.diaCobro ?? '') === filterDiaCobro
+      return matchesSeller && matchesSearch && matchesClassification && matchesDia
+    })
+    .sort((a, b) => {
+      if (sortBy === 'dias') {
+        // Más días en cuenta corriente primero (deuda más antigua)
+        return diasDesde(b.debtSince) - diasDesde(a.debtSince)
+      }
+      // Más deuda primero
+      return b.currentBalance - a.currentBalance
+    })
 
   const totalPages = Math.ceil(filteredClients.length / PAGE_SIZE)
   const paginatedClients = filteredClients.slice((currentPage - 1) * PAGE_SIZE, currentPage * PAGE_SIZE)
 
   // Reset página al cambiar filtros
-  useEffect(() => { setCurrentPage(1) }, [searchQuery, filterSeller, filterClassification, filterDiaCobro])
+  useEffect(() => { setCurrentPage(1) }, [searchQuery, filterSeller, filterClassification, filterDiaCobro, sortBy])
 
   // Seleccionar cliente → cargar detalle
   const handleSelectClient = async (client: ClientWithSeller) => {
@@ -243,8 +277,40 @@ export default function CuentaCorrientePage() {
   const emitirRecibo = async (tx: Transaction, saldoAnterior: number, metodo: string) => {
     try {
       const { generarReciboPago } = await import('@/hooks/useGenerarPdf')
+      // Estado fresco post-pago (saldos ya actualizados en BD)
+      const freshTx = selectedClient
+        ? await clientsApi.getTransactions(selectedClient.id)
+        : clientTransactions
+      const cuentaTx = tx.cuenta ?? 'minorista'
+      const txFresh = freshTx.find((t) => t.id === tx.id)
+      const debtIdPagada = txFresh?.debtId ?? tx.debtId
+
+      // Número de recibo por cliente: clienteSlug_NNN (secuencial según el pago)
+      const pagos = freshTx
+        .filter((t) => t.type === 'payment')
+        .sort((a, b) => a.date.getTime() - b.date.getTime())
+      const idx = pagos.findIndex((t) => t.id === tx.id)
+      const seq = idx >= 0 ? idx + 1 : pagos.length + 1
+      const reciboNumero = `${slugify(selectedClient?.name || 'cliente')}_${String(seq).padStart(3, '0')}`
+
+      // Solo deudas pendientes o la que se acaba de pagar (no repetir las ya saldadas antes)
+      const deudas = freshTx
+        .filter((t) =>
+          t.type === 'debt' &&
+          (t.cuenta ?? 'minorista') === cuentaTx &&
+          t.date.getTime() <= tx.date.getTime() &&
+          ((t.saldo != null && t.saldo > 0) || t.id === debtIdPagada)
+        )
+        .sort((a, b) => a.date.getTime() - b.date.getTime())
+        .map((t) => ({
+          descripcion: t.description,
+          fecha: t.date,
+          monto: t.amount,
+          saldo: t.saldo ?? null,
+        }))
+
       const base64 = await generarReciboPago({
-        reciboNumero: tx.reciboNumero || tx.id,
+        reciboNumero,
         fecha: new Date(),
         clientName: selectedClient?.name,
         clientAddress: selectedClient?.address,
@@ -253,11 +319,12 @@ export default function CuentaCorrientePage() {
         metodo,
         saldoAnterior,
         saldoNuevo: Math.max(0, saldoAnterior - tx.amount),
+        deudas,
       })
       await paymentsApi.saveReciboPdf(tx.id, base64)
       const link = document.createElement('a')
       link.href = `data:application/pdf;base64,${base64}`
-      link.download = `recibo-${tx.reciboNumero || tx.id}.pdf`
+      link.download = `recibo-${reciboNumero}.pdf`
       link.click()
     } catch {
       toast.info('Pago registrado — el recibo no pudo generarse')
@@ -437,23 +504,6 @@ export default function CuentaCorrientePage() {
     }
   }
 
-  // Cambiar clasificación de deuda
-  const handleChangeClassification = async (clientId: string, classification: DebtClassification) => {
-    try {
-      await clientsApi.update(clientId, { debtClassification: classification })
-      setDebtClients((prev) =>
-        prev.map((c) => c.id === clientId ? { ...c, debtClassification: classification } : c)
-      )
-      if (selectedClient?.id === clientId) {
-        setSelectedClient((prev) => prev ? { ...prev, debtClassification: classification } : prev)
-      }
-      const labels: Record<DebtClassification, string> = { normal: 'Normal', moroso: 'Moroso', incobrable: 'Incobrable' }
-      toast.success(`Clasificación cambiada a ${labels[classification]}`)
-    } catch {
-      toast.error('Error al cambiar clasificación')
-    }
-  }
-
   // Imprimir listado de cobranza del vendedor filtrado
   const handlePrintCobranza = () => {
     const conDeuda = filteredClients.filter((c) => c.currentBalance > 0)
@@ -516,6 +566,32 @@ tr{page-break-inside:avoid}
       iframe.contentWindow?.print()
       setTimeout(() => document.body.removeChild(iframe), 1000)
     }
+  }
+
+  // Genera (o regenera) el recibo de un pago que no tiene PDF guardado
+  const handleRegenerarRecibo = async (tx: Transaction) => {
+    if (!selectedClient) return
+    // Reconstruir el saldo anterior al pago según el orden cronológico de la misma cuenta
+    const cuentaTx = tx.cuenta ?? 'minorista'
+    const ordered = clientTransactions
+      .filter((t) => (t.cuenta ?? 'minorista') === cuentaTx)
+      .sort((a, b) => a.date.getTime() - b.date.getTime())
+    let running = 0
+    let saldoAnterior = 0
+    for (const t of ordered) {
+      if (t.id === tx.id) { saldoAnterior = running; break }
+      running += t.type === 'debt' ? t.amount : -t.amount
+    }
+    const desc = (tx.description || '').toLowerCase()
+    const metodo = desc.includes('transfer')
+      ? 'Pago por transferencia bancaria'
+      : desc.includes('efectivo')
+        ? 'Pago en efectivo'
+        : 'Pago registrado manualmente'
+    await emitirRecibo(tx, Math.max(0, saldoAnterior), metodo)
+    const txs = await clientsApi.getTransactions(selectedClient.id)
+    setClientTransactions(txs)
+    toast.success('Recibo generado')
   }
 
   const handleRegenerarRemito = async (sale: Sale) => {
@@ -609,24 +685,21 @@ tr{page-break-inside:avoid}
           </div>
         </div>
 
-        {/* Clasificación de deuda */}
-        <div className="flex items-center gap-3 mb-4 p-3 rounded-xl bg-muted/50">
-          <span className="text-sm font-medium text-muted-foreground">Clasificación:</span>
-          <Select
-            value={selectedClient.debtClassification ?? 'normal'}
-            onValueChange={(val) => handleChangeClassification(selectedClient.id, val as DebtClassification)}
-          >
-            <SelectTrigger className="w-[160px] h-8 text-sm rounded-lg">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="normal">Normal</SelectItem>
-              <SelectItem value="moroso">Moroso</SelectItem>
-              <SelectItem value="incobrable">Incobrable</SelectItem>
-            </SelectContent>
-          </Select>
-          {classificationBadge(selectedClient.debtClassification ?? 'normal')}
-        </div>
+        {/* Clasificación de deuda (automática según antigüedad) */}
+        {selectedClient.currentBalance > 0 && (
+          <div className="flex items-center gap-3 mb-4 p-3 rounded-xl bg-muted/50">
+            <span className="text-sm font-medium text-muted-foreground">Clasificación:</span>
+            {classificationBadge(clasificarDeuda(selectedClient.debtSince))}
+            {esDiaDePago(selectedClient.debtSince) && (
+              <Badge variant="secondary" className="text-teal-700 bg-teal-50 text-xs"><Clock className="h-3 w-3 mr-1" />Día de pago hoy</Badge>
+            )}
+            {selectedClient.debtSince && (
+              <span className="text-xs text-muted-foreground">
+                {diasDesde(selectedClient.debtSince)} días en cuenta corriente
+              </span>
+            )}
+          </div>
+        )}
 
         {loadingDetail ? (
           <div className="space-y-3">
@@ -729,22 +802,36 @@ tr{page-break-inside:avoid}
               {txMinorista.length === 0 ? (
                 <p className="text-sm text-muted-foreground text-center py-2">Sin movimientos</p>
               ) : (
-                <div className="flex flex-col gap-1">
-                  {txMinorista.map((tx) => {
-                    const sale = tx.saleId ? salesById.get(tx.saleId) : undefined
-                    const devolsSale = sale
-                      ? clientDevoluciones.filter((d) => d.saleId === sale.id)
-                      : []
-                    return (
-                      <MovimientoDeudaCard
-                        key={tx.id}
-                        tx={tx}
-                        sale={sale}
-                        devoluciones={devolsSale}
-                        onRegenerarRemito={handleRegenerarRemito}
-                      />
-                    )
-                  })}
+                <div className="overflow-x-auto">
+                  <div className="min-w-[600px] rounded-lg border overflow-hidden">
+                    {/* Encabezado */}
+                    <div className={`${MOVIMIENTO_GRID} px-3 py-1.5 bg-muted/50 border-b text-[10px] font-semibold uppercase tracking-wide text-muted-foreground`}>
+                      <span>Concepto</span>
+                      <span className="text-right">Fecha</span>
+                      <span className="text-center">Días</span>
+                      <span className="text-right">Monto</span>
+                      <span className="text-right">Saldo</span>
+                      <span />
+                    </div>
+                    <div className="divide-y">
+                      {txMinorista.map((tx) => {
+                        const sale = tx.saleId ? salesById.get(tx.saleId) : undefined
+                        const devolsSale = sale
+                          ? clientDevoluciones.filter((d) => d.saleId === sale.id)
+                          : []
+                        return (
+                          <MovimientoDeudaCard
+                            key={tx.id}
+                            tx={tx}
+                            sale={sale}
+                            devoluciones={devolsSale}
+                            onRegenerarRemito={handleRegenerarRemito}
+                            onRegenerarRecibo={handleRegenerarRecibo}
+                          />
+                        )
+                      })}
+                    </div>
+                  </div>
                 </div>
               )}
             </div>
@@ -1161,12 +1248,46 @@ tr{page-break-inside:avoid}
             </Card>
             <Card>
               <CardHeader className="pb-1 pt-4 px-4 flex flex-row items-center justify-between space-y-0">
-                <CardTitle className="text-xs font-medium text-muted-foreground">Comprobantes pendientes</CardTitle>
-                <Clock className="h-4 w-4 text-orange-500" />
+                <CardTitle className="text-xs font-medium text-muted-foreground">Estado</CardTitle>
+                <AlertTriangle className="h-4 w-4 text-muted-foreground" />
               </CardHeader>
-              <CardContent className="pb-4 px-4">
-                <div className="text-xl font-bold text-orange-500">{pendingComprobantes.length}</div>
-                <p className="text-xs text-muted-foreground mt-0.5">por revisar</p>
+              <CardContent className="pb-4 px-4 space-y-0.5">
+                {ESTADO_META.map((e) => (
+                  <div key={e.key} className="flex items-center justify-between text-sm">
+                    <span className="flex items-center gap-1.5"><span className={`h-2 w-2 rounded-full ${e.dot}`} />{e.label}</span>
+                    <div className="flex items-center gap-2">
+                      <span className={`font-bold tabular-nums ${e.text}`}>{estadoCounts[e.key]}</span>
+                      {estadoCounts[e.key] > 0 && (
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          className="h-6 px-2 text-xs gap-1"
+                          onClick={() => setEstadoDetalle(e.key)}
+                        >
+                          <Search className="h-3 w-3" />Ver
+                        </Button>
+                      )}
+                    </div>
+                  </div>
+                ))}
+                {estadoCounts.diaPago > 0 && (
+                  <div className="flex items-center justify-between text-sm pt-1 mt-1 border-t">
+                    <span className="flex items-center gap-1.5 text-teal-700 font-medium">
+                      <Clock className="h-3.5 w-3.5 text-teal-600" />Día de pago (hoy)
+                    </span>
+                    <div className="flex items-center gap-2">
+                      <span className="font-bold tabular-nums text-teal-600">{estadoCounts.diaPago}</span>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="h-6 px-2 text-xs gap-1"
+                        onClick={() => setEstadoDetalle('dia_pago')}
+                      >
+                        <Search className="h-3 w-3" />Ver
+                      </Button>
+                    </div>
+                  </div>
+                )}
               </CardContent>
             </Card>
             <Card className="col-span-2 md:col-span-1">
@@ -1197,13 +1318,23 @@ tr{page-break-inside:avoid}
                 </Button>
               )}
             </div>
+            <Select value={sortBy} onValueChange={(v) => setSortBy(v as 'deuda' | 'dias')}>
+              <SelectTrigger className="w-full sm:w-[170px] rounded-xl">
+                <SelectValue placeholder="Ordenar por" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="deuda">Mayor deuda</SelectItem>
+                <SelectItem value="dias">Más días</SelectItem>
+              </SelectContent>
+            </Select>
             <Select value={filterClassification} onValueChange={setFilterClassification}>
               <SelectTrigger className="w-full sm:w-[170px] rounded-xl">
                 <SelectValue placeholder="Clasificación" />
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="all">Todas</SelectItem>
-                <SelectItem value="normal">Normal</SelectItem>
+                <SelectItem value="normal">Normales</SelectItem>
+                <SelectItem value="atrasado">Atrasados</SelectItem>
                 <SelectItem value="moroso">Morosos</SelectItem>
                 <SelectItem value="incobrable">Incobrables</SelectItem>
               </SelectContent>
@@ -1269,8 +1400,8 @@ tr{page-break-inside:avoid}
                               {c.sellerName || 'Sin vendedor'}
                               {c.diaCobro && <span className="capitalize text-teal-600"> · {c.diaCobro}</span>}
                             </p>
-                            {(c.debtClassification ?? 'normal') !== 'normal' && (
-                              <div className="mt-1">{classificationBadge(c.debtClassification!)}</div>
+                            {clasificarDeuda(c.debtSince) !== 'normal' && (
+                              <div className="mt-1">{classificationBadge(clasificarDeuda(c.debtSince))}</div>
                             )}
                           </div>
                           <div className="text-right shrink-0">
@@ -1303,12 +1434,11 @@ tr{page-break-inside:avoid}
                         <TableHead className="text-right">Deuda</TableHead>
 
                         <TableHead className="text-center">Estado</TableHead>
-                        <TableHead className="text-center">Comprobantes</TableHead>
+                        <TableHead className="text-center">Día de pago</TableHead>
                       </TableRow>
                     </TableHeader>
                     <TableBody>
                       {paginatedClients.map((c) => {
-                        const clientPending = comprobantes.filter((comp) => comp.clientId === c.id && comp.status === 'pending')
                         return (
                           <TableRow
                             key={c.id}
@@ -1328,16 +1458,10 @@ tr{page-break-inside:avoid}
                               )}
                             </TableCell>
                             <TableCell className="text-center">
-                              {classificationBadge(c.debtClassification ?? 'normal')}
+                              {classificationBadge(clasificarDeuda(c.debtSince))}
                             </TableCell>
                             <TableCell className="text-center">
-                              {clientPending.length > 0 ? (
-                                <Badge variant="secondary" className="text-orange-600 bg-orange-50">
-                                  <Clock className="h-3 w-3 mr-1" />{clientPending.length}
-                                </Badge>
-                              ) : (
-                                <span className="text-xs text-muted-foreground">—</span>
-                              )}
+                              {c.currentBalance > 0 ? diaDePagoCell(c.debtSince) : <span className="text-xs text-muted-foreground">—</span>}
                             </TableCell>
                           </TableRow>
                         )
@@ -1614,20 +1738,84 @@ tr{page-break-inside:avoid}
           </Dialog>
           </>
           )}
+
+          {/* Dialog: lista de clientes de una clasificación */}
+          <Dialog open={!!estadoDetalle} onOpenChange={(open) => !open && setEstadoDetalle(null)}>
+            <DialogContent className="sm:max-w-md max-h-[80vh] overflow-y-auto">
+              <DialogHeader>
+                <DialogTitle className="flex items-center gap-2">
+                  {estadoDetalle === 'dia_pago' ? (
+                    <><Clock className="h-4 w-4 text-teal-600" />Día de pago (hoy)</>
+                  ) : estadoDetalle && (() => {
+                    const meta = ESTADO_META.find((e) => e.key === estadoDetalle)
+                    return <><span className={`h-2.5 w-2.5 rounded-full ${meta?.dot}`} />{meta?.label}</>
+                  })()}
+                </DialogTitle>
+                <DialogDescription>Clic en un cliente para ver su deuda</DialogDescription>
+              </DialogHeader>
+              {(() => {
+                const lista = debtClients
+                  .filter((c) => c.currentBalance > 0 && (
+                    estadoDetalle === 'dia_pago'
+                      ? esDiaDePago(c.debtSince)
+                      : clasificarDeuda(c.debtSince) === estadoDetalle
+                  ))
+                  .sort((a, b) => b.currentBalance - a.currentBalance)
+                if (lista.length === 0) {
+                  return <p className="text-sm text-muted-foreground text-center py-4">Sin clientes</p>
+                }
+                return (
+                  <div className="flex flex-col gap-1">
+                    {lista.map((c) => (
+                      <button
+                        key={c.id}
+                        className="flex items-center justify-between gap-3 p-3 rounded-xl border text-left hover:bg-muted/50 transition-colors"
+                        onClick={() => { setEstadoDetalle(null); handleSelectClient(c) }}
+                      >
+                        <div className="min-w-0 flex-1">
+                          <p className="text-sm font-medium truncate">{c.name}</p>
+                          <p className="text-xs text-muted-foreground truncate">
+                            {c.sellerName || 'Sin vendedor'}
+                            {c.debtSince && <span> · {diasDesde(c.debtSince)} días</span>}
+                          </p>
+                        </div>
+                        <span className="text-sm font-bold text-red-600 shrink-0 tabular-nums">{formatCurrency(c.currentBalance)}</span>
+                      </button>
+                    ))}
+                  </div>
+                )
+              })()}
+            </DialogContent>
+          </Dialog>
         </>
       )}
     </MainLayout>
   )
 }
 
+// Número de días con color según el estado del día de pago
+function diaDePagoCell(debtSince?: Date) {
+  const { numero, estado } = diaDePagoInfo(debtSince)
+  const color: Record<string, string> = {
+    falta: 'text-green-600',
+    hoy: 'text-foreground',
+    atrasado: 'text-yellow-600',
+    moroso: 'text-orange-600',
+    incobrable: 'text-red-600',
+  }
+  return <span className={`font-bold tabular-nums ${color[estado]}`}>{numero}</span>
+}
+
 function classificationBadge(classification: string) {
   switch (classification) {
+    case 'atrasado':
+      return <Badge variant="secondary" className="text-yellow-700 bg-yellow-50 text-xs"><Clock className="h-3 w-3 mr-1" />Atrasado</Badge>
     case 'moroso':
-      return <Badge variant="secondary" className="text-amber-700 bg-amber-50 text-xs"><AlertTriangle className="h-3 w-3 mr-1" />Moroso</Badge>
+      return <Badge variant="secondary" className="text-orange-700 bg-orange-50 text-xs"><AlertTriangle className="h-3 w-3 mr-1" />Moroso</Badge>
     case 'incobrable':
       return <Badge variant="destructive" className="text-xs"><Ban className="h-3 w-3 mr-1" />Incobrable</Badge>
     default:
-      return <Badge variant="outline" className="text-xs">Normal</Badge>
+      return <Badge variant="secondary" className="text-green-700 bg-green-50 text-xs"><CheckCircle2 className="h-3 w-3 mr-1" />Normal</Badge>
   }
 }
 

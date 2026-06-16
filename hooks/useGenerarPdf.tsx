@@ -1124,6 +1124,14 @@ export const generarBoletaDoble = async (venta: Venta, afipData?: any): Promise<
 };
 
 // ===================== RECIBO DE PAGO =====================
+export interface ReciboDeuda {
+  descripcion: string;
+  remito?: string;
+  fecha: any;
+  monto: number;
+  saldo: number | null;
+}
+
 export interface ReciboPagoData {
   reciboNumero: string;
   fecha: any;
@@ -1134,13 +1142,14 @@ export interface ReciboPagoData {
   metodo?: string;
   saldoAnterior: number;
   saldoNuevo: number;
+  deudas?: ReciboDeuda[];
 }
 
 // Recibo compacto: dos copias (Original/Duplicado) en una A4 para cortar al medio.
 const reciboStyles = StyleSheet.create({
-  page: { fontFamily: "Helvetica", backgroundColor: "white", color: "#1a1a1a", flexDirection: "column" },
-  half: { flexGrow: 1, flexBasis: 0, padding: "10mm 14mm", flexDirection: "column" },
-  cutLine: { borderBottom: "1px dashed #999", marginHorizontal: "14mm" },
+  page: { fontFamily: "Helvetica", backgroundColor: "white", color: "#1a1a1a", flexDirection: "row" },
+  half: { flexGrow: 1, flexBasis: 0, padding: "12mm 12mm", flexDirection: "column" },
+  cutLine: { borderLeft: "1px dashed #999", marginVertical: "10mm" },
   // Header
   header: { flexDirection: "row", justifyContent: "space-between", alignItems: "flex-start", borderBottom: "1.5px solid black", paddingBottom: 8, marginBottom: 8 },
   brandRow: { flexDirection: "row", alignItems: "center", gap: 8 },
@@ -1151,7 +1160,17 @@ const reciboStyles = StyleSheet.create({
   reciboTitle: { fontSize: 13, fontWeight: "bold", letterSpacing: 0.5 },
   reciboNro: { fontSize: 9, marginTop: 2 },
   reciboFecha: { fontSize: 7.5, color: "#555", marginTop: 1 },
-  copiaLabel: { fontSize: 7, fontWeight: "bold", color: "#fff", backgroundColor: "#0d9488", paddingVertical: 1.5, paddingHorizontal: 5, borderRadius: 3, marginTop: 4 },
+  // Fila única: fecha/hora + copia
+  metaRow: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: 8 },
+  metaText: { fontSize: 8 },
+  copiaLabel: { fontSize: 7, fontWeight: "bold", color: "#fff", backgroundColor: "#0d9488", paddingVertical: 1.5, paddingHorizontal: 5, borderRadius: 3 },
+  // Lista de comprobantes/deudas a la fecha
+  deudasTitle: { fontSize: 7.5, color: "#777", marginBottom: 3 },
+  deudasBox: { border: "0.5px solid #ddd", borderRadius: 3, paddingVertical: 3, paddingHorizontal: 6, marginBottom: 6 },
+  deudaRow: { flexDirection: "row", alignItems: "center", paddingVertical: 1.5 },
+  deudaFecha: { fontSize: 8.5, color: "#444", flexGrow: 1, flexBasis: 0 },
+  deudaMonto: { fontSize: 8.5, width: 75, textAlign: "right" },
+  deudaSaldo: { fontSize: 8.5, fontWeight: "bold", width: 70, textAlign: "right" },
   bold: { fontWeight: "bold" },
   // Cuerpo
   recibiRow: { fontSize: 9, marginBottom: 3 },
@@ -1183,13 +1202,33 @@ const ReciboCopia = ({ data, copia }: { data: ReciboPagoData; copia: string }) =
           <Text style={reciboStyles.brandName}>Distribuidora J&J</Text>
           <Text style={reciboStyles.brandSub}>Comprobante de pago — no válido como factura</Text>
         </View>
-        <View style={reciboStyles.headerRight}>
-          <Text style={reciboStyles.reciboTitle}>RECIBO DE PAGO</Text>
-          <Text style={reciboStyles.reciboNro}><Text style={reciboStyles.bold}>N° </Text>{data.reciboNumero}</Text>
-          <Text style={reciboStyles.reciboFecha}>{safeFormatDate(data.fecha)}  {safeFormatTime(data.fecha)}</Text>
-          <Text style={reciboStyles.copiaLabel}>{copia}</Text>
-        </View>
+        <Text style={reciboStyles.reciboTitle}>RECIBO DE PAGO</Text>
       </View>
+
+      {/* Fecha/hora + copia — en una sola fila */}
+      <View style={reciboStyles.metaRow}>
+        <Text style={reciboStyles.metaText}>{safeFormatDate(data.fecha)}  {safeFormatTime(data.fecha)}</Text>
+        <Text style={reciboStyles.copiaLabel}>{copia}</Text>
+      </View>
+
+      {/* Comprobantes / deudas a la fecha del recibo */}
+      {data.deudas && data.deudas.length > 0 && (
+        <View style={reciboStyles.deudasBox}>
+          <Text style={reciboStyles.deudasTitle}>Comprobantes en cuenta a la fecha</Text>
+          {data.deudas.map((d, i) => {
+            const pagada = d.saldo != null && d.saldo <= 0;
+            return (
+              <View key={i} style={reciboStyles.deudaRow}>
+                <Text style={reciboStyles.deudaFecha}>{safeFormatDate(d.fecha)}</Text>
+                <Text style={reciboStyles.deudaMonto}>+{formatCurrency(d.monto)}</Text>
+                <Text style={[reciboStyles.deudaSaldo, { color: pagada ? "#16a34a" : "#dc2626" }]}>
+                  {d.saldo == null ? "—" : pagada ? "PAGADO" : formatCurrency(d.saldo)}
+                </Text>
+              </View>
+            );
+          })}
+        </View>
+      )}
 
       {/* Recibí de */}
       <Text style={reciboStyles.recibiRow}>
@@ -1237,7 +1276,7 @@ const ReciboCopia = ({ data, copia }: { data: ReciboPagoData; copia: string }) =
 
       {/* Footer */}
       <View style={reciboStyles.footer}>
-        <Text>{data.reciboNumero}</Text>
+        <Text>Distribuidora J&J</Text>
         <Text>{copia}</Text>
       </View>
     </>
@@ -1247,7 +1286,7 @@ const ReciboCopia = ({ data, copia }: { data: ReciboPagoData; copia: string }) =
 const ReciboPagoPDF = ({ data }: { data: ReciboPagoData }) => {
   return (
     <Document>
-      <Page size="A4" style={reciboStyles.page}>
+      <Page size="A4" orientation="landscape" style={reciboStyles.page}>
         <View style={reciboStyles.half}>
           <ReciboCopia data={data} copia="ORIGINAL · Cliente" />
         </View>

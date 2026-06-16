@@ -64,14 +64,16 @@ export interface Client {
   currentBalanceMayorista?: number;
   sellerId?: string;
   sellerName?: string;
-  debtClassification?: 'normal' | 'moroso' | 'incobrable';
+  debtClassification?: 'normal' | 'atrasado' | 'moroso' | 'incobrable';
   /** Día de visita/cobro asignado (lunes..domingo) */
   diaCobro?: string;
+  /** Fecha de la deuda pendiente más antigua (entró a cuenta corriente). Define la clasificación automática. */
+  debtSince?: Date;
   notes?: string;
   createdAt: Date;
 }
 
-export type DebtClassification = 'normal' | 'moroso' | 'incobrable';
+export type DebtClassification = 'normal' | 'atrasado' | 'moroso' | 'incobrable';
 
 export interface Transaction {
   id: string;
