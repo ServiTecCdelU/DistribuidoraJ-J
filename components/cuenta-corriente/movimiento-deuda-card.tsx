@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useMemo } from 'react'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import {
@@ -263,7 +263,36 @@ export function MovimientoDeudaCard({
   }, [expanded, sale?.id])
 
   const isPayment = tx.type === 'payment'
-  const expandable = !isPayment && !!sale
+  const isDescuento = isPayment && (tx.description ?? '').startsWith('[DESCUENTO]')
+
+  // Parseo del detalle de un descuento desde la descripción:
+  // "[DESCUENTO] #venta — Nombre -3%, Nombre -4% (motivo)" o "[DESCUENTO] #venta — Final -10% (motivo)"
+  const descuento = useMemo(() => {
+    if (!isDescuento) return { rows: [] as TableRow[], motivo: undefined as string | undefined, final: undefined as string | undefined }
+    let s = (tx.description ?? '').replace(/^\[DESCUENTO\]\s*/, '').replace(/^#?[\w-]*\s*—\s*/, '')
+    let motivo: string | undefined
+    const m = s.match(/\(([^)]*)\)\s*$/)
+    if (m && m.index != null) { motivo = m[1].trim(); s = s.slice(0, m.index).trim() }
+    const priceByName = new Map((sale?.items ?? []).map((it) => [it.name, it]))
+    const rows: TableRow[] = []
+    let final: string | undefined
+    for (const part of s.split(', ').map((p) => p.trim()).filter(Boolean)) {
+      if (/^Final\b/i.test(part)) { final = part; continue }
+      const mm = part.match(/^(.+?)\s+-\s*(\d+(?:[.,]\d+)?)\s*%$/)
+      if (!mm) continue
+      const it = priceByName.get(mm[1].trim())
+      rows.push({
+        name: mm[1].trim(),
+        quantity: it?.quantity ?? 0,
+        price: it?.price ?? 0,
+        itemDiscount: Number(mm[2].replace(',', '.')),
+      })
+    }
+    return { rows, motivo, final }
+  }, [isDescuento, tx.description, sale])
+
+  const descuentoExpandable = isDescuento && !!sale && (descuento.rows.length > 0 || !!descuento.final)
+  const expandable = (!isPayment && !!sale) || descuentoExpandable
   const tieneRemito = !!sale?.remitoNumber
   const saldo = !isPayment && tx.saldo != null ? tx.saldo : null
   const pagada = saldo != null && saldo <= 0
@@ -354,7 +383,11 @@ export function MovimientoDeudaCard({
             ? <ArrowDownCircle className="h-3.5 w-3.5 text-green-600 shrink-0" />
             : <ArrowUpCircle className="h-3.5 w-3.5 text-red-600 shrink-0" />
           }
-          <span className="text-xs font-medium truncate">{tx.description}</span>
+          <span className="text-xs font-medium truncate">
+            {isDescuento
+              ? `Descuento${sale?.saleNumber ? ` · Venta ${sale.saleNumber}` : ''}${descuento.motivo ? ` · ${descuento.motivo}` : ''}`
+              : tx.description}
+          </span>
           {tieneRemito && (
             <span className="inline-flex items-center gap-0.5 text-[11px] text-blue-600 shrink-0">
               <Truck className="h-3 w-3" />{sale!.remitoNumber}
@@ -431,8 +464,30 @@ export function MovimientoDeudaCard({
         </div>
       </div>
 
+      {/* Panel expandido — descuento */}
+      {descuentoExpandable && expanded && sale && (
+        <div className="border-t bg-muted/20 px-3 pb-3 pt-2 space-y-2">
+          <div className="flex items-center gap-1 text-[11px] font-semibold text-emerald-700 mb-1">
+            <Tag className="h-3 w-3" />
+            Productos con descuento
+          </div>
+          {descuento.rows.length > 0 ? (
+            <ItemsTable items={descuento.rows} />
+          ) : (
+            <p className="text-[11px] text-muted-foreground">Descuento final sobre el total de la venta.</p>
+          )}
+          {descuento.motivo && (
+            <p className="text-[11px] text-muted-foreground">Motivo: {descuento.motivo}</p>
+          )}
+          <div className="border-t pt-1 flex justify-between text-[11px] font-semibold">
+            <span>Descuento total</span>
+            <span className="tabular-nums text-emerald-600">-{formatCurrencyDecimals(tx.amount)}</span>
+          </div>
+        </div>
+      )}
+
       {/* Panel expandido */}
-      {expandable && expanded && sale && (
+      {expandable && expanded && sale && !isDescuento && (
         <div className="border-t bg-muted/20 px-3 pb-3 pt-2 space-y-3">
 
           {/* Tabla de productos entregados */}

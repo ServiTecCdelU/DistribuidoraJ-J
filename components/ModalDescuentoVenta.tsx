@@ -113,7 +113,7 @@ export function ModalDescuentoVenta({ abierto, venta, onCerrar, onRegistrada }: 
           : tipoFinal === "percent"
             ? `Final -${Number(valorFinal)}%`
             : `Final -${formatCurrency(monto)}`;
-      const motivoFinal = [motivo.trim(), detalle].filter(Boolean).join(" · ") || undefined;
+      const motivoFinal = `${detalle}${motivo.trim() ? ` (${motivo.trim()})` : ""}`.trim() || undefined;
 
       const desc = await ajustesVentaApi.registrarDescuento({
         saleId: venta.id,
