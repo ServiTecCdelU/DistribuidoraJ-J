@@ -26,10 +26,12 @@ import {
 import { toast } from "sonner";
 import { descargarDocumento, enviarWhatsapp } from "@/lib/utils/doc-actions";
 import type { Venta } from "../types";
-import { Scissors, RotateCcw } from "lucide-react";
+import { Scissors, RotateCcw, Tag, ArrowLeftRight } from "lucide-react";
 import { supabase } from "@/lib/supabase";
 import { ModalDevolucion } from "@/components/ModalDevolucion";
-import { devolucionesApi, type Devolucion } from "@/lib/api";
+import { ModalDescuentoVenta } from "@/components/ModalDescuentoVenta";
+import { ModalConvertirPago } from "@/components/ModalConvertirPago";
+import { devolucionesApi, ajustesVentaApi, type Devolucion, type DescuentoVenta } from "@/lib/api";
 
 interface ModalDetalleVentaProps {
   abierto: boolean;
@@ -42,6 +44,7 @@ interface ModalDetalleVentaProps {
   claseBadgePago: (tipo: string, metodo?: string) => string;
   resolverTelefono?: (venta: Venta) => Promise<string>;
   isAdmin?: boolean;
+  onActualizado?: () => void;
 }
 
 export function ModalDetalleVenta({
@@ -55,6 +58,7 @@ export function ModalDetalleVenta({
   claseBadgePago,
   resolverTelefono,
   isAdmin = true,
+  onActualizado,
 }: ModalDetalleVentaProps) {
   const [generando, setGenerando] = useState<"boleta" | "remito" | null>(null);
   const [downloading, setDownloading] = useState<"invoice" | "remito" | null>(null);
@@ -62,19 +66,29 @@ export function ModalDetalleVenta({
   const [incidencias, setIncidencias] = useState<{ roturas: string[]; faltantes: string[]; noQuiere: string[] }>({ roturas: [], faltantes: [], noQuiere: [] });
   const [verTodosIncidencias, setVerTodosIncidencias] = useState(false);
   const [modalDevAbierto, setModalDevAbierto] = useState(false);
+  const [modalDescAbierto, setModalDescAbierto] = useState(false);
+  const [modalConvAbierto, setModalConvAbierto] = useState(false);
   const [devoluciones, setDevoluciones] = useState<Devolucion[]>([]);
+  const [descuentos, setDescuentos] = useState<DescuentoVenta[]>([]);
 
   const cargarDevoluciones = () => {
     if (!venta?.id) return;
     devolucionesApi.getBySale(venta.id).then(setDevoluciones).catch(() => {});
   };
 
+  const cargarDescuentos = () => {
+    if (!venta?.id) return;
+    ajustesVentaApi.getDescuentosBySale(venta.id).then(setDescuentos).catch(() => {});
+  };
+
   useEffect(() => {
     if (!venta?.id || !abierto) {
       setDevoluciones([]);
+      setDescuentos([]);
       return;
     }
     devolucionesApi.getBySale(venta.id).then(setDevoluciones).catch(() => {});
+    ajustesVentaApi.getDescuentosBySale(venta.id).then(setDescuentos).catch(() => {});
   }, [venta?.id, abierto]);
 
   useEffect(() => {
@@ -163,6 +177,27 @@ export function ModalDetalleVenta({
     link.href = `data:application/pdf;base64,${dev.reciboPdfBase64}`;
     link.download = `recibo-devolucion-${dev.reciboNumero}.pdf`;
     link.click();
+  };
+
+  const descargarReciboDescuento = (desc: DescuentoVenta) => {
+    if (!desc.reciboPdfBase64) {
+      toast.error("Este descuento no tiene recibo guardado");
+      return;
+    }
+    const link = document.createElement("a");
+    link.href = `data:application/pdf;base64,${desc.reciboPdfBase64}`;
+    link.download = `recibo-descuento-${desc.reciboNumero}.pdf`;
+    link.click();
+  };
+
+  const tieneCredito =
+    venta?.paymentType === "credit" ||
+    (venta?.paymentType === "mixed" && (venta?.creditAmount ?? 0) > 0);
+
+  const handleActualizado = () => {
+    cargarDescuentos();
+    cargarDevoluciones();
+    onActualizado?.();
   };
 
   return (
@@ -392,17 +427,71 @@ export function ModalDetalleVenta({
             </div>
           )}
 
-          {/* Registrar devolución (solo admin) */}
-          {isAdmin && !venta.rechazado && venta.items.length > 0 && (
-            <Button
-              variant="outline"
-              size="sm"
-              className="w-full gap-1.5 text-xs border-amber-300 text-amber-700 hover:bg-amber-50"
-              onClick={() => setModalDevAbierto(true)}
-            >
-              <RotateCcw className="h-3.5 w-3.5" />
-              Registrar devolución
-            </Button>
+          {/* Descuentos registrados */}
+          {descuentos.length > 0 && (
+            <div className="rounded-2xl border border-emerald-200 bg-emerald-50/40 overflow-hidden">
+              <p className="text-xs font-medium text-emerald-700 uppercase tracking-wider px-4 pt-3 pb-2">
+                Descuentos
+              </p>
+              <div className="divide-y divide-emerald-100">
+                {descuentos.map((desc) => (
+                  <div key={desc.id} className="flex items-center justify-between gap-2 px-4 py-2.5">
+                    <div className="min-w-0">
+                      <p className="text-sm font-medium text-emerald-800">-{formatearMoneda(desc.monto)}</p>
+                      <p className="text-xs text-emerald-700/80 truncate">
+                        {desc.description.replace(/^\[DESCUENTO\]\s*/, "") || desc.reciboNumero}
+                      </p>
+                    </div>
+                    {desc.reciboPdfBase64 && (
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="gap-1 text-xs shrink-0"
+                        onClick={() => descargarReciboDescuento(desc)}
+                      >
+                        <Download className="h-3 w-3" />
+                        Recibo
+                      </Button>
+                    )}
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Acciones admin */}
+          {isAdmin && !venta.rechazado && (
+            <div className="grid grid-cols-1 gap-2">
+              {venta.items.length > 0 && (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="w-full gap-1.5 text-xs border-amber-300 text-amber-700 hover:bg-amber-50"
+                  onClick={() => setModalDevAbierto(true)}
+                >
+                  <RotateCcw className="h-3.5 w-3.5" />
+                  Registrar devolución
+                </Button>
+              )}
+              <Button
+                variant="outline"
+                size="sm"
+                className="w-full gap-1.5 text-xs border-emerald-300 text-emerald-700 hover:bg-emerald-50"
+                onClick={() => setModalDescAbierto(true)}
+              >
+                <Tag className="h-3.5 w-3.5" />
+                Registrar descuento
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                className="w-full gap-1.5 text-xs border-sky-300 text-sky-700 hover:bg-sky-50"
+                onClick={() => setModalConvAbierto(true)}
+              >
+                <ArrowLeftRight className="h-3.5 w-3.5" />
+                {tieneCredito ? "Marcar como pagada" : "Pasar a cuenta corriente"}
+              </Button>
+            </div>
           )}
 
           {/* Pago mixto */}
@@ -523,7 +612,21 @@ export function ModalDetalleVenta({
         abierto={modalDevAbierto}
         venta={venta}
         onCerrar={() => setModalDevAbierto(false)}
-        onRegistrada={cargarDevoluciones}
+        onRegistrada={handleActualizado}
+      />
+
+      <ModalDescuentoVenta
+        abierto={modalDescAbierto}
+        venta={venta}
+        onCerrar={() => setModalDescAbierto(false)}
+        onRegistrada={handleActualizado}
+      />
+
+      <ModalConvertirPago
+        abierto={modalConvAbierto}
+        venta={venta}
+        onCerrar={() => setModalConvAbierto(false)}
+        onActualizado={handleActualizado}
       />
     </Dialog>
   );

@@ -62,6 +62,7 @@ function VentasInner() {
     formatearFechaHora,
     etiquetaPago,
     claseBadgePago,
+    recargar,
   } = useVentas(filterBySellerId, clientCityMap, !authLoading);
 
   useEffect(() => { setMounted(true); }, []);
@@ -99,6 +100,11 @@ function VentasInner() {
         claseBadgePago={claseBadgePago}
         resolverTelefono={resolverTelefono}
         isAdmin={user?.role === "admin"}
+        onActualizado={async () => {
+          const id = ventaSeleccionada?.id;
+          await recargar();
+          if (id) abrirDetallePorId(id);
+        }}
       />
 
       {/* ModalEmitirDocumento — solo admin */}

@@ -126,6 +126,12 @@ import {
   getDevolucionesByClient,
 } from '@/services/devoluciones-service'
 import type { Devolucion, DevolucionItem } from '@/services/devoluciones-service'
+import {
+  registrarDescuentoVenta,
+  getDescuentosBySale,
+  convertirPagoVenta,
+} from '@/services/ajustes-venta-service'
+import type { DescuentoVenta, ConversionPago, DireccionConversion } from '@/services/ajustes-venta-service'
 
 export const productsApi = {
   async getAll(): Promise<Product[]> {
@@ -290,6 +296,14 @@ export const devolucionesApi = {
 }
 
 export type { Devolucion, DevolucionItem }
+
+export const ajustesVentaApi = {
+  registrarDescuento: registrarDescuentoVenta,
+  getDescuentosBySale,
+  convertirPago: convertirPagoVenta,
+}
+
+export type { DescuentoVenta, ConversionPago, DireccionConversion }
 
 export const invoiceApi = {
   async createInvoice(saleId: string, client?: { name?: string; phone?: string; email?: string }) {
