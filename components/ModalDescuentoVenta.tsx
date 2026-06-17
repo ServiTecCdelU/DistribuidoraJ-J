@@ -127,14 +127,28 @@ export function ModalDescuentoVenta({ abierto, venta, onCerrar, onRegistrada }: 
       });
 
       try {
-        const { generarReciboPago } = await import("@/hooks/useGenerarPdf");
-        const base64 = await generarReciboPago({
+        const { generarReciboDescuento } = await import("@/hooks/useGenerarPdf");
+        const itemsRecibo =
+          modo === "porProducto"
+            ? filas
+                .filter((f) => f.pct > 0)
+                .map((f) => ({
+                  name: f.name,
+                  quantity: f.cantidad,
+                  precioUnit: f.precioUnit,
+                  pct: f.pct,
+                  descuento: round2((f.subtotal * f.pct) / 100),
+                }))
+            : [];
+        const base64 = await generarReciboDescuento({
           reciboNumero: desc.reciboNumero,
           fecha: desc.createdAt,
           clientName: venta.clientName,
           clientPhone: venta.clientPhone,
-          monto: desc.monto,
-          metodo: `Descuento${detalle ? ` — ${detalle}` : ""}`,
+          saleNumber: venta.saleNumber ? String(venta.saleNumber) : undefined,
+          items: itemsRecibo,
+          motivo: motivo.trim() || undefined,
+          total: desc.monto,
           saldoAnterior,
           saldoNuevo: saldoAnterior - desc.monto,
         });

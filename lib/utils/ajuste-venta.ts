@@ -18,6 +18,45 @@ export function calcularMontoDescuento(total: number, tipo: TipoDescuento, valor
   return round2(bruto);
 }
 
+export interface ItemDescuento {
+  name: string;
+  pct: number;
+}
+
+export interface DescuentoParseado {
+  items: ItemDescuento[];
+  motivo?: string;
+  final?: string; // texto del descuento final (ej "Final -10%") si aplica
+}
+
+/**
+ * Parsea la descripción de un movimiento [DESCUENTO]:
+ *   "[DESCUENTO] #venta — Nombre -3%, Nombre -4% (motivo)"
+ *   "[DESCUENTO] #venta — Final -10% (motivo)"
+ * Devuelve los productos con su % de descuento, el motivo y, si fue un
+ * descuento final, su texto.
+ */
+export function parseDescuentoDescripcion(description: string): DescuentoParseado {
+  let s = (description ?? "").replace(/^\[DESCUENTO\]\s*/, "").replace(/^#?[\w-]*\s*—\s*/, "");
+  let motivo: string | undefined;
+  const m = s.match(/\(([^)]*)\)\s*$/);
+  if (m && m.index != null) {
+    motivo = m[1].trim();
+    s = s.slice(0, m.index).trim();
+  }
+  const items: ItemDescuento[] = [];
+  let final: string | undefined;
+  for (const part of s.split(", ").map((p) => p.trim()).filter(Boolean)) {
+    if (/^Final\b/i.test(part)) {
+      final = part;
+      continue;
+    }
+    const mm = part.match(/^(.+?)\s+-\s*(\d+(?:[.,]\d+)?)\s*%$/);
+    if (mm) items.push({ name: mm[1].trim(), pct: Number(mm[2].replace(",", ".")) });
+  }
+  return { items, motivo, final };
+}
+
 /** Comisión que se descuenta al vendedor por un monto dado y su tasa (%). */
 export function calcularComisionDescuento(monto: number, commissionRate: number): number {
   const m = Number(monto) || 0;

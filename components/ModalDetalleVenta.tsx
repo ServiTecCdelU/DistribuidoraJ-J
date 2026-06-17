@@ -32,6 +32,7 @@ import { ModalDevolucion } from "@/components/ModalDevolucion";
 import { ModalDescuentoVenta } from "@/components/ModalDescuentoVenta";
 import { ModalConvertirPago } from "@/components/ModalConvertirPago";
 import { devolucionesApi, ajustesVentaApi, type Devolucion, type DescuentoVenta } from "@/lib/api";
+import { parseDescuentoDescripcion } from "@/lib/utils/ajuste-venta";
 
 interface ModalDetalleVentaProps {
   abierto: boolean;
@@ -435,27 +436,56 @@ export function ModalDetalleVenta({
                 Descuentos
               </p>
               <div className="divide-y divide-emerald-100">
-                {descuentos.map((desc) => (
-                  <div key={desc.id} className="flex items-center justify-between gap-2 px-4 py-2.5">
-                    <div className="min-w-0">
-                      <p className="text-sm font-medium text-emerald-800">-{formatearMoneda(desc.monto)}</p>
-                      <p className="text-xs text-emerald-700/80 truncate">
-                        {desc.description.replace(/^\[DESCUENTO\]\s*/, "") || desc.reciboNumero}
-                      </p>
+                {descuentos.map((desc) => {
+                  const parsed = parseDescuentoDescripcion(desc.description);
+                  return (
+                    <div key={desc.id} className="px-4 py-2.5 space-y-2">
+                      <div className="flex items-center justify-between gap-2">
+                        <p className="text-sm font-semibold text-emerald-800">-{formatearMoneda(desc.monto)}</p>
+                        {desc.reciboPdfBase64 && (
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            className="gap-1 text-xs shrink-0"
+                            onClick={() => descargarReciboDescuento(desc)}
+                          >
+                            <Download className="h-3 w-3" />
+                            Recibo
+                          </Button>
+                        )}
+                      </div>
+
+                      {parsed.items.length > 0 ? (
+                        <div className="space-y-0.5">
+                          {parsed.items.map((it, i) => {
+                            const prod = venta.items.find((p) => p.name === it.name);
+                            const dtoPrevio = (prod as any)?.itemDiscount || 0;
+                            const precioUnit = prod ? prod.price * (1 - dtoPrevio / 100) : 0;
+                            const lineDto = precioUnit * (prod?.quantity || 0) * (it.pct / 100);
+                            return (
+                              <div key={i} className="flex items-center justify-between gap-2 text-xs">
+                                <span className="text-emerald-700/90 truncate">
+                                  {prod ? `${prod.quantity}x ` : ""}
+                                  {it.name}
+                                </span>
+                                <span className="text-emerald-700 font-medium shrink-0 tabular-nums">
+                                  -{it.pct}%
+                                  {prod ? ` · -${formatearMoneda(lineDto)}` : ""}
+                                </span>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      ) : parsed.final ? (
+                        <p className="text-xs text-emerald-700/90">Descuento final sobre el total</p>
+                      ) : null}
+
+                      {parsed.motivo && (
+                        <p className="text-[11px] text-muted-foreground">Motivo: {parsed.motivo}</p>
+                      )}
                     </div>
-                    {desc.reciboPdfBase64 && (
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        className="gap-1 text-xs shrink-0"
-                        onClick={() => descargarReciboDescuento(desc)}
-                      >
-                        <Download className="h-3 w-3" />
-                        Recibo
-                      </Button>
-                    )}
-                  </div>
-                ))}
+                  );
+                })}
               </div>
             </div>
           )}

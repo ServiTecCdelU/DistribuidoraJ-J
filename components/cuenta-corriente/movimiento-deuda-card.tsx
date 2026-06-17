@@ -10,6 +10,7 @@ import {
 import { formatCurrencyDecimals, formatDate } from '@/lib/utils/format'
 import { descargarDocumento } from '@/lib/utils/doc-actions'
 import { diaDePagoInfo, type EstadoDiaPago } from '@/lib/utils/deuda'
+import { parseDescuentoDescripcion } from '@/lib/utils/ajuste-venta'
 import type { Sale, Transaction } from '@/lib/types'
 import type { Devolucion } from '@/services/devoluciones-service'
 import { supabase } from '@/lib/supabase'
@@ -269,26 +270,18 @@ export function MovimientoDeudaCard({
   // "[DESCUENTO] #venta — Nombre -3%, Nombre -4% (motivo)" o "[DESCUENTO] #venta — Final -10% (motivo)"
   const descuento = useMemo(() => {
     if (!isDescuento) return { rows: [] as TableRow[], motivo: undefined as string | undefined, final: undefined as string | undefined }
-    let s = (tx.description ?? '').replace(/^\[DESCUENTO\]\s*/, '').replace(/^#?[\w-]*\s*—\s*/, '')
-    let motivo: string | undefined
-    const m = s.match(/\(([^)]*)\)\s*$/)
-    if (m && m.index != null) { motivo = m[1].trim(); s = s.slice(0, m.index).trim() }
+    const parsed = parseDescuentoDescripcion(tx.description ?? '')
     const priceByName = new Map((sale?.items ?? []).map((it) => [it.name, it]))
-    const rows: TableRow[] = []
-    let final: string | undefined
-    for (const part of s.split(', ').map((p) => p.trim()).filter(Boolean)) {
-      if (/^Final\b/i.test(part)) { final = part; continue }
-      const mm = part.match(/^(.+?)\s+-\s*(\d+(?:[.,]\d+)?)\s*%$/)
-      if (!mm) continue
-      const it = priceByName.get(mm[1].trim())
-      rows.push({
-        name: mm[1].trim(),
+    const rows: TableRow[] = parsed.items.map((d) => {
+      const it = priceByName.get(d.name)
+      return {
+        name: d.name,
         quantity: it?.quantity ?? 0,
         price: it?.price ?? 0,
-        itemDiscount: Number(mm[2].replace(',', '.')),
-      })
-    }
-    return { rows, motivo, final }
+        itemDiscount: d.pct,
+      }
+    })
+    return { rows, motivo: parsed.motivo, final: parsed.final }
   }, [isDescuento, tx.description, sale])
 
   const descuentoExpandable = isDescuento && !!sale && (descuento.rows.length > 0 || !!descuento.final)

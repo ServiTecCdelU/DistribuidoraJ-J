@@ -1448,3 +1448,156 @@ export const generarReciboDevolucion = async (data: ReciboDevolucionData): Promi
   for (let i = 0; i < bytes.byteLength; i++) binary += String.fromCharCode(bytes[i]);
   return btoa(binary);
 };
+
+// ===================== RECIBO DE DESCUENTO =====================
+export interface ReciboDescuentoItem {
+  name: string;
+  quantity: number;
+  precioUnit: number; // precio unitario (con dto. previo)
+  pct: number;        // % de descuento aplicado
+  descuento: number;  // monto descontado de la línea
+}
+export interface ReciboDescuentoData {
+  reciboNumero: string;
+  fecha: any;
+  clientName?: string;
+  clientAddress?: string;
+  clientPhone?: string;
+  saleNumber?: string;
+  items: ReciboDescuentoItem[];
+  motivo?: string;
+  total: number;
+  saldoAnterior: number;
+  saldoNuevo: number;
+}
+
+const descStyles = StyleSheet.create({
+  itemsHead: { flexDirection: "row", borderBottom: "0.75px solid #333", paddingBottom: 2, marginBottom: 2, marginTop: 2 },
+  itemRow: { flexDirection: "row", paddingVertical: 1.5, borderBottom: "0.5px solid #eee" },
+  colCant: { width: "10%", fontSize: 7.5 },
+  colDesc: { width: "48%", fontSize: 7.5 },
+  colPct: { width: "14%", fontSize: 7.5, textAlign: "right" },
+  colSub: { width: "28%", fontSize: 7.5, textAlign: "right" },
+  headTxt: { fontSize: 6.5, color: "#777", fontWeight: "bold" },
+});
+
+const ReciboDescuentoCopia = ({ data, copia }: { data: ReciboDescuentoData; copia: string }) => {
+  const clientName = data.clientName || "Consumidor Final";
+  return (
+    <>
+      {/* Header */}
+      <View style={reciboStyles.header}>
+        <View>
+          <Text style={reciboStyles.brandName}>Distribuidora J&J</Text>
+          <Text style={reciboStyles.brandSub}>Comprobante de descuento — no válido como factura</Text>
+        </View>
+        <View style={reciboStyles.headerRight}>
+          <Text style={reciboStyles.reciboTitle}>RECIBO DE DESCUENTO</Text>
+          <Text style={reciboStyles.reciboNro}><Text style={reciboStyles.bold}>N° </Text>{data.reciboNumero}</Text>
+          <Text style={reciboStyles.reciboFecha}>{safeFormatDate(data.fecha)}  {safeFormatTime(data.fecha)}</Text>
+          <Text style={reciboStyles.copiaLabel}>{copia}</Text>
+        </View>
+      </View>
+
+      {/* Cliente */}
+      <Text style={reciboStyles.recibiRow}>
+        <Text style={reciboStyles.bold}>Cliente: </Text>{clientName}
+        {data.saleNumber ? <Text style={reciboStyles.recibiMeta}>   ·   Venta #{data.saleNumber}</Text> : null}
+      </Text>
+      {(data.clientAddress || data.clientPhone) && (
+        <Text style={reciboStyles.recibiMeta}>
+          {[data.clientAddress, data.clientPhone].filter(Boolean).join("  ·  ")}
+        </Text>
+      )}
+
+      {/* Productos con descuento */}
+      {data.items.length > 0 ? (
+        <>
+          <View style={descStyles.itemsHead}>
+            <Text style={[descStyles.colCant, descStyles.headTxt]}>Cant.</Text>
+            <Text style={[descStyles.colDesc, descStyles.headTxt]}>Producto</Text>
+            <Text style={[descStyles.colPct, descStyles.headTxt]}>Dto.</Text>
+            <Text style={[descStyles.colSub, descStyles.headTxt]}>Descuento</Text>
+          </View>
+          {data.items.map((it, i) => (
+            <View key={i} style={descStyles.itemRow}>
+              <Text style={descStyles.colCant}>{it.quantity}</Text>
+              <Text style={descStyles.colDesc}>{it.name}</Text>
+              <Text style={descStyles.colPct}>{it.pct}%</Text>
+              <Text style={descStyles.colSub}>-{formatCurrency(it.descuento)}</Text>
+            </View>
+          ))}
+        </>
+      ) : (
+        <Text style={reciboStyles.recibiMeta}>Descuento final sobre el total de la venta.</Text>
+      )}
+
+      {data.motivo ? (
+        <Text style={reciboStyles.recibiMeta}>
+          <Text style={reciboStyles.bold}>Motivo: </Text>{data.motivo}
+        </Text>
+      ) : null}
+
+      {/* Monto total descontado */}
+      <View style={reciboStyles.montoBox}>
+        <Text style={reciboStyles.montoLabel}>Total descontado</Text>
+        <Text style={reciboStyles.montoValue}>{formatCurrency(data.total)}</Text>
+      </View>
+
+      {/* Saldos */}
+      <View style={reciboStyles.saldosRow}>
+        <View style={reciboStyles.saldoCell}>
+          <Text style={reciboStyles.saldoLabel}>Saldo anterior</Text>
+          <Text style={reciboStyles.saldoValue}>{formatCurrency(data.saldoAnterior)}</Text>
+        </View>
+        <View style={reciboStyles.saldoCell}>
+          <Text style={reciboStyles.saldoLabel}>Este descuento</Text>
+          <Text style={reciboStyles.saldoValue}>-{formatCurrency(data.total)}</Text>
+        </View>
+        <View style={reciboStyles.saldoCellFinal}>
+          <Text style={reciboStyles.saldoLabel}>Saldo actual</Text>
+          <Text style={reciboStyles.saldoValue}>{formatCurrency(data.saldoNuevo)}</Text>
+        </View>
+      </View>
+
+      {/* Firma */}
+      <View style={reciboStyles.firma}>
+        <View style={reciboStyles.firmaBox}>
+          <Text style={reciboStyles.firmaLabel}>Firma y aclaración — Conforme descuento</Text>
+        </View>
+      </View>
+
+      {/* Footer */}
+      <View style={reciboStyles.footer}>
+        <Text>{data.reciboNumero}</Text>
+        <Text>{copia}</Text>
+      </View>
+    </>
+  );
+};
+
+const ReciboDescuentoPDF = ({ data }: { data: ReciboDescuentoData }) => {
+  return (
+    <Document>
+      <Page size="A4" orientation="landscape" style={reciboStyles.page}>
+        <View style={reciboStyles.half}>
+          <ReciboDescuentoCopia data={data} copia="ORIGINAL · Cliente" />
+        </View>
+        <View style={reciboStyles.cutLine} />
+        <View style={reciboStyles.half}>
+          <ReciboDescuentoCopia data={data} copia="DUPLICADO · Comercio" />
+        </View>
+      </Page>
+    </Document>
+  );
+};
+
+/** Genera el PDF del recibo de descuento en el cliente. Retorna base64. */
+export const generarReciboDescuento = async (data: ReciboDescuentoData): Promise<string> => {
+  const pdfBlob = await pdf(<ReciboDescuentoPDF data={data} />).toBlob();
+  const arrayBuffer = await pdfBlob.arrayBuffer();
+  const bytes = new Uint8Array(arrayBuffer);
+  let binary = "";
+  for (let i = 0; i < bytes.byteLength; i++) binary += String.fromCharCode(bytes[i]);
+  return btoa(binary);
+};

@@ -1,5 +1,9 @@
 import { describe, it, expect } from "vitest";
-import { calcularMontoDescuento, calcularComisionDescuento } from "./ajuste-venta";
+import {
+  calcularMontoDescuento,
+  calcularComisionDescuento,
+  parseDescuentoDescripcion,
+} from "./ajuste-venta";
 
 describe("calcularMontoDescuento", () => {
   it("calcula un porcentaje del total", () => {
@@ -45,5 +49,31 @@ describe("calcularComisionDescuento", () => {
 
   it("redondea a 2 decimales", () => {
     expect(calcularComisionDescuento(333.33, 7)).toBe(23.33);
+  });
+});
+
+describe("parseDescuentoDescripcion", () => {
+  it("parsea descuentos por producto", () => {
+    const r = parseDescuentoDescripcion(
+      "[DESCUENTO] #N222-16-06-2026 — AC PLUSBELLE 1LT HIDRATACION -3%, AC SEDAL X 190 ML CREM BALANCE -1%",
+    );
+    expect(r.items).toEqual([
+      { name: "AC PLUSBELLE 1LT HIDRATACION", pct: 3 },
+      { name: "AC SEDAL X 190 ML CREM BALANCE", pct: 1 },
+    ]);
+    expect(r.motivo).toBeUndefined();
+    expect(r.final).toBeUndefined();
+  });
+
+  it("extrae el motivo entre paréntesis al final", () => {
+    const r = parseDescuentoDescripcion("[DESCUENTO] #N1 — Coca 2L -10% (mal estado)");
+    expect(r.items).toEqual([{ name: "Coca 2L", pct: 10 }]);
+    expect(r.motivo).toBe("mal estado");
+  });
+
+  it("detecta descuento final", () => {
+    const r = parseDescuentoDescripcion("[DESCUENTO] #N1 — Final -10%");
+    expect(r.items).toHaveLength(0);
+    expect(r.final).toBe("Final -10%");
   });
 });
