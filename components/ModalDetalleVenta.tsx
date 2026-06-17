@@ -201,6 +201,7 @@ export function ModalDetalleVenta({
   };
 
   return (
+    <>
     <Dialog open={abierto} onOpenChange={onCerrar}>
       <DialogContent className="max-w-lg p-0 gap-0 overflow-hidden max-h-[90vh] overflow-y-auto">
         {/* Header */}
@@ -607,27 +608,28 @@ export function ModalDetalleVenta({
           })()}
         </div>
       </DialogContent>
-
-      <ModalDevolucion
-        abierto={modalDevAbierto}
-        venta={venta}
-        onCerrar={() => setModalDevAbierto(false)}
-        onRegistrada={handleActualizado}
-      />
-
-      <ModalDescuentoVenta
-        abierto={modalDescAbierto}
-        venta={venta}
-        onCerrar={() => setModalDescAbierto(false)}
-        onRegistrada={handleActualizado}
-      />
-
-      <ModalConvertirPago
-        abierto={modalConvAbierto}
-        venta={venta}
-        onCerrar={() => setModalConvAbierto(false)}
-        onActualizado={handleActualizado}
-      />
     </Dialog>
+
+    <ModalDevolucion
+      abierto={modalDevAbierto}
+      venta={venta}
+      onCerrar={() => setModalDevAbierto(false)}
+      onRegistrada={handleActualizado}
+    />
+
+    <ModalDescuentoVenta
+      abierto={modalDescAbierto}
+      venta={venta}
+      onCerrar={() => setModalDescAbierto(false)}
+      onRegistrada={handleActualizado}
+    />
+
+    <ModalConvertirPago
+      abierto={modalConvAbierto}
+      venta={venta}
+      onCerrar={() => setModalConvAbierto(false)}
+      onActualizado={handleActualizado}
+    />
+    </>
   );
 }
