@@ -37,6 +37,8 @@ import { cobranzasApi, clientsApi, paymentsApi, sellersApi, mayoristaCuentaApi, 
 import type { TransaccionMayorista } from '@/services/mayorista-cuenta-service'
 import type { Faltante } from '@/services/faltantes-service'
 import type { Devolucion } from '@/services/devoluciones-service'
+import type { ReciboMatch } from '@/services/payments-service'
+import { descargarDocumento } from '@/lib/utils/doc-actions'
 import { useAuth } from '@/hooks/use-auth'
 import type { Client, ComprobantePago, DebtClassification, Sale, Seller, Transaction } from '@/lib/types'
 import { MovimientoDeudaCard, MOVIMIENTO_GRID } from '@/components/cuenta-corriente/movimiento-deuda-card'
@@ -46,7 +48,7 @@ import {
   Users, FileCheck, CheckCircle2, XCircle, Clock, Loader2, ExternalLink,
   ChevronLeft, DollarSign, ArrowDownCircle, ArrowUpCircle, Search, X,
   Banknote, CreditCard, Image as ImageIcon, AlertTriangle, Ban, Printer,
-  History, RotateCcw, Tag,
+  History, RotateCcw, Tag, Receipt, Download,
 } from 'lucide-react'
 import { toast } from 'sonner'
 
@@ -75,6 +77,9 @@ export default function CuentaCorrientePage() {
   const [filterDiaCobro, setFilterDiaCobro] = useState<string>('all')
   const [filterClassification, setFilterClassification] = useState<string>('all')
   const [searchQuery, setSearchQuery] = useState('')
+  // Búsqueda de recibos por número (ej: "N° RC-2026-00012")
+  const [reciboMatches, setReciboMatches] = useState<ReciboMatch[]>([])
+  const [reciboSearching, setReciboSearching] = useState(false)
   // Orden de la lista: por deuda (más plata) o por días en cuenta corriente (más días)
   const [sortBy, setSortBy] = useState<'deuda' | 'dias'>('deuda')
 
@@ -206,6 +211,43 @@ export default function CuentaCorrientePage() {
 
   // Reset página al cambiar filtros
   useEffect(() => { setCurrentPage(1) }, [searchQuery, filterSeller, filterClassification, filterDiaCobro, sortBy])
+
+  // Detecta si lo escrito en el buscador es un número de recibo (RC-AAAA-NNNNN, "N° ..." o numérico)
+  const reciboTerm = searchQuery.replace(/n[°ºo]/gi, '').replace(/\s+/g, '').toUpperCase()
+  const isReciboQuery =
+    (/RC/.test(reciboTerm) && /\d/.test(reciboTerm)) ||
+    /^\d{2,}$/.test(reciboTerm) ||
+    /^n[°ºo]/i.test(searchQuery.trim())
+
+  // Busca recibos por número (debounced) cuando el query parece un recibo
+  useEffect(() => {
+    if (!isReciboQuery) {
+      setReciboMatches([])
+      setReciboSearching(false)
+      return
+    }
+    setReciboSearching(true)
+    const handler = setTimeout(async () => {
+      try {
+        const matches = await paymentsApi.findReciboByNumero(searchQuery)
+        setReciboMatches(matches)
+      } catch {
+        setReciboMatches([])
+      } finally {
+        setReciboSearching(false)
+      }
+    }, 350)
+    return () => clearTimeout(handler)
+  }, [searchQuery, isReciboQuery])
+
+  // Abre el detalle del cliente dueño de un recibo encontrado
+  const openReciboClient = async (m: ReciboMatch) => {
+    const inList = debtClients.find((c) => c.id === m.clientId)
+    if (inList) { handleSelectClient(inList); return }
+    const full = await clientsApi.getById(m.clientId)
+    if (full) handleSelectClient(full as ClientWithSeller)
+    else toast.error('No se encontró el cliente')
+  }
 
   // Seleccionar cliente → cargar detalle
   const handleSelectClient = async (client: ClientWithSeller) => {
@@ -1305,7 +1347,7 @@ tr{page-break-inside:avoid}
             <div className="relative flex-1">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
               <Input
-                placeholder="Buscar cliente..."
+                placeholder="Buscar cliente o N° de recibo (ej: RC-2026-00012)..."
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
                 className="pl-10 rounded-xl"
@@ -1373,8 +1415,56 @@ tr{page-break-inside:avoid}
             )}
           </div>
 
+          {/* Resultados de búsqueda por N° de recibo */}
+          {isReciboQuery && (
+            <div className="mb-4">
+              {reciboSearching ? (
+                <Card><CardContent className="py-8 text-center text-muted-foreground text-sm">
+                  <Loader2 className="h-4 w-4 animate-spin inline mr-2" />Buscando recibo...
+                </CardContent></Card>
+              ) : reciboMatches.length === 0 ? (
+                <Card><CardContent className="py-8 text-center text-muted-foreground text-sm">
+                  No se encontró ningún recibo con ese número
+                </CardContent></Card>
+              ) : (
+                <div className="flex flex-col gap-2">
+                  {reciboMatches.map((m) => (
+                    <Card key={m.txId} className="border-teal-200">
+                      <CardContent className="p-4 flex items-center justify-between gap-3 flex-wrap">
+                        <div className="min-w-0">
+                          <div className="flex items-center gap-2 text-teal-700 font-semibold text-sm">
+                            <Receipt className="h-4 w-4 shrink-0" />
+                            N° {m.reciboNumero}
+                            {m.cuenta === 'mayorista' && <Badge variant="secondary" className="text-[10px]">Mayorista</Badge>}
+                          </div>
+                          <p className="text-sm font-medium mt-1 truncate">{m.clientName}</p>
+                          <p className="text-xs text-muted-foreground">
+                            {formatDate(m.date)} · {formatCurrency(m.amount)}
+                          </p>
+                        </div>
+                        <div className="flex items-center gap-2 shrink-0">
+                          {m.reciboPdfBase64 ? (
+                            <Button variant="outline" size="sm" className="rounded-xl gap-1"
+                              onClick={() => descargarDocumento(m.reciboPdfBase64!, 'recibo', m.reciboNumero, m.clientName)}>
+                              <Download className="h-3.5 w-3.5" />Recibo
+                            </Button>
+                          ) : (
+                            <span className="text-xs text-muted-foreground">Sin PDF — abrí el cliente para generarlo</span>
+                          )}
+                          <Button size="sm" className="rounded-xl gap-1" onClick={() => openReciboClient(m)}>
+                            <ExternalLink className="h-3.5 w-3.5" />Ver cliente
+                          </Button>
+                        </div>
+                      </CardContent>
+                    </Card>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+
           {/* Lista de clientes con deuda */}
-          {filteredClients.length === 0 ? (
+          {isReciboQuery ? null : filteredClients.length === 0 ? (
             <Card>
               <CardContent className="py-12 text-center text-muted-foreground">
                 No hay clientes con deuda

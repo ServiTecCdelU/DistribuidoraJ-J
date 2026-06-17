@@ -125,6 +125,55 @@ export const ensureReciboNumero = async (txId: string): Promise<string> => {
   return reciboNumero
 }
 
+export interface ReciboMatch {
+  txId: string
+  clientId: string
+  clientName: string
+  reciboNumero: string
+  amount: number
+  date: Date
+  cuenta: 'minorista' | 'mayorista'
+  reciboPdfBase64?: string
+}
+
+/**
+ * Busca recibos de pago por número (ej: "RC-2026-00012", "N° RC-2026-00012" o "12").
+ * Devuelve el/los pagos que coinciden junto con el cliente al que pertenecen.
+ */
+export const findReciboByNumero = async (query: string): Promise<ReciboMatch[]> => {
+  const term = query.replace(/n[°ºo]/gi, '').replace(/\s+/g, '').toUpperCase()
+  if (!term) return []
+
+  const { data: txs } = await supabase
+    .from('transacciones')
+    .select('id, client_id, recibo_numero, amount, date, cuenta, recibo_pdf_base64')
+    .eq('type', 'payment')
+    .not('recibo_numero', 'is', null)
+    .ilike('recibo_numero', `%${term}%`)
+    .order('date', { ascending: false })
+    .limit(10)
+
+  if (!txs || txs.length === 0) return []
+
+  const clientIds = [...new Set(txs.map((t) => t.client_id))]
+  const { data: clients } = await supabase
+    .from('clientes')
+    .select('id, name')
+    .in('id', clientIds)
+  const nameById = new Map((clients ?? []).map((c) => [c.id, c.name as string]))
+
+  return txs.map((t) => ({
+    txId: t.id,
+    clientId: t.client_id,
+    clientName: nameById.get(t.client_id) || 'Cliente',
+    reciboNumero: String(t.recibo_numero),
+    amount: Number(t.amount),
+    date: new Date(t.date),
+    cuenta: (t.cuenta as 'minorista' | 'mayorista') ?? 'minorista',
+    reciboPdfBase64: t.recibo_pdf_base64 ?? undefined,
+  }))
+}
+
 /** Guarda el PDF del recibo (base64) en la transacción de pago. */
 export const saveReciboPdf = async (txId: string, pdfBase64: string): Promise<void> => {
   await supabase
