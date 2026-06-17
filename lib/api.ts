@@ -35,7 +35,7 @@ import {
   updateSaleInvoice,
   updateSaleRemito,
 } from '@/services/sales-service'
-import { registerCashPayment, registerMayoristaPayment, saveReciboPdf } from '@/services/payments-service'
+import { registerCashPayment, registerMayoristaPayment, saveReciboPdf, ensureReciboNumero } from '@/services/payments-service'
 import {
   getTransaccionesMayorista,
   getBalanceMayorista,
@@ -268,6 +268,7 @@ export const paymentsApi = {
     return registerMayoristaPayment(data)
   },
   saveReciboPdf,
+  ensureReciboNumero,
 }
 
 export const mayoristaCuentaApi = {

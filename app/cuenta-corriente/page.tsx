@@ -42,7 +42,6 @@ import type { Client, ComprobantePago, DebtClassification, Sale, Seller, Transac
 import { MovimientoDeudaCard, MOVIMIENTO_GRID } from '@/components/cuenta-corriente/movimiento-deuda-card'
 import { formatCurrency, formatDate } from '@/lib/utils/format'
 import { clasificarDeuda, diasDesde, esDiaDePago, diaDePagoInfo } from '@/lib/utils/deuda'
-import { slugify } from '@/services/supabase-helpers'
 import {
   Users, FileCheck, CheckCircle2, XCircle, Clock, Loader2, ExternalLink,
   ChevronLeft, DollarSign, ArrowDownCircle, ArrowUpCircle, Search, X,
@@ -294,13 +293,9 @@ export default function CuentaCorrientePage() {
       const txFresh = freshTx.find((t) => t.id === tx.id)
       const debtIdPagada = txFresh?.debtId ?? tx.debtId
 
-      // Número de recibo por cliente: clienteSlug_NNN (secuencial según el pago)
-      const pagos = freshTx
-        .filter((t) => t.type === 'payment')
-        .sort((a, b) => a.date.getTime() - b.date.getTime())
-      const idx = pagos.findIndex((t) => t.id === tx.id)
-      const seq = idx >= 0 ? idx + 1 : pagos.length + 1
-      const reciboNumero = `${slugify(selectedClient?.name || 'cliente')}_${String(seq).padStart(3, '0')}`
+      // Número de recibo: ID global atómico (RC-AAAA-NNNNN) reutilizando el de la
+      // transacción; si es un pago legacy sin número, genera y persiste uno nuevo.
+      const reciboNumero = tx.reciboNumero || (await paymentsApi.ensureReciboNumero(tx.id))
 
       // Solo deudas pendientes o la que se acaba de pagar (no repetir las ya saldadas antes)
       const deudas = freshTx

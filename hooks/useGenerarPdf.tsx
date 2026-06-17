@@ -1194,8 +1194,6 @@ const reciboStyles = StyleSheet.create({
 
 const ReciboCopia = ({ data, copia }: { data: ReciboPagoData; copia: string }) => {
   const clientName = data.clientName || "Consumidor Final";
-  // Número visible: toma el sufijo numérico del reciboNumero (clienteSlug_001 -> 001)
-  const nroRecibo = (data.reciboNumero.split("_").pop() || data.reciboNumero).replace(/\D/g, "") || "001";
   return (
     <>
       {/* Header */}
@@ -1204,7 +1202,10 @@ const ReciboCopia = ({ data, copia }: { data: ReciboPagoData; copia: string }) =
           <Text style={reciboStyles.brandName}>Distribuidora J&J</Text>
           <Text style={reciboStyles.brandSub}>Comprobante de pago — no válido como factura</Text>
         </View>
-        <Text style={reciboStyles.reciboTitle}>RECIBO N°{nroRecibo}</Text>
+        <View style={reciboStyles.headerRight}>
+          <Text style={reciboStyles.reciboTitle}>RECIBO</Text>
+          <Text style={reciboStyles.reciboNro}><Text style={reciboStyles.bold}>N° </Text>{data.reciboNumero}</Text>
+        </View>
       </View>
 
       {/* Fecha/hora + copia — en una sola fila */}

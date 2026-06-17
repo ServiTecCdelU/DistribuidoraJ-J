@@ -106,6 +106,25 @@ const registerPayment = async (
   }
 }
 
+/**
+ * Devuelve el número de recibo de una transacción de pago. Si todavía no tiene
+ * (pagos legacy), genera uno atómico con next_recibo_number() y lo persiste.
+ */
+export const ensureReciboNumero = async (txId: string): Promise<string> => {
+  const { data: tx } = await supabase
+    .from('transacciones')
+    .select('recibo_numero')
+    .eq('id', txId)
+    .single()
+  const existing = (tx as any)?.recibo_numero
+  if (existing) return String(existing)
+
+  const { data: nro, error } = await supabase.rpc('next_recibo_number')
+  const reciboNumero = !error && nro ? String(nro) : `RC-${Date.now()}`
+  await supabase.from('transacciones').update({ recibo_numero: reciboNumero }).eq('id', txId)
+  return reciboNumero
+}
+
 /** Guarda el PDF del recibo (base64) en la transacción de pago. */
 export const saveReciboPdf = async (txId: string, pdfBase64: string): Promise<void> => {
   await supabase
