@@ -57,6 +57,9 @@ interface ProductModalProps {
   onSave: (product: Omit<Product, "id" | "createdAt">, stockAdjustment?: StockAdjustment) => Promise<void>;
   availableCategories?: string[];
   availableMarcas?: string[];
+  /** Mobile: acción de habilitar/deshabilitar dentro del modal de edición */
+  onToggleDisabled?: () => void;
+  isDisabled?: boolean;
 }
 
 export function ProductModal({
@@ -66,6 +69,8 @@ export function ProductModal({
   onSave,
   availableCategories,
   availableMarcas,
+  onToggleDisabled,
+  isDisabled,
 }: ProductModalProps) {
   const [loading, setLoading] = useState(false);
   const [imagePreview, setImagePreview] = useState<string | null>(null);
@@ -1128,6 +1133,27 @@ export function ProductModal({
               {isEditing ? "Guardar Cambios" : "Crear Producto"}
             </Button>
           </div>
+
+          {/* Mobile: habilitar/deshabilitar abajo de todo */}
+          {isEditing && onToggleDisabled && (
+            <div className="md:hidden pt-2">
+              <Button
+                type="button"
+                variant="outline"
+                disabled={loading}
+                onClick={() => onToggleDisabled()}
+                className={cn(
+                  "w-full gap-2",
+                  isDisabled
+                    ? "text-green-600 border-green-600/30 hover:bg-green-50"
+                    : "text-amber-600 border-amber-600/30 hover:bg-amber-50",
+                )}
+              >
+                {isDisabled ? <PackagePlus className="h-4 w-4" /> : <PackageMinus className="h-4 w-4" />}
+                {isDisabled ? "Habilitar producto" : "Deshabilitar producto"}
+              </Button>
+            </div>
+          )}
         </form>
       </DialogContent>
     </Dialog>

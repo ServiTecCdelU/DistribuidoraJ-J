@@ -649,28 +649,28 @@ export default function EmpleadosPage() {
               </div>
 
               {/* Mobile Cards */}
-              <div className="md:hidden space-y-3 pb-24">
+              <div className="md:hidden space-y-2 pb-24">
                 {filteredSellers.map((seller) => (
                   <Card key={seller.id} className="overflow-hidden border-border/60 shadow-sm active:scale-[0.99] transition-transform">
-                    <CardContent className="p-0">
+                    <CardContent className="p-0" style={{ fontSize: '11px' }}>
                       {/* Card Header */}
-                      <div className="p-4 border-b border-border/50 bg-muted/30">
-                        <div className="flex items-start justify-between gap-3">
-                          <div className="flex items-center gap-3 min-w-0 flex-1">
-                            <div className="h-11 w-11 rounded-full bg-primary/10 flex items-center justify-center shrink-0">
-                              <span className="text-lg font-semibold text-primary">
+                      <div className="p-1.5 border-b border-border/50 bg-muted/30">
+                        <div className="flex items-start justify-between gap-1.5">
+                          <div className="flex items-center gap-1.5 min-w-0 flex-1">
+                            <div className="h-6 w-6 rounded-full bg-primary/10 flex items-center justify-center shrink-0">
+                              <span className="text-[10px] font-semibold text-primary">
                                 {seller.name.charAt(0).toUpperCase()}
                               </span>
                             </div>
                             <div className="min-w-0 flex-1">
-                              <h3 className="font-semibold text-foreground truncate text-base">{seller.name}</h3>
-                              <p className="text-sm text-muted-foreground">Desde {formatDate(seller.createdAt)}</p>
+                              <h3 className="font-semibold text-foreground truncate text-[13px] leading-tight">{seller.name}</h3>
+                              <p className="text-[10px] text-muted-foreground leading-tight">Desde {formatDate(seller.createdAt)}</p>
                             </div>
                           </div>
                           <DropdownMenu>
                             <DropdownMenuTrigger asChild>
-                              <Button variant="ghost" size="icon" className="h-9 w-9 shrink-0 -mr-2">
-                                <MoreVertical className="h-5 w-5" />
+                              <Button variant="ghost" size="icon" className="h-6 w-6 shrink-0 -mr-0.5">
+                                <MoreVertical className="h-4 w-4" />
                               </Button>
                             </DropdownMenuTrigger>
                             <DropdownMenuContent align="end" className="w-48">
@@ -692,51 +692,47 @@ export default function EmpleadosPage() {
                             </DropdownMenuContent>
                           </DropdownMenu>
                         </div>
-                        <div className="flex items-center gap-2 mt-3 flex-wrap">
-                          <span className={`inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium ${EMPLOYEE_TYPE_BADGE[seller.employeeType]}`}>
+                        <div className="flex items-center gap-1 mt-1 flex-wrap">
+                          <span className={`inline-flex items-center px-1.5 py-0.5 rounded-full text-[10px] font-medium ${EMPLOYEE_TYPE_BADGE[seller.employeeType]}`}>
                             {getEmployeeTypeIcon(seller.employeeType)}
                             {EMPLOYEE_TYPE_LABELS[seller.employeeType]}
                           </span>
-                          <span className={`inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium ${getStatusBadge(seller.isActive)}`}>
+                          <span className={`inline-flex items-center px-1.5 py-0.5 rounded-full text-[10px] font-medium ${getStatusBadge(seller.isActive)}`}>
                             {seller.isActive ? 'Activo' : 'Inactivo'}
                           </span>
                           {(seller.employeeType === 'vendedor' || seller.employeeType === 'ambos') && (
-                            <span className={`inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium ${getCommissionColor(seller.commissionRate)}`}>
-                              <ShoppingCart className="h-3 w-3 mr-1" />{seller.commissionRate}%
+                            <span className={`inline-flex items-center px-1.5 py-0.5 rounded-full text-[10px] font-medium ${getCommissionColor(seller.commissionRate)}`}>
+                              <ShoppingCart className="h-2.5 w-2.5 mr-0.5" />{seller.commissionRate}%
                             </span>
                           )}
                           {(seller.employeeType === 'transportista' || seller.employeeType === 'ambos') && (
-                            <span className={`inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium ${getCommissionColor(seller.transportistaCommissionRate ?? 0)}`}>
-                              <Truck className="h-3 w-3 mr-1" />{seller.transportistaCommissionRate ?? 0}%
+                            <span className={`inline-flex items-center px-1.5 py-0.5 rounded-full text-[10px] font-medium ${getCommissionColor(seller.transportistaCommissionRate ?? 0)}`}>
+                              <Truck className="h-2.5 w-2.5 mr-0.5" />{seller.transportistaCommissionRate ?? 0}%
                             </span>
                           )}
                         </div>
                       </div>
 
                       {/* Card Body */}
-                      <div className="p-4 space-y-4">
+                      <div className="p-1.5 space-y-1.5">
                         {/* Contact Info */}
                         {(seller.phone || seller.email) && (
-                          <div className="flex flex-col gap-2 text-sm">
+                          <div className="flex items-center gap-3 text-[11px] min-w-0">
                             {seller.phone && (
                               <a
                                 href={`tel:${seller.phone}`}
-                                className="flex items-center gap-2.5 text-muted-foreground hover:text-primary transition-colors"
+                                className="flex items-center gap-1.5 text-muted-foreground hover:text-primary transition-colors shrink-0"
                               >
-                                <div className="h-7 w-7 rounded-full bg-muted flex items-center justify-center">
-                                  <Phone className="h-3.5 w-3.5" />
-                                </div>
+                                <Phone className="h-3 w-3 shrink-0" />
                                 {seller.phone}
                               </a>
                             )}
                             {seller.email && (
                               <a
                                 href={`mailto:${seller.email}`}
-                                className="flex items-center gap-2.5 text-muted-foreground hover:text-primary transition-colors"
+                                className="flex items-center gap-1.5 text-muted-foreground hover:text-primary transition-colors min-w-0"
                               >
-                                <div className="h-7 w-7 rounded-full bg-muted flex items-center justify-center">
-                                  <Mail className="h-3.5 w-3.5" />
-                                </div>
+                                <Mail className="h-3 w-3 shrink-0" />
                                 <span className="truncate">{seller.email}</span>
                               </a>
                             )}
@@ -744,36 +740,38 @@ export default function EmpleadosPage() {
                         )}
 
                         {/* Stats */}
-                        <div className="grid grid-cols-2 gap-3">
-                          <div className="rounded-xl p-3 bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800">
-                            <p className="text-xs text-muted-foreground font-medium uppercase tracking-wide">Ventas</p>
-                            <p className="font-bold text-lg text-foreground">
+                        <div className="grid grid-cols-2 gap-1.5">
+                          <div className="rounded-md px-2 py-1 bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 flex items-baseline justify-between gap-1">
+                            <p className="text-[10px] text-muted-foreground font-medium uppercase">Ventas</p>
+                            <p className="font-bold text-[12px] text-foreground tabular-nums">
                               {formatCurrency(seller.totalSales || 0)}
                             </p>
                           </div>
-                          <div className="rounded-xl p-3 bg-emerald-50 dark:bg-emerald-900/20 border border-emerald-200 dark:border-emerald-800">
-                            <p className="text-xs text-muted-foreground font-medium uppercase tracking-wide">Comisiones</p>
-                            <p className="font-bold text-lg text-emerald-600 dark:text-emerald-400">
+                          <div className="rounded-md px-2 py-1 bg-emerald-50 dark:bg-emerald-900/20 border border-emerald-200 dark:border-emerald-800 flex items-baseline justify-between gap-1">
+                            <p className="text-[10px] text-muted-foreground font-medium uppercase">Comis.</p>
+                            <p className="font-bold text-[12px] text-emerald-600 dark:text-emerald-400 tabular-nums">
                               {formatCurrency(seller.totalCommission || 0)}
                             </p>
                           </div>
                         </div>
 
                         {/* Quick Actions */}
-                        <div className="flex gap-2 pt-1">
+                        <div className="flex gap-1.5">
                           <Button
                             variant="outline"
-                            className="flex-1 h-10 bg-transparent"
+                            size="sm"
+                            className="flex-1 h-6 bg-transparent text-[11px] px-2"
                             onClick={() => handleEdit(seller)}
                           >
-                            <Pencil className="h-4 w-4 mr-2" />
+                            <Pencil className="h-3 w-3 mr-1" />
                             Editar
                           </Button>
                           <Button
-                            className="flex-1 h-10"
+                            size="sm"
+                            className="flex-1 h-6 text-[11px] px-2"
                             onClick={() => handleViewDetail(seller)}
                           >
-                            <Eye className="h-4 w-4 mr-2" />
+                            <Eye className="h-3 w-3 mr-1" />
                             Ver Detalle
                           </Button>
                         </div>

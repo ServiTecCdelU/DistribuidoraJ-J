@@ -1987,6 +1987,22 @@ tbody tr:nth-child(even){background:#fafafa}
 
                     {/* Mobile: lista (en reparto la tarjeta grande se mantiene hasta lg) */}
                     <div className={`${filterStatus === "delivery" ? "lg:hidden" : "md:hidden"} divide-y border-t`}>
+                      {filterStatus === "delivery" && (
+                        <div className="grid grid-cols-[minmax(0,1fr)_auto] gap-x-2 px-2.5 py-1.5 bg-muted/50 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
+                          <span>Cliente</span>
+                          <span className="text-right">Deuda</span>
+                        </div>
+                      )}
+                      {filterStatus !== "delivery" && (
+                        <div className="grid grid-cols-[1.25rem_1.5rem_minmax(0,1fr)] gap-2 px-3 py-1.5 bg-muted/50 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
+                          <span />
+                          <span />
+                          <div className="flex items-center justify-between">
+                            <span>Cliente</span>
+                            <span>Deuda</span>
+                          </div>
+                        </div>
+                      )}
                       {day.groups.map(({ client, groupKey, orders: clientOrders }) => {
                         const { mergedItems, displayOrder, config, onView, deuda, clasificacion, codigo, clientPhone } = computeRow(clientOrders);
                         const orderId = clientOrders[0].id;
@@ -2002,61 +2018,36 @@ tbody tr:nth-child(even){background:#fafafa}
                           return (
                             <div
                               key={groupKey}
-                              className={`p-4 transition-colors ${isHeld ? "bg-red-50/60 opacity-60" : "active:bg-muted/40"}`}
+                              className={`px-2.5 py-1.5 transition-colors ${isHeld ? "bg-red-50/60 opacity-60" : "active:bg-muted/40"}`}
                               onClick={onView}
+                              style={{ fontSize: '12px' }}
                             >
-                              <div className="flex items-start justify-between gap-2">
-                                <div className="min-w-0 flex-1">
-                                  <p className={`font-bold text-base leading-tight truncate ${isHeld ? "text-red-400 line-through" : "text-foreground"}`}>
-                                    {client}{codigo && <span className="ml-1 text-xs font-normal text-muted-foreground">({codigo})</span>}
-                                  </p>
-                                  <p className="text-xs text-muted-foreground mt-0.5">
-                                    {mergedItems.length} {mergedItems.length === 1 ? "producto" : "productos"} · {totalUnidades} u.
-                                    {clientOrders.length > 1 && ` · ${clientOrders.length} pedidos`}
-                                  </p>
-                                </div>
-                                <span className={`shrink-0 inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] font-semibold ${config.bgColor} border ${config.borderColor}`}>
-                                  <span className={`w-1.5 h-1.5 rounded-full ${config.dotColor}`} />
-                                  <span className={config.color}>{config.label}</span>
+                              {/* Fila 1: cliente | debe / al día */}
+                              <div className="grid grid-cols-[minmax(0,1fr)_auto] gap-x-2 items-center leading-none">
+                                <p className={`font-semibold text-xs truncate min-w-0 ${isHeld ? "text-red-400 line-through" : "text-foreground"}`}>{client}</p>
+                                <span className="text-right shrink-0">
+                                  {deuda > 0 ? (
+                                    <span className={`text-xs font-bold ${deudaColor}`}>Debe {formatPrice(deuda)}</span>
+                                  ) : (
+                                    <span className="text-xs text-green-600">Al día</span>
+                                  )}
                                 </span>
                               </div>
 
-                              <div className="mt-2 flex items-start gap-1.5 text-sm">
-                                <MapPin className={`h-4 w-4 shrink-0 mt-0.5 ${tieneDir ? "text-primary" : "text-muted-foreground"}`} />
-                                {tieneDir ? (
-                                  <span className="text-foreground">{displayOrder.address}{displayOrder.city ? ` · ${displayOrder.city}` : ""}</span>
-                                ) : (
-                                  <span className="text-muted-foreground italic">Retiro en local</span>
-                                )}
-                              </div>
-
-                              {notas.length > 0 && (
-                                <p className="mt-1.5 text-xs text-amber-700 italic">📝 {notas.join(" · ")}</p>
-                              )}
-
-                              <div className="mt-3 flex items-center gap-2" onClick={(e) => e.stopPropagation()}>
-                                {deuda > 0 && (
-                                  <span className={`text-xs font-bold px-2.5 py-1.5 rounded-lg bg-muted/60 ${deudaColor}`}>
-                                    Debe {formatPrice(deuda)}
-                                  </span>
-                                )}
-                                {clientPhone && (
-                                  <a
-                                    href={`tel:${clientPhone}`}
-                                    className="ml-auto h-10 w-10 flex items-center justify-center rounded-xl border-2 border-border active:bg-muted text-foreground"
-                                    title="Llamar al cliente"
-                                  >
-                                    <Phone className="h-4 w-4" />
-                                  </a>
-                                )}
-                              </div>
+                              {/* Fila 2: código · cantidad de productos + notas */}
+                              <p className="text-[11px] text-muted-foreground truncate mt-0.5 leading-none">
+                                {codigo && <span>({codigo}) · </span>}
+                                {mergedItems.length} {mergedItems.length === 1 ? "producto" : "productos"} · {totalUnidades} u.
+                                {clientOrders.length > 1 && ` · ${clientOrders.length} pedidos`}
+                                {notas.length > 0 && <span className="text-amber-700 italic"> · 📝 {notas.join(" · ")}</span>}
+                              </p>
                             </div>
                           );
                         }
 
                         // ── Otros estados: fila compacta (workflow admin) ──
                         return (
-                          <div key={groupKey} className={`grid grid-cols-[auto_auto_1fr] gap-2 px-3 py-2.5 cursor-pointer transition-colors items-center ${isHeld ? "bg-red-50/60 opacity-60" : isSelected ? "bg-teal-50/60" : "hover:bg-muted/20"}`} onClick={onView}>
+                          <div key={groupKey} className={`grid grid-cols-[1.25rem_1.5rem_minmax(0,1fr)] gap-2 px-3 py-2 cursor-pointer transition-colors items-center ${isHeld ? "bg-red-50/60 opacity-60" : isSelected ? "bg-teal-50/60" : "hover:bg-muted/20"}`} onClick={onView}>
                             <div className="shrink-0" onClick={(e) => e.stopPropagation()}>
                               <input
                                 type="checkbox"

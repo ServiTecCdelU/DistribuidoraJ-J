@@ -1062,7 +1062,7 @@ export default function CajaPage() {
               <>
                 {/* Register info */}
                 <Card className={isOpen ? "border-emerald-500/30 bg-emerald-500/5" : ""}>
-                  <CardContent className="p-3 sm:p-4">
+                  <CardContent className="px-3 py-2 sm:p-4">
                     <div className="flex items-center justify-between flex-wrap gap-2">
                       <div className="flex items-center gap-2.5 sm:gap-3 min-w-0">
                         <div className={`h-8 w-8 sm:h-10 sm:w-10 rounded-full flex items-center justify-center shrink-0 ${isOpen ? "bg-emerald-500/10" : "bg-muted"}`}>
@@ -1073,10 +1073,10 @@ export default function CajaPage() {
                           )}
                         </div>
                         <div className="min-w-0">
-                          <p className="font-semibold text-sm sm:text-base">
+                          <p className="font-semibold text-[16px] sm:text-base">
                             {isOpen ? "Caja abierta" : "Caja cerrada"}
                           </p>
-                          <p className="text-[11px] sm:text-xs text-muted-foreground">
+                          <p className="text-[13px] sm:text-xs text-muted-foreground">
                             Abierta a las {formatTime(currentRegister.openedAt)} por{" "}
                             {currentRegister.openedBy}
                             {currentRegister.closedAt &&
@@ -1085,60 +1085,60 @@ export default function CajaPage() {
                         </div>
                       </div>
                       <div className="text-right">
-                        <p className="text-[11px] sm:text-xs text-muted-foreground">Monto inicial</p>
-                        <p className="font-bold text-sm sm:text-base">{formatCurrency(currentRegister.initialAmount)}</p>
+                        <p className="text-[13px] sm:text-xs text-muted-foreground">Monto inicial</p>
+                        <p className="font-bold text-[16px] sm:text-base">{formatCurrency(currentRegister.initialAmount)}</p>
                       </div>
                     </div>
                   </CardContent>
                 </Card>
 
                 {/* Stats */}
-                <div className="grid grid-cols-2 lg:grid-cols-5 gap-2 sm:gap-4">
+                <div className="grid grid-cols-2 lg:grid-cols-5 gap-1.5 sm:gap-4">
                   <Card>
-                    <CardContent className="p-2.5 sm:p-4">
-                      <div className="flex items-center gap-1.5 sm:gap-2 mb-0.5 sm:mb-1">
+                    <CardContent className="px-2.5 py-1 sm:p-4 text-center sm:text-left">
+                      <div className="flex items-center justify-center sm:justify-start gap-1.5 sm:gap-2 mb-0.5 sm:mb-1">
                         <DollarSign className="h-3.5 w-3.5 sm:h-4 sm:w-4 text-emerald-500 shrink-0" />
-                        <span className="text-[11px] sm:text-xs text-muted-foreground truncate">Venta total</span>
+                        <span className="text-[13px] sm:text-xs text-muted-foreground truncate">Venta total</span>
                       </div>
-                      <p className="text-[13px] sm:text-xl font-bold tabular-nums">{formatCurrency(todayStats.total)}</p>
-                      <p className="text-[10px] sm:text-xs text-muted-foreground">{todayStats.count} ventas</p>
+                      <p className="text-[16px] sm:text-xl font-bold tabular-nums">{formatCurrency(todayStats.total)}</p>
+                      <p className="text-[12px] sm:text-xs text-muted-foreground">{todayStats.count} ventas</p>
                     </CardContent>
                   </Card>
                   <Card>
-                    <CardContent className="p-2.5 sm:p-4">
-                      <div className="flex items-center gap-1.5 sm:gap-2 mb-0.5 sm:mb-1">
+                    <CardContent className="px-2.5 py-1 sm:p-4 text-center sm:text-left">
+                      <div className="flex items-center justify-center sm:justify-start gap-1.5 sm:gap-2 mb-0.5 sm:mb-1">
                         <Banknote className="h-3.5 w-3.5 sm:h-4 sm:w-4 text-green-500 shrink-0" />
-                        <span className="text-[11px] sm:text-xs text-muted-foreground truncate">Efectivo</span>
+                        <span className="text-[13px] sm:text-xs text-muted-foreground truncate">Efectivo</span>
                       </div>
-                      <p className="text-[13px] sm:text-xl font-bold tabular-nums">{formatCurrency(todayStats.efectivoTotal)}</p>
+                      <p className="text-[16px] sm:text-xl font-bold tabular-nums">{formatCurrency(todayStats.efectivoTotal)}</p>
                     </CardContent>
                   </Card>
                   <Card>
-                    <CardContent className="p-2.5 sm:p-4">
-                      <div className="flex items-center gap-1.5 sm:gap-2 mb-0.5 sm:mb-1">
+                    <CardContent className="px-2.5 py-1 sm:p-4 text-center sm:text-left">
+                      <div className="flex items-center justify-center sm:justify-start gap-1.5 sm:gap-2 mb-0.5 sm:mb-1">
                         <ArrowUpRight className="h-3.5 w-3.5 sm:h-4 sm:w-4 text-violet-500 shrink-0" />
-                        <span className="text-[11px] sm:text-xs text-muted-foreground truncate">Transferencia</span>
+                        <span className="text-[13px] sm:text-xs text-muted-foreground truncate">Transferencia</span>
                       </div>
-                      <p className="text-[13px] sm:text-xl font-bold tabular-nums">{formatCurrency(todayStats.transferTotal)}</p>
+                      <p className="text-[16px] sm:text-xl font-bold tabular-nums">{formatCurrency(todayStats.transferTotal)}</p>
                     </CardContent>
                   </Card>
                   <Card>
-                    <CardContent className="p-2.5 sm:p-4">
-                      <div className="flex items-center gap-1.5 sm:gap-2 mb-0.5 sm:mb-1">
+                    <CardContent className="px-2.5 py-1 sm:p-4 text-center sm:text-left">
+                      <div className="flex items-center justify-center sm:justify-start gap-1.5 sm:gap-2 mb-0.5 sm:mb-1">
                         <CreditCard className="h-3.5 w-3.5 sm:h-4 sm:w-4 text-blue-500 shrink-0" />
-                        <span className="text-[11px] sm:text-xs text-muted-foreground truncate">Cta. Corriente</span>
+                        <span className="text-[13px] sm:text-xs text-muted-foreground truncate">Cta. Corriente</span>
                       </div>
-                      <p className="text-[13px] sm:text-xl font-bold tabular-nums">{formatCurrency(todayStats.creditTotal)}</p>
+                      <p className="text-[16px] sm:text-xl font-bold tabular-nums">{formatCurrency(todayStats.creditTotal)}</p>
                     </CardContent>
                   </Card>
-                  <Card>
-                    <CardContent className="p-2.5 sm:p-4">
-                      <div className="flex items-center gap-1.5 sm:gap-2 mb-0.5 sm:mb-1">
+                  <Card className="col-span-2 lg:col-span-1">
+                    <CardContent className="px-2.5 py-1 sm:p-4 text-center sm:text-left">
+                      <div className="flex items-center justify-center sm:justify-start gap-1.5 sm:gap-2 mb-0.5 sm:mb-1">
                         <Banknote className="h-3.5 w-3.5 sm:h-4 sm:w-4 text-amber-500 shrink-0" />
-                        <span className="text-[11px] sm:text-xs text-muted-foreground truncate">Efectivo esperado</span>
+                        <span className="text-[13px] sm:text-xs text-muted-foreground truncate">Efectivo esperado</span>
                       </div>
-                      <p className="text-[13px] sm:text-xl font-bold tabular-nums">{formatCurrency(expectedCash)}</p>
-                      <p className="text-[10px] sm:text-xs text-muted-foreground">
+                      <p className="text-[16px] sm:text-xl font-bold tabular-nums">{formatCurrency(expectedCash)}</p>
+                      <p className="text-[12px] sm:text-xs text-muted-foreground">
                         Inicial + efectivo - comisiones
                       </p>
                     </CardContent>

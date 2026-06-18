@@ -40,6 +40,7 @@ import {
   Settings2,
   Pencil,
   Save,
+  SlidersHorizontal,
 } from "lucide-react";
 import * as XLSX from "xlsx";
 import type { MayoristaProducto, MayoristaPrefs } from "@/lib/types";
@@ -180,9 +181,9 @@ export default function MayoristaPage() {
       <div className="space-y-4">
         <PageHeader description="Productos y precios del mayorista" />
 
-        {/* Panel de preferencias de columnas */}
+        {/* Panel de preferencias de columnas (solo desktop) */}
         {prefsLoaded && (
-          <Card className="rounded-2xl border-dashed">
+          <Card className="hidden md:block rounded-2xl border-dashed">
             <CardContent className="py-3 px-4">
               <div className="flex flex-wrap items-center gap-x-6 gap-y-2">
                 <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
@@ -270,6 +271,7 @@ function ListaPrecios({
   const [rubroFiltro, setRubroFiltro] = useState("todos");
   const [subrubroFiltro, setSubrubroFiltro] = useState("todos");
   const [estadoFiltro, setEstadoFiltro] = useState<"todos" | "habilitados" | "deshabilitados">("todos");
+  const [filtersOpen, setFiltersOpen] = useState(false);
   const [importOpen, setImportOpen] = useState(false);
   const [priceUpdateOpen, setPriceUpdateOpen] = useState(false);
   const [priceUpdateSuccess, setPriceUpdateSuccess] = useState<PriceUpdateResult | null>(null);
@@ -321,84 +323,109 @@ function ListaPrecios({
 
   const filasPagina = productos;
 
-
+  const activeFilterCount =
+    (rubroFiltro !== "todos" ? 1 : 0) +
+    (subrubroFiltro !== "todos" ? 1 : 0) +
+    (estadoFiltro !== "todos" ? 1 : 0);
 
   return (
     <div className="space-y-4">
       {/* Controles */}
-      <div className="flex flex-col sm:flex-row gap-3 flex-wrap">
-        <div className="relative flex-1 min-w-[200px]">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-          <Input
-            placeholder="Buscar por nombre, código o cód. barras..."
-            value={search}
-            onChange={(e) => handleSearchInput(e.target.value)}
-            className="pl-10 rounded-xl"
-          />
-          {search && (
-            <Button
-              variant="ghost"
-              size="icon"
-              className="absolute right-2 top-1/2 -translate-y-1/2 h-6 w-6"
-              onClick={() => { setSearch(""); emitSearch("", rubroFiltro, subrubroFiltro, estadoFiltro, 1); }}
-            >
-              <X className="h-3.5 w-3.5" />
-            </Button>
-          )}
+      <div className="space-y-3">
+        {/* Buscador + botón de filtros (el botón solo en mobile) */}
+        <div className="flex gap-2 items-center">
+          <div className="relative flex-1 min-w-0">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+            <Input
+              placeholder="Buscar por nombre o código..."
+              value={search}
+              onChange={(e) => handleSearchInput(e.target.value)}
+              className="pl-10 rounded-xl"
+            />
+            {search && (
+              <Button
+                variant="ghost"
+                size="icon"
+                className="absolute right-2 top-1/2 -translate-y-1/2 h-6 w-6"
+                onClick={() => { setSearch(""); emitSearch("", rubroFiltro, subrubroFiltro, estadoFiltro, 1); }}
+              >
+                <X className="h-3.5 w-3.5" />
+              </Button>
+            )}
+          </div>
+          <Button
+            variant={filtersOpen ? "default" : "outline"}
+            size="icon"
+            className={`sm:hidden shrink-0 h-10 w-10 relative rounded-xl ${filtersOpen ? "bg-teal-600 hover:bg-teal-700 text-white" : ""}`}
+            onClick={() => setFiltersOpen(!filtersOpen)}
+          >
+            <SlidersHorizontal className="h-4 w-4" />
+            {activeFilterCount > 0 && !filtersOpen && (
+              <span className="absolute -top-1.5 -right-1.5 flex h-4 w-4 items-center justify-center rounded-full bg-red-500 text-[10px] font-bold text-white leading-none">
+                {activeFilterCount}
+              </span>
+            )}
+          </Button>
         </div>
-        <Select value={rubroFiltro} onValueChange={handleRubroChange}>
-          <SelectTrigger className="w-full sm:w-48 rounded-xl">
-            <SelectValue placeholder="Rubro" />
-          </SelectTrigger>
-          <SelectContent>
-            {rubros.map((r) => (
-              <SelectItem key={r} value={r}>
-                {r === "todos" ? "Todos los rubros" : r}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-        <Select value={subrubroFiltro} onValueChange={handleSubrubroChange}>
-          <SelectTrigger className="w-full sm:w-48 rounded-xl">
-            <SelectValue placeholder="Subrubro" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="todos">Todos los subrubros</SelectItem>
-          </SelectContent>
-        </Select>
-        <Select value={estadoFiltro} onValueChange={handleEstadoChange}>
-          <SelectTrigger className="w-full sm:w-44 rounded-xl">
-            <SelectValue placeholder="Estado" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="todos">Todos</SelectItem>
-            <SelectItem value="habilitados">Habilitados</SelectItem>
-            <SelectItem value="deshabilitados">Deshabilitados</SelectItem>
-          </SelectContent>
-        </Select>
+
+        {/* Actualizar precios — botón principal, debajo del buscador */}
         <Button
-          variant="outline"
-          size="icon"
-          className="rounded-xl shrink-0"
-          onClick={onReload}
-        >
-          <RefreshCw className="h-4 w-4" />
-        </Button>
-        <Button
-          className="rounded-xl gap-2 shrink-0"
+          className="rounded-xl gap-2 w-full sm:w-auto"
           onClick={() => setPriceUpdateOpen(true)}
         >
           <Upload className="h-4 w-4" />
           Actualizar Precios
         </Button>
-        <Button
-          variant="outline"
-          className="rounded-xl gap-2 shrink-0"
-          onClick={() => setImportOpen(true)}
-        >
-          <FileSpreadsheet className="h-4 w-4" />
-          Importar Productos
-        </Button>
+
+        {/* Filtros + acciones: panel colapsable en mobile, fila en desktop */}
+        <div className={`${filtersOpen ? "grid grid-cols-1" : "hidden"} sm:flex sm:flex-row sm:flex-wrap gap-3 sm:items-center`}>
+          <Select value={rubroFiltro} onValueChange={handleRubroChange}>
+            <SelectTrigger className="w-full sm:w-48 rounded-xl">
+              <SelectValue placeholder="Rubro" />
+            </SelectTrigger>
+            <SelectContent>
+              {rubros.map((r) => (
+                <SelectItem key={r} value={r}>
+                  {r === "todos" ? "Todos los rubros" : r}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          <Select value={subrubroFiltro} onValueChange={handleSubrubroChange}>
+            <SelectTrigger className="w-full sm:w-48 rounded-xl">
+              <SelectValue placeholder="Subrubro" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="todos">Todos los subrubros</SelectItem>
+            </SelectContent>
+          </Select>
+          <Select value={estadoFiltro} onValueChange={handleEstadoChange}>
+            <SelectTrigger className="w-full sm:w-44 rounded-xl">
+              <SelectValue placeholder="Estado" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="todos">Todos</SelectItem>
+              <SelectItem value="habilitados">Habilitados</SelectItem>
+              <SelectItem value="deshabilitados">Deshabilitados</SelectItem>
+            </SelectContent>
+          </Select>
+          <Button
+            variant="outline"
+            size="icon"
+            className="rounded-xl shrink-0"
+            onClick={onReload}
+          >
+            <RefreshCw className="h-4 w-4" />
+          </Button>
+          <Button
+            variant="outline"
+            className="rounded-xl gap-2 shrink-0"
+            onClick={() => setImportOpen(true)}
+          >
+            <FileSpreadsheet className="h-4 w-4" />
+            Importar Productos
+          </Button>
+        </div>
       </div>
 
       {/* Tabla */}
@@ -419,7 +446,7 @@ function ListaPrecios({
         </div>
       ) : (
         <div className="rounded-2xl border overflow-hidden">
-          <div className="overflow-x-auto">
+          <div className="hidden md:block overflow-x-auto">
             <table className="w-full text-sm">
               <thead className="bg-muted/50 border-b">
                 <tr>
@@ -524,6 +551,57 @@ function ListaPrecios({
               </tbody>
             </table>
           </div>
+
+          {/* Tabla mobile (compacta, alineada) */}
+          <div className="md:hidden divide-y" style={{ fontSize: '12px' }}>
+            {/* Encabezado */}
+            <div className="grid grid-cols-[4rem_minmax(0,1fr)_4.5rem_1.75rem] gap-x-1.5 px-2.5 py-1.5 bg-muted/50 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
+              <span>Código</span>
+              <span>Descripción</span>
+              <span className="text-right">C.Final</span>
+              <span />
+            </div>
+            {filasPagina.map((p) => (
+              <div
+                key={p.id}
+                className={`grid grid-cols-[4rem_minmax(0,1fr)_4.5rem_1.75rem] gap-x-1.5 px-2.5 py-1.5 items-center ${p.habilitado ? "bg-teal-50/40 dark:bg-teal-950/10" : ""}`}
+              >
+                <span className="font-mono text-[11px] text-muted-foreground truncate">{p.codigo}</span>
+                <span className="text-xs font-medium truncate">{p.nombre}</span>
+                <span className="text-right text-xs font-semibold text-teal-600 whitespace-nowrap">{formatCurrency(p.precioUnitarioMayorista)}</span>
+                {p.habilitado ? (
+                  <Button
+                    variant="outline"
+                    size="icon"
+                    className="h-6 w-6 rounded-md text-destructive border-destructive/30 hover:bg-destructive/10 justify-self-end"
+                    title="Deshabilitar"
+                    onClick={async () => {
+                      try {
+                        await deshabilitarProducto(p);
+                        onHabilitarChange(p.id, { habilitado: false });
+                        toast.success("Producto deshabilitado");
+                      } catch {
+                        toast.error("Error al deshabilitar");
+                      }
+                    }}
+                  >
+                    <PackageX className="h-3.5 w-3.5" />
+                  </Button>
+                ) : (
+                  <Button
+                    variant="outline"
+                    size="icon"
+                    className="h-6 w-6 rounded-md text-teal-600 border-teal-600/30 hover:bg-teal-50 dark:hover:bg-teal-950/30 justify-self-end"
+                    title="Habilitar"
+                    onClick={() => setHabilitarTarget(p)}
+                  >
+                    <PackagePlus className="h-3.5 w-3.5" />
+                  </Button>
+                )}
+              </div>
+            ))}
+          </div>
+
           <div className="px-4 py-2 bg-muted/30 border-t flex flex-wrap items-center justify-between gap-2">
             <span className="text-xs text-muted-foreground">
               {totalProductos} productos · página {currentPage} de {totalPages}

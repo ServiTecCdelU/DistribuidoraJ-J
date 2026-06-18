@@ -1737,12 +1737,12 @@ tr.cat td{border:none}
                 /* Vista Lista — tabla compacta estilo mayorista */
                 <div className="rounded-2xl border overflow-hidden">
                   <div className="overflow-x-auto">
-                    <table className="w-full text-sm">
+                    <table className="w-full text-[11px] md:text-sm leading-tight [&_th]:px-1.5 [&_th]:py-1 [&_td]:px-1.5 [&_td]:py-1 md:[&_th]:px-3 md:[&_th]:py-3 md:[&_td]:px-3 md:[&_td]:py-2.5">
                       <thead className="bg-muted/50 border-b">
                         <tr>
                           <th className="text-left px-3 py-3 font-semibold text-muted-foreground">Código</th>
                           <th className="text-left px-3 py-3 font-semibold text-muted-foreground">Descripción</th>
-                          <th className="text-left px-3 py-3 font-semibold text-muted-foreground">Categoría</th>
+                          <th className="hidden md:table-cell text-left px-3 py-3 font-semibold text-muted-foreground">Categoría</th>
                           <th className="text-right px-3 py-3 font-semibold text-muted-foreground whitespace-nowrap">Precio</th>
                           <th className="text-right px-3 py-3 font-semibold text-muted-foreground">Stock</th>
                           <th className="text-center px-3 py-3 font-semibold text-muted-foreground whitespace-nowrap">Lote</th>
@@ -1770,7 +1770,7 @@ tr.cat td{border:none}
                                   <Badge variant="destructive" className="ml-2 text-[10px] px-1.5 py-0">Deshabilitado</Badge>
                                 )}
                               </td>
-                              <td className="px-3 py-2.5 text-xs text-muted-foreground whitespace-nowrap">
+                              <td className="hidden md:table-cell px-3 py-2.5 text-xs text-muted-foreground whitespace-nowrap">
                                 {product.category}
                               </td>
                               <td className="px-3 py-2.5 text-right font-semibold text-teal-600 whitespace-nowrap">
@@ -1841,11 +1841,11 @@ tr.cat td{border:none}
                                     <Pencil className="h-3.5 w-3.5" />
                                   </Button>
                                   {isDisabled ? (
-                                    <Button variant="ghost" size="icon" className="h-7 w-7 text-green-600 hover:text-green-700" onClick={() => handleEnable(product)} title="Habilitar">
+                                    <Button variant="ghost" size="icon" className="hidden md:inline-flex h-7 w-7 text-green-600 hover:text-green-700" onClick={() => handleEnable(product)} title="Habilitar">
                                       <CheckCircle2 className="h-3.5 w-3.5" />
                                     </Button>
                                   ) : (
-                                    <Button variant="ghost" size="icon" className="h-7 w-7 text-amber-600 hover:text-amber-700" onClick={() => handleDeactivate(product)} title="Deshabilitar">
+                                    <Button variant="ghost" size="icon" className="hidden md:inline-flex h-7 w-7 text-amber-600 hover:text-amber-700" onClick={() => handleDeactivate(product)} title="Deshabilitar">
                                       <EyeOff className="h-3.5 w-3.5" />
                                     </Button>
                                   )}
@@ -1922,6 +1922,13 @@ tr.cat td{border:none}
         product={editingProduct}
         onSave={handleSave}
         availableCategories={availableCategories}
+        isDisabled={!!(editingProduct as any)?.disabled}
+        onToggleDisabled={editingProduct ? () => {
+          const p = editingProduct;
+          setModalOpen(false);
+          if ((p as any).disabled) handleEnable(p);
+          else handleDeactivate(p);
+        } : undefined}
       />
 
       <StockHistoryModal

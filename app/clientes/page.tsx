@@ -65,6 +65,7 @@ export default function ClientesPage() {
   const [searchQuery, setSearchQuery] = useState('')
   const debouncedSearch = useDebounce(searchQuery, 300)
   const [categoryFilter, setCategoryFilter] = useState<string>('all')
+  const [sellerFilter, setSellerFilter] = useState<string>('all')
   const [modalOpen, setModalOpen] = useState(false)
   const [editingClient, setEditingClient] = useState<Client | null>(null)
   
@@ -183,6 +184,8 @@ export default function ClientesPage() {
     }
   }
 
+  const sellerNameById = useMemo(() => new Map(sellers.map((s) => [s.id, s.name])), [sellers])
+
   const filteredClients = clients.filter(client => {
     const query = debouncedSearch.toLowerCase()
     const queryDigits = normalizeCuit(debouncedSearch)
@@ -194,11 +197,14 @@ export default function ClientesPage() {
       client.name.toLowerCase().includes(query) ||
       (queryDigits.length > 0 && (cuitDigits.includes(queryDigits) || dniDigits.includes(queryDigits)))
     const matchesCategory = categoryFilter === 'all' || client.taxCategory === categoryFilter
-    return matchesSearch && matchesCategory
+    const matchesSeller =
+      sellerFilter === 'all' ||
+      (sellerFilter === 'none' ? !client.sellerId : client.sellerId === sellerFilter)
+    return matchesSearch && matchesCategory && matchesSeller
   })
 
   // Reset to page 1 when filters change
-  useEffect(() => { setCurrentPage(1) }, [debouncedSearch, categoryFilter])
+  useEffect(() => { setCurrentPage(1) }, [debouncedSearch, categoryFilter, sellerFilter])
 
   const pagedClients = useMemo(
     () => filteredClients.slice((currentPage - 1) * pageSize, currentPage * pageSize),
@@ -359,6 +365,17 @@ export default function ClientesPage() {
             <option value="exento">Exento</option>
             <option value="no_responsable">No Responsable</option>
           </select>
+          <select
+            className="h-10 rounded-md border border-input bg-background px-3 text-sm text-foreground shadow-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+            value={sellerFilter}
+            onChange={(e) => setSellerFilter(e.target.value)}
+          >
+            <option value="all">Todos los vendedores</option>
+            <option value="none">Sin vendedor</option>
+            {sellers.map((s) => (
+              <option key={s.id} value={s.id}>{s.name}</option>
+            ))}
+          </select>
           {/* <Button variant="outline" onClick={() => setArcaDialogOpen(true)} className="gap-2">
             <Search className="h-4 w-4" />
             Consultar ARCA
@@ -381,18 +398,31 @@ export default function ClientesPage() {
             className="pl-10 bg-background"
           />
         </div>
-        <select
-          className="h-10 w-full rounded-md border border-input bg-background px-3 text-sm text-foreground shadow-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
-          value={categoryFilter}
-          onChange={(e) => setCategoryFilter(e.target.value)}
-        >
-          <option value="all">Todas las categorias</option>
-          <option value="responsable_inscripto">Responsable Inscripto</option>
-          <option value="monotributo">Monotributo</option>
-          <option value="consumidor_final">Consumidor Final</option>
-          <option value="exento">Exento</option>
-          <option value="no_responsable">No Responsable</option>
-        </select>
+        <div className="flex gap-2">
+          <select
+            className="h-10 flex-1 min-w-0 rounded-md border border-input bg-background px-3 text-sm text-foreground shadow-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+            value={categoryFilter}
+            onChange={(e) => setCategoryFilter(e.target.value)}
+          >
+            <option value="all">Todas las categorias</option>
+            <option value="responsable_inscripto">Responsable Inscripto</option>
+            <option value="monotributo">Monotributo</option>
+            <option value="consumidor_final">Consumidor Final</option>
+            <option value="exento">Exento</option>
+            <option value="no_responsable">No Responsable</option>
+          </select>
+          <select
+            className="h-10 flex-1 min-w-0 rounded-md border border-input bg-background px-3 text-sm text-foreground shadow-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+            value={sellerFilter}
+            onChange={(e) => setSellerFilter(e.target.value)}
+          >
+            <option value="all">Todos los vendedores</option>
+            <option value="none">Sin vendedor</option>
+            {sellers.map((s) => (
+              <option key={s.id} value={s.id}>{s.name}</option>
+            ))}
+          </select>
+        </div>
       </div>
 
       {/* Loading State */}
@@ -569,52 +599,41 @@ export default function ClientesPage() {
                 </div>
               </div>
 
-              {/* Mobile List */}
-              <div className="md:hidden border border-border rounded-2xl overflow-hidden bg-card shadow-sm divide-y divide-border pb-4">
+              {/* Mobile List (tabla 2 filas) */}
+              <div className="md:hidden border border-border rounded-2xl overflow-hidden bg-card shadow-sm divide-y divide-border" style={{ fontSize: '12px' }}>
+                {/* Encabezado de columnas */}
+                <div className="grid grid-cols-[minmax(0,1fr)_5rem_6rem] gap-x-2 px-3 py-1.5 bg-muted/50 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
+                  <span>Cliente</span>
+                  <span className="text-center">Código</span>
+                  <span className="text-right">C.C.</span>
+                </div>
                 {pagedClients.map((client) => {
                   const debt = getDebtIndicator(client.currentBalance || 0, client.creditLimit || 0)
-                  const DebtIcon = debt.icon
+                  const vendedor = client.sellerId ? (sellerNameById.get(client.sellerId) || 'Vendedor') : 'Sin vendedor'
                   return (
                     <div
                       key={client.id}
-                      className="flex items-center gap-3 px-4 py-3 active:bg-muted/50 transition-colors"
+                      className="px-3 py-2 active:bg-muted/50 transition-colors"
                       onClick={() => handleViewDetail(client)}
                     >
-                      <div className="h-9 w-9 rounded-full bg-primary/10 flex items-center justify-center shrink-0">
-                        <span className="text-sm font-semibold text-primary">
-                          {client.name.charAt(0).toUpperCase()}
-                        </span>
-                      </div>
-                      <div className="flex-1 min-w-0">
-                        <div className="flex items-center gap-1.5">
-                          <p className="font-medium text-sm text-foreground truncate">{client.name}</p>
-                          {client.codigo && <span className="text-[11px] font-mono text-muted-foreground shrink-0">{client.codigo}</span>}
-                          {client.notes && <StickyNote className="h-3 w-3 text-amber-500 shrink-0" />}
+                      <div className="grid grid-cols-[minmax(0,1fr)_5rem_6rem] gap-x-2 items-start leading-tight">
+                        {/* Col 1: cliente / vendedor */}
+                        <div className="min-w-0">
+                          <div className="flex items-center gap-1">
+                            <p className="font-semibold text-xs text-foreground truncate">{client.name}</p>
+                            {client.notes && <StickyNote className="h-3 w-3 text-amber-500 shrink-0" />}
+                          </div>
+                          <p className="text-[11px] text-muted-foreground truncate">{vendedor}</p>
                         </div>
-                        <p className="text-xs text-muted-foreground font-mono">{client.id}</p>
-                      </div>
-                      <div className="flex items-center gap-1 shrink-0">
-                        <div className={`flex items-center gap-1 ${debt.color}`}>
-                          <DebtIcon className="h-3.5 w-3.5" />
-                          <span className="text-sm font-semibold">{formatCurrency(client.currentBalance || 0)}</span>
+                        {/* Col 2: código / dato fiscal */}
+                        <div className="text-center min-w-0">
+                          <p className="text-[11px] font-mono text-muted-foreground truncate">{client.codigo || '—'}</p>
+                          <p className="text-[10px] text-muted-foreground truncate">{formatTaxCategory(client.taxCategory)}</p>
                         </div>
-                        <DropdownMenu>
-                          <DropdownMenuTrigger asChild>
-                            <Button variant="ghost" size="icon" className="h-8 w-8 shrink-0" onClick={(e) => e.stopPropagation()}>
-                              <MoreVertical className="h-4 w-4" />
-                            </Button>
-                          </DropdownMenuTrigger>
-                          <DropdownMenuContent align="end" className="w-48">
-                            <DropdownMenuItem onClick={() => handleViewDetail(client)} className="flex items-center gap-2">
-                              <Eye className="h-4 w-4" />
-                              Ver detalle
-                            </DropdownMenuItem>
-                            <DropdownMenuItem onClick={() => handleEdit(client)} className="flex items-center gap-2">
-                              <Pencil className="h-4 w-4" />
-                              Editar cliente
-                            </DropdownMenuItem>
-                          </DropdownMenuContent>
-                        </DropdownMenu>
+                        {/* Col 3: cuenta corriente */}
+                        <div className="text-right">
+                          <span className={`text-xs font-semibold whitespace-nowrap ${debt.color}`}>{formatCurrency(client.currentBalance || 0)}</span>
+                        </div>
                       </div>
                     </div>
                   )
