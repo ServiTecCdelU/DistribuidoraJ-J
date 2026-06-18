@@ -1062,21 +1062,21 @@ export default function CajaPage() {
               <>
                 {/* Register info */}
                 <Card className={isOpen ? "border-emerald-500/30 bg-emerald-500/5" : ""}>
-                  <CardContent className="p-4">
+                  <CardContent className="p-3 sm:p-4">
                     <div className="flex items-center justify-between flex-wrap gap-2">
-                      <div className="flex items-center gap-3">
-                        <div className={`h-10 w-10 rounded-full flex items-center justify-center ${isOpen ? "bg-emerald-500/10" : "bg-muted"}`}>
+                      <div className="flex items-center gap-2.5 sm:gap-3 min-w-0">
+                        <div className={`h-8 w-8 sm:h-10 sm:w-10 rounded-full flex items-center justify-center shrink-0 ${isOpen ? "bg-emerald-500/10" : "bg-muted"}`}>
                           {isOpen ? (
-                            <Unlock className="h-5 w-5 text-emerald-500" />
+                            <Unlock className="h-4 w-4 sm:h-5 sm:w-5 text-emerald-500" />
                           ) : (
-                            <LockKeyhole className="h-5 w-5 text-muted-foreground" />
+                            <LockKeyhole className="h-4 w-4 sm:h-5 sm:w-5 text-muted-foreground" />
                           )}
                         </div>
-                        <div>
-                          <p className="font-semibold">
+                        <div className="min-w-0">
+                          <p className="font-semibold text-sm sm:text-base">
                             {isOpen ? "Caja abierta" : "Caja cerrada"}
                           </p>
-                          <p className="text-xs text-muted-foreground">
+                          <p className="text-[11px] sm:text-xs text-muted-foreground">
                             Abierta a las {formatTime(currentRegister.openedAt)} por{" "}
                             {currentRegister.openedBy}
                             {currentRegister.closedAt &&
@@ -1085,60 +1085,60 @@ export default function CajaPage() {
                         </div>
                       </div>
                       <div className="text-right">
-                        <p className="text-xs text-muted-foreground">Monto inicial</p>
-                        <p className="font-bold">{formatCurrency(currentRegister.initialAmount)}</p>
+                        <p className="text-[11px] sm:text-xs text-muted-foreground">Monto inicial</p>
+                        <p className="font-bold text-sm sm:text-base">{formatCurrency(currentRegister.initialAmount)}</p>
                       </div>
                     </div>
                   </CardContent>
                 </Card>
 
                 {/* Stats */}
-                <div className="grid grid-cols-2 lg:grid-cols-5 gap-4">
+                <div className="grid grid-cols-2 lg:grid-cols-5 gap-2 sm:gap-4">
                   <Card>
-                    <CardContent className="p-4">
-                      <div className="flex items-center gap-2 mb-1">
-                        <DollarSign className="h-4 w-4 text-emerald-500" />
-                        <span className="text-xs text-muted-foreground">Venta total</span>
+                    <CardContent className="p-2.5 sm:p-4">
+                      <div className="flex items-center gap-1.5 sm:gap-2 mb-0.5 sm:mb-1">
+                        <DollarSign className="h-3.5 w-3.5 sm:h-4 sm:w-4 text-emerald-500 shrink-0" />
+                        <span className="text-[11px] sm:text-xs text-muted-foreground truncate">Venta total</span>
                       </div>
-                      <p className="text-xl font-bold">{formatCurrency(todayStats.total)}</p>
-                      <p className="text-xs text-muted-foreground">{todayStats.count} ventas</p>
+                      <p className="text-[13px] sm:text-xl font-bold tabular-nums">{formatCurrency(todayStats.total)}</p>
+                      <p className="text-[10px] sm:text-xs text-muted-foreground">{todayStats.count} ventas</p>
                     </CardContent>
                   </Card>
                   <Card>
-                    <CardContent className="p-4">
-                      <div className="flex items-center gap-2 mb-1">
-                        <Banknote className="h-4 w-4 text-green-500" />
-                        <span className="text-xs text-muted-foreground">Efectivo</span>
+                    <CardContent className="p-2.5 sm:p-4">
+                      <div className="flex items-center gap-1.5 sm:gap-2 mb-0.5 sm:mb-1">
+                        <Banknote className="h-3.5 w-3.5 sm:h-4 sm:w-4 text-green-500 shrink-0" />
+                        <span className="text-[11px] sm:text-xs text-muted-foreground truncate">Efectivo</span>
                       </div>
-                      <p className="text-xl font-bold">{formatCurrency(todayStats.efectivoTotal)}</p>
+                      <p className="text-[13px] sm:text-xl font-bold tabular-nums">{formatCurrency(todayStats.efectivoTotal)}</p>
                     </CardContent>
                   </Card>
                   <Card>
-                    <CardContent className="p-4">
-                      <div className="flex items-center gap-2 mb-1">
-                        <ArrowUpRight className="h-4 w-4 text-violet-500" />
-                        <span className="text-xs text-muted-foreground">Transferencia</span>
+                    <CardContent className="p-2.5 sm:p-4">
+                      <div className="flex items-center gap-1.5 sm:gap-2 mb-0.5 sm:mb-1">
+                        <ArrowUpRight className="h-3.5 w-3.5 sm:h-4 sm:w-4 text-violet-500 shrink-0" />
+                        <span className="text-[11px] sm:text-xs text-muted-foreground truncate">Transferencia</span>
                       </div>
-                      <p className="text-xl font-bold">{formatCurrency(todayStats.transferTotal)}</p>
+                      <p className="text-[13px] sm:text-xl font-bold tabular-nums">{formatCurrency(todayStats.transferTotal)}</p>
                     </CardContent>
                   </Card>
                   <Card>
-                    <CardContent className="p-4">
-                      <div className="flex items-center gap-2 mb-1">
-                        <CreditCard className="h-4 w-4 text-blue-500" />
-                        <span className="text-xs text-muted-foreground">Cta. Corriente</span>
+                    <CardContent className="p-2.5 sm:p-4">
+                      <div className="flex items-center gap-1.5 sm:gap-2 mb-0.5 sm:mb-1">
+                        <CreditCard className="h-3.5 w-3.5 sm:h-4 sm:w-4 text-blue-500 shrink-0" />
+                        <span className="text-[11px] sm:text-xs text-muted-foreground truncate">Cta. Corriente</span>
                       </div>
-                      <p className="text-xl font-bold">{formatCurrency(todayStats.creditTotal)}</p>
+                      <p className="text-[13px] sm:text-xl font-bold tabular-nums">{formatCurrency(todayStats.creditTotal)}</p>
                     </CardContent>
                   </Card>
                   <Card>
-                    <CardContent className="p-4">
-                      <div className="flex items-center gap-2 mb-1">
-                        <Banknote className="h-4 w-4 text-amber-500" />
-                        <span className="text-xs text-muted-foreground">Efectivo esperado</span>
+                    <CardContent className="p-2.5 sm:p-4">
+                      <div className="flex items-center gap-1.5 sm:gap-2 mb-0.5 sm:mb-1">
+                        <Banknote className="h-3.5 w-3.5 sm:h-4 sm:w-4 text-amber-500 shrink-0" />
+                        <span className="text-[11px] sm:text-xs text-muted-foreground truncate">Efectivo esperado</span>
                       </div>
-                      <p className="text-xl font-bold">{formatCurrency(expectedCash)}</p>
-                      <p className="text-xs text-muted-foreground">
+                      <p className="text-[13px] sm:text-xl font-bold tabular-nums">{formatCurrency(expectedCash)}</p>
+                      <p className="text-[10px] sm:text-xs text-muted-foreground">
                         Inicial + efectivo - comisiones
                       </p>
                     </CardContent>
@@ -1253,12 +1253,81 @@ export default function CajaPage() {
                         No hay ventas hoy
                       </p>
                     ) : (
-                      <div className="space-y-1">
+                      <>
                         {salesFiltradas.length === 0 && (
                           <p className="text-sm text-muted-foreground text-center py-4">
                             No hay ventas de este vendedor
                           </p>
                         )}
+
+                        {/* MOBILE: tabla 2 filas */}
+                        <div className="sm:hidden rounded-xl border divide-y overflow-hidden" style={{ fontSize: '12px' }}>
+                          {/* Encabezado de columnas */}
+                          <div className="grid grid-cols-[minmax(0,1fr)_5.5rem_6.5rem] gap-x-2 px-2.5 py-1.5 bg-muted/50 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
+                            <span>Cliente</span>
+                            <span className="text-center">Pago</span>
+                            <span className="text-right">Total</span>
+                          </div>
+                          {salesFiltradas.map((sale) => {
+                            const paymentLabel = sale.paymentType === "cash"
+                              ? ((sale as any).paymentMethod === "transferencia" ? "Transferencia" : "Efectivo")
+                              : sale.paymentType === "credit" ? "Cta.Cte." : "Mixto";
+                            const badgeClass = sale.paymentType === "cash"
+                              ? ((sale as any).paymentMethod === "transferencia" ? "bg-violet-100 text-violet-800" : "bg-green-100 text-green-800")
+                              : sale.paymentType === "credit" ? "bg-blue-100 text-blue-800" : "bg-amber-100 text-amber-800";
+                            return (
+                              <div key={sale.id} className="p-2.5">
+                                <div className="grid grid-cols-[minmax(0,1fr)_5.5rem_6.5rem] gap-x-2 items-center leading-tight">
+                                  {/* Col 1: cliente / n° venta */}
+                                  <div className="min-w-0">
+                                    <p className="font-medium text-xs truncate">{sale.clientName || "Consumidor Final"}</p>
+                                    {sale.saleNumber && <p className="text-xs text-muted-foreground truncate">{sale.saleNumber}</p>}
+                                  </div>
+                                  {/* Col 2: forma de pago / fecha */}
+                                  <div className="text-center">
+                                    <div className="flex items-center justify-center gap-1">
+                                      {(sale as any).comprobanteTransferencia && (
+                                        <button
+                                          type="button"
+                                          onClick={() => setComprobanteUrl((sale as any).comprobanteTransferencia)}
+                                          className="text-violet-600 hover:text-violet-800"
+                                          title="Ver comprobante de transferencia"
+                                        >
+                                          <Receipt className="h-3.5 w-3.5" />
+                                        </button>
+                                      )}
+                                      <Badge className={`text-[10px] border-0 ${badgeClass}`}>{paymentLabel}</Badge>
+                                    </div>
+                                    <p className="text-xs text-muted-foreground">{formatDateShort(new Date(sale.createdAt))}</p>
+                                  </div>
+                                  {/* Col 3: total / vendedor */}
+                                  <div className="text-right">
+                                    <p className="font-semibold text-xs tabular-nums">{formatCurrency(sale.total || 0)}</p>
+                                    <p className="text-xs text-muted-foreground truncate">{sale.sellerName || "—"}</p>
+                                  </div>
+                                </div>
+                              </div>
+                            );
+                          })}
+                          {rejectedOrders.map((o) => (
+                            <div key={o.id} className="p-2.5">
+                              <div className="grid grid-cols-[minmax(0,1fr)_5.5rem_6.5rem] gap-x-2 items-center leading-tight">
+                                <div className="min-w-0">
+                                  <p className="font-medium text-xs truncate">{o.clientName || "Consumidor Final"}</p>
+                                  {o.remitoNumber && <p className="text-xs text-muted-foreground truncate">{o.remitoNumber}</p>}
+                                </div>
+                                <div className="text-center">
+                                  <Badge className="text-[10px] border-0 bg-red-100 text-red-700">Rechazado</Badge>
+                                  <p className="text-xs text-muted-foreground">{formatDateShort(new Date(o.date))}</p>
+                                </div>
+                                <div className="text-right" />
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+
+                        {/* DESKTOP: lista en una línea */}
+                        <div className="hidden sm:block space-y-1">
                         {salesFiltradas.map((sale) => {
                           const paymentLabel = sale.paymentType === "cash"
                             ? ((sale as any).paymentMethod === "transferencia" ? "Transferencia" : "Efectivo")
@@ -1336,7 +1405,8 @@ export default function CajaPage() {
                             </div>
                           </div>
                         ))}
-                      </div>
+                        </div>
+                      </>
                     )}
                   </CardContent>
                 </Card>

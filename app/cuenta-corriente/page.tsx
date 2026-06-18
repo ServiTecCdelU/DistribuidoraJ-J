@@ -48,7 +48,7 @@ import {
   Users, FileCheck, CheckCircle2, XCircle, Clock, Loader2, ExternalLink,
   ChevronLeft, DollarSign, ArrowDownCircle, ArrowUpCircle, Search, X,
   Banknote, CreditCard, Image as ImageIcon, AlertTriangle, Ban, Printer,
-  History, RotateCcw, Tag, Receipt, Download,
+  History, RotateCcw, Tag, Receipt, Download, SlidersHorizontal,
 } from 'lucide-react'
 import { toast } from 'sonner'
 
@@ -82,6 +82,8 @@ export default function CuentaCorrientePage() {
   const [reciboSearching, setReciboSearching] = useState(false)
   // Orden de la lista: por deuda (más plata) o por días en cuenta corriente (más días)
   const [sortBy, setSortBy] = useState<'deuda' | 'dias'>('deuda')
+  // Panel de filtros colapsable (mobile)
+  const [filtersOpen, setFiltersOpen] = useState(false)
 
   // Cliente seleccionado
   const [selectedClient, setSelectedClient] = useState<ClientWithSeller | null>(null)
@@ -208,6 +210,13 @@ export default function CuentaCorrientePage() {
 
   const totalPages = Math.ceil(filteredClients.length / PAGE_SIZE)
   const paginatedClients = filteredClients.slice((currentPage - 1) * PAGE_SIZE, currentPage * PAGE_SIZE)
+
+  // Cuántos filtros (no el buscador) están activos — para el badge del botón de filtros en mobile
+  const activeFilterCount =
+    (sortBy !== 'deuda' ? 1 : 0) +
+    (filterClassification !== 'all' ? 1 : 0) +
+    (filterSeller !== 'all' ? 1 : 0) +
+    (filterDiaCobro !== 'all' ? 1 : 0)
 
   // Reset página al cambiar filtros
   useEffect(() => { setCurrentPage(1) }, [searchQuery, filterSeller, filterClassification, filterDiaCobro, sortBy])
@@ -716,7 +725,7 @@ tr{page-break-inside:avoid}
             <h2 className="text-lg font-bold truncate">{selectedClient.name}</h2>
             <p className="text-sm text-muted-foreground">{selectedClient.sellerName || 'Sin vendedor asignado'}</p>
           </div>
-          <div className="text-right flex gap-4">
+          <div className="text-right flex gap-3 sm:gap-4 shrink-0">
             <div>
               <p className="text-xs text-muted-foreground">Minorista</p>
               <p className={`text-lg font-bold ${selectedClient.currentBalance > 0 ? 'text-red-600' : 'text-green-600'}`}>
@@ -734,7 +743,7 @@ tr{page-break-inside:avoid}
 
         {/* Clasificación de deuda (automática según antigüedad) */}
         {selectedClient.currentBalance > 0 && (
-          <div className="flex items-center gap-3 mb-4 p-3 rounded-xl bg-muted/50">
+          <div className="flex flex-wrap items-center gap-x-3 gap-y-2 mb-4 p-3 rounded-xl bg-muted/50">
             <span className="text-sm font-medium text-muted-foreground">Clasificación:</span>
             {classificationBadge(clasificarDeuda(selectedClient.debtSince))}
             {esDiaDePago(selectedClient.debtSince) && (
@@ -1331,88 +1340,111 @@ tr{page-break-inside:avoid}
             </Card>
             {canManage && (
             <Card className="col-span-2 md:col-span-1">
-              <CardContent className="p-3">
-                <div className="flex items-center gap-1.5 text-xs text-muted-foreground mb-1">
+              {/* Mobile: tira fina horizontal. Desktop: bloque como las otras cards */}
+              <CardContent className="p-3 flex items-center justify-between gap-2 md:block">
+                <div className="flex items-center gap-1.5 text-xs text-muted-foreground md:mb-1">
                   <FileCheck className="h-3.5 w-3.5" />Vendedores activos
                 </div>
-                <div className="text-lg font-bold leading-tight">{sellers.length}</div>
-                <p className="text-[11px] text-muted-foreground">con clientes asignados</p>
+                <div className="flex items-baseline gap-1.5 md:block">
+                  <span className="text-lg font-bold leading-tight">{sellers.length}</span>
+                  <p className="text-[11px] text-muted-foreground">con clientes asignados</p>
+                </div>
               </CardContent>
             </Card>
             )}
           </div>
 
           {/* Filtros */}
-          <div className="flex flex-col sm:flex-row gap-3 mb-4">
-            <div className="relative flex-1">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-              <Input
-                placeholder="Buscar cliente o N° de recibo (ej: RC-2026-00012)..."
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                className="pl-10 rounded-xl"
-              />
-              {searchQuery && (
-                <Button variant="ghost" size="icon" className="absolute right-2 top-1/2 -translate-y-1/2 h-6 w-6" onClick={() => setSearchQuery('')}>
-                  <X className="h-3.5 w-3.5" />
+          <div className="space-y-3 mb-4">
+            {/* Fila buscador + botón de filtros (el botón solo en mobile) */}
+            <div className="flex gap-2">
+              <div className="relative flex-1">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                <Input
+                  placeholder="Buscar cliente o N° de recibo..."
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  className="pl-10 rounded-xl"
+                />
+                {searchQuery && (
+                  <Button variant="ghost" size="icon" className="absolute right-2 top-1/2 -translate-y-1/2 h-6 w-6" onClick={() => setSearchQuery('')}>
+                    <X className="h-3.5 w-3.5" />
+                  </Button>
+                )}
+              </div>
+              <Button
+                variant={filtersOpen ? 'default' : 'outline'}
+                size="icon"
+                className={`sm:hidden shrink-0 h-10 w-10 relative rounded-xl ${filtersOpen ? 'bg-teal-600 hover:bg-teal-700 text-white' : ''}`}
+                onClick={() => setFiltersOpen(!filtersOpen)}
+              >
+                <SlidersHorizontal className="h-4 w-4" />
+                {activeFilterCount > 0 && !filtersOpen && (
+                  <span className="absolute -top-1.5 -right-1.5 flex h-4 w-4 items-center justify-center rounded-full bg-red-500 text-[10px] font-bold text-white leading-none">
+                    {activeFilterCount}
+                  </span>
+                )}
+              </Button>
+            </div>
+
+            {/* Selects: panel colapsable en mobile, fila con wrap en desktop */}
+            <div className={`${filtersOpen ? 'grid grid-cols-1' : 'hidden'} sm:flex sm:flex-row sm:flex-wrap gap-3`}>
+              <Select value={sortBy} onValueChange={(v) => setSortBy(v as 'deuda' | 'dias')}>
+                <SelectTrigger className="w-full sm:w-[170px] rounded-xl">
+                  <SelectValue placeholder="Ordenar por" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="deuda">Mayor deuda</SelectItem>
+                  <SelectItem value="dias">Más días</SelectItem>
+                </SelectContent>
+              </Select>
+              <Select value={filterClassification} onValueChange={setFilterClassification}>
+                <SelectTrigger className="w-full sm:w-[170px] rounded-xl">
+                  <SelectValue placeholder="Clasificación" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">Todas</SelectItem>
+                  <SelectItem value="normal">Normales</SelectItem>
+                  <SelectItem value="atrasado">Atrasados</SelectItem>
+                  <SelectItem value="moroso">Morosos</SelectItem>
+                  <SelectItem value="incobrable">Incobrables</SelectItem>
+                </SelectContent>
+              </Select>
+              {canManage && (
+              <Select value={filterSeller} onValueChange={setFilterSeller}>
+                <SelectTrigger className="w-full sm:w-[200px] rounded-xl">
+                  <SelectValue placeholder="Vendedor" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">Todos los vendedores</SelectItem>
+                  {sellers.map((s) => (
+                    <SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              )}
+              <Select value={filterDiaCobro} onValueChange={setFilterDiaCobro}>
+                <SelectTrigger className="w-full sm:w-[170px] rounded-xl">
+                  <SelectValue placeholder="Día de cobro" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">Todos los días</SelectItem>
+                  <SelectItem value="lunes">Lunes</SelectItem>
+                  <SelectItem value="martes">Martes</SelectItem>
+                  <SelectItem value="miercoles">Miércoles</SelectItem>
+                  <SelectItem value="jueves">Jueves</SelectItem>
+                  <SelectItem value="viernes">Viernes</SelectItem>
+                  <SelectItem value="sabado">Sábado</SelectItem>
+                  <SelectItem value="domingo">Domingo</SelectItem>
+                </SelectContent>
+              </Select>
+              {(isSeller || filterSeller !== 'all') && (
+                <Button onClick={handlePrintCobranza} className="rounded-xl gap-2 shrink-0">
+                  <Printer className="h-4 w-4" />
+                  Imprimir cobranza
                 </Button>
               )}
             </div>
-            <Select value={sortBy} onValueChange={(v) => setSortBy(v as 'deuda' | 'dias')}>
-              <SelectTrigger className="w-full sm:w-[170px] rounded-xl">
-                <SelectValue placeholder="Ordenar por" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="deuda">Mayor deuda</SelectItem>
-                <SelectItem value="dias">Más días</SelectItem>
-              </SelectContent>
-            </Select>
-            <Select value={filterClassification} onValueChange={setFilterClassification}>
-              <SelectTrigger className="w-full sm:w-[170px] rounded-xl">
-                <SelectValue placeholder="Clasificación" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">Todas</SelectItem>
-                <SelectItem value="normal">Normales</SelectItem>
-                <SelectItem value="atrasado">Atrasados</SelectItem>
-                <SelectItem value="moroso">Morosos</SelectItem>
-                <SelectItem value="incobrable">Incobrables</SelectItem>
-              </SelectContent>
-            </Select>
-            {canManage && (
-            <Select value={filterSeller} onValueChange={setFilterSeller}>
-              <SelectTrigger className="w-full sm:w-[200px] rounded-xl">
-                <SelectValue placeholder="Vendedor" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">Todos los vendedores</SelectItem>
-                {sellers.map((s) => (
-                  <SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-            )}
-            <Select value={filterDiaCobro} onValueChange={setFilterDiaCobro}>
-              <SelectTrigger className="w-full sm:w-[170px] rounded-xl">
-                <SelectValue placeholder="Día de cobro" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">Todos los días</SelectItem>
-                <SelectItem value="lunes">Lunes</SelectItem>
-                <SelectItem value="martes">Martes</SelectItem>
-                <SelectItem value="miercoles">Miércoles</SelectItem>
-                <SelectItem value="jueves">Jueves</SelectItem>
-                <SelectItem value="viernes">Viernes</SelectItem>
-                <SelectItem value="sabado">Sábado</SelectItem>
-                <SelectItem value="domingo">Domingo</SelectItem>
-              </SelectContent>
-            </Select>
-            {(isSeller || filterSeller !== 'all') && (
-              <Button onClick={handlePrintCobranza} className="rounded-xl gap-2 shrink-0">
-                <Printer className="h-4 w-4" />
-                Imprimir cobranza
-              </Button>
-            )}
           </div>
 
           {/* Resultados de búsqueda por N° de recibo */}
@@ -1472,43 +1504,52 @@ tr{page-break-inside:avoid}
             </Card>
           ) : (
             <>
-              {/* Mobile cards */}
-              <div className="flex flex-col gap-3 md:hidden">
+              {/* Mobile tabla (filas compactas con encabezado) */}
+              <div className="md:hidden rounded-xl border divide-y overflow-hidden" style={{ fontSize: '12px' }}>
+                {/* Encabezado de columnas */}
+                <div className="grid grid-cols-[minmax(0,1fr)_4.5rem_7rem] gap-x-2 px-2.5 py-1.5 bg-muted/50 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
+                  <span>Cliente</span>
+                  <span className="text-center">Estado</span>
+                  <span className="text-right">Deuda</span>
+                </div>
                 {paginatedClients.map((c) => {
                   const clientPending = comprobantes.filter((comp) => comp.clientId === c.id && comp.status === 'pending')
+                  const dias = c.debtSince ? diasDesde(c.debtSince) : null
                   return (
-                    <Card
+                    <div
                       key={c.id}
-                      className="cursor-pointer hover:border-teal-300 transition-colors"
+                      className="cursor-pointer hover:bg-muted/40 transition-colors p-2.5"
                       onClick={() => handleSelectClient(c)}
                     >
-                      <CardContent className="p-4">
-                        <div className="flex justify-between items-start">
-                          <div className="min-w-0 flex-1">
-                            <p className="font-semibold text-sm truncate">{c.name}</p>
-                            <p className="text-xs text-muted-foreground">
-                              {c.sellerName || 'Sin vendedor'}
-                              {c.diaCobro && <span className="capitalize text-teal-600"> · {c.diaCobro}</span>}
-                            </p>
-                            {clasificarDeuda(c.debtSince) !== 'normal' && (
-                              <div className="mt-1">{classificationBadge(clasificarDeuda(c.debtSince))}</div>
-                            )}
-                          </div>
-                          <div className="text-right shrink-0">
-                            {c.currentBalance > 0 ? (
-                              <p className="font-bold text-red-600">{formatCurrency(c.currentBalance)}</p>
-                            ) : (
-                              <Badge className="bg-green-100 text-green-700 text-xs"><CheckCircle2 className="h-3 w-3 mr-1" />Cancelada</Badge>
-                            )}
-                            {clientPending.length > 0 && (
-                              <Badge variant="secondary" className="text-orange-600 bg-orange-50 text-[10px] mt-1">
-                                {clientPending.length} comprobante{clientPending.length > 1 ? 's' : ''}
-                              </Badge>
-                            )}
-                          </div>
+                      <div className="grid grid-cols-[minmax(0,1fr)_4.5rem_7rem] gap-x-2 items-center leading-tight">
+                        {/* Col 1: cliente / vendedor */}
+                        <div className="min-w-0">
+                          <p className="font-semibold text-xs truncate">{c.name}</p>
+                          <p className="text-xs text-muted-foreground truncate">
+                            {c.sellerName || 'Sin vendedor'}
+                            {c.diaCobro && <span className="capitalize text-teal-600"> · {c.diaCobro}</span>}
+                          </p>
                         </div>
-                      </CardContent>
-                    </Card>
+                        {/* Col 2: estado / días */}
+                        <div className="text-center">
+                          {c.currentBalance > 0 && classificationBadge(clasificarDeuda(c.debtSince))}
+                          {c.currentBalance > 0 && dias != null && (
+                            <p className="text-xs text-muted-foreground whitespace-nowrap">{dias} días</p>
+                          )}
+                        </div>
+                        {/* Col 3: deuda / comprobantes */}
+                        <div className="text-right">
+                          {c.currentBalance > 0 ? (
+                            <span className="font-bold text-xs text-red-600 whitespace-nowrap">{formatCurrency(c.currentBalance)}</span>
+                          ) : (
+                            <Badge className="bg-green-100 text-green-700 text-[10px]"><CheckCircle2 className="h-3 w-3 mr-1" />Cancelada</Badge>
+                          )}
+                          {clientPending.length > 0 && (
+                            <p className="mt-0.5"><Badge variant="secondary" className="text-orange-600 bg-orange-50 text-[10px]">{clientPending.length} comp.</Badge></p>
+                          )}
+                        </div>
+                      </div>
+                    </div>
                   )
                 })}
               </div>
