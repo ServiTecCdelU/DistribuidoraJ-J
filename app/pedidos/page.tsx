@@ -1882,8 +1882,8 @@ tbody tr:nth-child(even){background:#fafafa}
 
                 {isExpanded && (
                   <>
-                    {/* Desktop: tabla */}
-                    <div className="hidden lg:block border-t">
+                    {/* Desktop/tablet: tabla (en reparto se prioriza la tarjeta grande hasta lg) */}
+                    <div className={`hidden ${filterStatus === "delivery" ? "lg:block" : "md:block"} border-t`}>
                       <table className="w-full">
                         <thead className="bg-muted/30 border-b">
                           <tr className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
@@ -1985,8 +1985,8 @@ tbody tr:nth-child(even){background:#fafafa}
                       </table>
                     </div>
 
-                    {/* Mobile: lista */}
-                    <div className="lg:hidden divide-y border-t">
+                    {/* Mobile: lista (en reparto la tarjeta grande se mantiene hasta lg) */}
+                    <div className={`${filterStatus === "delivery" ? "lg:hidden" : "md:hidden"} divide-y border-t`}>
                       {day.groups.map(({ client, groupKey, orders: clientOrders }) => {
                         const { mergedItems, displayOrder, config, onView, deuda, clasificacion, codigo, clientPhone } = computeRow(clientOrders);
                         const orderId = clientOrders[0].id;
@@ -2056,7 +2056,7 @@ tbody tr:nth-child(even){background:#fafafa}
 
                         // ── Otros estados: fila compacta (workflow admin) ──
                         return (
-                          <div key={groupKey} className={`grid grid-cols-[auto_auto_1fr_auto_auto] gap-2 px-3 py-2.5 cursor-pointer transition-colors items-center ${isHeld ? "bg-red-50/60 opacity-60" : isSelected ? "bg-teal-50/60" : "hover:bg-muted/20"}`} onClick={onView}>
+                          <div key={groupKey} className={`grid grid-cols-[auto_auto_1fr] gap-2 px-3 py-2.5 cursor-pointer transition-colors items-center ${isHeld ? "bg-red-50/60 opacity-60" : isSelected ? "bg-teal-50/60" : "hover:bg-muted/20"}`} onClick={onView}>
                             <div className="shrink-0" onClick={(e) => e.stopPropagation()}>
                               <input
                                 type="checkbox"
@@ -2075,36 +2075,24 @@ tbody tr:nth-child(even){background:#fafafa}
                               </button>
                             </div>
                             <div className="min-w-0">
-                              <div className="flex items-center gap-1">
+                              <div className="flex items-baseline justify-between gap-2">
                                 <p className={`text-xs font-semibold truncate ${isHeld ? "text-red-400 line-through" : "text-foreground"}`}>{client}</p>
-                                {codigo && <span className="text-[10px] font-normal text-muted-foreground shrink-0">({codigo})</span>}
-                                {clientOrders.length > 1 && (
-                                  <span className="text-[10px] text-muted-foreground shrink-0">·{clientOrders.length}</span>
+                                {deuda > 0 ? (
+                                  <span className={`text-xs font-semibold shrink-0 ${deudaColor}`}>{formatPrice(deuda)}</span>
+                                ) : (
+                                  <span className="text-[10px] text-green-600 shrink-0">Al día</span>
                                 )}
                               </div>
                               <p className="text-[11px] text-muted-foreground truncate">
+                                {codigo && <span className="font-medium text-foreground/70">({codigo}) </span>}
                                 {displayOrder.sellerName || "Sin vendedor"}
+                                {clientOrders.length > 1 && ` (${clientOrders.length})`}
                               </p>
                               {notas.length > 0 && (
                                 <p className="text-[10px] text-amber-700 italic truncate" title={notas.join(" · ")}>
                                   📝 {notas.join(" · ")}
                                 </p>
                               )}
-                            </div>
-                            <div className="shrink-0 text-center">
-                              {deuda > 0 ? (
-                                <p className={`text-[10px] font-semibold ${deudaColor}`}>
-                                  {formatPrice(deuda)}
-                                </p>
-                              ) : (
-                                <span className="text-[10px] text-green-600">—</span>
-                              )}
-                            </div>
-                            <div className="flex items-center shrink-0">
-                              <div className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold ${config.bgColor} border ${config.borderColor}`}>
-                                <div className={`w-1.5 h-1.5 rounded-full ${config.dotColor}`} />
-                                <span className={config.color}>{config.label}</span>
-                              </div>
                             </div>
                           </div>
                         );

@@ -19,6 +19,7 @@ import {
   Search,
   X,
   SlidersHorizontal,
+  Calendar,
 } from "lucide-react";
 import { statusConfig, statusFlow } from "@/lib/order-constants";
 
@@ -92,7 +93,7 @@ export function OrdersFilters({
   return (
     <div className="space-y-3">
       {/* Fila 1: Status tabs (desktop) / Select (mobile) + botones de acción */}
-      <div className="flex items-center gap-2">
+      <div className="flex flex-wrap items-center gap-2">
         {/* Mobile: Select de estado */}
         <div className="sm:hidden flex-1">
           <Select value={filterStatus} onValueChange={setFilterStatus}>
@@ -143,7 +144,7 @@ export function OrdersFilters({
 
         {/* Botones de acción (children) */}
         {children && (
-          <div className="flex items-center gap-1.5 sm:gap-2 shrink-0">
+          <div className="flex flex-wrap items-center justify-end gap-1.5 sm:gap-2 shrink-0">
             {children}
           </div>
         )}
@@ -169,14 +170,14 @@ export function OrdersFilters({
           )}
         </div>
 
-        {/* Selector de día */}
+        {/* Selector de día (desktop: al lado del buscador; mobile: dentro del panel de filtros) */}
         {setFilterDate && (
-          <div className="relative shrink-0">
+          <div className="relative shrink-0 hidden sm:block">
             <Input
               type="date"
               value={filterDate || ""}
               onChange={(e) => setFilterDate(e.target.value)}
-              className={`h-10 w-[150px] sm:w-[160px] ${filterDate ? "border-teal-500 ring-1 ring-teal-500/30 pr-8" : ""}`}
+              className={`h-10 w-[125px] sm:w-[160px] ${filterDate ? "border-teal-500 ring-1 ring-teal-500/30 pr-8" : ""}`}
               title="Filtrar por día"
             />
             {filterDate && (
@@ -285,6 +286,33 @@ export function OrdersFilters({
                   ))}
                 </SelectContent>
               </Select>
+            </div>
+          )}
+
+          {/* Día — solo mobile (en desktop vive al lado del buscador) */}
+          {setFilterDate && (
+            <div className="space-y-1.5 sm:hidden">
+              <label className="text-xs font-medium text-gray-600 flex items-center gap-1.5">
+                <Calendar className="h-3.5 w-3.5" />
+                Día
+              </label>
+              <div className="relative">
+                <Input
+                  type="date"
+                  value={filterDate || ""}
+                  onChange={(e) => setFilterDate(e.target.value)}
+                  className={`bg-white h-10 w-full ${filterDate ? "border-teal-500 ring-1 ring-teal-500/30 pr-8" : ""}`}
+                />
+                {filterDate && (
+                  <button
+                    onClick={() => setFilterDate("")}
+                    className="absolute right-2 top-1/2 -translate-y-1/2"
+                    title="Quitar filtro de día"
+                  >
+                    <X className="h-4 w-4 text-muted-foreground hover:text-foreground" />
+                  </button>
+                )}
+              </div>
             </div>
           )}
 
