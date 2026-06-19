@@ -40,6 +40,7 @@ import Link from "next/link";
 import type { ListaVentasProps } from "../types";
 import { formatDate, formatTime, formatCurrency } from "@/lib/utils/format";
 import { toDate } from "@/services/supabase-helpers";
+import { toast } from "sonner";
 import { useMemo, useState, useCallback } from "react";
 import {
   Dialog,
@@ -181,7 +182,7 @@ export function ListaVentas({
   const [exportFrom, setExportFrom] = useState("");
   const [exportTo, setExportTo] = useState("");
 
-  const exportCSV = useCallback(() => {
+  const exportExcel = useCallback(async () => {
     let ventasToExport = [...ventas];
     if (exportPeriod !== "all" && exportPeriod !== "custom") {
       const now = new Date();
@@ -198,27 +199,81 @@ export function ListaVentas({
     if (exportFrom) { const f = new Date(exportFrom); f.setHours(0,0,0,0); ventasToExport = ventasToExport.filter(v => { const d = safeGetDate(v.createdAt); return d && d >= f; }); }
     if (exportTo) { const t = new Date(exportTo); t.setHours(23,59,59,999); ventasToExport = ventasToExport.filter(v => { const d = safeGetDate(v.createdAt); return d && d <= t; }); }
 
-    const SEP = ";";
-    const headers = ["Fecha","Hora","Cliente","CUIT","DNI","Email","Telefono","Direccion Cliente","Vendedor","Productos","Cant. Items","Subtotal","Descuento","Tipo Descuento","Total","Metodo de Pago","Monto Efectivo","Monto Cta. Cte.","Metodo Entrega","Direccion Entrega","Transportista"];
-    const rows = ventasToExport.map((v: any) => {
+    if (ventasToExport.length === 0) { toast.error("No hay ventas en ese per\u00EDodo"); return; }
+
+    const XLSX = (await import("xlsx-js-style")).default ?? (await import("xlsx-js-style"));
+
+    const headers = ["N\u00B0 Venta", "Fecha", "Cliente", "Vendedor", "Total", "M\u00E9todo de Pago"];
+    // Columna num\u00E9rica (0-based): Total=4. Columnas centradas: N\u00B0 Venta=0, Fecha=1
+    const MONEY_COLS = new Set([4]);
+    const CENTER_COLS = new Set([0, 1]);
+
+    let totTotal = 0;
+    const dataRows = ventasToExport.map((v: any) => {
       const d = safeGetDate(v.createdAt);
       const fecha = d ? `${d.getDate().toString().padStart(2,"0")}/${(d.getMonth()+1).toString().padStart(2,"0")}/${d.getFullYear()}` : "";
-      const hora = d ? `${d.getHours().toString().padStart(2,"0")}:${d.getMinutes().toString().padStart(2,"0")}` : "";
-      const productos = v.items?.map((i: any) => `${i.name} x${i.quantity} ($${i.price})`).join(" | ") || "";
-      const cantItems = v.items?.reduce((s: number, i: any) => s + i.quantity, 0) || 0;
-      const subtotal = v.discount ? v.total + (v.discountType === "percent" ? v.total * v.discount / (100 - v.discount) : v.discount) : v.total;
-      const metodoPago = v.paymentType === "cash" ? (v.paymentMethod === "transferencia" ? "Transferencia" : "Efectivo") : v.paymentType === "credit" ? "Cta. Corriente" : "Mixto";
-      const metodoEntrega = v.deliveryMethod === "delivery" ? "A domicilio" : v.deliveryMethod === "pickup" ? "Retira en local" : "";
-      return [fecha,hora,v.clientName||"Consumidor Final",v.clientCuit||"",v.clientDni||"",v.clientEmail||"",v.clientPhone||"",v.clientAddress||"",v.sellerName||"",productos,cantItems,subtotal,v.discount||"",v.discountType||"",v.total,metodoPago,v.cashAmount||"",v.creditAmount||"",metodoEntrega,v.deliveryMethod==="pickup"?"":(v.deliveryAddress||""),v.transportistaName||v.transportistaId||""];
+      const total = Number(v.total) || 0;
+      const metodoPago = v.paymentType === "cash"
+        ? (v.paymentMethod === "transferencia" ? "Transferencia" : "Efectivo")
+        : v.paymentType === "credit" ? "Cta. Corriente" : "Mixto";
+      totTotal += total;
+      return [v.saleNumber || "\u2014", fecha, v.clientName || "Consumidor Final", v.sellerName || "\u2014", total, metodoPago];
     });
-    const csv = [headers.join(SEP), ...rows.map(r => r.map(c => `"${String(c??"").replace(/"/g,'""')}"`).join(SEP))].join("\n");
-    const blob = new Blob(["\uFEFF"+"sep=;\n"+csv], { type: "text/csv;charset=utf-8;" });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = `ventas_${exportPeriod === "custom" ? `${exportFrom||"inicio"}_a_${exportTo||"hoy"}` : exportPeriod}_${new Date().toISOString().slice(0,10)}.csv`;
-    a.click();
-    URL.revokeObjectURL(url);
+
+    const totalRow = ["TOTALES", "", "", "", totTotal, ""];
+    const aoa = [headers, ...dataRows, totalRow];
+    const ws = XLSX.utils.aoa_to_sheet(aoa);
+    const lastRow = aoa.length; // 1-based \u00EDndice de la fila de totales
+
+    // Anchos de columna (un poco amplios para que no se pisen)
+    ws["!cols"] = [
+      { wch: 22 },  // N\u00B0 Venta
+      { wch: 14 },  // Fecha
+      { wch: 36 },  // Cliente
+      { wch: 26 },  // Vendedor
+      { wch: 18 },  // Total
+      { wch: 22 },  // M\u00E9todo de Pago
+    ];
+    // Filtro + congelar encabezado
+    ws["!autofilter"] = { ref: `A1:F${lastRow - 1}` };
+    ws["!freeze"] = { xSplit: 0, ySplit: 1, topLeftCell: "A2", activePane: "bottomLeft", state: "frozen" } as any;
+
+    const MONEY_FMT = '"$ "#,##0.00';
+    const headerStyle = {
+      font: { bold: true, color: { rgb: "FFFFFF" }, sz: 11 },
+      fill: { fgColor: { rgb: "0D9488" } },
+      alignment: { horizontal: "center", vertical: "center" },
+      border: { bottom: { style: "thin", color: { rgb: "0B7C72" } } },
+    };
+    const range = XLSX.utils.decode_range(ws["!ref"] as string);
+    for (let R = range.s.r; R <= range.e.r; R++) {
+      const isHeader = R === 0;
+      const isTotal = R === lastRow - 1;
+      for (let C = range.s.c; C <= range.e.c; C++) {
+        const ref = XLSX.utils.encode_cell({ r: R, c: C });
+        const cell = ws[ref];
+        if (!cell) continue;
+        if (isHeader) { cell.s = headerStyle; continue; }
+        const money = MONEY_COLS.has(C);
+        const base: any = {
+          alignment: { horizontal: money ? "right" : CENTER_COLS.has(C) ? "center" : "left", vertical: "center" },
+        };
+        if (money) { cell.z = MONEY_FMT; }
+        if (isTotal) {
+          base.font = { bold: true };
+          base.fill = { fgColor: { rgb: "F1F5F9" } };
+          base.border = { top: { style: "thin", color: { rgb: "94A3B8" } } };
+        }
+        cell.s = base;
+      }
+    }
+    // Alto del encabezado
+    ws["!rows"] = [{ hpt: 22 }];
+
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, "Ventas");
+    const fileName = `ventas_${exportPeriod === "custom" ? `${exportFrom||"inicio"}_a_${exportTo||"hoy"}` : exportPeriod}_${new Date().toISOString().slice(0,10)}.xlsx`;
+    XLSX.writeFile(wb, fileName);
     setExportOpen(false);
   }, [ventas, exportPeriod, exportFrom, exportTo]);
 
@@ -672,11 +727,11 @@ export function ListaVentas({
                 <div className="space-y-1.5"><label className="text-xs font-medium text-muted-foreground">Hasta</label><Input type="date" value={exportTo} onChange={e => setExportTo(e.target.value)} /></div>
               </div>
             )}
-            <p className="text-xs text-muted-foreground">Se exportarán todas las columnas: N° venta, cliente, CUIT, vendedor, productos, pagos, factura, remito, entrega, transportista, etc.</p>
+            <p className="text-xs text-muted-foreground">Se exporta un Excel con: N° Venta, Fecha, Cliente, Vendedor, Total y Método de Pago. Incluye fila de totales.</p>
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setExportOpen(false)}>Cancelar</Button>
-            <Button onClick={exportCSV} className="gap-2"><Download className="h-4 w-4" />Descargar CSV</Button>
+            <Button onClick={exportExcel} className="gap-2"><Download className="h-4 w-4" />Descargar Excel</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
