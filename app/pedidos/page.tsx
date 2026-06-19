@@ -1583,6 +1583,7 @@ tbody tr:nth-child(even){background:#fafafa}
 .cond{display:inline-flex;gap:10px;font-size:10px;color:#6b7280;white-space:nowrap}
 .cond .box{display:inline-flex;align-items:center;gap:3px}
 .checkbox{display:inline-block;width:11px;height:11px;border:1.5px solid #9ca3af;border-radius:2px}
+.total-final{display:flex;justify-content:space-between;align-items:center;margin-top:10px;padding:9px 14px;background:#0f766e;color:#fff;border-radius:6px;font-weight:800;font-size:15px;page-break-inside:avoid}
 *{-webkit-print-color-adjust:exact;print-color-adjust:exact}
 @media print{body{padding:10mm}}
 </style></head><body>`;
@@ -1626,6 +1627,13 @@ tbody tr:nth-child(even){background:#fafafa}
         });
         html += `</tbody></table></div>`;
       });
+
+    // Total general de la hoja de ruta (suma de todos los importes)
+    const totalGeneral = cargoGroups.reduce(
+      (acc, { orders }) => acc + orders.reduce((a, o) => a + calculateOrderTotal(o), 0),
+      0,
+    );
+    html += `<div class="total-final"><span>TOTAL GENERAL</span><span>${fmtMoney(totalGeneral)}</span></div>`;
 
     html += `</body></html>`;
     printHtml(html);
