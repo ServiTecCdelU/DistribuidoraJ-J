@@ -84,6 +84,11 @@ export default function CuentaCorrientePage() {
   const [sortBy, setSortBy] = useState<'deuda' | 'dias'>('deuda')
   // Panel de filtros colapsable (mobile)
   const [filtersOpen, setFiltersOpen] = useState(false)
+  // Modal de impresión de cobranza (elegir todas / un vendedor)
+  const [printDialogOpen, setPrintDialogOpen] = useState(false)
+  const [printMode, setPrintMode] = useState<'choose' | 'seller'>('choose')
+  const [printSeller, setPrintSeller] = useState('all')
+  const [printing, setPrinting] = useState(false)
 
   // Cliente seleccionado
   const [selectedClient, setSelectedClient] = useState<ClientWithSeller | null>(null)
@@ -154,7 +159,8 @@ export default function CuentaCorrientePage() {
       ])
       setDebtClients(clientsData)
       setComprobantes(compData)
-      setSellers(sellersData.filter((s) => s.isActive))
+      // Solo vendedores (incluye "ambos"); los transportistas no son vendedores
+      setSellers(sellersData.filter((s) => s.isActive && s.employeeType !== 'transportista'))
     } catch { /* silenciado */ }
 
     // Mayorista aparte para que no rompa la carga principal
@@ -560,57 +566,131 @@ export default function CuentaCorrientePage() {
     }
   }
 
-  // Imprimir listado de cobranza del vendedor filtrado
-  const handlePrintCobranza = () => {
-    const conDeuda = filteredClients.filter((c) => c.currentBalance > 0)
+  // Imprimir listado de cobranza con el detalle de movimientos de cada cliente.
+  // targetSellerId: undefined/'all' = todas las cuentas; un id = solo ese vendedor.
+  const handlePrintCobranza = async (targetSellerId?: string) => {
+    const base = scopedDebtClients.filter((c) => c.currentBalance > 0)
+    const conDeuda = (targetSellerId && targetSellerId !== 'all')
+      ? base.filter((c) => c.sellerId === targetSellerId)
+      : base
     if (conDeuda.length === 0) {
       toast.error('No hay clientes con deuda para imprimir')
       return
     }
-    const vendedorName = sellers.find((s) => s.id === filterSeller)?.name || conDeuda[0].sellerName || 'Vendedor'
-    const total = conDeuda.reduce((acc, c) => acc + c.currentBalance, 0)
-    const now = new Date()
-    const dateStr = new Intl.DateTimeFormat('es-AR', { day: '2-digit', month: 'long', year: 'numeric' }).format(now)
+    setPrinting(true)
+    const loadingId = toast.loading('Generando listado de cobranza...')
+    try {
+      // Traer los movimientos de cuenta corriente (minorista) de cada cliente con deuda
+      const detalles = await Promise.all(
+        conDeuda.map(async (c) => {
+          let movimientos: Transaction[] = []
+          try {
+            const txs = await clientsApi.getTransactions(c.id)
+            movimientos = txs
+              .filter((t) => (t.cuenta ?? 'minorista') === 'minorista')
+              .sort((a, b) => a.date.getTime() - b.date.getTime())
+          } catch { /* si falla, se imprime solo el total */ }
+          return { client: c, movimientos }
+        })
+      )
 
-    const rows = conDeuda.map((c, i) => {
-      const cod = c.codigo ? ` <span class="cod">(${c.codigo})</span>` : ''
-      return `<tr>
-        <td class="center">${i + 1}</td>
-        <td><b>${c.name}</b>${cod}</td>
-        <td class="right deuda">${formatCurrency(c.currentBalance)}</td>
-      </tr>`
-    }).join('')
+      const esTodas = !targetSellerId || targetSellerId === 'all'
+      const vendedorName = esTodas
+        ? 'Todas las cuentas corrientes'
+        : (sellers.find((s) => s.id === targetSellerId)?.name || conDeuda[0].sellerName || 'Vendedor')
+      const total = conDeuda.reduce((acc, c) => acc + c.currentBalance, 0)
+      const now = new Date()
+      const dateStr = new Intl.DateTimeFormat('es-AR', { day: '2-digit', month: 'long', year: 'numeric' }).format(now)
 
-    const html = `<!DOCTYPE html><html><head><title>Cobranza ${vendedorName}</title><style>
+      const esc = (s: string) => String(s ?? '').replace(/[&<>]/g, (ch) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' }[ch] as string))
+
+      const bloques = detalles.map(({ client: c, movimientos }, i) => {
+        const cod = c.codigo ? ` <span class="cod">(${esc(c.codigo)})</span>` : ''
+        const vend = esTodas && c.sellerName ? `<span class="cli-vend">${esc(c.sellerName)}</span>` : ''
+        const movRows = movimientos.map((t) => {
+          const esDeuda = t.type === 'debt'
+          const tieneSaldo = esDeuda && (t.saldo ?? 0) > 0
+          const dias = tieneSaldo ? String(diasDesde(t.date)) : '—'
+          const monto = esDeuda
+            ? `<span class="m-deuda">+${formatCurrency(t.amount)}</span>`
+            : `<span class="m-pago">-${formatCurrency(t.amount)}</span>`
+          const saldo = esDeuda && t.saldo != null ? formatCurrency(t.saldo) : '—'
+          return `<tr>
+            <td>${esc(t.description || (esDeuda ? 'Venta' : 'Pago'))}</td>
+            <td class="center nowrap">${formatDate(t.date)}</td>
+            <td class="center">${dias}</td>
+            <td class="right nowrap">${monto}</td>
+            <td class="right nowrap">${saldo}</td>
+          </tr>`
+        }).join('')
+        const sinMov = movimientos.length === 0
+          ? `<tr><td colspan="5" class="empty">Sin movimientos cargados</td></tr>`
+          : ''
+        return `<tr><td><div class="cliente">
+  <div class="cli-head">
+    <span class="cli-num">${i + 1}</span>
+    <span class="cli-name"><b>${esc(c.name)}</b>${cod}${vend}</span>
+    <span class="cli-total deuda">${formatCurrency(c.currentBalance)}</span>
+  </div>
+  <table class="mov">
+    <colgroup><col style="width:44%"><col style="width:15%"><col style="width:8%"><col style="width:16.5%"><col style="width:16.5%"></colgroup>
+    <thead><tr><th>Concepto</th><th class="center">Fecha</th><th class="center">Días</th><th class="right">Monto</th><th class="right">Saldo</th></tr></thead>
+    <tbody>${movRows}${sinMov}</tbody>
+  </table>
+</div></td></tr>`
+      }).join('')
+
+      const html = `<!DOCTYPE html><html><head><title>Cobranza ${esc(vendedorName)}</title><style>
 *{margin:0;padding:0;box-sizing:border-box;-webkit-print-color-adjust:exact;print-color-adjust:exact}
-body{font-family:-apple-system,sans-serif;padding:24px;font-size:13px;color:#1f2937}
-.header{display:flex;justify-content:space-between;align-items:flex-end;margin-bottom:14px;padding-bottom:8px;border-bottom:2px solid #1f2937}
-.header h2{font-size:18px;line-height:1.2}
-.header .vend{font-size:13px;font-weight:600;color:#0d9488;margin-top:2px}
-.header .meta{text-align:right;font-size:11px;color:#6b7280}
-table{width:100%;border-collapse:collapse}
-th,td{padding:8px 10px;border-bottom:1px solid #f3f4f6;vertical-align:top}
-th{font-size:10px;font-weight:700;color:#6b7280;background:#f9fafb;border-bottom:1px solid #e5e7eb;text-transform:uppercase;letter-spacing:.05em}
-td.right,th.right{text-align:right}
-td.center,th.center{text-align:center}
-.deuda{font-weight:700;color:#dc2626;white-space:nowrap}
-.cod{font-size:11px;color:#6b7280;font-weight:400}
-.tfoot td{border-top:2px solid #d1d5db;background:#f3f4f6;font-weight:800;font-size:14px}
-.footer{margin-top:18px;font-size:10px;color:#9ca3af;border-top:1px solid #e5e7eb;padding-top:8px}
-tr{page-break-inside:avoid}
-@media print{body{padding:16px}}
+body{font-family:-apple-system,sans-serif;padding:16px;font-size:12px;color:#1f2937}
+.header{display:flex;align-items:baseline;gap:10px;flex-wrap:wrap;margin-bottom:8px;padding-bottom:5px;border-bottom:2px solid #1f2937}
+.header h2{font-size:16px;line-height:1.1}
+.header .vend{font-size:12px;font-weight:600;color:#0d9488}
+.header .meta{margin-left:auto;font-size:11px;color:#6b7280}
+.cliente{margin-bottom:6px;border:1px solid #e5e7eb;border-radius:5px;overflow:hidden;page-break-inside:avoid}
+.cli-head{display:flex;align-items:center;gap:6px;padding:4px 8px;background:#f9fafb;border-bottom:1px solid #e5e7eb}
+.cli-num{font-weight:800;color:#9ca3af;min-width:16px}
+.cli-name{flex:1;font-size:13px}
+.cli-vend{margin-left:6px;font-size:11px;font-weight:600;color:#0d9488}
+.cli-total{font-weight:800;font-size:14px}
+table.mov{width:100%;border-collapse:collapse;table-layout:fixed}
+.mov th,.mov td{padding:2px 8px;border-bottom:1px solid #f3f4f6;vertical-align:top;text-align:left;line-height:1.35;word-break:break-word;overflow-wrap:anywhere}
+.mov th{font-size:9px;font-weight:700;color:#6b7280;background:#fcfcfd;text-transform:uppercase;letter-spacing:.03em}
+.mov tr:last-child td{border-bottom:none}
+.right{text-align:right!important}
+.center{text-align:center!important}
+.nowrap{white-space:nowrap}
+.deuda{color:#dc2626}
+.m-deuda{font-weight:600;color:#b45309}
+.m-pago{font-weight:600;color:#059669}
+.cod{font-size:10px;color:#6b7280;font-weight:400}
+.empty{color:#9ca3af;font-style:italic;text-align:center}
+.total-final{margin-top:4px;display:flex;justify-content:space-between;align-items:center;padding:6px 10px;background:#f3f4f6;border-radius:5px;font-weight:800;font-size:13px}
+.doc{width:100%;border-collapse:collapse}
+.doc>thead{display:table-header-group}
+.doc>thead>tr>td,.doc>tbody>tr>td{padding:0}
+.doc .header{background:#fff}
+@page{margin:10mm 6mm 6mm;@top-right{content:"Página " counter(page) " de " counter(pages);font-size:9px;color:#9ca3af}}
+@media print{body{padding:0}}
 </style></head><body>
-<div class="header">
-  <div><h2>Listado de Cobranza</h2><div class="vend">${vendedorName}</div></div>
-  <div class="meta"><div style="font-weight:600;color:#1f2937;font-size:13px">${dateStr}</div><div>${conDeuda.length} clientes</div></div>
-</div>
-<table>
-<thead><tr><th class="center">#</th><th>Cliente</th><th class="right">Deuda</th></tr></thead>
-<tbody>${rows}</tbody>
-<tfoot><tr class="tfoot"><td></td><td>TOTAL A COBRAR</td><td class="right deuda">${formatCurrency(total)}</td></tr></tfoot>
+<table class="doc">
+<thead><tr><td>
+  <div class="header">
+    <h2>Listado de Cobranza</h2>
+    <span class="vend">${esc(vendedorName)}</span>
+    <span class="meta">${dateStr} · ${conDeuda.length} ${conDeuda.length === 1 ? 'cliente' : 'clientes'}</span>
+  </div>
+</td></tr></thead>
+<tbody>
+${bloques}
+<tr><td><div class="total-final"><span>TOTAL A COBRAR</span><span class="deuda">${formatCurrency(total)}</span></div></td></tr>
+</tbody>
 </table>
-<div class="footer">Generado el ${new Intl.DateTimeFormat('es-AR', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' }).format(now)}</div>
 </body></html>`
+
+    toast.dismiss(loadingId)
+    setPrinting(false)
+    setPrintDialogOpen(false)
 
     const iframe = document.createElement('iframe')
     iframe.style.cssText = 'position:fixed;top:0;left:0;width:0;height:0;border:0;opacity:0;'
@@ -621,6 +701,11 @@ tr{page-break-inside:avoid}
     iframe.onload = () => {
       iframe.contentWindow?.print()
       setTimeout(() => document.body.removeChild(iframe), 1000)
+    }
+    } catch {
+      toast.dismiss(loadingId)
+      setPrinting(false)
+      toast.error('Error al generar el listado de cobranza')
     }
   }
 
@@ -1373,6 +1458,17 @@ tr{page-break-inside:avoid}
                 )}
               </div>
               <Button
+                onClick={() => {
+                  if (isSeller) { handlePrintCobranza() }
+                  else { setPrintMode('choose'); setPrintSeller('all'); setPrintDialogOpen(true) }
+                }}
+                className="shrink-0 h-10 rounded-xl gap-1.5"
+              >
+                <Printer className="h-4 w-4" />
+                <span className="hidden sm:inline">Imprimir cobranza</span>
+                <span className="sm:hidden">Cobranza</span>
+              </Button>
+              <Button
                 variant={filtersOpen ? 'default' : 'outline'}
                 size="icon"
                 className={`sm:hidden shrink-0 h-10 w-10 relative rounded-xl ${filtersOpen ? 'bg-teal-600 hover:bg-teal-700 text-white' : ''}`}
@@ -1438,12 +1534,6 @@ tr{page-break-inside:avoid}
                   <SelectItem value="domingo">Domingo</SelectItem>
                 </SelectContent>
               </Select>
-              {(isSeller || filterSeller !== 'all') && (
-                <Button onClick={handlePrintCobranza} className="rounded-xl gap-2 shrink-0">
-                  <Printer className="h-4 w-4" />
-                  Imprimir cobranza
-                </Button>
-              )}
             </div>
           </div>
 
@@ -1871,6 +1961,71 @@ tr{page-break-inside:avoid}
           )}
 
           {/* Dialog: lista de clientes de una clasificación */}
+          {/* Modal: imprimir cobranza (todas / elegir vendedor) */}
+          <Dialog open={printDialogOpen} onOpenChange={(open) => { if (!printing) setPrintDialogOpen(open) }}>
+            <DialogContent className="sm:max-w-sm">
+              <DialogHeader>
+                <DialogTitle className="flex items-center gap-2">
+                  <Printer className="h-4 w-4 text-teal-600" />
+                  Imprimir cobranza
+                </DialogTitle>
+                <DialogDescription>
+                  {printMode === 'choose'
+                    ? '¿Qué cuentas corrientes querés imprimir?'
+                    : 'Elegí el vendedor a imprimir.'}
+                </DialogDescription>
+              </DialogHeader>
+
+              {printMode === 'choose' ? (
+                <div className="flex flex-col gap-2 pt-1">
+                  <Button
+                    className="w-full justify-start gap-2 h-11"
+                    disabled={printing}
+                    onClick={() => setPrintMode('seller')}
+                  >
+                    <FileCheck className="h-4 w-4" />
+                    Elegir un vendedor
+                  </Button>
+                  <Button
+                    variant="outline"
+                    className="w-full justify-start gap-2 h-11"
+                    disabled={printing}
+                    onClick={() => handlePrintCobranza('all')}
+                  >
+                    {printing ? <Loader2 className="h-4 w-4 animate-spin" /> : <Users className="h-4 w-4" />}
+                    Todas las cuentas corrientes
+                  </Button>
+                </div>
+              ) : (
+                <div className="space-y-3 pt-1">
+                  <Select value={printSeller} onValueChange={setPrintSeller}>
+                    <SelectTrigger>
+                      <SelectValue placeholder="Vendedor" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {sellers.map((s) => (
+                        <SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <DialogFooter className="gap-2 sm:gap-2">
+                    <Button variant="outline" onClick={() => setPrintMode('choose')} disabled={printing}>
+                      Volver
+                    </Button>
+                    <Button
+                      onClick={() => handlePrintCobranza(printSeller)}
+                      disabled={printing || printSeller === 'all'}
+                      className="gap-2"
+                    >
+                      {printing ? <Loader2 className="h-4 w-4 animate-spin" /> : <Printer className="h-4 w-4" />}
+                      Imprimir
+                    </Button>
+                  </DialogFooter>
+                </div>
+              )}
+            </DialogContent>
+          </Dialog>
+
           <Dialog open={!!estadoDetalle} onOpenChange={(open) => !open && setEstadoDetalle(null)}>
             <DialogContent className="sm:max-w-md max-h-[80vh] overflow-y-auto">
               <DialogHeader>
