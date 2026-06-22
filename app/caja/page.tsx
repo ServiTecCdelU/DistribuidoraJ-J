@@ -403,6 +403,7 @@ export default function CajaPage() {
   // Detalle de caja histórica
   const [selectedHistorial, setSelectedHistorial] = useState<CashRegister | null>(null);
   const [selectedSales, setSelectedSales] = useState<Sale[]>([]);
+  const [selectedRejected, setSelectedRejected] = useState<{ id: string; clientName: string; remitoNumber?: string; date: string }[]>([]);
   const [filtroVendedorCaja, setFiltroVendedorCaja] = useState<string>("all");
   const [detailLoading, setDetailLoading] = useState(false);
   const [generatingHistorialPdf, setGeneratingHistorialPdf] = useState<string | null>(null);
@@ -757,6 +758,15 @@ export default function CajaPage() {
         return d >= start && d <= end && Boolean(s.remitoNumber);
       });
       setSelectedSales(daySales);
+
+      // Pedidos rechazados del día (mismo criterio que la caja del día: por updated_at).
+      const { data: rejData } = await supabase
+        .from("pedidos")
+        .select("id, client_name, remito_number, updated_at")
+        .eq("status", "rechazado")
+        .gte("updated_at", start.toISOString())
+        .lte("updated_at", end.toISOString());
+      setSelectedRejected((rejData || []).map((p: any) => ({ id: p.id, clientName: p.client_name, remitoNumber: p.remito_number ?? undefined, date: p.updated_at })));
     } catch {
       toast.error("Error al cargar ventas del día");
     } finally {
@@ -1651,6 +1661,26 @@ export default function CajaPage() {
                                 </div>
                               );
                             })}
+                          </div>
+                        </div>
+                      )}
+
+                      {selectedRejected.length > 0 && (
+                        <div>
+                          <p className="text-sm font-medium mb-2">Rechazados ({selectedRejected.length})</p>
+                          <div className="space-y-1 max-h-60 overflow-y-auto">
+                            {selectedRejected.map((o) => (
+                              <div key={o.id} className="flex items-center justify-between py-1.5 border-b border-border/30 last:border-0 text-sm gap-2">
+                                <div className="flex items-center gap-2 min-w-0 flex-1">
+                                  <span className="font-medium truncate">{o.clientName || "Cons. Final"}</span>
+                                  {o.remitoNumber && (
+                                    <span className="text-xs text-muted-foreground shrink-0">{o.remitoNumber}</span>
+                                  )}
+                                  <span className="text-xs text-muted-foreground shrink-0">{formatTimeStr(new Date(o.date))}</span>
+                                </div>
+                                <Badge className="text-[10px] border-0 bg-red-100 text-red-700 shrink-0">Rechazado</Badge>
+                              </div>
+                            ))}
                           </div>
                         </div>
                       )}
