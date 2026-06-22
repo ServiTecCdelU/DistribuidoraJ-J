@@ -463,6 +463,61 @@ export const habilitarProducto = async (
   }
 }
 
+// Habilita un producto a partir de su mpId, pensado para el ingreso por remito de proveedor.
+// Garantiza que el producto quede visible para TODOS (vendedores y tienda):
+//  - si la ficha en `productos` no existe, la crea (precio según ganancia global, disabled=false)
+//  - si ya existe, solo la reactiva (disabled=false) SIN pisar precio/unidades/ganancia
+//  - marca `mayorista_productos.habilitado=true` y vincula el producto_id
+// Devuelve el productoId resultante (para sumarle stock luego).
+export const habilitarDesdeRemito = async (mpId: string): Promise<string | null> => {
+  const { data: mpRow } = await supabase.from('mayorista_productos').select('*').eq('id', mpId).maybeSingle()
+  if (!mpRow) return null
+  const mp = mapDoc(mpRow)
+
+  let productoId = mp.productoId ?? `prod_${mp.id}`
+
+  const { data: existente } = await supabase.from('productos').select('id').eq('id', productoId).maybeSingle()
+
+  if (existente) {
+    // La ficha ya existe: solo asegurar que esté visible. No tocar precio ni unidades.
+    await supabase.from('productos').update({ disabled: false }).eq('id', productoId)
+  } else {
+    // Crear ficha. Precio de venta a partir de la ganancia global vigente.
+    let ganancia: number | undefined
+    try {
+      const { data: rows } = await supabase
+        .from('productos').select('ganancia_global').gte('ganancia_global', 0).limit(1)
+      if (rows && rows.length > 0) {
+        const g = Number(rows[0].ganancia_global)
+        if (!isNaN(g)) ganancia = g
+      }
+    } catch { /* noop */ }
+
+    const precio = ganancia != null && mp.precioUnitarioMayorista > 0
+      ? Math.round(mp.precioUnitarioMayorista * (1 + ganancia / 100) * 100) / 100
+      : mp.precioUnitarioMayorista
+
+    await supabase.from('productos').insert({
+      id: productoId,
+      name: mp.nombre,
+      description: mp.codigo,
+      price: precio,
+      precio_venta: precio,
+      stock: 0,
+      image_url: '',
+      category: mp.rubro || mp.categoria || 'Sin categoria',
+      disabled: false,
+      unidades_por_bulto: 1,
+      codigo: mp.codigo,
+      ...(ganancia != null ? { ganancia_global: ganancia } : {}),
+    })
+  }
+
+  await supabase.from('mayorista_productos').update({ habilitado: true, producto_id: productoId }).eq('id', mp.id)
+  invalidateProductsCache()
+  return productoId
+}
+
 export const deshabilitarProducto = async (mp: MayoristaProducto): Promise<void> => {
   await supabase.from('mayorista_productos').update({ habilitado: false }).eq('id', mp.id)
 

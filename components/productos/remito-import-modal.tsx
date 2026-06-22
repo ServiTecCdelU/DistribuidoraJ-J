@@ -28,6 +28,7 @@ import { cn } from "@/lib/utils";
 import { formatCurrency } from "@/lib/utils/format";
 import { supabase } from "@/lib/supabase";
 import { mayoristaCuentaApi } from "@/lib/api";
+import { habilitarDesdeRemito } from "@/services/mayorista-service";
 
 interface ParsedItem {
   codigo: string;
@@ -494,7 +495,8 @@ export function RemitoImportModal({
   };
 
   const handleConfirm = async () => {
-    const toUpdate = items.filter((item) => item.matchedProduct !== null);
+    // Procesables: tienen ficha matcheada o registro en mayorista (por mpId, aunque falte la ficha).
+    const toUpdate = items.filter((item) => item.matchedProduct !== null || item.mpId);
 
     if (toUpdate.length === 0) {
       toast.error("No hay productos para actualizar");
@@ -503,33 +505,38 @@ export function RemitoImportModal({
 
     setConfirming(true);
     try {
-      const updates = toUpdate.map((item) => {
-        const product = item.matchedProduct!;
-        // El stock real se lee fresco en el server; acá solo informamos la cantidad recibida.
-        const newStock = Math.max(0, product.stock) + item.quantity;
-        return {
-          productId: product.id,
-          newStock,
+      // Asegurar que cada producto exista y quede VISIBLE para todos (vendedores y tienda):
+      // habilitarDesdeRemito crea la ficha si falta, la reactiva (disabled=false) y marca
+      // habilitado=true en mayorista. Devuelve el productoId al que sumar stock.
+      let habilitados = 0;
+      const updates: { productId: string; newStock: number; cantidad: number; productName: string; precioLista: number }[] = [];
+      for (const item of toUpdate) {
+        let productId = item.matchedProduct?.id ?? null;
+        if (item.mpId) {
+          const pid = await habilitarDesdeRemito(item.mpId);
+          if (pid) {
+            productId = pid;
+            if (item.needsEnable || !item.matchedProduct) habilitados++;
+          }
+        } else if (item.matchedProduct) {
+          // Sin registro mayorista (match local por código): solo asegurar visibilidad en tienda.
+          await supabase.from("productos").update({ disabled: false }).eq("id", item.matchedProduct.id);
+        }
+        if (!productId) continue;
+        const stockBase = Math.max(0, item.matchedProduct?.stock ?? 0);
+        updates.push({
+          productId,
+          newStock: stockBase + item.quantity,
           cantidad: item.quantity,
-          productName: product.name,
+          productName: item.matchedProduct?.name ?? item.parsedItem.rawName,
           precioLista: item.parsedItem.precio,
-        };
-      });
+        });
+      }
 
       await onConfirm(updates);
 
-      // Habilitar los productos matcheados que figuraban deshabilitados en mayorista
-      const toEnable = toUpdate.filter((item) => item.needsEnable && item.mpId);
-      if (toEnable.length > 0) {
-        const { error } = await supabase
-          .from("mayorista_productos")
-          .update({ habilitado: true })
-          .in("id", toEnable.map((item) => item.mpId!));
-        if (error) {
-          toast.error("Stock actualizado pero no se pudieron habilitar algunos productos");
-        } else {
-          toast.success(`${toEnable.length} producto(s) habilitado(s)`);
-        }
+      if (habilitados > 0) {
+        toast.success(`${habilitados} producto(s) habilitado(s) para vendedores y tienda`);
       }
 
       // Registrar deuda en cuenta mayorista si hay total
@@ -559,8 +566,10 @@ export function RemitoImportModal({
   };
 
   const matchedCount = items.filter((i) => i.matchedProduct !== null).length;
-  const unmatchedCount = items.filter((i) => i.matchedProduct === null).length;
-  const toEnableCount = items.filter((i) => i.matchedProduct !== null && i.needsEnable).length;
+  const processableCount = items.filter((i) => i.matchedProduct !== null || i.mpId).length;
+  const willCreateCount = items.filter((i) => i.matchedProduct === null && !!i.mpId).length;
+  const unmatchedCount = items.filter((i) => i.matchedProduct === null && !i.mpId).length;
+  const toEnableCount = items.filter((i) => (i.matchedProduct !== null && i.needsEnable) || (i.matchedProduct === null && !!i.mpId)).length;
   const priceChangedCount = items.filter(
     (i) => i.matchedProduct && i.precioListaActual != null && i.precioListaActual > 0 && Math.abs(i.parsedItem.precio - i.precioListaActual) > 0.01
   ).length;
@@ -707,7 +716,7 @@ export function RemitoImportModal({
               {/* Items con match */}
               {items
                 .map((item, index) => ({ item, index }))
-                .filter(({ item }) => item.matchedProduct !== null)
+                .filter(({ item }) => item.matchedProduct !== null || item.mpId)
                 .map(({ item, index }) => (
                   <div
                     key={index}
@@ -719,15 +728,19 @@ export function RemitoImportModal({
                           Remito: [{item.parsedItem.codigo}] {item.parsedItem.rawName}
                         </p>
                         <p className="font-medium text-sm truncate flex items-center gap-1.5">
-                          {item.matchedProduct!.name}
-                          {item.needsEnable && (
+                          {item.matchedProduct?.name ?? item.parsedItem.rawName}
+                          {!item.matchedProduct ? (
+                            <span className="shrink-0 text-[10px] font-semibold text-teal-700 bg-teal-100 border border-teal-200 rounded px-1.5 py-0.5">
+                              Se creará y habilitará
+                            </span>
+                          ) : item.needsEnable ? (
                             <span className="shrink-0 text-[10px] font-semibold text-teal-700 bg-teal-100 border border-teal-200 rounded px-1.5 py-0.5">
                               Se habilitará
                             </span>
-                          )}
+                          ) : null}
                         </p>
                         <p className="text-xs text-muted-foreground">
-                          Stock actual: {item.matchedProduct!.stock} · Cantidad: {item.parsedItem.cantidad}
+                          Stock actual: {item.matchedProduct?.stock ?? 0} · Cantidad: {item.parsedItem.cantidad}
                         </p>
                         {item.precioListaActual != null && item.precioListaActual > 0 && Math.abs(item.parsedItem.precio - item.precioListaActual) > 0.01 ? (
                           <p className="text-xs font-medium text-amber-600">
@@ -767,26 +780,27 @@ export function RemitoImportModal({
                       <div className="ml-auto text-xs text-muted-foreground">
                         {" "}
                         <span className="font-semibold text-foreground">
-                          {item.matchedProduct!.stock + item.quantity}
+                          {(item.matchedProduct?.stock ?? 0) + item.quantity}
                         </span>{" "}
                         unidades
                       </div>
                     </div>
 
-                    {/* Cambiar producto manualmente */}
+                    {/* Cambiar producto manualmente (solo si ya tiene ficha) */}
+                    {item.matchedProduct && (
                     <div className="flex items-center gap-1.5">
                       <label className="text-xs text-muted-foreground whitespace-nowrap">
                         Producto:
                       </label>
                       <select
-                        value={item.matchedProduct!.id}
+                        value={item.matchedProduct.id}
                         onChange={(e) => updateMatch(index, e.target.value)}
                         className="flex-1 text-xs border border-border rounded-md px-2 py-1 bg-background"
                       >
                         {/* Incluir el producto matcheado si no está en la lista */}
                         {!products.some((p) => p.id === item.matchedProduct!.id) && (
-                          <option value={item.matchedProduct!.id}>
-                            {item.matchedProduct!.name}
+                          <option value={item.matchedProduct.id}>
+                            {item.matchedProduct.name}
                           </option>
                         )}
                         {products.map((p) => (
@@ -796,6 +810,7 @@ export function RemitoImportModal({
                         ))}
                       </select>
                     </div>
+                    )}
                   </div>
                 ))}
 
@@ -821,7 +836,7 @@ export function RemitoImportModal({
                     <div className="divide-y divide-border">
                       {items
                         .map((item, index) => ({ item, index }))
-                        .filter(({ item }) => item.matchedProduct === null)
+                        .filter(({ item }) => item.matchedProduct === null && !item.mpId)
                         .map(({ item, index }) => (
                           <div
                             key={index}
@@ -888,7 +903,7 @@ export function RemitoImportModal({
           {step === "review" && (
             <Button
               onClick={handleConfirm}
-              disabled={matchedCount === 0 || confirming}
+              disabled={processableCount === 0 || confirming}
               className="bg-primary hover:bg-primary/90"
             >
               {confirming ? (
@@ -899,8 +914,8 @@ export function RemitoImportModal({
               ) : (
                 <>
                   <CheckCircle2 className="h-4 w-4 mr-2" />
-                  Confirmar ({matchedCount} producto
-                  {matchedCount !== 1 ? "s" : ""})
+                  Confirmar ({processableCount} producto
+                  {processableCount !== 1 ? "s" : ""})
                 </>
               )}
             </Button>
