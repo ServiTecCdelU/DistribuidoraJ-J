@@ -178,6 +178,68 @@ export const getDashboardData = async (_forceRefresh = false) => {
   return fetchDashboardData()
 }
 
+export interface ClienteActividad {
+  id: string
+  name: string
+  sellerName?: string
+  lastPurchase: string
+  daysSince: number
+  phone?: string
+  city?: string
+}
+
+// Clasifica los clientes que alguna vez compraron en "activos" (compraron dentro de `dias`)
+// e "inactivos" (su última compra fue hace más de `dias`). Sirve para detectar clientes que
+// dejaron de comprar (posible fuga a otro vendedor/distribuidora). El vendedor mostrado es el
+// de la última venta del cliente.
+export const getClientesActividad = async (dias = 30): Promise<{ activos: ClienteActividad[]; inactivos: ClienteActividad[]; dias: number }> => {
+  const limite = new Date()
+  limite.setDate(limite.getDate() - dias)
+  limite.setHours(0, 0, 0, 0)
+
+  const [clientesRes, ventasRes] = await Promise.all([
+    supabase.from('clientes').select('id, name, phone, address'),
+    supabase
+      .from('ventas')
+      .select('client_id, seller_name, created_at')
+      .not('client_id', 'is', null)
+      .order('created_at', { ascending: false }),
+  ])
+
+  // Como las ventas vienen ordenadas desc, la primera de cada cliente es su última compra.
+  const ultima = new Map<string, { date: Date; sellerName?: string }>()
+  for (const v of ventasRes.data ?? []) {
+    const cid = (v as any).client_id as string
+    if (!cid || ultima.has(cid)) continue
+    ultima.set(cid, { date: new Date((v as any).created_at), sellerName: (v as any).seller_name ?? undefined })
+  }
+
+  const activos: ClienteActividad[] = []
+  const inactivos: ClienteActividad[] = []
+  const ahora = Date.now()
+
+  for (const c of clientesRes.data ?? []) {
+    const u = ultima.get((c as any).id)
+    if (!u) continue // nunca compró: no es fuga, lo dejamos fuera
+    const daysSince = Math.floor((ahora - u.date.getTime()) / 86400000)
+    const item: ClienteActividad = {
+      id: (c as any).id,
+      name: (c as any).name,
+      sellerName: u.sellerName,
+      lastPurchase: u.date.toISOString(),
+      daysSince,
+      phone: (c as any).phone ?? undefined,
+      city: (c as any).address ?? undefined,
+    }
+    if (u.date >= limite) activos.push(item)
+    else inactivos.push(item)
+  }
+
+  inactivos.sort((a, b) => b.daysSince - a.daysSince)
+  activos.sort((a, b) => a.daysSince - b.daysSince)
+  return { activos, inactivos, dias }
+}
+
 export const getDashboardStats = async () => (await getDashboardData()).stats
 export const getSalesLastDays = async () => (await getDashboardData()).charts.salesLastDays
 export const getSalesByHourToday = async () => (await getDashboardData()).charts.salesByHourToday

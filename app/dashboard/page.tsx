@@ -130,6 +130,9 @@ export default function DashboardPage() {
   const [monthlyComparison, setMonthlyComparison] = useState<{month: string; total: number}[]>([])
   const [topProducts, setTopProducts] = useState<any[]>([])
   const [productDistribution, setProductDistribution] = useState<{name: string; value: number; color: string}[]>([])
+  const [clientesActividad, setClientesActividad] = useState<{ activos: any[]; inactivos: any[]; dias: number }>({ activos: [], inactivos: [], dias: 30 })
+  const [actividadView, setActividadView] = useState<'inactivos' | 'activos'>('inactivos')
+  const [actividadQuery, setActividadQuery] = useState('')
 
   // Transfer alias config
   const [aliasModalOpen, setAliasModalOpen] = useState(false)
@@ -188,13 +191,15 @@ export default function DashboardPage() {
   const loadDashboardData = useCallback(async (isMounted?: () => boolean) => {
     setLoading(true)
     try {
-      const [data, orders, transferCfg] = await Promise.all([
+      const [data, orders, transferCfg, actividad] = await Promise.all([
         dashboardApi.getDashboardData(),
         ordersApi.getActive(),
         transferApi.getConfig(),
+        dashboardApi.getClientesActividad(30),
       ])
       if (isMounted && !isMounted()) return
       setAliasConfig(transferCfg)
+      setClientesActividad(actividad)
 
       setDashboardStats(data.stats)
       setLowStockProducts(data.lists.lowStockProducts)
@@ -935,6 +940,80 @@ export default function DashboardPage() {
               </CardContent>
             </Card>
           </div>
+
+          {/* Actividad de clientes — quién compra y quién dejó de comprar */}
+          {(() => {
+            const lista = (actividadView === 'inactivos' ? clientesActividad.inactivos : clientesActividad.activos)
+              .filter((c) => c.name?.toLowerCase().includes(actividadQuery.toLowerCase()))
+            return (
+              <Card className="border-border/40 bg-white shadow-sm">
+                <CardHeader className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pb-2 p-2 sm:p-3">
+                  <div>
+                    <CardTitle className="text-sm sm:text-base font-semibold flex items-center gap-1.5">
+                      <Usuarios className="h-3.5 w-3.5 sm:h-4 sm:w-4 text-teal-500" />
+                      Actividad de clientes
+                    </CardTitle>
+                    <p className="text-xs text-muted-foreground mt-0.5">Quién sigue comprando y quién dejó de hacerlo (corte {clientesActividad.dias} días)</p>
+                  </div>
+                  <div className="flex items-center gap-1.5">
+                    <button
+                      type="button"
+                      onClick={() => setActividadView('inactivos')}
+                      className={`px-2.5 py-1 rounded-lg text-xs font-medium border transition-colors ${actividadView === 'inactivos' ? 'bg-rose-500 text-white border-rose-500' : 'bg-white text-rose-600 border-rose-200 hover:bg-rose-50'}`}
+                    >
+                      Dejaron de comprar ({clientesActividad.inactivos.length})
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setActividadView('activos')}
+                      className={`px-2.5 py-1 rounded-lg text-xs font-medium border transition-colors ${actividadView === 'activos' ? 'bg-emerald-500 text-white border-emerald-500' : 'bg-white text-emerald-600 border-emerald-200 hover:bg-emerald-50'}`}
+                    >
+                      Activos ({clientesActividad.activos.length})
+                    </button>
+                  </div>
+                </CardHeader>
+                <CardContent className="p-2 sm:p-3 pt-0 space-y-2">
+                  <div className="relative">
+                    <Buscar className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
+                    <Input
+                      placeholder="Buscar cliente..."
+                      value={actividadQuery}
+                      onChange={(e) => setActividadQuery(e.target.value)}
+                      className="pl-8 h-8 text-xs"
+                    />
+                  </div>
+                  {lista.length === 0 ? (
+                    <p className="text-xs text-muted-foreground text-center py-6">
+                      {actividadView === 'inactivos' ? 'No hay clientes inactivos en este corte.' : 'No hay clientes activos.'}
+                    </p>
+                  ) : (
+                    <div className="max-h-[420px] overflow-y-auto divide-y divide-slate-100">
+                      {lista.map((c) => (
+                        <div key={c.id} className="flex items-center justify-between gap-2 py-2">
+                          <div className="min-w-0">
+                            <p className="text-xs font-semibold text-foreground truncate">{c.name}</p>
+                            <p className="text-[11px] text-muted-foreground truncate">
+                              {c.sellerName ? `Vendedor: ${c.sellerName}` : 'Sin vendedor'}
+                              {c.phone ? ` · ${c.phone}` : ''}
+                            </p>
+                          </div>
+                          <div className="text-right shrink-0">
+                            <Badge
+                              variant="outline"
+                              className={`text-[10px] ${actividadView === 'inactivos' ? 'bg-rose-50 text-rose-700 border-rose-200' : 'bg-emerald-50 text-emerald-700 border-emerald-200'}`}
+                            >
+                              {c.daysSince === 0 ? 'Hoy' : `hace ${c.daysSince} días`}
+                            </Badge>
+                            <p className="text-[10px] text-muted-foreground mt-0.5">Últ.: {new Date(c.lastPurchase).toLocaleDateString('es-AR')}</p>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
+            )
+          })()}
 
         </div>
       </div>

@@ -88,6 +88,7 @@ import {
   getTopProducts,
   getProductDistribution,
   getDashboardData,
+  getClientesActividad,
 } from '@/services/dashboard-service'
 import { logAudit, getAuditLog } from '@/services/audit-service'
 import {
@@ -458,6 +459,9 @@ export const dashboardApi = {
   },
   async getDashboardData() {
     return getDashboardData()
+  },
+  async getClientesActividad(dias = 30) {
+    return getClientesActividad(dias)
   },
 }
 
