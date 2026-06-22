@@ -91,6 +91,7 @@ interface FiltrosVentas {
   sellerId: string;
   city: string;
   deliveryFilter: string;
+  rejectedFilter: string;
 }
 
 const safeGetDate = (date: any): Date | null => {
@@ -199,6 +200,7 @@ export function useVentas(filterBySellerId?: string, clientCityMap?: Record<stri
     sellerId: "",
     city: "",
     deliveryFilter: "all",
+    rejectedFilter: "all",
   });
 
   const [modalDetalleAbierto, setModalDetalleAbierto] = useState(false);
@@ -334,6 +336,11 @@ export function useVentas(filterBySellerId?: string, clientCityMap?: Record<stri
 
       if (filtros.deliveryFilter && filtros.deliveryFilter !== "all") {
         if ((venta as any).deliveryMethod !== filtros.deliveryFilter) return false;
+      }
+
+      if (filtros.rejectedFilter && filtros.rejectedFilter !== "all") {
+        if (filtros.rejectedFilter === "only" && !venta.rechazado) return false;
+        if (filtros.rejectedFilter === "exclude" && venta.rechazado) return false;
       }
 
       return true;

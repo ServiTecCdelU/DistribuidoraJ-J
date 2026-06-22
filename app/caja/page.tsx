@@ -136,7 +136,7 @@ const cajaPdfStyles = StyleSheet.create({
   footer: { marginTop: "auto", paddingTop: 8, borderTop: "1px solid #e5e7eb", flexDirection: "row", justifyContent: "space-between", fontSize: 7, color: "#aaa" },
 });
 
-const CajaPdfDocument = ({ register, sales, losses = [], pagos = [] }: { register: CashRegister; sales: Sale[]; losses?: { id: string; amount: number; description: string; date: string }[]; pagos?: { id: string; sellerName: string; monto: number; createdAt: string }[] }) => {
+const CajaPdfDocument = ({ register, sales, losses = [], pagos = [], rejected = [] }: { register: CashRegister; sales: Sale[]; losses?: { id: string; amount: number; description: string; date: string }[]; pagos?: { id: string; sellerName: string; monto: number; createdAt: string }[]; rejected?: { id: string; clientName: string; remitoNumber?: string; date: string }[] }) => {
   const isClosed = register.status === "closed";
 
   // Calcular desglose desde ventas si no hay datos guardados
@@ -309,6 +309,27 @@ const CajaPdfDocument = ({ register, sales, losses = [], pagos = [] }: { registe
           </View>
         )}
 
+        {/* Pedidos rechazados */}
+        {rejected.length > 0 && (
+          <View style={cajaPdfStyles.section}>
+            <Text style={[cajaPdfStyles.sectionTitle, { color: "#dc2626" }]}>Pedidos rechazados ({rejected.length})</Text>
+            <View style={[cajaPdfStyles.saleRow, { borderBottom: "1px solid #d1d5db", paddingBottom: 4, marginBottom: 2 }]}>
+              <Text style={[cajaPdfStyles.saleClient, { fontWeight: "bold", color: "#333" }]}>Cliente</Text>
+              <Text style={[cajaPdfStyles.saleNumber, { fontWeight: "bold", color: "#333" }]}>Remito</Text>
+              <Text style={[cajaPdfStyles.saleTime, { fontWeight: "bold", color: "#333" }]}>Hora</Text>
+              <Text style={[cajaPdfStyles.saleBadge, { fontWeight: "bold", color: "#333" }]}>Estado</Text>
+            </View>
+            {rejected.map((o, i) => (
+              <View key={i} style={cajaPdfStyles.saleRow}>
+                <Text style={cajaPdfStyles.saleClient}>{o.clientName || "Cons. Final"}</Text>
+                <Text style={cajaPdfStyles.saleNumber}>{o.remitoNumber || "-"}</Text>
+                <Text style={cajaPdfStyles.saleTime}>{formatTimeStr(new Date(o.date))}</Text>
+                <Text style={[cajaPdfStyles.saleBadge, { color: "#dc2626" }]}>Rechazado</Text>
+              </View>
+            ))}
+          </View>
+        )}
+
         {/* Pérdidas por roturas */}
         {losses.length > 0 && (
           <View style={cajaPdfStyles.section}>
@@ -353,8 +374,8 @@ const CajaPdfDocument = ({ register, sales, losses = [], pagos = [] }: { registe
   );
 };
 
-const generarCajaPdf = async (register: CashRegister, sales: Sale[], losses: { id: string; amount: number; description: string; date: string }[] = [], pagos: { id: string; sellerName: string; monto: number; createdAt: string }[] = []) => {
-  const blob = await pdf(<CajaPdfDocument register={register} sales={sales} losses={losses} pagos={pagos} />).toBlob();
+const generarCajaPdf = async (register: CashRegister, sales: Sale[], losses: { id: string; amount: number; description: string; date: string }[] = [], pagos: { id: string; sellerName: string; monto: number; createdAt: string }[] = [], rejected: { id: string; clientName: string; remitoNumber?: string; date: string }[] = []) => {
+  const blob = await pdf(<CajaPdfDocument register={register} sales={sales} losses={losses} pagos={pagos} rejected={rejected} />).toBlob();
   const url = URL.createObjectURL(blob);
   const a = document.createElement("a");
   a.href = url;
@@ -945,7 +966,7 @@ export default function CajaPage() {
     if (!currentRegister) return;
     setGeneratingPdf(true);
     try {
-      await generarCajaPdf(currentRegister, sales, losses, pagosComisiones);
+      await generarCajaPdf(currentRegister, sales, losses, pagosComisiones, rejectedOrders);
       toast.success("PDF descargado");
     } catch {
       toast.error("Error al generar PDF");
@@ -984,7 +1005,16 @@ export default function CajaPage() {
         .lte("created_at", end.toISOString());
       const dayPagos = (pagosData || []).map((p: any) => ({ id: p.id, sellerName: p.seller_name, monto: Number(p.monto) || 0, createdAt: p.created_at }));
 
-      await generarCajaPdf(register, daySales, dayLosses, dayPagos);
+      // Cargar pedidos rechazados del día
+      const { data: rejData } = await supabase
+        .from("pedidos")
+        .select("id, client_name, remito_number, updated_at")
+        .eq("status", "rechazado")
+        .gte("updated_at", start.toISOString())
+        .lte("updated_at", end.toISOString());
+      const dayRejected = (rejData || []).map((p: any) => ({ id: p.id, clientName: p.client_name, remitoNumber: p.remito_number ?? undefined, date: p.updated_at }));
+
+      await generarCajaPdf(register, daySales, dayLosses, dayPagos, dayRejected);
       toast.success("PDF descargado");
     } catch {
       toast.error("Error al generar PDF");

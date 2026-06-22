@@ -107,6 +107,7 @@ const EMPTY_FILTROS = {
   sellerId: "",
   city: "",
   deliveryFilter: "all",
+  rejectedFilter: "all",
 } as const;
 
 // ─── componente principal ─────────────────────────────────────────────────────
@@ -129,6 +130,7 @@ export function ListaVentas({
   const deliveryFilter = (filtros as any).deliveryFilter || "all";
   const remitoFilter = (filtros as any).remitoFilter || "all";
   const discountFilter = (filtros as any).discountFilter || "all";
+  const rejectedFilter = (filtros as any).rejectedFilter || "all";
 
   const fmt = formatCurrency;
   const fmtDate = formatDate;
@@ -153,8 +155,9 @@ export function ListaVentas({
     if (sellerId) n++;
     if (city) n++;
     if (deliveryFilter !== "all") n++;
+    if (rejectedFilter !== "all") n++;
     return n;
-  }, [paymentFilter, invoiceFilter, remitoFilter, discountFilter, periodFilter, dateFrom, dateTo, sellerId, city, deliveryFilter]);
+  }, [paymentFilter, invoiceFilter, remitoFilter, discountFilter, periodFilter, dateFrom, dateTo, sellerId, city, deliveryFilter, rejectedFilter]);
 
   const hayFiltrosActivos = !!(searchQuery || activeFilterCount > 0);
 
@@ -400,6 +403,15 @@ export function ListaVentas({
                 </SelectContent>
               </Select>
 
+              <Select value={rejectedFilter} onValueChange={(v) => onCambiarFiltros({ rejectedFilter: v } as any)}>
+                <SelectTrigger className="h-10 w-[150px]"><SelectValue placeholder="Rechazados" /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">Rechazados</SelectItem>
+                  <SelectItem value="only">Solo rechazados</SelectItem>
+                  <SelectItem value="exclude">Ocultar rechazados</SelectItem>
+                </SelectContent>
+              </Select>
+
               {isAdmin && sellers.length > 0 && (
                 <Select value={sellerId || "all-sellers"} onValueChange={(v) => onCambiarFiltros({ sellerId: v === "all-sellers" ? "" : v })}>
                   <SelectTrigger className="h-10 w-[150px]">
@@ -453,6 +465,7 @@ export function ListaVentas({
               {remitoFilter !== "all" && <FilterChip label={remitoFilter === "emitted" ? "Remitos emitidos" : "Remitos pendientes"} onRemove={() => onCambiarFiltros({ remitoFilter: "all" } as any)} />}
               {discountFilter !== "all" && <FilterChip label={discountFilter === "with" ? "Con descuento" : "Sin descuento"} onRemove={() => onCambiarFiltros({ discountFilter: "all" } as any)} />}
               {deliveryFilter !== "all" && <FilterChip label={deliveryFilter === "delivery" ? "A domicilio" : "Retira en local"} onRemove={() => onCambiarFiltros({ deliveryFilter: "all" } as any)} />}
+              {rejectedFilter !== "all" && <FilterChip label={rejectedFilter === "only" ? "Solo rechazados" : "Ocultar rechazados"} onRemove={() => onCambiarFiltros({ rejectedFilter: "all" } as any)} />}
               <button onClick={() => onCambiarFiltros({ ...EMPTY_FILTROS } as any)} className="text-xs text-primary hover:underline">
                 Limpiar todos
               </button>
@@ -493,7 +506,7 @@ export function ListaVentas({
                     </div>
                     <div className="min-w-0">
                       <p className="font-medium text-sm text-foreground truncate">{venta.clientName || "Venta directa"}</p>
-                      <p className="text-[11px] text-muted-foreground">{fmtDate(venta.createdAt)} · {venta.saleNumber || `#${ventas.length - index}`}</p>
+                      <p className="text-[11px] text-muted-foreground">{fmtDate(venta.createdAt)} · {venta.saleNumber || venta.remitoNumber || `#${ventas.length - index}`}</p>
                     </div>
                   </div>
                   <div className="text-right shrink-0">
@@ -516,7 +529,7 @@ export function ListaVentas({
                     <Receipt className="h-4 w-4 text-primary" />
                   </div>
                   <div>
-                    <p className="font-semibold text-foreground text-sm">{venta.saleNumber || `N° ${ventas.length - index}`}</p>
+                    <p className="font-semibold text-foreground text-sm">{venta.saleNumber || venta.remitoNumber || `N° ${ventas.length - index}`}</p>
                     <p className="text-[10px] text-muted-foreground truncate max-w-[120px]">{venta.id.replace(/^venta_/, "") || "directa"}</p>
                   </div>
                 </div>
@@ -659,6 +672,15 @@ export function ListaVentas({
               <div className="grid grid-cols-3 gap-2">
                 {[["all","Todos"],["delivery","A domicilio"],["pickup","Retira en local"]].map(([v, l]) => (
                   <OptionBtn key={v} active={(tmpFiltros as any).deliveryFilter === v} onClick={() => setTmpFiltros(f => ({ ...f, deliveryFilter: v as any }))}>{l}</OptionBtn>
+                ))}
+              </div>
+            </FilterSection>
+
+            {/* Rechazados */}
+            <FilterSection icon={<X className="h-4 w-4" />} label="Rechazados">
+              <div className="grid grid-cols-3 gap-2">
+                {[["all","Todos"],["only","Solo rechazados"],["exclude","Ocultar"]].map(([v, l]) => (
+                  <OptionBtn key={v} active={(tmpFiltros as any).rejectedFilter === v} onClick={() => setTmpFiltros(f => ({ ...f, rejectedFilter: v as any }))}>{l}</OptionBtn>
                 ))}
               </div>
             </FilterSection>
