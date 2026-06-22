@@ -294,7 +294,7 @@ const CajaPdfDocument = ({ register, sales, losses = [], pagos = [], rejected = 
                   : cajaPdfStyles.mixedBadge;
               return (
                 <View key={i} style={cajaPdfStyles.saleRow}>
-                  <Text style={cajaPdfStyles.saleClient}>{sale.clientName || "Cons. Final"}</Text>
+                  <Text style={cajaPdfStyles.saleClient}>{sale.clientName || "Cons. Final"}{(sale as any).hojaRutaNumber ? `  (HR ${(sale as any).hojaRutaNumber})` : ""}</Text>
                   <Text style={cajaPdfStyles.saleNumber}>{sale.saleNumber ? `#${sale.saleNumber}` : "-"}</Text>
                   <Text style={cajaPdfStyles.saleTime}>{formatTimeStr(new Date(sale.createdAt))}</Text>
                   <Text style={[cajaPdfStyles.saleBadge, badgeStyle]}>
@@ -1669,6 +1669,9 @@ export default function CajaPage() {
                                     <span className="font-medium truncate">{sale.clientName || "Cons. Final"}</span>
                                     {sale.saleNumber && (
                                       <span className="text-xs text-muted-foreground shrink-0">#{sale.saleNumber}</span>
+                                    )}
+                                    {(sale as any).hojaRutaNumber && (
+                                      <span className="text-xs text-teal-600 font-medium shrink-0">HR {(sale as any).hojaRutaNumber}</span>
                                     )}
                                     <span className="text-xs text-muted-foreground shrink-0">{formatTimeStr(new Date(sale.createdAt))}</span>
                                   </div>

@@ -49,6 +49,7 @@ function mapSale(d: Record<string, any>): Sale {
     remitoPdfUrl: d.remito_pdf_url ?? undefined,
     remitoPdfBase64: d.remito_pdf_base64 ?? undefined,
     remitoNumber: d.remito_number ?? undefined,
+    hojaRutaNumber: d.hoja_ruta_number ?? undefined,
     discount: d.discount ? Number(d.discount) : undefined,
     discountType: d.discount_type ?? undefined,
     orderId: d.order_id ?? undefined,
@@ -182,6 +183,17 @@ export const processSale = async (data: {
 
   const saleId = await generateReadableId('ventas', 'venta', resolvedClientName)
 
+  // Heredar el N° de hoja de ruta del pedido de origen (si la venta viene de un pedido).
+  let hojaRutaNumber: string | null = null
+  if (data.orderId) {
+    const { data: pedidoHr } = await supabase
+      .from('pedidos')
+      .select('hoja_ruta_number')
+      .eq('id', data.orderId)
+      .maybeSingle()
+    hojaRutaNumber = pedidoHr?.hoja_ruta_number ?? null
+  }
+
   const regalosCruzados = data.items
     .filter((it) => (it.regaloOtroCantidad ?? 0) > 0 && it.product.regaloProductoId)
     .map((it) => ({ productoId: it.product.regaloProductoId as string, nombre: it.product.regaloProductoNombre ?? 'Regalo', cantidad: it.regaloOtroCantidad as number }))
@@ -223,6 +235,7 @@ export const processSale = async (data: {
     delivery_method: data.deliveryMethod ?? 'pickup',
     delivery_address: clientAddress ?? null,
     order_id: data.orderId ?? null,
+    hoja_ruta_number: hojaRutaNumber,
   }
   const hasPayCol = await ensurePaymentMethodColumn()
   if (!hasPayCol) delete saleRow2.payment_method

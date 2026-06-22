@@ -128,6 +128,7 @@ export interface Sale {
   status: "completed" | "pending" | "listo" | "pendiente";
   invoiceNumber?: string;
   remitoNumber?: string;
+  hojaRutaNumber?: string;
   invoiceEmitted: boolean;
   invoiceStatus?: InvoiceStatus;
   invoicePdfUrl?: string;

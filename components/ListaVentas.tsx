@@ -316,7 +316,7 @@ export function ListaVentas({
             <div className="relative flex-1 min-w-0">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
               <Input
-                placeholder="Buscar por cliente, vendedor, producto o N°..."
+                placeholder="Buscar por cliente, vendedor, producto, remito, hoja de ruta o N°..."
                 value={searchQuery}
                 onChange={(e) => onCambiarFiltros({ searchQuery: e.target.value })}
                 className="pl-10 h-10 bg-background"
@@ -507,6 +507,7 @@ export function ListaVentas({
                     <div className="min-w-0">
                       <p className="font-medium text-sm text-foreground truncate">{venta.clientName || "Venta directa"}</p>
                       <p className="text-[11px] text-muted-foreground">{fmtDate(venta.createdAt)} · {venta.saleNumber || venta.remitoNumber || `#${ventas.length - index}`}</p>
+                      {venta.hojaRutaNumber && <p className="text-[10px] text-teal-600 font-medium">Hoja de ruta: {venta.hojaRutaNumber}</p>}
                     </div>
                   </div>
                   <div className="text-right shrink-0">
@@ -540,6 +541,7 @@ export function ListaVentas({
                   <div className="min-w-0">
                     <p className="text-sm font-medium text-foreground truncate">{venta.clientName || "Venta directa"}</p>
                     {venta.sellerName && <p className="text-[10px] text-muted-foreground truncate">Vendedor: {venta.sellerName}</p>}
+                    {venta.hojaRutaNumber && <p className="text-[10px] text-teal-600 font-medium truncate">Hoja de ruta: {venta.hojaRutaNumber}</p>}
                   </div>
                 </div>
                 <div className="hidden md:flex md:col-span-2 items-center text-sm text-muted-foreground">

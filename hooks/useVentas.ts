@@ -60,6 +60,7 @@ export interface Venta {
   remitoDriveUrl?: string;
   remitoDriveFileId?: string;
   remitoNumber?: string;
+  hojaRutaNumber?: string;
   remitoPdfBase64?: string;
   invoicePdfBase64?: string;
   sellerName?: string;
@@ -151,6 +152,7 @@ function mapVenta(d: Record<string, any>): Venta {
     remitoDriveUrl: d.remito_drive_url ?? undefined,
     remitoDriveFileId: d.remito_drive_file_id ?? undefined,
     remitoNumber: d.remito_number ?? undefined,
+    hojaRutaNumber: d.hoja_ruta_number ?? undefined,
     remitoPdfBase64: d.remito_pdf_base64 ?? undefined,
     invoicePdfBase64: d.invoice_pdf_base64 ?? undefined,
     sellerId: d.seller_id ?? undefined,
@@ -177,6 +179,7 @@ function mapPedidoRechazado(d: Record<string, any>): Venta {
     // Usar la fecha de rechazo (updated_at) para que aparezca arriba en Ventas
     createdAt: d.updated_at ? new Date(d.updated_at) : d.created_at ? new Date(d.created_at) : new Date(),
     remitoNumber: d.remito_number ?? undefined,
+    hojaRutaNumber: d.hoja_ruta_number ?? undefined,
     remitoPdfBase64: d.remito_pdf_base64 ?? undefined,
     sellerName: d.seller_name ?? undefined,
     deliveryAddress: d.address ?? undefined,
@@ -259,6 +262,8 @@ export function useVentas(filterBySellerId?: string, clientCityMap?: Record<stri
           venta.sellerName?.toLowerCase().includes(q) ||
           venta.id.toLowerCase().includes(q) ||
           venta.invoiceNumber?.toLowerCase().includes(q) ||
+          venta.remitoNumber?.toLowerCase().includes(q) ||
+          venta.hojaRutaNumber?.toLowerCase().includes(q) ||
           String(venta.saleNumber || "").toLowerCase().includes(q) ||
           (venta.items || []).some((it) =>
             it.name?.toLowerCase().includes(q) || it.codigo?.toLowerCase().includes(q),

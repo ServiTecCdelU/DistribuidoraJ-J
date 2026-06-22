@@ -1557,6 +1557,15 @@ tfoot td{border-top:2px solid #1f4e78;background:#f2f2f2;font-weight:700;font-si
       toast.error("No se pudo asignar el N° de hoja de ruta");
     }
 
+    // Guardar el N° de hoja de ruta en cada pedido del grupo para que quede asociado
+    // (y se herede a la venta al cobrar). Reimprimir la misma hoja reescribe el mismo N°.
+    if (hojaRutaNro) {
+      const idsHoja = cargoGroups.flatMap(({ orders }) => orders.map((o) => o.id));
+      if (idsHoja.length > 0) {
+        supabase.from("pedidos").update({ hoja_ruta_number: hojaRutaNro }).in("id", idsHoja).then(() => {});
+      }
+    }
+
     let html = `<!DOCTYPE html><html><head><title></title><style>
 @page{margin:0}
 *{margin:0;padding:0;box-sizing:border-box}
