@@ -29,6 +29,7 @@ import { formatCurrency } from "@/lib/utils/format";
 import { supabase } from "@/lib/supabase";
 import { mayoristaCuentaApi } from "@/lib/api";
 import { habilitarDesdeRemito } from "@/services/mayorista-service";
+import { esItemProcesable, stockResultante } from "@/lib/utils/remito-import";
 
 interface ParsedItem {
   codigo: string;
@@ -496,7 +497,7 @@ export function RemitoImportModal({
 
   const handleConfirm = async () => {
     // Procesables: tienen ficha matcheada o registro en mayorista (por mpId, aunque falte la ficha).
-    const toUpdate = items.filter((item) => item.matchedProduct !== null || item.mpId);
+    const toUpdate = items.filter((item) => esItemProcesable({ tieneFicha: item.matchedProduct !== null, tieneMayorista: !!item.mpId }));
 
     if (toUpdate.length === 0) {
       toast.error("No hay productos para actualizar");
@@ -523,10 +524,9 @@ export function RemitoImportModal({
           await supabase.from("productos").update({ disabled: false }).eq("id", item.matchedProduct.id);
         }
         if (!productId) continue;
-        const stockBase = Math.max(0, item.matchedProduct?.stock ?? 0);
         updates.push({
           productId,
-          newStock: stockBase + item.quantity,
+          newStock: stockResultante(item.matchedProduct?.stock ?? 0, item.quantity),
           cantidad: item.quantity,
           productName: item.matchedProduct?.name ?? item.parsedItem.rawName,
           precioLista: item.parsedItem.precio,

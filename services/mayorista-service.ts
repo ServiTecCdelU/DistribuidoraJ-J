@@ -1,6 +1,7 @@
 import { supabase } from '@/lib/supabase'
 import type { MayoristaProducto, MayoristaPrefs } from '@/lib/types'
 import { invalidateProductsCache } from '@/services/products-service'
+import { calcularPrecioVentaRemito, resolverProductoId } from '@/lib/utils/remito-import'
 
 const BATCH_SIZE = 300
 const UPDATE_CONCURRENCY = 10
@@ -474,7 +475,7 @@ export const habilitarDesdeRemito = async (mpId: string): Promise<string | null>
   if (!mpRow) return null
   const mp = mapDoc(mpRow)
 
-  let productoId = mp.productoId ?? `prod_${mp.id}`
+  let productoId = resolverProductoId(mp.productoId, mp.id)
 
   const { data: existente } = await supabase.from('productos').select('id').eq('id', productoId).maybeSingle()
 
@@ -493,9 +494,7 @@ export const habilitarDesdeRemito = async (mpId: string): Promise<string | null>
       }
     } catch { /* noop */ }
 
-    const precio = ganancia != null && mp.precioUnitarioMayorista > 0
-      ? Math.round(mp.precioUnitarioMayorista * (1 + ganancia / 100) * 100) / 100
-      : mp.precioUnitarioMayorista
+    const precio = calcularPrecioVentaRemito(mp.precioUnitarioMayorista, ganancia)
 
     await supabase.from('productos').insert({
       id: productoId,
