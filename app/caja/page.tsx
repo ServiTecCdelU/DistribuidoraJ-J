@@ -445,7 +445,7 @@ export default function CajaPage() {
       // 1) Cerrar automáticamente cajas abiertas cuyo cierre programado (23:00 de su día) ya pasó.
       const { data: abiertas } = await supabase
         .from("caja").select("*").eq("status", "open").order("opened_at", { ascending: true });
-      const allSales = (abiertas && abiertas.length) ? await salesApi.getAll() : [];
+      const allSales = await salesApi.getAll();
       for (const reg of (abiertas || [])) {
         const ap = new Date(reg.opened_at);
         const diaReg = new Date(ap); diaReg.setHours(0, 0, 0, 0);
@@ -478,6 +478,72 @@ export default function CajaPage() {
           credit_total: st.credito,
           transfer_total: st.transfer,
         }).eq("id", reg.id).eq("status", "open");
+      }
+
+      // 1.5) Backfill: crear cajas CERRADAS retroactivas para días pasados que tuvieron ventas
+      //      con remito pero quedaron sin caja (p.ej. fines de semana donde nadie abrió la página,
+      //      o cualquier hueco entre la última caja y hoy). Sin esto, esas ventas no aparecen en
+      //      ninguna caja del historial.
+      const LIMITE_DIAS = 31;
+      const limite = new Date(diaHoy); limite.setDate(limite.getDate() - LIMITE_DIAS);
+      const dayKey = (d: Date) => `${d.getFullYear()}-${d.getMonth()}-${d.getDate()}`;
+
+      const { data: cajasRango } = await supabase
+        .from("caja").select("opened_at").gte("opened_at", limite.toISOString());
+      const diasConCaja = new Set((cajasRango || []).map((r: any) => dayKey(new Date(r.opened_at))));
+
+      const { data: pagosRango } = await supabase
+        .from("pagos_comisiones").select("monto, created_at").gte("created_at", limite.toISOString());
+
+      // Agrupar ventas con remito de días pasados (dentro del rango, sin contar hoy) por día.
+      const ventasPorDia = new Map<string, any[]>();
+      for (const s of allSales) {
+        if (!(s as any).remitoNumber) continue;
+        const d = new Date(s.createdAt);
+        if (d < limite || d >= diaHoy) continue;
+        const dia = new Date(d); dia.setHours(0, 0, 0, 0);
+        const key = dayKey(dia);
+        if (diasConCaja.has(key)) continue;
+        if (!ventasPorDia.has(key)) ventasPorDia.set(key, []);
+        ventasPorDia.get(key)!.push(s);
+      }
+
+      for (const [key, ventasDia] of ventasPorDia) {
+        const [yy, mm, dd] = key.split("-").map(Number);
+        const dia = new Date(yy, mm, dd, 0, 0, 0, 0);
+        const ap = new Date(dia); ap.setHours(HORA_APERTURA, 0, 0, 0);
+        const cierre = new Date(dia); cierre.setHours(HORA_CIERRE, 0, 0, 0);
+        const periodo = ventasDia.filter((s: any) => {
+          const d = new Date(s.createdAt);
+          return d >= ap && d <= cierre;
+        });
+        if (periodo.length === 0) continue;
+        const st = agg(periodo);
+        const comis = (pagosRango || []).reduce((a: number, p: any) => {
+          const pd = new Date(p.created_at);
+          return pd >= ap && pd <= cierre ? a + (Number(p.monto) || 0) : a;
+        }, 0);
+        const esperado = st.efectivo - comis; // inicial 0 (apertura automática)
+        const dateStr = `${yy}${String(mm + 1).padStart(2, "0")}${String(dd).padStart(2, "0")}`;
+        const id = await generateReadableId("caja", "caja", dateStr);
+        await supabase.from("caja").insert({
+          id,
+          opened_at: ap.toISOString(),
+          opened_by: "Apertura automática",
+          initial_amount: 0,
+          closed_at: cierre.toISOString(),
+          closed_by: "Cierre automático",
+          final_amount: esperado,
+          expected_amount: esperado,
+          difference: 0,
+          status: "closed",
+          notes: "Cierre automático 23:00 (retroactivo)",
+          sales_count: st.count,
+          total_sales: st.total,
+          cash_total: st.efectivo,
+          credit_total: st.credito,
+          transfer_total: st.transfer,
+        });
       }
 
       // 2) ¿Ya hay una caja abierta de hoy? Usarla.
