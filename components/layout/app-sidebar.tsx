@@ -59,6 +59,7 @@ export function AppSidebar() {
     {
       label: "Operaciones",
       items: [
+        { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard, roles: ["admin"] },
         { href: "/caja", label: "Caja de Reparto", icon: Banknote, roles: ["admin"] },
         { href: "/ventas", label: user?.role === "seller" ? "Mis Ventas" : "Ventas", icon: Receipt, roles: ["admin", ...(isVendedor ? ["seller"] : [])] },
         { href: "/ventas/nueva", label: "Nueva Venta", icon: ShoppingCart, roles: ["admin", ...(isVendedor ? ["seller"] : [])] },
