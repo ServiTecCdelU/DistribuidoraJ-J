@@ -313,7 +313,7 @@ export function ListaVentas({
             <div className="relative flex-1 min-w-0">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
               <Input
-                placeholder="Buscar por cliente, vendedor o N°..."
+                placeholder="Buscar por cliente, vendedor, producto o N°..."
                 value={searchQuery}
                 onChange={(e) => onCambiarFiltros({ searchQuery: e.target.value })}
                 className="pl-10 h-10 bg-background"

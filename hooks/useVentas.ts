@@ -257,7 +257,10 @@ export function useVentas(filterBySellerId?: string, clientCityMap?: Record<stri
           venta.sellerName?.toLowerCase().includes(q) ||
           venta.id.toLowerCase().includes(q) ||
           venta.invoiceNumber?.toLowerCase().includes(q) ||
-          String(venta.saleNumber || "").toLowerCase().includes(q);
+          String(venta.saleNumber || "").toLowerCase().includes(q) ||
+          (venta.items || []).some((it) =>
+            it.name?.toLowerCase().includes(q) || it.codigo?.toLowerCase().includes(q),
+          );
         if (!matchSearch) return false;
       }
 
