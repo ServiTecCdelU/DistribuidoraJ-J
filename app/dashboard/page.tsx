@@ -936,66 +936,6 @@ export default function DashboardPage() {
             </Card>
           </div>
 
-          {/* Pending Orders Section - Ahora con datos reales */}
-          <Card className="border-border/40 bg-white shadow-sm">
-            <CardHeader className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 sm:gap-0 pb-2 p-2 sm:p-3">
-              <div>
-                <CardTitle className="text-sm sm:text-base font-semibold flex items-center gap-1.5">
-                  <Camion className="h-3.5 w-3.5 sm:h-4 sm:w-4 text-sky-500" />
-                  Pedidos pendientes
-                </CardTitle>
-                <p className="text-xs text-muted-foreground mt-0.5">Seguimiento en tiempo real</p>
-              </div>
-              <Badge variant="secondary" className="rounded-md sm:rounded-lg bg-sky-50 text-sky-700 border-sky-200 font-medium text-xs w-fit">
-                {pendingOrders.length} en curso
-              </Badge>
-            </CardHeader>
-            <CardContent className="p-2 sm:p-3 pt-0">
-              <div className="grid grid-cols-2 sm:grid-cols-2 lg:grid-cols-4 gap-2 sm:gap-3">
-                {pendingOrders.slice(0, 10000000000000000000000).map((order) => {
-                  const meta = statusMeta[order.status] ?? statusMeta['pending']
-                  const StatusIcon = meta.icon
-                  const itemsCount = order.items.reduce((acc, item) => acc + item.quantity, 0)
-
-                  return (
-                    <button
-                      key={order.id}
-                      type="button"
-                      onClick={() => setSelectedOrder(order)}
-                      className="group text-left rounded-lg border border-slate-200 bg-white p-2.5 sm:p-3 hover:border-sky-300 hover:shadow-md transition-all duration-200"
-                    >
-                      <div className="flex items-start justify-between mb-1.5 sm:mb-2">
-                        <div className="min-w-0 pr-1.5">
-                          <p className="text-xs font-semibold text-foreground group-hover:text-sky-700 transition-colors truncate">
-                            {order.clientName || 'Cliente no especificado'}
-                          </p>
-                          <p className="text-xs text-muted-foreground font-mono mt-0.5">{order.id.slice(0, 8)}</p>
-                        </div>
-                        <div className={`p-1 rounded ${meta.bg} shrink-0`}>
-                          <StatusIcon className={`h-3 w-3 sm:h-3.5 sm:w-3.5 ${meta.color}`} />
-                        </div>
-                      </div>
-
-                      <div className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full text-xs font-medium border ${meta.bg} ${meta.color} mb-1.5 sm:mb-2`}>
-                        {meta.label}
-                      </div>
-                      
-                      <div className="flex items-center justify-between text-xs text-muted-foreground pt-1.5 sm:pt-2 border-t border-slate-100">
-                        <span className="flex items-center gap-0.5">
-                          <Paquete className="h-2 w-2 sm:h-2.5 sm:w-2.5" />
-                          {itemsCount} productos
-                        </span>
-                        <span className="flex items-center gap-0.5">
-                          <Reloj className="h-2 w-2 sm:h-2.5 sm:w-2.5" />
-                          {order.status === 'delivery' ? '30 min' : '45 min'}
-                        </span>
-                      </div>
-                    </button>
-                  )
-                })}
-              </div>
-            </CardContent>
-          </Card>
         </div>
       </div>
 
