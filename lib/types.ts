@@ -185,6 +185,8 @@ export interface Order {
   checkedItems?: string[];
   held?: boolean;
   notes?: string;
+  discount?: number;
+  discountType?: "percent" | "fixed";
   createdAt: Date;
   updatedAt: Date;
 }

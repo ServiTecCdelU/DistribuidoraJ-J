@@ -473,6 +473,17 @@ export default function PedidosPage() {
     }
   }, [detailOrder]);
 
+  const handleUpdateItems = useCallback(async (orderId: string, items: Order["items"]) => {
+    try {
+      const updated = await ordersApi.updateItems(orderId, items);
+      setOrders((prev) => prev.map((o) => (o.id === orderId ? updated : o)));
+      if (detailOrder?.id === orderId) setDetailOrder(updated);
+      toast.success("Descuentos actualizados");
+    } catch (error) {
+      toast.error("Error al actualizar los descuentos");
+    }
+  }, [detailOrder]);
+
   useEffect(() => {
     let active = true;
     setMounted(true);
@@ -2129,6 +2140,7 @@ tbody tr:nth-child(even){background:#fafafa}
         userRole={user?.role}
         onHacerPedido={undefined}
         onDelete={handleDeleteOrder}
+        onUpdateItems={handleUpdateItems}
       />
 
       <ConfirmDialog

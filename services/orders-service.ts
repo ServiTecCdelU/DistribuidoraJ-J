@@ -7,7 +7,7 @@ import { generateReadableId } from '@/services/supabase-helpers'
 const LIGHT_COLUMNS =
   'id, sale_id, client_id, client_name, client_phone, client_email, seller_id, seller_name, ' +
   'transportista_id, transportista_name, items, status, city, address, lat, lng, delivery_method, ' +
-  'remito_number, stock_descontado, invoice_number, checked_items, held, notes, created_at, updated_at'
+  'remito_number, stock_descontado, invoice_number, checked_items, held, notes, discount, discount_type, created_at, updated_at'
 
 export function mapOrder(d: Record<string, any>): Order {
   return {
@@ -36,6 +36,8 @@ export function mapOrder(d: Record<string, any>): Order {
     checkedItems: d.checked_items ?? [],
     held: d.held ?? false,
     notes: d.notes ?? undefined,
+    discount: d.discount != null ? Number(d.discount) : undefined,
+    discountType: d.discount_type ?? undefined,
     createdAt: new Date(d.created_at),
     updatedAt: new Date(d.updated_at ?? d.created_at),
   }
@@ -96,6 +98,23 @@ export const updateOrderStatus = async (id: string, status: OrderStatus): Promis
   const { data } = await supabase
     .from('pedidos')
     .update({ status })
+    .eq('id', id)
+    .select()
+    .single()
+
+  if (!data) throw new Error('Order not found')
+  return mapOrder(data)
+}
+
+// Actualiza los items de un pedido (p. ej. el admin edita el descuento por producto
+// mientras el pedido está en 'pending', antes de armarlo). Reemplaza el array completo.
+export const updateOrderItems = async (
+  id: string,
+  items: Order['items'],
+): Promise<Order> => {
+  const { data } = await supabase
+    .from('pedidos')
+    .update({ items })
     .eq('id', id)
     .select()
     .single()

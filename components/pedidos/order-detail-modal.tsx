@@ -82,6 +82,7 @@ interface OrderDetailModalProps {
   userRole?: string;
   onHacerPedido?: () => void;
   onDelete?: (order: Order) => void;
+  onUpdateItems?: (orderId: string, items: Order["items"]) => Promise<void>;
 }
 
 export function OrderDetailModal({
@@ -98,6 +99,7 @@ export function OrderDetailModal({
   userRole,
   onHacerPedido,
   onDelete,
+  onUpdateItems,
 }: OrderDetailModalProps) {
   const router = useRouter();
   const [selectedTransportista, setSelectedTransportista] = useState<string>("");
@@ -117,8 +119,35 @@ export function OrderDetailModal({
   const [downloading, setDownloading] = useState<"invoice" | "remito" | null>(null);
   const [deletingRemito, setDeletingRemito] = useState(false);
   const [showProducts, setShowProducts] = useState(false);
+  // Descuentos por producto editables (solo admin con el pedido en pendiente).
+  const [descItems, setDescItems] = useState<Record<number, number>>({});
+  const [guardandoDesc, setGuardandoDesc] = useState(false);
+
+  const puedeEditarDesc = userRole === "admin" && order?.status === "pending" && !!onUpdateItems;
 
   useEffect(() => { setShowProducts(false); }, [order?.id]);
+  useEffect(() => {
+    const init: Record<number, number> = {};
+    (order?.items ?? []).forEach((it, i) => { init[i] = it.itemDiscount ?? 0; });
+    setDescItems(init);
+  }, [order?.id]);
+
+  const descSucio = !!order && order.items.some((it, i) => (descItems[i] ?? 0) !== (it.itemDiscount ?? 0));
+
+  const guardarDescuentos = async () => {
+    if (!order || !onUpdateItems) return;
+    const nuevosItems = order.items.map((it, i) => {
+      const d = Math.min(100, Math.max(0, Number(descItems[i]) || 0));
+      const { itemDiscount, ...rest } = it as any;
+      return d > 0 ? { ...rest, itemDiscount: d } : { ...rest };
+    });
+    setGuardandoDesc(true);
+    try {
+      await onUpdateItems(order.id, nuevosItems);
+    } finally {
+      setGuardandoDesc(false);
+    }
+  };
 
   if (!order) return null;
 
@@ -319,7 +348,7 @@ export function OrderDetailModal({
                   </thead>
                   <tbody>
                     {order.items.map((item, index) => {
-                      const dto = item.itemDiscount ?? 0;
+                      const dto = puedeEditarDesc ? (descItems[index] ?? 0) : (item.itemDiscount ?? 0);
                       const precioConDto = item.price * (1 - dto / 100);
                       const subtotal = precioConDto * item.quantity;
                       return (
@@ -333,7 +362,22 @@ export function OrderDetailModal({
                             }
                           </td>
                           <td className="px-1 py-1.5 text-right">
-                            {dto > 0
+                            {puedeEditarDesc ? (
+                              <div className="flex items-center justify-end gap-0.5">
+                                <input
+                                  type="number"
+                                  min={0}
+                                  max={100}
+                                  value={descItems[index] ?? 0}
+                                  onChange={(e) => {
+                                    const v = Math.min(100, Math.max(0, Number(e.target.value) || 0));
+                                    setDescItems((prev) => ({ ...prev, [index]: v }));
+                                  }}
+                                  className="w-10 text-right text-[10px] border border-gray-200 rounded px-1 py-0.5 focus:border-emerald-400 outline-none"
+                                />
+                                <span className="text-gray-400">%</span>
+                              </div>
+                            ) : dto > 0
                               ? <span className="text-emerald-600 font-semibold">{dto}%</span>
                               : <span className="text-gray-300">—</span>
                             }
@@ -346,9 +390,10 @@ export function OrderDetailModal({
                   <tfoot>
                     {(() => {
                       const subtotalBruto = order.items.reduce((acc, i) => acc + i.price * i.quantity, 0);
-                      const subtotalConItemDtos = order.items.reduce((acc, i) => {
+                      const subtotalConItemDtos = order.items.reduce((acc, i, idx) => {
                         const base = i.price * i.quantity;
-                        const dto = i.itemDiscount ? (base * i.itemDiscount) / 100 : 0;
+                        const dtoPct = puedeEditarDesc ? (descItems[idx] ?? 0) : (i.itemDiscount ?? 0);
+                        const dto = dtoPct ? (base * dtoPct) / 100 : 0;
                         return acc + base - dto;
                       }, 0);
                       const hayItemDtos = subtotalBruto > subtotalConItemDtos;
@@ -392,6 +437,20 @@ export function OrderDetailModal({
               </div>
             )}
           </div>
+
+          {/* Guardar descuentos por producto — solo admin y con el pedido en pendiente */}
+          {puedeEditarDesc && (
+            <div className="flex items-center justify-between gap-2 rounded-xl border border-emerald-200 bg-emerald-50/50 px-3 py-2.5">
+              <p className="text-[11px] text-emerald-700">
+                {showProducts
+                  ? "Editá el % de descuento de cada producto y guardá."
+                  : "Abrí «Ver productos» para editar el descuento de cada uno."}
+              </p>
+              <Button onClick={guardarDescuentos} disabled={guardandoDesc || !descSucio} className="h-9 shrink-0">
+                {guardandoDesc ? <Loader2 className="h-4 w-4 animate-spin" /> : "Guardar descuentos"}
+              </Button>
+            </div>
+          )}
 
           {/* Progreso */}
           <div>
