@@ -989,10 +989,26 @@ export default function PedidosPage() {
     try {
       const ordersToReject = selectedClientOrders.length > 0 ? selectedClientOrders : [selectedOrder];
       const rejected = await Promise.all(ordersToReject.map((o) => ordersApi.rejectOrder(o.id)));
+
+      // Reponer el stock de los pedidos que ya lo tenían descontado (remito generado): al
+      // rechazarse, la mercadería vuelve al depósito. Queda registrado en el historial del producto.
+      const { registrarMovimiento } = await import("@/services/stock-service");
+      for (const o of ordersToReject) {
+        const reposiciones = reposicionEliminarRemito(o.stockDescontado === true, o.items as any[]);
+        for (const mov of reposiciones) {
+          await registrarMovimiento({
+            productoId: mov.productId,
+            tipo: "ajuste",
+            cantidad: mov.cantidad, // entrada: vuelve al stock
+            referencia: `Rechazo pedido ${o.remitoNumber ?? ""} — ${o.clientName ?? ""}`.trim(),
+          });
+        }
+      }
+
       setOrders((prev) =>
         prev.map((o) => rejected.find((r) => r.id === o.id) ?? o),
       );
-      toast.success(ordersToReject.length > 1 ? "Pedidos rechazados" : "Pedido rechazado");
+      toast.success(ordersToReject.length > 1 ? "Pedidos rechazados — stock repuesto" : "Pedido rechazado — stock repuesto");
       setActiveModal(null);
       setSelectedOrder(null);
       setSelectedClientId("");

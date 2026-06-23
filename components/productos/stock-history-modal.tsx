@@ -381,7 +381,9 @@ function MovimientoRow({ m }: { m: Movimiento }) {
                   <span className="truncate max-w-[140px]">{m.clientName}</span>
                 </span>
               )}
-              {!m.sellerName && !m.clientName && <span className="text-muted-foreground">—</span>}
+              {!m.sellerName && !m.clientName && (
+                <span className="text-[11px] italic text-muted-foreground line-clamp-2">{m.motivo || "—"}</span>
+              )}
             </div>
             {m.saleNumber && <div className="text-[10px] text-muted-foreground/70 mt-0.5">Venta #{m.saleNumber}</div>}
           </div>
@@ -450,8 +452,8 @@ function MovimientoCard({ m }: { m: Movimiento }) {
         </div>
       )}
 
-      {/* Motivo libre (ajustes/roturas/ingresos) */}
-      {!m.sellerName && !m.clientName && m.motivo && m.tipo !== 'venta' && m.tipo !== 'regalo' && (
+      {/* Motivo libre (ajustes/roturas/ingresos, o ventas/regalos sin datos de venta) */}
+      {!m.sellerName && !m.clientName && m.motivo && (
         <p className="text-[11px] text-muted-foreground italic pl-0.5">{m.motivo}</p>
       )}
 
