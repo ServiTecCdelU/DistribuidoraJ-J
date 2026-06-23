@@ -122,6 +122,7 @@ export function ListaVentas({
   clients = [],
   sellers = [],
   isAdmin = false,
+  onExportData,
 }: ListaVentasProps) {
   const {
     searchQuery, invoiceFilter, paymentFilter, periodFilter, dateFrom, dateTo,
@@ -186,21 +187,34 @@ export function ListaVentas({
   const [exportTo, setExportTo] = useState("");
 
   const exportExcel = useCallback(async () => {
-    let ventasToExport = [...ventas];
-    if (exportPeriod !== "all" && exportPeriod !== "custom") {
-      const now = new Date();
-      ventasToExport = ventasToExport.filter((v) => {
-        const d = safeGetDate(v.createdAt);
-        if (!d) return false;
-        if (exportPeriod === "today") { const t = new Date(now); t.setHours(0,0,0,0); return d >= t; }
-        if (exportPeriod === "week") { const w = new Date(now); w.setDate(w.getDate()-7); w.setHours(0,0,0,0); return d >= w; }
-        if (exportPeriod === "month") return d >= new Date(now.getFullYear(), now.getMonth(), 1);
-        if (exportPeriod === "year") return d >= new Date(now.getFullYear(), 0, 1);
-        return true;
-      });
+    // Trae las ventas del per\u00EDodo desde el servidor (no depende de lo cargado en
+    // pantalla, que por defecto es solo hoy). Fallback al set en memoria si no se
+    // provey\u00F3 onExportData.
+    let ventasToExport: any[];
+    if (onExportData) {
+      try {
+        ventasToExport = await onExportData(exportPeriod, exportFrom, exportTo);
+      } catch {
+        toast.error("No se pudieron traer las ventas para exportar");
+        return;
+      }
+    } else {
+      ventasToExport = [...ventas];
+      if (exportPeriod !== "all" && exportPeriod !== "custom") {
+        const now = new Date();
+        ventasToExport = ventasToExport.filter((v) => {
+          const d = safeGetDate(v.createdAt);
+          if (!d) return false;
+          if (exportPeriod === "today") { const t = new Date(now); t.setHours(0,0,0,0); return d >= t; }
+          if (exportPeriod === "week") { const w = new Date(now); w.setDate(w.getDate()-7); w.setHours(0,0,0,0); return d >= w; }
+          if (exportPeriod === "month") return d >= new Date(now.getFullYear(), now.getMonth(), 1);
+          if (exportPeriod === "year") return d >= new Date(now.getFullYear(), 0, 1);
+          return true;
+        });
+      }
+      if (exportFrom) { const f = new Date(exportFrom); f.setHours(0,0,0,0); ventasToExport = ventasToExport.filter(v => { const d = safeGetDate(v.createdAt); return d && d >= f; }); }
+      if (exportTo) { const t = new Date(exportTo); t.setHours(23,59,59,999); ventasToExport = ventasToExport.filter(v => { const d = safeGetDate(v.createdAt); return d && d <= t; }); }
     }
-    if (exportFrom) { const f = new Date(exportFrom); f.setHours(0,0,0,0); ventasToExport = ventasToExport.filter(v => { const d = safeGetDate(v.createdAt); return d && d >= f; }); }
-    if (exportTo) { const t = new Date(exportTo); t.setHours(23,59,59,999); ventasToExport = ventasToExport.filter(v => { const d = safeGetDate(v.createdAt); return d && d <= t; }); }
 
     if (ventasToExport.length === 0) { toast.error("No hay ventas en ese per\u00EDodo"); return; }
 
@@ -278,7 +292,7 @@ export function ListaVentas({
     const fileName = `ventas_${exportPeriod === "custom" ? `${exportFrom||"inicio"}_a_${exportTo||"hoy"}` : exportPeriod}_${new Date().toISOString().slice(0,10)}.xlsx`;
     XLSX.writeFile(wb, fileName);
     setExportOpen(false);
-  }, [ventas, exportPeriod, exportFrom, exportTo]);
+  }, [ventas, exportPeriod, exportFrom, exportTo, onExportData]);
 
   if (cargando) return <DataTableSkeleton columns={5} rows={8} />;
 

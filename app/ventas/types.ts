@@ -65,4 +65,5 @@ export interface ListaVentasProps {
   clients?: { id: string; name: string; city?: string }[];
   sellers?: { id: string; name: string }[];
   isAdmin?: boolean;
+  onExportData?: (period: string, from?: string, to?: string) => Promise<Venta[]>;
 }

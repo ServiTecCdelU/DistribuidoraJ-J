@@ -63,6 +63,7 @@ function VentasInner() {
     etiquetaPago,
     claseBadgePago,
     recargar,
+    cargarVentasExport,
   } = useVentas(filterBySellerId, clientCityMap, !authLoading);
 
   useEffect(() => { setMounted(true); }, []);
@@ -87,6 +88,7 @@ function VentasInner() {
         clients={clients}
         sellers={user?.role === "admin" ? sellers : []}
         isAdmin={user?.role === "admin"}
+        onExportData={cargarVentasExport}
       />
 
       <ModalDetalleVenta

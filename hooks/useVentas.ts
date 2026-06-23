@@ -6,6 +6,7 @@ import { savePdfToDatabase, downloadBase64Pdf } from "@/services/pdf-service";
 import { toast } from "sonner";
 import { getAuthToken } from "@/services/auth-service";
 import { formatCurrencyDecimals, formatDateTime } from "@/lib/utils/format";
+import { periodRange } from "@/lib/utils/ventas-period";
 
 // Helper para nombre de archivo: N°{numero}_{nombre_cliente}.pdf
 function buildDocFilename(tipo: "boleta" | "remito", numero: string | undefined, clientName?: string): string {
@@ -196,7 +197,7 @@ export function useVentas(filterBySellerId?: string, clientCityMap?: Record<stri
     remitoFilter: "all",
     discountFilter: "all",
     paymentFilter: "all",
-    periodFilter: "all",
+    periodFilter: "today",
     dateFrom: "",
     dateTo: "",
     clientId: "",
@@ -213,10 +214,22 @@ export function useVentas(filterBySellerId?: string, clientCityMap?: Record<stri
   const [tipoDocumento, setTipoDocumento] = useState<"boleta" | "remito">("boleta");
   const [emitiendo, setEmitiendo] = useState(false);
 
+  // Búsqueda con debounce: dispara la consulta al servidor recién 350ms después
+  // de dejar de tipear, para no pegarle a la BD en cada tecla.
+  const [debouncedSearch, setDebouncedSearch] = useState("");
+  useEffect(() => {
+    const t = setTimeout(() => setDebouncedSearch(filtros.searchQuery.trim()), 350);
+    return () => clearTimeout(t);
+  }, [filtros.searchQuery]);
+
   const cargarVentas = useCallback(async () => {
     if (!enabled) return;
     try {
       setCargando(true);
+      // Con texto de búsqueda (>=2 chars) busca en TODAS las ventas, sin límite de
+      // fecha. Sin búsqueda, trae solo el período seleccionado (por defecto, hoy).
+      const hasSearch = debouncedSearch.length >= 2;
+
       let q = supabase
         .from("ventas")
         .select("*")
@@ -235,6 +248,20 @@ export function useVentas(filterBySellerId?: string, clientCityMap?: Record<stri
         pq = pq.eq("seller_id", filterBySellerId);
       }
 
+      if (hasSearch) {
+        const like = `%${debouncedSearch}%`;
+        q = q.or(
+          `client_name.ilike.${like},seller_name.ilike.${like},sale_number.ilike.${like},remito_number.ilike.${like},invoice_number.ilike.${like},hoja_ruta_number.ilike.${like}`,
+        );
+        pq = pq.or(
+          `client_name.ilike.${like},remito_number.ilike.${like},hoja_ruta_number.ilike.${like}`,
+        );
+      } else {
+        const { from, to } = periodRange(filtros.periodFilter, filtros.dateFrom, filtros.dateTo);
+        if (from) { q = q.gte("created_at", from); pq = pq.gte("created_at", from); }
+        if (to) { q = q.lte("created_at", to); pq = pq.lte("created_at", to); }
+      }
+
       const [{ data }, { data: rechazados }] = await Promise.all([q, pq]);
       const ventasList = (data ?? []).map(mapVenta);
       const rechazadosList = (rechazados ?? []).map(mapPedidoRechazado);
@@ -247,7 +274,27 @@ export function useVentas(filterBySellerId?: string, clientCityMap?: Record<stri
     } finally {
       setCargando(false);
     }
-  }, [filterBySellerId, enabled]);
+  }, [filterBySellerId, enabled, debouncedSearch, filtros.periodFilter, filtros.dateFrom, filtros.dateTo]);
+
+  // Trae ventas de un período arbitrario desde el servidor (para exportar a Excel),
+  // sin depender de lo que esté cargado en pantalla. Columnas mínimas para que sea liviano.
+  const cargarVentasExport = useCallback(async (
+    period: string,
+    from?: string,
+    to?: string,
+  ): Promise<Venta[]> => {
+    let q = supabase
+      .from("ventas")
+      .select("sale_number,created_at,client_name,seller_name,total,payment_type,payment_method")
+      .order("created_at", { ascending: false })
+      .limit(5000);
+    if (filterBySellerId) q = q.eq("seller_id", filterBySellerId);
+    const range = periodRange(period, from, to);
+    if (range.from) q = q.gte("created_at", range.from);
+    if (range.to) q = q.lte("created_at", range.to);
+    const { data } = await q;
+    return (data ?? []).map(mapVenta);
+  }, [filterBySellerId]);
 
   useEffect(() => {
     cargarVentas();
@@ -271,7 +318,9 @@ export function useVentas(filterBySellerId?: string, clientCityMap?: Record<stri
         if (!matchSearch) return false;
       }
 
-      if (filtros.periodFilter && filtros.periodFilter !== "all") {
+      // El filtrado por fecha lo hace el servidor (ver cargarVentas). Acá se omite
+      // cuando hay búsqueda activa para que los resultados abarquen todas las fechas.
+      if (!filtros.searchQuery && filtros.periodFilter && filtros.periodFilter !== "all") {
         const ventaDate = safeGetDate(venta.createdAt);
         if (ventaDate) {
           const now = new Date();
@@ -291,13 +340,13 @@ export function useVentas(filterBySellerId?: string, clientCityMap?: Record<stri
         }
       }
 
-      if (filtros.dateFrom) {
+      if (!filtros.searchQuery && filtros.dateFrom) {
         const ventaDate = safeGetDate(venta.createdAt);
         const fromDate = new Date(filtros.dateFrom); fromDate.setHours(0, 0, 0, 0);
         if (!ventaDate || ventaDate < fromDate) return false;
       }
 
-      if (filtros.dateTo) {
+      if (!filtros.searchQuery && filtros.dateTo) {
         const ventaDate = safeGetDate(venta.createdAt);
         const toDate = new Date(filtros.dateTo); toDate.setHours(23, 59, 59, 999);
         if (!ventaDate || ventaDate > toDate) return false;
@@ -737,6 +786,7 @@ export function useVentas(filterBySellerId?: string, clientCityMap?: Record<stri
   return {
     ventas, ventasFiltradas, cargando, filtros, actualizarFiltros,
     recargar: cargarVentas,
+    cargarVentasExport,
     modalDetalleAbierto, ventaSeleccionada, abrirDetalle, cerrarDetalle, abrirDetallePorId,
     modalEmitirAbierto, ventaParaEmitir, tipoDocumento, emitiendo,
     abrirEmitir, cerrarEmitir, emitirDocumento, emitirConDatos, setTipoDocumento,
