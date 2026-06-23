@@ -248,6 +248,10 @@ export function useVentas(filterBySellerId?: string, clientCityMap?: Record<stri
         pq = pq.eq("seller_id", filterBySellerId);
       }
 
+      // Solo ventas con remito: las que no tienen no se muestran en el historial.
+      q = q.not("remito_number", "is", null);
+      pq = pq.not("remito_number", "is", null);
+
       if (hasSearch) {
         const like = `%${debouncedSearch}%`;
         q = q.or(
@@ -289,6 +293,7 @@ export function useVentas(filterBySellerId?: string, clientCityMap?: Record<stri
       .order("created_at", { ascending: false })
       .limit(5000);
     if (filterBySellerId) q = q.eq("seller_id", filterBySellerId);
+    q = q.not("remito_number", "is", null);
     const range = periodRange(period, from, to);
     if (range.from) q = q.gte("created_at", range.from);
     if (range.to) q = q.lte("created_at", range.to);
