@@ -26,6 +26,7 @@ import {
   formatDateTime,
   formatDateShort,
 } from '@/lib/utils/format'
+import { badgeDeMovimiento } from '@/lib/utils/stock-movimiento-label'
 
 type TipoFilter = 'all' | 'venta' | 'regalo' | 'apertura_bulto' | 'ajuste' | 'rotura'
 
@@ -335,8 +336,8 @@ function StatCard({
   )
 }
 
-function TipoBadge({ tipo }: { tipo: string }) {
-  const cfg = TIPO_CONFIG[tipo] ?? { label: tipo, className: 'bg-gray-100 text-gray-700 border-gray-200' }
+function TipoBadge({ tipo, motivo }: { tipo: string; motivo?: string | null }) {
+  const cfg = badgeDeMovimiento(tipo, motivo ?? null)
   return (
     <Badge variant="outline" className={cn('text-[10px] px-1.5 py-0 whitespace-nowrap', cfg.className)}>
       {cfg.label}
@@ -363,7 +364,7 @@ function MovimientoRow({ m }: { m: Movimiento }) {
         <div className="leading-tight text-[10px]">{hora}</div>
       </td>
       <td className="px-3 py-2.5 border-b">
-        <TipoBadge tipo={m.tipo} />
+        <TipoBadge tipo={m.tipo} motivo={m.motivo} />
       </td>
       <td className="px-3 py-2.5 text-xs border-b">
         {m.tipo === 'venta' || m.tipo === 'regalo' ? (
@@ -417,7 +418,7 @@ function MovimientoCard({ m }: { m: Movimiento }) {
       {/* Fila 1: badge + fecha/hora | cant + monto */}
       <div className="flex items-center justify-between gap-2">
         <div className="flex items-center gap-2 min-w-0">
-          <TipoBadge tipo={m.tipo} />
+          <TipoBadge tipo={m.tipo} motivo={m.motivo} />
           <span className="text-[10px] text-muted-foreground whitespace-nowrap">{fecha} · {hora}</span>
         </div>
         <div className="flex items-center gap-2.5 shrink-0">
