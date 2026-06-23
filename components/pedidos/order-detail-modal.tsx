@@ -335,15 +335,15 @@ export function OrderDetailModal({
               </span>
             </button>
             {showProducts && (
-              <div className="rounded-xl border border-gray-100 mt-1">
-                <table className="w-full table-fixed text-[10px]">
+              <div className="rounded-xl border border-gray-100 mt-1 overflow-x-auto">
+                <table className="w-full table-fixed text-xs min-w-[420px]">
                   <thead>
-                    <tr className="bg-gray-50 border-b border-gray-100 text-[9px] font-semibold text-gray-500 uppercase">
-                      <th className="px-1.5 py-1.5 text-left">Producto</th>
-                      <th className="px-1 py-1.5 text-right w-8">Cant.</th>
-                      <th className="px-1 py-1.5 text-right w-16">P. unit</th>
-                      <th className="px-1 py-1.5 text-right w-9">Dto.</th>
-                      <th className="px-1.5 py-1.5 text-right w-16">Subtotal</th>
+                    <tr className="bg-gray-50 border-b border-gray-100 text-[10px] font-semibold text-gray-500 uppercase">
+                      <th className="px-2 py-2 text-left">Producto</th>
+                      <th className="px-1.5 py-2 text-center w-10">Cant.</th>
+                      <th className="px-1.5 py-2 text-right w-24">P. unit</th>
+                      <th className="px-1.5 py-2 text-center w-16">Dto.</th>
+                      <th className="px-2 py-2 text-right w-24">Subtotal</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -352,18 +352,18 @@ export function OrderDetailModal({
                       const precioConDto = item.price * (1 - dto / 100);
                       const subtotal = precioConDto * item.quantity;
                       return (
-                        <tr key={index} className="border-b border-gray-100 last:border-0 hover:bg-gray-50/50 transition-colors">
-                          <td className="px-1.5 py-1.5 font-medium text-gray-900 truncate">{item.name}</td>
-                          <td className="px-1 py-1.5 text-right text-gray-700 font-mono">{item.quantity}</td>
-                          <td className="px-1 py-1.5 text-right text-gray-700">
+                        <tr key={index} className="border-b border-gray-100 last:border-0 hover:bg-gray-50/50 transition-colors align-middle">
+                          <td className="px-2 py-2 font-medium text-gray-900 truncate">{item.name}</td>
+                          <td className="px-1.5 py-2 text-center text-gray-700 font-mono">{item.quantity}</td>
+                          <td className="px-1.5 py-2 text-right text-gray-700 whitespace-nowrap">
                             {dto > 0
-                              ? <span className="flex flex-col items-end leading-tight"><s className="text-gray-400">{formatPrice(item.price)}</s><span>{formatPrice(precioConDto)}</span></span>
+                              ? <span className="flex flex-col items-end leading-tight"><s className="text-[10px] text-gray-400">{formatPrice(item.price)}</s><span className="font-medium">{formatPrice(precioConDto)}</span></span>
                               : formatPrice(item.price)
                             }
                           </td>
-                          <td className="px-1 py-1.5 text-right">
+                          <td className="px-1.5 py-2 text-center">
                             {puedeEditarDesc ? (
-                              <div className="flex items-center justify-end gap-0.5">
+                              <div className="flex items-center justify-center gap-0.5">
                                 <input
                                   type="number"
                                   min={0}
@@ -373,16 +373,16 @@ export function OrderDetailModal({
                                     const v = Math.min(100, Math.max(0, Number(e.target.value) || 0));
                                     setDescItems((prev) => ({ ...prev, [index]: v }));
                                   }}
-                                  className="w-10 text-right text-[10px] border border-gray-200 rounded px-1 py-0.5 focus:border-emerald-400 outline-none"
+                                  className="w-12 text-center text-xs border border-gray-300 rounded-md px-1 py-1 focus:border-emerald-400 focus:ring-1 focus:ring-emerald-200 outline-none"
                                 />
-                                <span className="text-gray-400">%</span>
+                                <span className="text-gray-400 text-[10px]">%</span>
                               </div>
                             ) : dto > 0
                               ? <span className="text-emerald-600 font-semibold">{dto}%</span>
                               : <span className="text-gray-300">—</span>
                             }
                           </td>
-                          <td className="px-1.5 py-1.5 text-right font-semibold text-gray-900">{formatPrice(subtotal)}</td>
+                          <td className="px-2 py-2 text-right font-semibold text-gray-900 whitespace-nowrap">{formatPrice(subtotal)}</td>
                         </tr>
                       );
                     })}
