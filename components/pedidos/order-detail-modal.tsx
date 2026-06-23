@@ -18,6 +18,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { formatPrice, formatDateFull } from "@/lib/utils/format";
+import { aplicarDescuentosItems, hayCambiosDescuento, clampDescuento } from "@/lib/utils/order-discount";
 import type { Order, OrderStatus, Seller } from "@/lib/types";
 import {
   X,
@@ -132,18 +133,14 @@ export function OrderDetailModal({
     setDescItems(init);
   }, [order?.id]);
 
-  const descSucio = !!order && order.items.some((it, i) => (descItems[i] ?? 0) !== (it.itemDiscount ?? 0));
+  const descSucio = !!order && hayCambiosDescuento(order.items as any[], descItems);
 
   const guardarDescuentos = async () => {
     if (!order || !onUpdateItems) return;
-    const nuevosItems = order.items.map((it, i) => {
-      const d = Math.min(100, Math.max(0, Number(descItems[i]) || 0));
-      const { itemDiscount, ...rest } = it as any;
-      return d > 0 ? { ...rest, itemDiscount: d } : { ...rest };
-    });
+    const nuevosItems = aplicarDescuentosItems(order.items as any[], descItems);
     setGuardandoDesc(true);
     try {
-      await onUpdateItems(order.id, nuevosItems);
+      await onUpdateItems(order.id, nuevosItems as Order["items"]);
     } finally {
       setGuardandoDesc(false);
     }
@@ -370,7 +367,7 @@ export function OrderDetailModal({
                                   max={100}
                                   value={descItems[index] ?? 0}
                                   onChange={(e) => {
-                                    const v = Math.min(100, Math.max(0, Number(e.target.value) || 0));
+                                    const v = clampDescuento(Number(e.target.value) || 0);
                                     setDescItems((prev) => ({ ...prev, [index]: v }));
                                   }}
                                   className="w-12 text-center text-xs border border-gray-300 rounded-md px-1 py-1 focus:border-emerald-400 focus:ring-1 focus:ring-emerald-200 outline-none"
