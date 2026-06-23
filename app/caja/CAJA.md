@@ -59,6 +59,7 @@ expectedCash = initialAmount + efectivoTotal - comisionesTotal
 ## Vistas
 
 - **Tabs**: caja del día (abierta) + historial (cajas cerradas, con buscador por fecha vía `Calendar`/`Popover`).
+- **Buscador por cliente** (en historial): `buscarCajasPorCliente()` trae las ventas del cliente con remito, las agrupa por jornada (`dayKeyOf`) y muestra las cajas de esos días, listando dentro de cada tarjeta las compras del cliente. Solo cuenta ventas con remito (igual que el resto de Caja). Mutuamente excluyente con el filtro por fecha.
 - Resumen del día: venta total, efectivo, transferencia, cta. corriente, comisiones (en naranja, restan), pérdidas.
 
 ## Caveats

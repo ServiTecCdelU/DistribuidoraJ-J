@@ -34,6 +34,7 @@ import {
   ChevronRight,
   AlertTriangle,
   Receipt,
+  X,
 } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
 import { salesApi, auditApi } from "@/lib/api";
@@ -78,6 +79,20 @@ const formatDateLong = (d: Date) =>
 
 const formatTimeStr = (d: Date) =>
   d.toLocaleTimeString("es-AR", { hour: "2-digit", minute: "2-digit", hour12: false });
+
+// Clave de día (para mapear una venta a la caja de su jornada).
+const dayKeyOf = (d: Date) => `${d.getFullYear()}-${d.getMonth()}-${d.getDate()}`;
+
+// Venta de un cliente ubicada dentro de una caja (para el buscador por cliente).
+interface VentaClienteCaja {
+  id: string;
+  saleNumber?: string | number;
+  clientName?: string;
+  total: number;
+  paymentType?: string;
+  paymentMethod?: string;
+  createdAt: string;
+}
 
 const mapRegister = (data: any): CashRegister => ({
   id: data.id,
@@ -419,6 +434,10 @@ export default function CajaPage() {
   const [searchDate, setSearchDate] = useState<Date | undefined>(undefined);
   const [calendarOpen, setCalendarOpen] = useState(false);
   const [historialPage, setHistorialPage] = useState(0);
+  // Búsqueda por cliente: muestra en qué cajas aparece y sus compras.
+  const [searchClient, setSearchClient] = useState("");
+  const [clienteVentasPorCaja, setClienteVentasPorCaja] = useState<Record<string, VentaClienteCaja[]>>({});
+  const [buscandoCliente, setBuscandoCliente] = useState(false);
   const HISTORIAL_PAGE_SIZE = 10;
 
   // Detalle de caja histórica
@@ -763,6 +782,77 @@ export default function CajaPage() {
       setHistorialLoading(false);
     }
   }, []);
+
+  // Busca un cliente y muestra en qué cajas aparece (solo ventas con remito, que son
+  // las que cuentan en caja). Agrupa las ventas por jornada y trae esas cajas.
+  const buscarCajasPorCliente = useCallback(async (nombre: string) => {
+    const q = nombre.trim();
+    if (q.length < 2) {
+      toast.error("Escribí al menos 2 letras del cliente");
+      return;
+    }
+    setBuscandoCliente(true);
+    setHistorialLoading(true);
+    setSelectedHistorial(null);
+    setSearchDate(undefined);
+    try {
+      const { data: ventas } = await supabase
+        .from("ventas")
+        .select("id, sale_number, client_name, total, payment_type, payment_method, created_at")
+        .ilike("client_name", `%${q}%`)
+        .not("remito_number", "is", null)
+        .order("created_at", { ascending: false });
+
+      const lista = ventas || [];
+      const porDia = new Map<string, VentaClienteCaja[]>();
+      for (const v of lista) {
+        const k = dayKeyOf(new Date(v.created_at));
+        const arr = porDia.get(k) ?? [];
+        arr.push({
+          id: v.id,
+          saleNumber: v.sale_number ?? undefined,
+          clientName: v.client_name ?? undefined,
+          total: Number(v.total) || 0,
+          paymentType: v.payment_type ?? undefined,
+          paymentMethod: v.payment_method ?? undefined,
+          createdAt: v.created_at,
+        });
+        porDia.set(k, arr);
+      }
+
+      if (porDia.size === 0) {
+        setHistorialRegisters([]);
+        setClienteVentasPorCaja({});
+        return;
+      }
+
+      // Traer las cajas del rango de fechas y quedarnos con las jornadas que tienen ventas del cliente.
+      const fechas = lista.map((v) => new Date(v.created_at).getTime());
+      const min = new Date(Math.min(...fechas)); min.setHours(0, 0, 0, 0);
+      const max = new Date(Math.max(...fechas)); max.setHours(23, 59, 59, 999);
+      const { data: cajas } = await supabase
+        .from("caja")
+        .select("*")
+        .gte("opened_at", min.toISOString())
+        .lte("opened_at", max.toISOString())
+        .order("opened_at", { ascending: false });
+
+      const matched = (cajas || []).filter((c: any) => porDia.has(dayKeyOf(new Date(c.opened_at)))).map(mapRegister);
+      setHistorialRegisters(matched);
+      setClienteVentasPorCaja(Object.fromEntries(porDia));
+    } catch {
+      toast.error("Error al buscar por cliente");
+    } finally {
+      setBuscandoCliente(false);
+      setHistorialLoading(false);
+    }
+  }, []);
+
+  const limpiarBusquedaCliente = useCallback(() => {
+    setSearchClient("");
+    setClienteVentasPorCaja({});
+    loadHistorial(undefined, 0);
+  }, [loadHistorial]);
 
   const loadHistorialDetail = async (register: CashRegister) => {
     setDetailLoading(true);
@@ -1522,6 +1612,36 @@ export default function CajaPage() {
 
           {/* ═══ TAB HISTORIAL ═══ */}
           <TabsContent value="historial" className="space-y-4 mt-4">
+            {/* Buscador por cliente: muestra en qué cajas está */}
+            <div className="flex flex-col sm:flex-row gap-2">
+              <div className="relative flex-1">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                <Input
+                  placeholder="Buscar cliente y ver en qué cajas está..."
+                  value={searchClient}
+                  onChange={(e) => setSearchClient(e.target.value)}
+                  onKeyDown={(e) => { if (e.key === "Enter") buscarCajasPorCliente(searchClient); }}
+                  className="pl-10"
+                />
+                {searchClient && (
+                  <button
+                    onClick={limpiarBusquedaCliente}
+                    className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+                  >
+                    <X className="h-4 w-4" />
+                  </button>
+                )}
+              </div>
+              <Button
+                onClick={() => buscarCajasPorCliente(searchClient)}
+                disabled={buscandoCliente || searchClient.trim().length < 2}
+                className="gap-2"
+              >
+                {buscandoCliente ? <Loader2 className="h-4 w-4 animate-spin" /> : <Search className="h-4 w-4" />}
+                Buscar
+              </Button>
+            </div>
+
             {/* Barra de búsqueda */}
             <div className="flex flex-col sm:flex-row gap-3 items-start sm:items-center">
               <Popover open={calendarOpen} onOpenChange={setCalendarOpen}>
@@ -1539,6 +1659,8 @@ export default function CajaPage() {
                       setSearchDate(date);
                       setCalendarOpen(false);
                       setHistorialPage(0);
+                      setSearchClient("");
+                      setClienteVentasPorCaja({});
                       loadHistorial(date, 0);
                     }}
                     disabled={(date) => date > new Date()}
@@ -1743,7 +1865,9 @@ export default function CajaPage() {
                 <CardContent className="flex flex-col items-center justify-center py-12 text-center">
                   <Search className="h-10 w-10 text-muted-foreground mb-3" />
                   <p className="text-muted-foreground text-sm">
-                    {searchDate ? "No hay cajas para esa fecha" : "No hay cajas anteriores"}
+                    {searchClient
+                      ? `No se encontraron cajas con ventas de "${searchClient}"`
+                      : searchDate ? "No hay cajas para esa fecha" : "No hay cajas anteriores"}
                   </p>
                 </CardContent>
               </Card>
@@ -1830,12 +1954,35 @@ export default function CajaPage() {
                             </Badge>
                           </div>
                         </div>
+
+                        {/* Compras del cliente buscado dentro de esta caja */}
+                        {searchClient && (clienteVentasPorCaja[dayKeyOf(reg.openedAt)]?.length ?? 0) > 0 && (
+                          <div className="mt-3 pt-3 border-t border-border/40 space-y-1">
+                            <p className="text-xs font-medium text-teal-700">
+                              {clienteVentasPorCaja[dayKeyOf(reg.openedAt)].length} compra(s) de "{searchClient}"
+                            </p>
+                            {clienteVentasPorCaja[dayKeyOf(reg.openedAt)].map((v) => {
+                              const pago = v.paymentType === "cash"
+                                ? (v.paymentMethod === "transferencia" ? "Transf." : "Efectivo")
+                                : v.paymentType === "credit" ? "Cta.Cte." : "Mixto";
+                              return (
+                                <div key={v.id} className="flex items-center justify-between text-xs gap-2">
+                                  <span className="text-muted-foreground truncate">
+                                    {v.saleNumber ? `#${v.saleNumber}` : ""} · {formatTimeStr(new Date(v.createdAt))} · {pago}
+                                  </span>
+                                  <span className="font-semibold tabular-nums">{formatCurrency(v.total || 0)}</span>
+                                </div>
+                              );
+                            })}
+                          </div>
+                        )}
                       </CardContent>
                     </Card>
                   ))}
                 </div>
 
-                {/* Paginación */}
+                {/* Paginación (no aplica durante la búsqueda por cliente) */}
+                {!searchClient && (
                 <div className="flex items-center justify-center gap-2">
                   <Button
                     variant="outline"
@@ -1865,6 +2012,7 @@ export default function CajaPage() {
                     <ChevronRight className="h-4 w-4" />
                   </Button>
                 </div>
+                )}
               </>
             )}
           </TabsContent>
