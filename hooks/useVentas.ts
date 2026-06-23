@@ -221,14 +221,14 @@ export function useVentas(filterBySellerId?: string, clientCityMap?: Record<stri
         .from("ventas")
         .select("*")
         .order("created_at", { ascending: false })
-        .limit(200);
+        .limit(1000);
 
       let pq = supabase
         .from("pedidos")
         .select("*")
         .eq("status", "rechazado")
         .order("created_at", { ascending: false })
-        .limit(200);
+        .limit(1000);
 
       if (filterBySellerId) {
         q = q.eq("seller_id", filterBySellerId);
