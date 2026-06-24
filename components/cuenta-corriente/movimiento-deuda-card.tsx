@@ -159,6 +159,7 @@ export function MovimientoDeudaCard({
   const [expanded, setExpanded] = useState(false)
   const [regenerando, setRegenerando] = useState(false)
   const [regenerandoRecibo, setRegenerandoRecibo] = useState(false)
+  const [descargandoDevol, setDescargandoDevol] = useState(false)
   const [legacyItems, setLegacyItems] = useState<TableRow[] | null>(null)
   const [linkedRemitos, setLinkedRemitos] = useState<{ id: string; remitoNumber: string; remitoPdfBase64?: string }[] | null>(null)
 
@@ -266,6 +267,11 @@ export function MovimientoDeudaCard({
 
   const isPayment = tx.type === 'payment'
   const isDescuento = isPayment && (tx.description ?? '').startsWith('[DESCUENTO]')
+  const isDevolucion = isPayment && (tx.description ?? '').startsWith('[DEVOLUCION]')
+  // Devolución vinculada a este movimiento (match por monto dentro de la venta)
+  const devMatch = isDevolucion
+    ? (devoluciones.find((d) => Math.abs(d.total - tx.amount) < 0.01) ?? devoluciones[0])
+    : undefined
 
   // Parseo del detalle de un descuento desde la descripción:
   // "[DESCUENTO] #venta — Nombre -3%, Nombre -4% (motivo)" o "[DESCUENTO] #venta — Final -10% (motivo)"
@@ -364,6 +370,32 @@ export function MovimientoDeudaCard({
     }
   }
 
+  // Descarga el recibo de DEVOLUCIÓN (el mismo que se emite en Ventas), regenerado al vuelo.
+  const handleDescargarReciboDevol = async (e: React.MouseEvent) => {
+    e.stopPropagation()
+    if (!devMatch) return
+    setDescargandoDevol(true)
+    try {
+      const { generarReciboDevolucion } = await import('@/hooks/useGenerarPdf')
+      const base64 = await generarReciboDevolucion({
+        reciboNumero: devMatch.reciboNumero,
+        fecha: devMatch.createdAt,
+        clientName: devMatch.clientName ?? sale?.clientName,
+        saleNumber: devMatch.saleNumber ?? sale?.saleNumber,
+        items: devMatch.items.map((it) => ({
+          name: it.name, quantity: it.quantity, price: it.price, destino: it.destino,
+        })),
+        total: devMatch.total,
+      })
+      const link = document.createElement('a')
+      link.href = `data:application/pdf;base64,${base64}`
+      link.download = `recibo-devolucion-${devMatch.reciboNumero}.pdf`
+      link.click()
+    } finally {
+      setDescargandoDevol(false)
+    }
+  }
+
   return (
     <div>
       {/* Fila principal (tabla) */}
@@ -387,7 +419,20 @@ export function MovimientoDeudaCard({
               <Truck className="h-3.5 w-3.5" />{sale!.remitoNumber}
             </span>
           )}
-          {isPayment && (
+          {/* Recibo de DEVOLUCIÓN (mismo de Ventas) — no recibo de pago */}
+          {isDevolucion && devMatch && (
+            <button
+              type="button"
+              className="inline-flex items-center gap-0.5 text-xs text-purple-600 hover:underline shrink-0 disabled:opacity-50"
+              onClick={handleDescargarReciboDevol}
+              disabled={descargandoDevol}
+              title="Descargar recibo de devolución"
+            >
+              {descargandoDevol ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <RotateCcw className="h-3.5 w-3.5" />}
+              {devMatch.reciboNumero || 'Recibo devol.'}
+            </button>
+          )}
+          {isPayment && !isDevolucion && (
             tx.reciboPdfBase64 ? (
               <>
                 <button
