@@ -26,7 +26,7 @@ interface MovimientoDeudaCardProps {
 
 // Columnas compartidas entre el encabezado (en la page) y cada fila
 export const MOVIMIENTO_GRID =
-  'grid grid-cols-[minmax(8rem,1fr)_4.5rem_2.75rem_7rem_7rem_0.75rem] items-center gap-x-2'
+  'grid grid-cols-[minmax(8rem,1fr)_5rem_2.75rem_7.5rem_7.5rem_0.75rem] items-center gap-x-2'
 
 const COLOR_DIA: Record<EstadoDiaPago, string> = {
   falta: 'text-green-600',
@@ -38,7 +38,7 @@ const COLOR_DIA: Record<EstadoDiaPago, string> = {
 
 function DiasCell({ date }: { date: Date }) {
   const { numero, estado } = diaDePagoInfo(date)
-  return <span className={`text-[11px] font-bold tabular-nums ${COLOR_DIA[estado]}`}>{numero}</span>
+  return <span className={`text-xs font-bold tabular-nums ${COLOR_DIA[estado]}`}>{numero}</span>
 }
 
 function descargarRemito(sale: Sale) {
@@ -368,23 +368,23 @@ export function MovimientoDeudaCard({
     <div>
       {/* Fila principal (tabla) */}
       <div
-        className={`${MOVIMIENTO_GRID} px-3 py-1.5 ${expandable ? 'cursor-pointer hover:bg-muted/30' : ''}`}
+        className={`${MOVIMIENTO_GRID} px-3 py-2 ${expandable ? 'cursor-pointer hover:bg-muted/30' : ''}`}
         onClick={expandable ? () => setExpanded((v) => !v) : undefined}
       >
         {/* Concepto */}
         <div className="flex items-center gap-1.5 min-w-0">
           {isPayment
-            ? <ArrowDownCircle className="h-3.5 w-3.5 text-green-600 shrink-0" />
-            : <ArrowUpCircle className="h-3.5 w-3.5 text-red-600 shrink-0" />
+            ? <ArrowDownCircle className="h-4 w-4 text-green-600 shrink-0" />
+            : <ArrowUpCircle className="h-4 w-4 text-red-600 shrink-0" />
           }
-          <span className="text-xs font-medium truncate">
+          <span className="text-sm font-medium truncate">
             {isDescuento
               ? `Descuento${sale?.saleNumber ? ` · Venta ${sale.saleNumber}` : ''}${descuento.motivo ? ` · ${descuento.motivo}` : ''}`
               : tx.description}
           </span>
           {tieneRemito && (
-            <span className="inline-flex items-center gap-0.5 text-[11px] text-blue-600 shrink-0">
-              <Truck className="h-3 w-3" />{sale!.remitoNumber}
+            <span className="inline-flex items-center gap-0.5 text-xs text-blue-600 shrink-0">
+              <Truck className="h-3.5 w-3.5" />{sale!.remitoNumber}
             </span>
           )}
           {isPayment && (
@@ -392,78 +392,78 @@ export function MovimientoDeudaCard({
               <>
                 <button
                   type="button"
-                  className="inline-flex items-center gap-0.5 text-[11px] text-teal-600 hover:underline shrink-0"
+                  className="inline-flex items-center gap-0.5 text-xs text-teal-600 hover:underline shrink-0"
                   onClick={(e) => {
                     e.stopPropagation()
                     descargarDocumento(tx.reciboPdfBase64!, 'recibo', tx.reciboNumero)
                   }}
                   title="Descargar recibo"
                 >
-                  <Receipt className="h-3 w-3" />{tx.reciboNumero || 'Recibo'}
+                  <Receipt className="h-3.5 w-3.5" />{tx.reciboNumero || 'Recibo'}
                 </button>
                 {onRegenerarRecibo && (
                   <button
                     type="button"
-                    className="inline-flex items-center text-[11px] text-muted-foreground hover:text-teal-600 shrink-0 disabled:opacity-50"
+                    className="inline-flex items-center text-xs text-muted-foreground hover:text-teal-600 shrink-0 disabled:opacity-50"
                     onClick={handleRegenerarRecibo}
                     disabled={regenerandoRecibo}
                     title="Generar de nuevo el recibo"
                   >
-                    {regenerandoRecibo ? <Loader2 className="h-3 w-3 animate-spin" /> : <RefreshCw className="h-3 w-3" />}
+                    {regenerandoRecibo ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <RefreshCw className="h-3.5 w-3.5" />}
                   </button>
                 )}
               </>
             ) : onRegenerarRecibo ? (
               <button
                 type="button"
-                className="inline-flex items-center gap-0.5 text-[11px] text-teal-600 hover:underline shrink-0 disabled:opacity-50"
+                className="inline-flex items-center gap-0.5 text-xs text-teal-600 hover:underline shrink-0 disabled:opacity-50"
                 onClick={handleRegenerarRecibo}
                 disabled={regenerandoRecibo}
                 title="Generar y descargar el recibo de este pago"
               >
-                {regenerandoRecibo ? <Loader2 className="h-3 w-3 animate-spin" /> : <Receipt className="h-3 w-3" />}
+                {regenerandoRecibo ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Receipt className="h-3.5 w-3.5" />}
                 Generar recibo
               </button>
             ) : tx.reciboNumero ? (
-              <span className="inline-flex items-center gap-0.5 text-[11px] text-teal-600 shrink-0">
-                <Receipt className="h-3 w-3" />{tx.reciboNumero}
+              <span className="inline-flex items-center gap-0.5 text-xs text-teal-600 shrink-0">
+                <Receipt className="h-3.5 w-3.5" />{tx.reciboNumero}
               </span>
             ) : null
           )}
           {isPayment && !isDescuento && onEliminarPago && (
             <button
               type="button"
-              className="inline-flex items-center gap-0.5 text-[11px] text-red-500 hover:text-red-700 hover:underline shrink-0"
+              className="inline-flex items-center gap-0.5 text-xs text-red-500 hover:text-red-700 hover:underline shrink-0"
               onClick={(e) => { e.stopPropagation(); onEliminarPago(tx) }}
               title="Eliminar este pago"
             >
-              <Trash2 className="h-3 w-3" />Eliminar
+              <Trash2 className="h-3.5 w-3.5" />Eliminar
             </button>
           )}
           {tieneNoEntregados && !expanded && (
-            <Badge variant="outline" className="text-[10px] px-1 py-0 h-4 text-amber-600 border-amber-300 shrink-0">
+            <Badge variant="outline" className="text-[11px] px-1 py-0 h-4 text-amber-600 border-amber-300 shrink-0">
               {noEntregadosUnified.length} no entregado{noEntregadosUnified.length > 1 ? 's' : ''}
             </Badge>
           )}
         </div>
         {/* Fecha */}
-        <span className="text-[11px] text-muted-foreground text-right tabular-nums">{formatDate(tx.date)}</span>
+        <span className="text-xs text-muted-foreground text-right tabular-nums">{formatDate(tx.date)}</span>
         {/* Días en cuenta corriente (solo deudas pendientes) */}
         <div className="text-center">
           {!isPayment && !pagada ? <DiasCell date={tx.date} /> : null}
         </div>
         {/* Monto */}
-        <span className={`text-xs font-bold tabular-nums text-right ${isPayment ? 'text-green-600' : 'text-red-600'}`}>
+        <span className={`text-sm font-bold tabular-nums text-right ${isPayment ? 'text-green-600' : 'text-red-600'}`}>
           {isPayment ? '-' : '+'}{formatCurrencyDecimals(tx.amount)}
         </span>
         {/* Saldo */}
-        <span className={`text-[11px] font-medium tabular-nums text-right ${saldo == null ? 'text-muted-foreground' : pagada ? 'text-green-600' : parcial ? 'text-amber-600' : 'text-red-500'}`}>
+        <span className={`text-xs font-medium tabular-nums text-right ${saldo == null ? 'text-muted-foreground' : pagada ? 'text-green-600' : parcial ? 'text-amber-600' : 'text-red-500'}`}>
           {saldo == null ? '—' : pagada ? '✓' : formatCurrencyDecimals(saldo)}
         </span>
         {/* Expandir */}
         <div className="flex justify-center">
           {expandable && (
-            <ChevronDown className={`h-3.5 w-3.5 text-muted-foreground transition-transform ${expanded ? 'rotate-180' : ''}`} />
+            <ChevronDown className={`h-4 w-4 text-muted-foreground transition-transform ${expanded ? 'rotate-180' : ''}`} />
           )}
         </div>
       </div>

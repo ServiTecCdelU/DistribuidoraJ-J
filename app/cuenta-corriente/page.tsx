@@ -1016,9 +1016,9 @@ ${bloques}
                 <p className="text-sm text-muted-foreground text-center py-2">Sin movimientos</p>
               ) : (
                 <div className="overflow-x-auto">
-                  <div className="min-w-[600px] rounded-lg border overflow-hidden">
+                  <div className="min-w-[640px] rounded-lg border overflow-hidden">
                     {/* Encabezado */}
-                    <div className={`${MOVIMIENTO_GRID} px-3 py-1.5 bg-muted/50 border-b text-[10px] font-semibold uppercase tracking-wide text-muted-foreground`}>
+                    <div className={`${MOVIMIENTO_GRID} px-3 py-2 bg-muted/50 border-b text-[11px] font-semibold uppercase tracking-wide text-muted-foreground`}>
                       <span>Concepto</span>
                       <span className="text-right">Fecha</span>
                       <span className="text-center">Días</span>
