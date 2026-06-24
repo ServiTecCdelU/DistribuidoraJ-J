@@ -1,0 +1,412 @@
+[
+  {
+    "sale_number": "N109-09-06-2026",
+    "remito": "R-2026-00124",
+    "cliente": "ALVEZ SERRAN ELIDA",
+    "totalVenta": 523255.6,
+    "totalRemito": 68506.13,
+    "diff": 454749.47,
+    "seller": null,
+    "sellerId": null
+  },
+  {
+    "sale_number": "N67-05-06-2026",
+    "remito": "R-2026-00066",
+    "cliente": "AUTOSERVICIO  LA GAUCHITA",
+    "totalVenta": 71038.75,
+    "totalRemito": 108160.99,
+    "diff": -37122.24,
+    "seller": "NICOLAS (4)",
+    "sellerId": "vendedor_saldivianicolas_1"
+  },
+  {
+    "sale_number": "N36-03-06-2026",
+    "remito": "R-2026-00035",
+    "cliente": "ALEXANDER VENEZU",
+    "totalVenta": 270042.18,
+    "totalRemito": 304320.9,
+    "diff": -34278.72,
+    "seller": "Adrian Gange",
+    "sellerId": "vendedor_adriangange_1"
+  },
+  {
+    "sale_number": "N138-12-06-2026",
+    "remito": "R-2026-00135",
+    "cliente": "TODO LIMPIO",
+    "totalVenta": 125242.7,
+    "totalRemito": 151614.65,
+    "diff": -26371.95,
+    "seller": "ADRIAN (3)",
+    "sellerId": "vendedor_adriangange_1"
+  },
+  {
+    "sale_number": "N97-06-06-2026",
+    "remito": "R-2026-00101",
+    "cliente": "SUPERMERCADO MT",
+    "totalVenta": 299634.01,
+    "totalRemito": 322775.6,
+    "diff": -23141.59,
+    "seller": "NICOLAS (4)",
+    "sellerId": "vendedor_saldivianicolas_1"
+  },
+  {
+    "sale_number": "N60-05-06-2026",
+    "remito": "R-2026-00062",
+    "cliente": "SUPERMERCADO ESTRELLA",
+    "totalVenta": 48866.79,
+    "totalRemito": 70468.22,
+    "diff": -21601.43,
+    "seller": "ADRIAN (3)",
+    "sellerId": "vendedor_adriangange_1"
+  },
+  {
+    "sale_number": "N35-03-06-2026",
+    "remito": "R-2026-00020",
+    "cliente": "SUPERMERCADO PRIMAVERA",
+    "totalVenta": 949667.93,
+    "totalRemito": 968870.09,
+    "diff": -19202.16,
+    "seller": "Adrian Gange",
+    "sellerId": "vendedor_adriangange_1"
+  },
+  {
+    "sale_number": "N73-05-06-2026",
+    "remito": "R-2026-00064",
+    "cliente": "BONNIN LORENA",
+    "totalVenta": 157527.94,
+    "totalRemito": 176096.82,
+    "diff": -18568.88,
+    "seller": "NICOLAS (4)",
+    "sellerId": "vendedor_saldivianicolas_1"
+  },
+  {
+    "sale_number": "N83-06-06-2026",
+    "remito": "R-2026-00098",
+    "cliente": "ALMACEN EL BURRO",
+    "totalVenta": 89089.49,
+    "totalRemito": 107267.26,
+    "diff": -18177.77,
+    "seller": "ADRIAN (3)",
+    "sellerId": "vendedor_adriangange_1"
+  },
+  {
+    "sale_number": "N39-04-06-2026",
+    "remito": "R-2026-00050",
+    "cliente": "PETRONI NICOLAS",
+    "totalVenta": 143502.76,
+    "totalRemito": 159473.31,
+    "diff": -15970.55,
+    "seller": "Adrian Gange",
+    "sellerId": "vendedor_adriangange_1"
+  },
+  {
+    "sale_number": "N61-05-06-2026",
+    "remito": "R-2026-00063",
+    "cliente": "BRUN JULIA",
+    "totalVenta": 122522.77,
+    "totalRemito": 138330.35,
+    "diff": -15807.58,
+    "seller": "ADRIAN (3)",
+    "sellerId": "vendedor_adriangange_1"
+  },
+  {
+    "sale_number": "N142-12-06-2026",
+    "remito": "R-2026-00142",
+    "cliente": "KIOSCO CABE",
+    "totalVenta": 33677.44,
+    "totalRemito": 48884.92,
+    "diff": -15207.48,
+    "seller": "NICOLAS (4)",
+    "sellerId": "vendedor_saldivianicolas_1"
+  },
+  {
+    "sale_number": "N52-04-06-2026",
+    "remito": "R-2026-00057",
+    "cliente": "VEREDA CESAR GASTON",
+    "totalVenta": 67995.63,
+    "totalRemito": 81290.24,
+    "diff": -13294.61,
+    "seller": "ADRIAN (3)",
+    "sellerId": "vendedor_adriangange_1"
+  },
+  {
+    "sale_number": "N131-11-06-2026",
+    "remito": "R-2026-00147",
+    "cliente": "LEAL RAUL",
+    "totalVenta": 153187.14,
+    "totalRemito": 166068.14,
+    "diff": -12881,
+    "seller": "ADRIAN (3)",
+    "sellerId": "vendedor_adriangange_1"
+  },
+  {
+    "sale_number": "N11-02-06-2026",
+    "remito": "R-2026-00001",
+    "cliente": "ALMACEN EL BURRO",
+    "totalVenta": 192466.69,
+    "totalRemito": 204711.68,
+    "diff": -12244.99,
+    "seller": "Adrian Gange",
+    "sellerId": "vendedor_adriangange_1"
+  },
+  {
+    "sale_number": "N50-04-06-2026",
+    "remito": "R-2026-00048",
+    "cliente": "SUPERMERCADO LARROQUE",
+    "totalVenta": 294744.2,
+    "totalRemito": 306658.7,
+    "diff": -11914.5,
+    "seller": "NICOLAS (4)",
+    "sellerId": "vendedor_saldivianicolas_1"
+  },
+  {
+    "sale_number": "N157-12-06-2026",
+    "remito": "R-2026-00168",
+    "cliente": "RODRIGUEZ ELIANA",
+    "totalVenta": 56992.95,
+    "totalRemito": 68761.57,
+    "diff": -11768.62,
+    "seller": "ADRIAN (3)",
+    "sellerId": "vendedor_adriangange_1"
+  },
+  {
+    "sale_number": "N46-04-06-2026",
+    "remito": "R-2026-00054",
+    "cliente": "MAXIKOSCO TOM",
+    "totalVenta": 134988.27,
+    "totalRemito": 144730.71,
+    "diff": -9742.44,
+    "seller": "NICOLAS (4)",
+    "sellerId": "vendedor_saldivianicolas_1"
+  },
+  {
+    "sale_number": "N71-05-06-2026",
+    "remito": "R-2026-00071",
+    "cliente": "Zapata Marisa",
+    "totalVenta": 64046.53,
+    "totalRemito": 73493.83,
+    "diff": -9447.3,
+    "seller": "ADRIAN (3)",
+    "sellerId": "vendedor_adriangange_1"
+  },
+  {
+    "sale_number": "N6-02-06-2026",
+    "remito": "R-2026-00001",
+    "cliente": "CHE LIMP",
+    "totalVenta": 25989.94,
+    "totalRemito": 35073.75,
+    "diff": -9083.81,
+    "seller": "Adrian Gange",
+    "sellerId": "vendedor_adriangange_1"
+  },
+  {
+    "sale_number": "N42-04-06-2026",
+    "remito": "R-2026-00051",
+    "cliente": "TODO LIMPIO",
+    "totalVenta": 89241.89,
+    "totalRemito": 97226.47,
+    "diff": -7984.58,
+    "seller": "ADRIAN (3)",
+    "sellerId": "vendedor_adriangange_1"
+  },
+  {
+    "sale_number": "N58-04-06-2026",
+    "remito": "R-2026-00053",
+    "cliente": "PUCARA",
+    "totalVenta": 70170,
+    "totalRemito": 76740.48,
+    "diff": -6570.48,
+    "seller": "NICOLAS (4)",
+    "sellerId": "vendedor_saldivianicolas_1"
+  },
+  {
+    "sale_number": "N18-03-06-2026",
+    "remito": "R-2026-00026",
+    "cliente": "FRIOTEKA 9 DE JULIO",
+    "totalVenta": 474775.47,
+    "totalRemito": 480701.29,
+    "diff": -5925.82,
+    "seller": "Nicolas Saldavia",
+    "sellerId": "vendedor_saldivianicolas_1"
+  },
+  {
+    "sale_number": "N102-06-06-2026",
+    "remito": "R-2026-00082",
+    "cliente": "MOREL MAITENA****",
+    "totalVenta": 84472.83,
+    "totalRemito": 90178.92,
+    "diff": -5706.09,
+    "seller": "NICOLAS (4)",
+    "sellerId": "vendedor_saldivianicolas_1"
+  },
+  {
+    "sale_number": "N143-12-06-2026",
+    "remito": "R-2026-00145",
+    "cliente": "BOSTON SHOP",
+    "totalVenta": 148626.95,
+    "totalRemito": 152149.46,
+    "diff": -3522.51,
+    "seller": "NICOLAS (4)",
+    "sellerId": "vendedor_saldivianicolas_1"
+  },
+  {
+    "sale_number": "N19-03-06-2026",
+    "remito": "R-2026-00017",
+    "cliente": "KIOSCO MARI MORENO",
+    "totalVenta": 63521.66,
+    "totalRemito": 65794.06,
+    "diff": -2272.4,
+    "seller": "Nicolas Saldavia",
+    "sellerId": "vendedor_saldivianicolas_1"
+  },
+  {
+    "sale_number": "N89-06-06-2026",
+    "remito": "R-2026-00092",
+    "cliente": "ANDRE JUANA MARGARITA",
+    "totalVenta": 93815.14,
+    "totalRemito": 96066.26,
+    "diff": -2251.12,
+    "seller": "LEONARDO (7)",
+    "sellerId": "vendedor_lucasbenitez_1"
+  },
+  {
+    "sale_number": "N125-11-06-2026",
+    "remito": "R-2026-00132",
+    "cliente": "KIOSCO 2.3",
+    "totalVenta": 278579.67,
+    "totalRemito": 280495.51,
+    "diff": -1915.84,
+    "seller": "NICOLAS (4)",
+    "sellerId": "vendedor_saldivianicolas_1"
+  },
+  {
+    "sale_number": "N150-12-06-2026",
+    "remito": "R-2026-00172",
+    "cliente": "CARNICERIA DON GARIN",
+    "totalVenta": 62707.13,
+    "totalRemito": 64616.86,
+    "diff": -1909.73,
+    "seller": "ADRIAN (3)",
+    "sellerId": "vendedor_adriangange_1"
+  },
+  {
+    "sale_number": "N140-12-06-2026",
+    "remito": "R-2026-00138",
+    "cliente": "GARNIER PAOLA",
+    "totalVenta": 200328.67,
+    "totalRemito": 202027.95,
+    "diff": -1699.28,
+    "seller": "NICOLAS (4)",
+    "sellerId": "vendedor_saldivianicolas_1"
+  },
+  {
+    "sale_number": "N126-11-06-2026",
+    "remito": "R-2026-00130",
+    "cliente": "QUITTET MABEL",
+    "totalVenta": 168867.91,
+    "totalRemito": 170365.28,
+    "diff": -1497.37,
+    "seller": "ADRIAN (3)",
+    "sellerId": "vendedor_adriangange_1"
+  },
+  {
+    "sale_number": "N74-05-06-2026",
+    "remito": "R-2026-00074",
+    "cliente": "SUPERMERCADOR FAMILIAR",
+    "totalVenta": 196391.24,
+    "totalRemito": 197880.58,
+    "diff": -1489.34,
+    "seller": "ADRIAN (3)",
+    "sellerId": "vendedor_adriangange_1"
+  },
+  {
+    "sale_number": "N130-11-06-2026",
+    "remito": "R-2026-00143",
+    "cliente": "ORLANDO RATO",
+    "totalVenta": 126688.74,
+    "totalRemito": 127862.91,
+    "diff": -1174.17,
+    "seller": "NICOLAS (4)",
+    "sellerId": "vendedor_saldivianicolas_1"
+  },
+  {
+    "sale_number": "N116-09-06-2026",
+    "remito": "R-2026-00119",
+    "cliente": "DOMINGUEZ MARIELA",
+    "totalVenta": 26358.9,
+    "totalRemito": 25822.33,
+    "diff": 536.57,
+    "seller": "ADRIAN (3)",
+    "sellerId": "vendedor_adriangange_1"
+  },
+  {
+    "sale_number": "N119-09-06-2026",
+    "remito": "R-2026-00109",
+    "cliente": "ESCALADA MARIA CLAUDIA",
+    "totalVenta": 53764.93,
+    "totalRemito": 53411.85,
+    "diff": 353.08,
+    "seller": "ADRIAN (3)",
+    "sellerId": "vendedor_adriangange_1"
+  },
+  {
+    "sale_number": "N167-12-06-2026",
+    "remito": "R-2026-00167",
+    "cliente": "BRUN JULIA",
+    "totalVenta": 162827.16,
+    "totalRemito": 162482.03,
+    "diff": 345.13,
+    "seller": "ADRIAN (3)",
+    "sellerId": "vendedor_adriangange_1"
+  },
+  {
+    "sale_number": "N164-12-06-2026",
+    "remito": "R-2026-00175",
+    "cliente": "DESPENSA DANIMAR",
+    "totalVenta": 172281.31,
+    "totalRemito": 172059.19,
+    "diff": 222.12,
+    "seller": "NICOLAS (4)",
+    "sellerId": "vendedor_saldivianicolas_1"
+  },
+  {
+    "sale_number": "N106-09-06-2026",
+    "remito": "R-2026-00113",
+    "cliente": "JESICA SEGOVIA",
+    "totalVenta": 25642.33,
+    "totalRemito": 25430.48,
+    "diff": 211.85,
+    "seller": "ADRIAN (3)",
+    "sellerId": "vendedor_adriangange_1"
+  },
+  {
+    "sale_number": "N162-12-06-2026",
+    "remito": "R-2026-00169",
+    "cliente": "JESICA SEGOVIA",
+    "totalVenta": 43669.94,
+    "totalRemito": 43526.3,
+    "diff": 143.64,
+    "seller": "ADRIAN (3)",
+    "sellerId": "vendedor_adriangange_1"
+  },
+  {
+    "sale_number": "N13-02-06-2026",
+    "remito": "R-2026-00001",
+    "cliente": "BRUN JULIA",
+    "totalVenta": 76038.9,
+    "totalRemito": 75926.26,
+    "diff": 112.64,
+    "seller": "Adrian Gange",
+    "sellerId": "vendedor_adriangange_1"
+  },
+  {
+    "sale_number": "N165-12-06-2026",
+    "remito": "R-2026-00148",
+    "cliente": "LEAL RAUL 2",
+    "totalVenta": 340967.22,
+    "totalRemito": 340919.14,
+    "diff": 48.08,
+    "seller": "ADRIAN (3)",
+    "sellerId": "vendedor_adriangange_1"
+  }
+]

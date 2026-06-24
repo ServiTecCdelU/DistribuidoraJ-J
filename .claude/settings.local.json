@@ -23,7 +23,17 @@
       "Bash(taskkill //F //PID 17280)",
       "Bash(taskkill //F //PID 13004)",
       "Bash(grep -l \"MainLayout\" \"/c/Users/Emanuel/Documents/Proyectos/Distribuidora J&J/app/\"*\"/page.tsx\")",
-      "Bash(xargs grep:*)"
+      "Bash(xargs grep:*)",
+      "PowerShell(npm run *)",
+      "PowerShell(npx --yes ui-skills start 2>&1 | Select-Object -First 60)",
+      "Bash(grep -vE '^\\\\s*[+-]\\\\s*[{}\\(\\)></]*\\\\s*$')",
+      "Bash(git merge *)",
+      "Bash(ls app/api/generate-pdf/)",
+      "Bash(head -60 app/api/generate-pdf/route.ts)"
     ]
-  }
+  },
+  "enabledMcpjsonServers": [
+    "supabase"
+  ],
+  "enableAllProjectMcpServers": true
 }

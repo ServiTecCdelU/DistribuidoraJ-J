@@ -1,0 +1,305 @@
+[
+  {
+    "sale_number": "N161-12-06-2026",
+    "sale_id": "venta_matheydoretfabricio_2",
+    "remito": "R-2026-00164",
+    "cliente": "MATHEY DORET FABRICIO",
+    "seller": "NICOLAS (4)",
+    "totalVenta": 457747.67,
+    "deltaTotal": 2331.15,
+    "items": [
+      {
+        "name": "YERBA X 500G MAÑANITA",
+        "cod": "0102075",
+        "cant": 10,
+        "precioVenta": 2035.68,
+        "precioRemito": 1998.66,
+        "deltaLinea": 370.2
+      },
+      {
+        "name": "YERBA X 500G UNION",
+        "cod": "0102074",
+        "cant": 10,
+        "precioVenta": 2035.68,
+        "precioRemito": 1998.66,
+        "deltaLinea": 370.2
+      },
+      {
+        "name": "YERBA X 500G TARAGUI",
+        "cod": "0102073",
+        "cant": 10,
+        "precioVenta": 2035.68,
+        "precioRemito": 1998.66,
+        "deltaLinea": 370.2
+      },
+      {
+        "name": "ACEITE X 900CC COSTA DEL SOL",
+        "cod": "0106352",
+        "cant": 15,
+        "precioVenta": 3483.66,
+        "precioRemito": 3402.29,
+        "deltaLinea": 1220.55
+      }
+    ]
+  },
+  {
+    "sale_number": "N145-12-06-2026",
+    "sale_id": "venta_maxikoscotom_2",
+    "remito": "R-2026-00139",
+    "cliente": "MAXIKOSCO TOM",
+    "seller": "NICOLAS (4)",
+    "totalVenta": 307073.32,
+    "deltaTotal": 951.26,
+    "items": [
+      {
+        "name": "LAVANDINA X1LT SEDILEE",
+        "cod": "0101572",
+        "cant": 6,
+        "precioVenta": 753.94,
+        "precioRemito": 749.81,
+        "deltaLinea": 24.78
+      },
+      {
+        "name": "ROLLO COCINA 1X200P SIMBA",
+        "cod": "0209870",
+        "cant": 8,
+        "precioVenta": 1295.34,
+        "precioRemito": 1233.57,
+        "deltaLinea": 494.16
+      },
+      {
+        "name": "GRASA X 500G PORCINA ESANI",
+        "cod": "0011865",
+        "cant": 4,
+        "precioVenta": 3001.86,
+        "precioRemito": 2893.78,
+        "deltaLinea": 432.32
+      }
+    ]
+  },
+  {
+    "sale_number": "N116-09-06-2026",
+    "sale_id": "venta_dominguezmariela_2",
+    "remito": "R-2026-00119",
+    "cliente": "DOMINGUEZ MARIELA",
+    "seller": "ADRIAN (3)",
+    "totalVenta": 26358.9,
+    "deltaTotal": 536.57,
+    "items": [
+      {
+        "name": "GALLETITA CILO X400G LENGÜITA",
+        "cod": "0102290",
+        "cant": 4,
+        "precioVenta": 1460.24,
+        "precioRemito": 1321.95,
+        "deltaLinea": 536.57
+      }
+    ]
+  },
+  {
+    "sale_number": "N119-09-06-2026",
+    "sale_id": "venta_escaladamariaclaudia_2",
+    "remito": "R-2026-00109",
+    "cliente": "ESCALADA MARIA CLAUDIA",
+    "seller": "ADRIAN (3)",
+    "totalVenta": 53764.93,
+    "deltaTotal": 353.08,
+    "items": [
+      {
+        "name": "ACEITE X 900CC LEIRA GIRASOL",
+        "cod": "0104908",
+        "cant": 5,
+        "precioVenta": 2574.09,
+        "precioRemito": 2501.29,
+        "deltaLinea": 353.08
+      }
+    ]
+  },
+  {
+    "sale_number": "N167-12-06-2026",
+    "sale_id": "venta_brunjulia_3",
+    "remito": "R-2026-00167",
+    "cliente": "BRUN JULIA",
+    "seller": "ADRIAN (3)",
+    "totalVenta": 162827.16,
+    "deltaTotal": 345.13,
+    "items": [
+      {
+        "name": "SUAVIZANTE CLOW X900ML FRESH",
+        "cod": "0101602",
+        "cant": 3,
+        "precioVenta": 1540.37,
+        "precioRemito": 1481.07,
+        "deltaLinea": 172.56
+      },
+      {
+        "name": "SUAVIZANTE CLOW X900ML INTENSE",
+        "cod": "0102676",
+        "cant": 3,
+        "precioVenta": 1540.37,
+        "precioRemito": 1481.07,
+        "deltaLinea": 172.56
+      }
+    ]
+  },
+  {
+    "sale_number": "N164-12-06-2026",
+    "sale_id": "venta_despensadanimar_2",
+    "remito": "R-2026-00175",
+    "cliente": "DESPENSA DANIMAR",
+    "seller": "NICOLAS (4)",
+    "totalVenta": 172281.31,
+    "deltaTotal": 222.12,
+    "items": [
+      {
+        "name": "YERBA X 500G TARAGUI",
+        "cod": "0102073",
+        "cant": 6,
+        "precioVenta": 2035.68,
+        "precioRemito": 1998.66,
+        "deltaLinea": 222.12
+      }
+    ]
+  },
+  {
+    "sale_number": "N106-09-06-2026",
+    "sale_id": "venta_jesicasegovia_1",
+    "remito": "R-2026-00113",
+    "cliente": "JESICA SEGOVIA",
+    "seller": "ADRIAN (3)",
+    "totalVenta": 25642.33,
+    "deltaTotal": 211.85,
+    "items": [
+      {
+        "name": "ACEITE X 900CC LEIRA GIRASOL",
+        "cod": "0104908",
+        "cant": 3,
+        "precioVenta": 2574.09,
+        "precioRemito": 2501.29,
+        "deltaLinea": 211.85
+      }
+    ]
+  },
+  {
+    "sale_number": "N146-12-06-2026",
+    "sale_id": "venta_villagranmaximiliano_2",
+    "remito": "R-2026-00151",
+    "cliente": "VILLAGRAN MAXIMILIANO",
+    "seller": "ADRIAN (3)",
+    "totalVenta": 389300.57,
+    "deltaTotal": 184.8,
+    "items": [
+      {
+        "name": "BIZCOCHO DON SATUR X200G DULCE",
+        "cod": "0104861",
+        "cant": 2,
+        "precioVenta": 1179.95,
+        "precioRemito": 1133.75,
+        "deltaLinea": 92.4
+      },
+      {
+        "name": "BIZCOCHO DON SATUR X200G SALADO",
+        "cod": "0103210",
+        "cant": 2,
+        "precioVenta": 1179.95,
+        "precioRemito": 1133.75,
+        "deltaLinea": 92.4
+      }
+    ]
+  },
+  {
+    "sale_number": "N169-12-06-2026",
+    "sale_id": "venta_liporacepablo_1",
+    "remito": "R-2026-00171",
+    "cliente": "LIPORACE PABLO",
+    "seller": "NICOLAS (4)",
+    "totalVenta": 187107.03,
+    "deltaTotal": 184.8,
+    "items": [
+      {
+        "name": "BIZCOCHO DON SATUR X200G NEGRITO",
+        "cod": "0103209",
+        "cant": 4,
+        "precioVenta": 1179.95,
+        "precioRemito": 1133.75,
+        "deltaLinea": 184.8
+      }
+    ]
+  },
+  {
+    "sale_number": "N162-12-06-2026",
+    "sale_id": "venta_jesicasegovia_2",
+    "remito": "R-2026-00169",
+    "cliente": "JESICA SEGOVIA",
+    "seller": "ADRIAN (3)",
+    "totalVenta": 43669.94,
+    "deltaTotal": 143.64,
+    "items": [
+      {
+        "name": "YERBA X 500G MAÑANITA",
+        "cod": "0102075",
+        "cant": 4,
+        "precioVenta": 2035.68,
+        "precioRemito": 1998.66,
+        "deltaLinea": 143.64
+      }
+    ]
+  },
+  {
+    "sale_number": "N138-12-06-2026",
+    "sale_id": "venta_todolimpio_2",
+    "remito": "R-2026-00135",
+    "cliente": "TODO LIMPIO",
+    "seller": "ADRIAN (3)",
+    "totalVenta": 125242.7,
+    "deltaTotal": 48.07,
+    "items": [
+      {
+        "name": "LAVANDINA X1LT SEDILEE",
+        "cod": "0101572",
+        "cant": 12,
+        "precioVenta": 753.94,
+        "precioRemito": 749.81,
+        "deltaLinea": 48.07
+      }
+    ]
+  },
+  {
+    "sale_number": "N165-12-06-2026",
+    "sale_id": "venta_lealraul2_1",
+    "remito": "R-2026-00148",
+    "cliente": "LEAL RAUL 2",
+    "seller": "ADRIAN (3)",
+    "totalVenta": 340967.22,
+    "deltaTotal": 48.07,
+    "items": [
+      {
+        "name": "LAVANDINA X1LT SEDILEE",
+        "cod": "0101572",
+        "cant": 12,
+        "precioVenta": 753.94,
+        "precioRemito": 749.81,
+        "deltaLinea": 48.07
+      }
+    ]
+  },
+  {
+    "sale_number": "N150-12-06-2026",
+    "sale_id": "venta_carniceriadongarin_3",
+    "remito": "R-2026-00172",
+    "cliente": "CARNICERIA DON GARIN",
+    "seller": "ADRIAN (3)",
+    "totalVenta": 62707.13,
+    "deltaTotal": 47.08,
+    "items": [
+      {
+        "name": "LAVANDINA X1LT SEDILEE",
+        "cod": "0101572",
+        "cant": 12,
+        "precioVenta": 753.94,
+        "precioRemito": 749.81,
+        "deltaLinea": 47.08
+      }
+    ]
+  }
+]
