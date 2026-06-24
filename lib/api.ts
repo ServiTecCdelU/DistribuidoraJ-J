@@ -42,6 +42,7 @@ import {
   addDeudaMayorista,
   addPagoMayorista,
   pagarBoleta,
+  deleteTransaccionMayorista,
 } from '@/services/mayorista-cuenta-service'
 import {
   createSeller,
@@ -280,6 +281,7 @@ export const mayoristaCuentaApi = {
   addDeuda: addDeudaMayorista,
   addPago: addPagoMayorista,
   pagarBoleta,
+  eliminar: deleteTransaccionMayorista,
 }
 
 export const faltantesApi = {

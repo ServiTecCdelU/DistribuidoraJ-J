@@ -48,7 +48,7 @@ import {
   Users, FileCheck, CheckCircle2, XCircle, Clock, Loader2, ExternalLink,
   ChevronLeft, DollarSign, ArrowDownCircle, ArrowUpCircle, Search, X,
   Banknote, CreditCard, Image as ImageIcon, AlertTriangle, Ban, Printer,
-  History, RotateCcw, Tag, Receipt, Download, SlidersHorizontal,
+  History, RotateCcw, Tag, Receipt, Download, SlidersHorizontal, Trash2,
 } from 'lucide-react'
 import { toast } from 'sonner'
 
@@ -511,6 +511,33 @@ export default function CuentaCorrientePage() {
     } catch (err: any) {
       toast.error(err.message || 'Error al registrar pago')
     } finally { setMayProcessing(false) }
+  }
+
+  // Eliminar un movimiento mayorista cargado por error (deuda o pago).
+  const [mayTxToDelete, setMayTxToDelete] = useState<TransaccionMayorista | null>(null)
+  const [mayDeleting, setMayDeleting] = useState(false)
+  const handleEliminarMayTx = async () => {
+    if (!mayTxToDelete || !canManage) return
+    const tx = mayTxToDelete
+    setMayDeleting(true)
+    try {
+      await mayoristaCuentaApi.eliminar(tx.id)
+      setMayTxs((prev) => {
+        let next = prev.filter((t) => t.id !== tx.id)
+        // Si era un pago imputado a una boleta, restaurar el saldo de esa boleta en la lista.
+        if (tx.type === 'payment' && tx.debtId) {
+          next = next.map((t) =>
+            t.id === tx.debtId ? { ...t, saldo: Math.min(t.amount, (t.saldo ?? 0) + tx.amount) } : t
+          )
+        }
+        return next
+      })
+      setMayBalance((prev) => (tx.type === 'debt' ? prev - tx.amount : prev + tx.amount))
+      setMayTxToDelete(null)
+      toast.success('Movimiento eliminado')
+    } catch (err: any) {
+      toast.error(err.message || 'No se pudo eliminar')
+    } finally { setMayDeleting(false) }
   }
 
   const handleRegisterMayoristaPayment = async () => {
@@ -1798,6 +1825,7 @@ ${bloques}
                         <TableHead className="text-xs py-2 text-right">Debe</TableHead>
                         <TableHead className="text-xs py-2 text-right">Haber</TableHead>
                         <TableHead className="text-xs py-2 text-center">Estado</TableHead>
+                        <TableHead className="text-xs py-2 text-center w-10"></TableHead>
                       </TableRow>
                     </TableHeader>
                     <TableBody>
@@ -1833,6 +1861,18 @@ ${bloques}
                               <span className="text-muted-foreground">—</span>
                             )}
                           </TableCell>
+                          <TableCell className="py-2 text-center">
+                            {canManage && (
+                              <button
+                                type="button"
+                                onClick={() => setMayTxToDelete(tx)}
+                                className="text-muted-foreground hover:text-red-600 transition-colors"
+                                title="Eliminar movimiento"
+                              >
+                                <Trash2 className="h-3.5 w-3.5" />
+                              </button>
+                            )}
+                          </TableCell>
                         </TableRow>
                       ))}
                     </TableBody>
@@ -1841,6 +1881,33 @@ ${bloques}
               </Card>
             )}
           </div>
+
+          {/* Dialog confirmar eliminación de movimiento mayorista */}
+          <Dialog open={!!mayTxToDelete} onOpenChange={(open) => !open && setMayTxToDelete(null)}>
+            <DialogContent className="sm:max-w-sm">
+              <DialogHeader>
+                <DialogTitle>Eliminar movimiento</DialogTitle>
+              </DialogHeader>
+              {mayTxToDelete && (
+                <div className="space-y-2 text-sm">
+                  <p className="text-muted-foreground">¿Seguro que querés eliminar este movimiento? Esta acción no se puede deshacer.</p>
+                  <div className="rounded-lg border p-3 space-y-1">
+                    <p className="font-medium">{mayTxToDelete.description}</p>
+                    <p className="text-xs text-muted-foreground">
+                      {formatDate(mayTxToDelete.date)} · {mayTxToDelete.type === 'debt' ? 'Deuda' : 'Pago'} · {formatCurrency(mayTxToDelete.amount)}
+                    </p>
+                  </div>
+                </div>
+              )}
+              <DialogFooter>
+                <Button variant="outline" onClick={() => setMayTxToDelete(null)} disabled={mayDeleting}>Cancelar</Button>
+                <Button variant="destructive" onClick={handleEliminarMayTx} disabled={mayDeleting}>
+                  {mayDeleting && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
+                  Eliminar
+                </Button>
+              </DialogFooter>
+            </DialogContent>
+          </Dialog>
 
           {/* Dialog cargar deuda mayorista */}
           <Dialog open={mayDeudaDialog} onOpenChange={(open) => !open && setMayDeudaDialog(false)}>

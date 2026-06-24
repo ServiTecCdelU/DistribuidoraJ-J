@@ -47,6 +47,10 @@ cada una con su balance, sus boletas y sus pagos independientes.
   `date` admite `YYYY-MM-DD` (mediodía local para evitar desfase).
 - `pagarBoleta({ debtId, amount, description? })` — paga una boleta puntual y baja su `saldo`.
   El pago **hereda la distribución de la boleta**.
+- `eliminar(id)` (`deleteTransaccionMayorista`) — borra un movimiento cargado por error (botón papelera
+  en la tabla). Una **deuda** solo se borra si no tiene pagos aplicados (saldo intacto), para no dejar
+  pagos huérfanos; un **pago** restaura el `saldo` de la boleta a la que se había imputado. El balance
+  se recalcula solo (Σ deudas − Σ pagos). Confirmación con diálogo.
 - `addPago({ amount, distribucion, description? })` — pago genérico (legacy).
 - Balance = Σ deudas − Σ pagos, **por distribución**.
 - Import de remito (`RemitoImportModal`) detecta la distribución del destinatario

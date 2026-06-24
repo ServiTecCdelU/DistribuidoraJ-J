@@ -135,6 +135,51 @@ export const addPagoMayorista = async (data: {
   return { ...row, type: 'payment', date: new Date(), distribucion: data.distribucion }
 }
 
+// Elimina un movimiento (deuda o pago) cargado por error.
+// - Deuda: solo si NO tiene pagos aplicados (saldo intacto), para no dejar pagos huérfanos.
+// - Pago: restaura el saldo de la boleta a la que se había imputado.
+// El balance se recalcula solo (es Σ deudas − Σ pagos).
+export const deleteTransaccionMayorista = async (id: string): Promise<void> => {
+  const { data: tx, error } = await supabase
+    .from('transacciones_mayorista')
+    .select('id, type, amount, saldo, debt_id')
+    .eq('id', id)
+    .single()
+  if (error || !tx) throw new Error('Movimiento no encontrado')
+
+  if (tx.type === 'debt') {
+    const amount = Number(tx.amount) || 0
+    const saldo = tx.saldo != null ? Number(tx.saldo) : amount
+    const { data: pagos } = await supabase
+      .from('transacciones_mayorista')
+      .select('id')
+      .eq('debt_id', id)
+      .limit(1)
+    if ((pagos && pagos.length > 0) || saldo < amount) {
+      throw new Error('La deuda tiene pagos aplicados. Eliminá primero los pagos.')
+    }
+    const { error: delErr } = await supabase.from('transacciones_mayorista').delete().eq('id', id)
+    if (delErr) throw delErr
+    return
+  }
+
+  // Pago: devolver el saldo a la boleta imputada antes de borrar.
+  if (tx.debt_id) {
+    const { data: debt } = await supabase
+      .from('transacciones_mayorista')
+      .select('saldo, amount')
+      .eq('id', tx.debt_id)
+      .single()
+    if (debt) {
+      const cap = Number(debt.amount) || 0
+      const nuevo = Math.min(cap, (Number(debt.saldo) || 0) + (Number(tx.amount) || 0))
+      await supabase.from('transacciones_mayorista').update({ saldo: nuevo }).eq('id', tx.debt_id)
+    }
+  }
+  const { error: delErr } = await supabase.from('transacciones_mayorista').delete().eq('id', id)
+  if (delErr) throw delErr
+}
+
 export const getBalanceMayorista = async (distribucion?: Distribucion): Promise<number> => {
   const txs = await getTransaccionesMayorista(distribucion)
   return txs.reduce((acc, tx) => {
