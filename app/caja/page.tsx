@@ -437,6 +437,7 @@ export default function CajaPage() {
   // Búsqueda por cliente: muestra en qué cajas aparece y sus compras.
   const [searchClient, setSearchClient] = useState("");
   const [clienteVentasPorCaja, setClienteVentasPorCaja] = useState<Record<string, VentaClienteCaja[]>>({});
+  const [clienteVentasSinRemito, setClienteVentasSinRemito] = useState<VentaClienteCaja[]>([]);
   const [buscandoCliente, setBuscandoCliente] = useState(false);
   const HISTORIAL_PAGE_SIZE = 10;
 
@@ -798,25 +799,30 @@ export default function CajaPage() {
     try {
       const { data: ventas } = await supabase
         .from("ventas")
-        .select("id, sale_number, client_name, total, payment_type, payment_method, created_at")
+        .select("id, sale_number, client_name, total, payment_type, payment_method, created_at, remito_number")
         .ilike("client_name", `%${q}%`)
-        .not("remito_number", "is", null)
         .order("created_at", { ascending: false });
 
       const lista = ventas || [];
+      const toVenta = (v: any): VentaClienteCaja => ({
+        id: v.id,
+        saleNumber: v.sale_number ?? undefined,
+        clientName: v.client_name ?? undefined,
+        total: Number(v.total) || 0,
+        paymentType: v.payment_type ?? undefined,
+        paymentMethod: v.payment_method ?? undefined,
+        createdAt: v.created_at,
+      });
+
+      // Con remito → entran en caja. Sin remito → sección aparte (no cuentan en caja).
+      const conRemito = lista.filter((v) => v.remito_number);
+      setClienteVentasSinRemito(lista.filter((v) => !v.remito_number).map(toVenta));
+
       const porDia = new Map<string, VentaClienteCaja[]>();
-      for (const v of lista) {
+      for (const v of conRemito) {
         const k = dayKeyOf(new Date(v.created_at));
         const arr = porDia.get(k) ?? [];
-        arr.push({
-          id: v.id,
-          saleNumber: v.sale_number ?? undefined,
-          clientName: v.client_name ?? undefined,
-          total: Number(v.total) || 0,
-          paymentType: v.payment_type ?? undefined,
-          paymentMethod: v.payment_method ?? undefined,
-          createdAt: v.created_at,
-        });
+        arr.push(toVenta(v));
         porDia.set(k, arr);
       }
 
@@ -827,7 +833,7 @@ export default function CajaPage() {
       }
 
       // Traer las cajas del rango de fechas y quedarnos con las jornadas que tienen ventas del cliente.
-      const fechas = lista.map((v) => new Date(v.created_at).getTime());
+      const fechas = conRemito.map((v) => new Date(v.created_at).getTime());
       const min = new Date(Math.min(...fechas)); min.setHours(0, 0, 0, 0);
       const max = new Date(Math.max(...fechas)); max.setHours(23, 59, 59, 999);
       const { data: cajas } = await supabase
@@ -851,6 +857,7 @@ export default function CajaPage() {
   const limpiarBusquedaCliente = useCallback(() => {
     setSearchClient("");
     setClienteVentasPorCaja({});
+    setClienteVentasSinRemito([]);
     loadHistorial(undefined, 0);
   }, [loadHistorial]);
 
@@ -1661,6 +1668,7 @@ export default function CajaPage() {
                       setHistorialPage(0);
                       setSearchClient("");
                       setClienteVentasPorCaja({});
+                      setClienteVentasSinRemito([]);
                       loadHistorial(date, 0);
                     }}
                     disabled={(date) => date > new Date()}
@@ -1681,6 +1689,41 @@ export default function CajaPage() {
                 </Button>
               )}
             </div>
+
+            {/* Ventas SIN remito del cliente (no entran en ninguna caja) */}
+            {searchClient && clienteVentasSinRemito.length > 0 && (
+              <Card className="border-amber-400/40 bg-amber-50/40">
+                <CardHeader className="pb-2">
+                  <CardTitle className="text-sm flex items-center gap-2 text-amber-700">
+                    <AlertTriangle className="h-4 w-4" />
+                    Ventas sin remito de "{searchClient}" ({clienteVentasSinRemito.length})
+                  </CardTitle>
+                  <p className="text-xs text-muted-foreground">No entran en ninguna caja (suelen ser cobros duplicados o incompletos).</p>
+                </CardHeader>
+                <CardContent>
+                  <div className="space-y-1 max-h-60 overflow-y-auto">
+                    {clienteVentasSinRemito.map((v) => {
+                      const pago = v.paymentType === "cash"
+                        ? (v.paymentMethod === "transferencia" ? "Transf." : "Efectivo")
+                        : v.paymentType === "credit" ? "Cta.Cte." : "Mixto";
+                      return (
+                        <div key={v.id} className="flex items-center justify-between py-1.5 border-b border-amber-200/50 last:border-0 text-sm gap-2">
+                          <div className="flex items-center gap-2 min-w-0 flex-1">
+                            <span className="font-medium truncate">{v.clientName || "Cons. Final"}</span>
+                            {v.saleNumber && <span className="text-xs text-muted-foreground shrink-0">#{v.saleNumber}</span>}
+                            <span className="text-xs text-muted-foreground shrink-0">{formatDateShort(new Date(v.createdAt))} {formatTimeStr(new Date(v.createdAt))}</span>
+                          </div>
+                          <div className="flex items-center gap-2 shrink-0">
+                            <Badge className="text-[10px] border-0 bg-amber-100 text-amber-800">{pago}</Badge>
+                            <span className="font-semibold text-right tabular-nums">{formatCurrency(v.total || 0)}</span>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </CardContent>
+              </Card>
+            )}
 
             {/* Detalle de caja seleccionada */}
             {selectedHistorial && (
