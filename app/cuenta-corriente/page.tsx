@@ -850,7 +850,7 @@ table.mov{width:100%;border-collapse:collapse;table-layout:fixed}
 @media print{body{padding:0}}
 </style></head><body>
 <div class="top">
-  <div class="brand"><h1>Distribuidora Patricia</h1><div class="sub">Estado de Cuenta Corriente</div></div>
+  <div class="brand"><h1>Distribuidora J&amp;J</h1><div class="sub">Estado de Cuenta Corriente</div></div>
   <div class="emision">Emitido el<br><b>${dateStr}</b><br>${horaStr} hs</div>
 </div>
 <div class="cli-block">
@@ -866,7 +866,7 @@ table.mov{width:100%;border-collapse:collapse;table-layout:fixed}
 </div>
 ${renderTabla('Cuenta Minorista', minorista, balanceMin)}
 ${renderTabla('Cuenta Mayorista', mayorista, balanceMay)}
-<div class="foot-note">Documento generado automáticamente · Distribuidora Patricia · No válido como factura</div>
+<div class="foot-note">Documento generado automáticamente · Distribuidora J&amp;J · No válido como factura</div>
 </body></html>`
 
     const iframe = document.createElement('iframe')
