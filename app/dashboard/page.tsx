@@ -15,201 +15,136 @@ const Bar = dynamic(() => import('recharts').then(mod => ({ default: mod.Bar }))
 const BarChart = dynamic(() => import('recharts').then(mod => ({ default: mod.BarChart })), { ssr: false })
 const CartesianGrid = dynamic(() => import('recharts').then(mod => ({ default: mod.CartesianGrid })), { ssr: false })
 const Cell = dynamic(() => import('recharts').then(mod => ({ default: mod.Cell })), { ssr: false })
-const Line = dynamic(() => import('recharts').then(mod => ({ default: mod.Line })), { ssr: false })
-const LineChart = dynamic(() => import('recharts').then(mod => ({ default: mod.LineChart })), { ssr: false })
 const Pie = dynamic(() => import('recharts').then(mod => ({ default: mod.Pie })), { ssr: false })
 const PieChart = dynamic(() => import('recharts').then(mod => ({ default: mod.PieChart })), { ssr: false })
 const ResponsiveContainer = dynamic(() => import('recharts').then(mod => ({ default: mod.ResponsiveContainer })), { ssr: false })
 const XAxis = dynamic(() => import('recharts').then(mod => ({ default: mod.XAxis })), { ssr: false })
-import { 
-  AlertTriangle, 
-  ArrowRight, 
-  Calendar, 
-  CreditCard, 
-  DollarSign, 
-  Store as Helado,
-  Package as Paquete, 
-  Search as Buscar, 
-  ShoppingCart as CarritoDeCompras, 
-  TrendingDown as TendenciaALaBaja, 
-  TrendingUp as TendenciaAlAlza, 
-  Truck as Camion, 
-  Users as Usuarios, 
-  ChevronRight, 
-  Clock as Reloj, 
-  AlertCircle, 
-  CheckCircle2, 
-  MapPin, 
-  ChevronLeft, 
-  ChevronRight as ChevronRightIcon,
+const YAxis = dynamic(() => import('recharts').then(mod => ({ default: mod.YAxis })), { ssr: false })
+import {
+  AlertCircle,
+  AlertTriangle,
+  ArrowRight,
+  Award,
+  CreditCard,
+  DollarSign,
+  Layers,
+  Medal,
+  Package,
+  Search,
+  ShoppingCart,
+  Trophy,
+  TrendingDown,
+  TrendingUp,
+  Truck,
+  Users,
+  ChevronRight,
   Loader2,
-  Sliders,
-  ArrowLeftRight
+  ArrowLeftRight,
+  MessageCircle,
 } from 'lucide-react'
 import { ChartContainer, ChartTooltip, ChartTooltipContent } from '@/components/ui/chart'
 import { Skeleton } from '@/components/ui/skeleton'
 import { dashboardApi, ordersApi, transferApi } from '@/lib/api'
 import type { TransferConfig } from '@/lib/api'
-import { Label } from '@/components/ui/label'
-import type { Product, Client, Order, OrderStatus } from '@/lib/types'
+import type { Product, Order } from '@/lib/types'
 import { formatCurrency } from '@/lib/utils/format'
+import { Label } from '@/components/ui/label'
 import { toast } from 'sonner'
 
-const statusMeta: Record<OrderStatus, { 
-  label: string; 
-  color: string; 
-  bg: string; 
-  icon: React.ElementType 
-}> = {
-  pending: { 
-    label: 'Pendiente', 
-    color: 'text-amber-700', 
-    bg: 'bg-amber-50 border-amber-200', 
-    icon: Reloj 
-  },
-  preparation: { 
-    label: 'Preparando', 
-    color: 'text-amber-700', 
-    bg: 'bg-amber-50 border-amber-200', 
-    icon: Reloj 
-  },
-  delivery: { 
-    label: 'En camino', 
-    color: 'text-sky-700', 
-    bg: 'bg-sky-50 border-sky-200', 
-    icon: MapPin 
-  },
-  completed: { 
-    label: 'Completado', 
-    color: 'text-emerald-700', 
-    bg: 'bg-emerald-50 border-emerald-200', 
-    icon: CheckCircle2 
-  },
+interface SellerRank { name: string; total: number; count: number }
+interface CategoryRank { name: string; units: number; revenue: number }
+interface DeudorAntiguedad {
+  id: string
+  name: string
+  phone?: string
+  balance: number
+  classification: 'normal' | 'atrasado' | 'moroso' | 'incobrable'
+  debtSince?: string
+  daysSince?: number
+}
+interface ClienteActividad {
+  id: string
+  name: string
+  sellerName?: string
+  lastPurchase: string
+  daysSince: number
+  phone?: string
 }
 
-// Función para obtener la acción siguiente según el estado actual
-const getNextAction = (currentStatus: OrderStatus): { label: string; nextStatus: OrderStatus } => {
-  switch (currentStatus) {
-    case 'pending':
-      return { label: 'Comenzar preparación', nextStatus: 'preparation' }
-    case 'preparation':
-      return { label: 'Marcar para entrega', nextStatus: 'delivery' }
-    case 'delivery':
-      return { label: 'Marcar como entregado', nextStatus: 'completed' }
-    default:
-      return { label: 'Actualizar estado', nextStatus: 'completed' }
-  }
+const classMeta: Record<DeudorAntiguedad['classification'], { label: string; cls: string }> = {
+  normal: { label: 'Al día', cls: 'bg-emerald-50 text-emerald-700 border-emerald-200' },
+  atrasado: { label: 'Atrasado', cls: 'bg-amber-50 text-amber-700 border-amber-200' },
+  moroso: { label: 'Moroso', cls: 'bg-rose-50 text-rose-700 border-rose-200' },
+  incobrable: { label: 'Incobrable', cls: 'bg-rose-100 text-rose-900 border-rose-300' },
+}
+
+const podiumStyle = [
+  { ring: 'ring-amber-300', bg: 'bg-amber-50', text: 'text-amber-600', icon: Trophy },
+  { ring: 'ring-slate-300', bg: 'bg-slate-50', text: 'text-slate-500', icon: Medal },
+  { ring: 'ring-orange-300', bg: 'bg-orange-50', text: 'text-orange-600', icon: Award },
+]
+
+const RUBRO_COLORS = ['#0d9488', '#14b8a6', '#2dd4bf', '#5eead4', '#22c55e', '#84cc16', '#06b6d4', '#0ea5e9']
+
+function waLink(phone: string | undefined, msg: string): string {
+  const digits = (phone ?? '').replace(/\D/g, '')
+  return `https://wa.me/${digits}?text=${encodeURIComponent(msg)}`
 }
 
 export default function DashboardPage() {
-  const [dateFilter, setDateFilter] = useState<'hoy' | 'semana' | 'mes' | 'custom'>('hoy')
-  const [debtorQuery, setDebtorQuery] = useState('')
-  const [debtorPage, setDebtorPage] = useState(1)
-  const [selectedOrder, setSelectedOrder] = useState<Order | null>(null)
   const [loading, setLoading] = useState(true)
-  const [showDateRangePicker, setShowDateRangePicker] = useState(false)
-  const [dateRange, setDateRange] = useState({
-    start: '',
-    end: ''
-  })
-  
-  // Estados para datos reales
-  const [dashboardStats, setDashboardStats] = useState({
+
+  const [stats, setStats] = useState({
     todaySales: 0,
     todayOrders: 0,
     lowStockProducts: 0,
     totalDebt: 0,
     pendingOrders: 0,
+    salesThisMonth: 0,
+    salesPrevMonth: 0,
+    monthDeltaPct: 0,
   })
-  
   const [lowStockProducts, setLowStockProducts] = useState<Product[]>([])
-  const [debtors, setDebtors] = useState<Client[]>([])
   const [pendingOrders, setPendingOrders] = useState<Order[]>([])
-  const [salesLastDays, setSalesLastDays] = useState<{day: string; total: number}[]>([])
-  const [salesByHour, setSalesByHour] = useState<{hour: string; total: number}[]>([])
-  const [monthlyComparison, setMonthlyComparison] = useState<{month: string; total: number}[]>([])
+  const [salesLastDays, setSalesLastDays] = useState<{ day: string; total: number }[]>([])
+  const [monthlyComparison, setMonthlyComparison] = useState<{ month: string; total: number }[]>([])
   const [topProducts, setTopProducts] = useState<any[]>([])
-  const [productDistribution, setProductDistribution] = useState<{name: string; value: number; color: string}[]>([])
-  const [clientesActividad, setClientesActividad] = useState<{ activos: any[]; inactivos: any[]; dias: number }>({ activos: [], inactivos: [], dias: 30 })
-  const [actividadView, setActividadView] = useState<'inactivos' | 'activos'>('inactivos')
-  const [actividadQuery, setActividadQuery] = useState('')
+  const [productDistribution, setProductDistribution] = useState<{ name: string; value: number; color: string }[]>([])
+  const [sellerRanking, setSellerRanking] = useState<SellerRank[]>([])
+  const [categoryRanking, setCategoryRanking] = useState<CategoryRank[]>([])
+  const [deudores, setDeudores] = useState<DeudorAntiguedad[]>([])
+  const [inactivos, setInactivos] = useState<ClienteActividad[]>([])
 
-  // Transfer alias config
+  const [deudorQuery, setDeudorQuery] = useState('')
+  const [inactivoQuery, setInactivoQuery] = useState('')
+
   const [aliasModalOpen, setAliasModalOpen] = useState(false)
   const [aliasConfig, setAliasConfig] = useState<TransferConfig>({ alias: '', titular: '', banco: '' })
   const [aliasSaving, setAliasSaving] = useState(false)
 
-  // KPIs dinámicos memoizados — solo se recalculan cuando cambian los datos
-  const kpis = useMemo(() => [
-    { 
-      id: 'ventas', 
-      title: 'Ventas hoy', 
-      value: formatCurrency(dashboardStats.todaySales), 
-      change: dashboardStats.todaySales > 0 ? 12.4 : 0,
-      positive: true, 
-      detail: `${dashboardStats.todayOrders} órdenes procesadas`, 
-      icon: DollarSign, 
-      sparkline: [12, 18, 24, 22, 28, 30, 36], 
-      color: 'sky' 
-    },
-    { 
-      id: 'stock', 
-      title: 'Stock bajo', 
-      value: `${dashboardStats.lowStockProducts} productos`, 
-      change: -8.2, 
-      positive: false, 
-      detail: `${lowStockProducts.filter(p => p.stock < 5).length} críticos`, 
-      icon: AlertTriangle, 
-      sparkline: [9, 11, 10, 8, 7, 6, 7], 
-      color: 'rose' 
-    },
-    { 
-      id: 'deuda', 
-      title: 'Deudores', 
-      value: formatCurrency(dashboardStats.totalDebt), 
-      change: 4.1, 
-      positive: false, 
-      detail: `${debtors.length} clientes con saldo`, 
-      icon: Usuarios, 
-      sparkline: [6, 7, 8, 9, 10, 11, 12], 
-      color: 'orange' 
-    },
-    { 
-      id: 'pendientes', 
-      title: 'Pedidos pendientes', 
-      value: `${dashboardStats.pendingOrders}`, 
-      change: 6.7, 
-      positive: true, 
-      detail: `${pendingOrders.filter(o => o.status === 'delivery').length} en camino`, 
-      icon: Camion, 
-      sparkline: [8, 9, 11, 10, 12, 13, 14], 
-      color: 'emerald'
-    },
-  ], [dashboardStats, lowStockProducts, debtors, pendingOrders])
-
-  // Cargar todos los datos del dashboard en una sola llamada batch
   const loadDashboardData = useCallback(async (isMounted?: () => boolean) => {
     setLoading(true)
     try {
-      const [data, orders, transferCfg, actividad] = await Promise.all([
+      const [data, orders, transferCfg, actividad, deudoresData] = await Promise.all([
         dashboardApi.getDashboardData(),
         ordersApi.getActive(),
         transferApi.getConfig(),
         dashboardApi.getClientesActividad(30),
+        dashboardApi.getDeudoresAntiguedad(),
       ])
       if (isMounted && !isMounted()) return
-      setAliasConfig(transferCfg)
-      setClientesActividad(actividad)
-
-      setDashboardStats(data.stats)
+      setStats(data.stats as typeof stats)
       setLowStockProducts(data.lists.lowStockProducts)
-      setDebtors(data.lists.debtors)
       setPendingOrders(orders.filter(o => o.status && o.status !== 'completed' && Array.isArray(o.items)))
       setSalesLastDays(data.charts.salesLastDays)
-      setSalesByHour(data.charts.salesByHourToday)
       setMonthlyComparison(data.charts.salesLastMonths)
       setTopProducts(data.lists.topProducts || [])
       setProductDistribution(data.charts.productDistribution || [])
+      setSellerRanking((data.lists as any).sellerRanking || [])
+      setCategoryRanking((data.lists as any).categoryRanking || [])
+      setAliasConfig(transferCfg)
+      setInactivos(actividad.inactivos as ClienteActividad[])
+      setDeudores(deudoresData as DeudorAntiguedad[])
     } catch (error) {
       if (isMounted && !isMounted()) return
       toast.error('Error al cargar el dashboard')
@@ -219,144 +154,77 @@ export default function DashboardPage() {
     }
   }, [])
 
-  // Cargar datos al montar y cuando cambie el filtro de fecha
   useEffect(() => {
     let mounted = true
     loadDashboardData(() => mounted)
     return () => { mounted = false }
-  }, [loadDashboardData, dateFilter])
-
-  // Formatear datos para gráficos — memoizado para evitar recálculo en cada render
-  const salesWeekly = useMemo(() => salesLastDays.map((item, index, array) => ({
-    day: item.day,
-    current: item.total,
-    previous: index > 0 ? array[index - 1].total * 0.85 : item.total * 0.85
-  })), [salesLastDays])
-
-  const filteredDebtors = useMemo(() => {
-    return debtors.filter((debtor) => 
-      debtor.name.toLowerCase().includes(debtorQuery.toLowerCase())
-    )
-  }, [debtorQuery, debtors])
-
-  const pageSize = 4
-  const pagedDebtors = filteredDebtors.slice((debtorPage - 1) * pageSize, debtorPage * pageSize)
-  const totalPages = Math.max(1, Math.ceil(filteredDebtors.length / pageSize))
-
-  // Handlers
-  const handleNuevaVenta = () => {
-    window.location.href = '/ventas/nueva'
-  }
-
-  const handleAjustarStock = () => {
-    window.location.href = '/productos'
-  }
-
-  const handleVerPedidos = () => {
-    window.location.href = '/pedidos'
-  }
-
-  const handleVerRanking = () => {
-    window.location.href = '/productos?sort=ventas'
-  }
-
-  const handleVerTodosStock = () => {
-    window.location.href = '/productos?filter=low-stock'
-  }
-
-  const handleReabastecer = (productId: string) => {
-    window.location.href = `/productos?id=${productId}&action=edit`
-  }
-
-  const handleUpdateOrderStatus = async (orderId: string, newStatus: OrderStatus) => {
-    try {
-      await ordersApi.updateStatus(orderId, newStatus)
-      // Recargar datos
-      loadDashboardData()
-      setSelectedOrder(null)
-    } catch (error) {
-      toast.error('Error al actualizar estado del pedido')
-    }
-  }
+  }, [loadDashboardData])
 
   const handleSaveAlias = async () => {
     setAliasSaving(true)
     try {
       await transferApi.saveConfig(aliasConfig)
       setAliasModalOpen(false)
-    } catch (error) {
-      toast.error('Error al guardar configuracion de transferencia')
+    } catch {
+      toast.error('Error al guardar datos de transferencia')
     } finally {
       setAliasSaving(false)
     }
   }
 
-  const handleCustomDateRange = () => {
-    setShowDateRangePicker(true)
-  }
+  const maxSeller = useMemo(() => Math.max(1, ...sellerRanking.map(s => s.total)), [sellerRanking])
+  const filteredDeudores = useMemo(
+    () => deudores.filter(d => d.name?.toLowerCase().includes(deudorQuery.toLowerCase())),
+    [deudores, deudorQuery],
+  )
+  const filteredInactivos = useMemo(
+    () => inactivos.filter(c => c.name?.toLowerCase().includes(inactivoQuery.toLowerCase())),
+    [inactivos, inactivoQuery],
+  )
 
-  const applyDateRange = () => {
-    if (dateRange.start && dateRange.end) {
-      setDateFilter('custom')
-      setShowDateRangePicker(false)
-      // Aquí iría la lógica para cargar datos con el rango personalizado
-      // Rango de fechas aplicado
-    }
-  }
+  const kpis = useMemo(() => {
+    const isUp = stats.monthDeltaPct >= 0
+    return [
+      {
+        id: 'hoy', title: 'Ventas hoy', value: formatCurrency(stats.todaySales),
+        detail: `${stats.todayOrders} ventas`, icon: DollarSign, color: 'teal',
+      },
+      {
+        id: 'mes', title: 'Ventas del mes', value: formatCurrency(stats.salesThisMonth),
+        detail: `${isUp ? '+' : ''}${stats.monthDeltaPct.toFixed(1)}% vs mes anterior`,
+        delta: stats.monthDeltaPct, icon: TrendingUp, color: 'cyan',
+      },
+      {
+        id: 'deuda', title: 'Deuda total', value: formatCurrency(stats.totalDebt),
+        detail: `${deudores.length} clientes deben`, icon: CreditCard, color: 'orange',
+      },
+      {
+        id: 'pendientes', title: 'Pedidos pendientes', value: `${stats.pendingOrders}`,
+        detail: `${pendingOrders.filter(o => o.status === 'delivery').length} en camino`, icon: Truck, color: 'sky',
+      },
+      {
+        id: 'stock', title: 'Stock bajo', value: `${stats.lowStockProducts}`,
+        detail: `${lowStockProducts.filter(p => p.stock < 5).length} críticos`, icon: AlertTriangle, color: 'rose',
+      },
+    ]
+  }, [stats, deudores, pendingOrders, lowStockProducts])
 
   if (loading) {
     return (
       <MainLayout allowedRoles={['admin']} title="Dashboard" description="Resumen ejecutivo y operación diaria">
         <div className="min-h-screen bg-slate-50/50">
-          <div className="max-w-[1600px] mx-auto p-2 sm:p-3 lg:p-6 xl:p-8 space-y-3 sm:space-y-4 lg:space-y-6">
-            {/* Header skeleton */}
-            <div className="flex flex-col gap-3 sm:gap-4">
-              <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 sm:gap-3">
-                <Skeleton className="h-5 w-40" />
-                <Skeleton className="h-9 w-56 rounded-lg" />
-              </div>
-              {/* Hero card skeleton */}
-              <Skeleton className="h-28 sm:h-32 rounded-lg sm:rounded-xl" />
+          <div className="max-w-[1600px] mx-auto p-3 sm:p-4 lg:p-6 space-y-4">
+            <Skeleton className="h-24 rounded-2xl" />
+            <div className="grid grid-cols-2 lg:grid-cols-5 gap-3">
+              {Array.from({ length: 5 }).map((_, i) => <Skeleton key={i} className="h-28 rounded-2xl" />)}
             </div>
-
-            {/* KPI cards skeleton */}
-            <div className="grid grid-cols-2 lg:grid-cols-4 gap-2 sm:gap-3">
-              {Array.from({ length: 4 }).map((_, i) => (
-                <div key={i} className="bg-white/80 border border-border/40 rounded-2xl p-2 sm:p-3 space-y-2">
-                  <div className="flex items-center justify-between">
-                    <Skeleton className="h-3 w-20" />
-                    <Skeleton className="h-6 w-6 sm:h-7 sm:w-7 rounded" />
-                  </div>
-                  <Skeleton className="h-6 w-24" />
-                  <Skeleton className="h-3 w-16" />
-                </div>
-              ))}
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-3">
+              <Skeleton className="h-64 rounded-2xl lg:col-span-2" />
+              <Skeleton className="h-64 rounded-2xl" />
             </div>
-
-            {/* Charts skeleton */}
-            <div className="grid grid-cols-1 lg:grid-cols-3 gap-2 sm:gap-3">
-              <div className="lg:col-span-2 bg-white border border-border/40 rounded-2xl p-3 sm:p-4 space-y-3">
-                <Skeleton className="h-5 w-40" />
-                <Skeleton className="h-48 sm:h-56 rounded-2xl" />
-              </div>
-              <div className="bg-white border border-border/40 rounded-2xl p-3 sm:p-4 space-y-3">
-                <Skeleton className="h-5 w-32" />
-                <Skeleton className="h-48 sm:h-56 rounded-full mx-auto w-48 sm:w-56" />
-              </div>
-            </div>
-
-            {/* Bottom sections skeleton */}
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-2 sm:gap-3">
-              {Array.from({ length: 2 }).map((_, i) => (
-                <div key={i} className="bg-white border border-border/40 rounded-2xl p-3 sm:p-4 space-y-3">
-                  <Skeleton className="h-5 w-36" />
-                  <div className="space-y-2">
-                    {Array.from({ length: 4 }).map((_, j) => (
-                      <Skeleton key={j} className="h-10 rounded-2xl" />
-                    ))}
-                  </div>
-                </div>
-              ))}
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
+              <Skeleton className="h-72 rounded-2xl" />
+              <Skeleton className="h-72 rounded-2xl" />
             </div>
           </div>
         </div>
@@ -364,191 +232,64 @@ export default function DashboardPage() {
     )
   }
 
-  // Calcular porcentaje de cambio para el badge de ventas semanales
-  const weeklyChange = salesLastDays.length >= 2 
-    ? ((salesLastDays[salesLastDays.length - 1].total - salesLastDays[salesLastDays.length - 2].total) / salesLastDays[salesLastDays.length - 2].total) * 100
-    : 0
+  const colorMap: Record<string, string> = {
+    teal: 'bg-teal-50 text-teal-600 border-teal-100',
+    cyan: 'bg-cyan-50 text-cyan-600 border-cyan-100',
+    orange: 'bg-orange-50 text-orange-600 border-orange-100',
+    sky: 'bg-sky-50 text-sky-600 border-sky-100',
+    rose: 'bg-rose-50 text-rose-600 border-rose-100',
+  }
 
   return (
     <MainLayout allowedRoles={['admin']} title="Dashboard" description="Resumen ejecutivo y operación diaria">
       <div className="min-h-screen bg-slate-50/50">
-        <div className="max-w-[1600px] mx-auto p-2 sm:p-3 lg:p-6 xl:p-8 space-y-3 sm:space-y-4 lg:space-y-6">
-          
-          {/* Header Section - Más compacto en móvil */}
-          <div className="flex flex-col gap-3 sm:gap-4">
-            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 sm:gap-3">
-              <div className="min-w-0 flex items-center gap-3">
-                <nav className="flex items-center gap-1 sm:gap-1.5 text-xs text-muted-foreground mb-0.5">
-                  <span className="hover:text-foreground cursor-pointer truncate">Inicio</span>
-                  <ChevronRight className="h-2.5 w-2.5 sm:h-3 sm:w-3 shrink-0" />
-                  <span className="text-foreground font-medium truncate">Dashboard</span>
-                </nav>
-                <Button
-                  size="sm"
-                  variant="outline"
-                  className="h-7 text-xs gap-1.5 text-violet-700 border-violet-200 hover:bg-violet-50"
-                  onClick={() => setAliasModalOpen(true)}
-                >
-                  <ArrowLeftRight className="h-3 w-3" />
-                  {aliasConfig.alias ? aliasConfig.alias : "Alias"}
-                </Button>
-              </div>
-              
-              {/* Date Filter Pills - Más compactos */}
-              <div className="flex items-center gap-1 sm:gap-1.5 bg-white p-0.5 sm:p-1 rounded-lg border border-border/60 shadow-sm overflow-x-auto">
-                {(['hoy', 'semana', 'mes'] as const).map((option) => (
-                  <Button
-                    key={option}
-                    size="sm"
-                    variant={dateFilter === option ? 'default' : 'ghost'}
-                    className={`rounded text-xs font-medium transition-all whitespace-nowrap px-2 py-1 ${
-                      dateFilter === option
-                        ? 'bg-slate-900 text-white shadow-sm'
-                        : 'text-muted-foreground hover:text-foreground'
-                    }`}
-                    onClick={() => setDateFilter(option)}
-                  >
-                    {option}
-                  </Button>
-                ))}
-                <Button
-                  size="sm"
-                  variant={dateFilter === 'custom' ? 'default' : 'ghost'}
-                  className={`rounded text-xs font-medium transition-all whitespace-nowrap px-2 py-1 ${
-                    dateFilter === 'custom'
-                      ? 'bg-slate-900 text-white shadow-sm'
-                      : 'text-muted-foreground hover:text-foreground'
-                  }`}
-                  onClick={handleCustomDateRange}
-                >
-                  <span className="flex items-center gap-1">
-                    <Sliders className="h-3 w-3" />
-                    <span className="hidden sm:inline">Personalizado</span>
-                    <span className="sm:hidden">Pers.</span>
-                  </span>
-                </Button>
-              </div>
-            </div>
+        <div className="max-w-[1600px] mx-auto p-3 sm:p-4 lg:p-6 space-y-4 sm:space-y-5">
 
-            {/* Hero Card - Más compacto */}
-            <div className="relative overflow-hidden rounded-lg sm:rounded-xl bg-gradient-to-br from-sky-500/5 via-white to-cyan-500/5 border border-sky-100/50 shadow-sm">
-              <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top_right,_var(--tw-gradient-stops))] from-sky-100/40 via-transparent to-transparent" />
-              <div className="relative p-3 sm:p-4 lg:p-6">
-                <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-3 sm:gap-4">
-                  <div className="space-y-1 sm:space-y-1.5 min-w-0">
-                    <div className="flex items-center gap-1.5 sm:gap-2">
-                      <div className="h-6 w-6 sm:h-7 sm:w-7 rounded-lg bg-sky-500/10 flex items-center justify-center shrink-0">
-                        <Helado className="h-3 w-3 sm:h-3.5 sm:w-3.5 text-sky-600" />
-                      </div>
-                      <span className="text-xs font-medium text-sky-700">Golloara</span>
-                    </div>
-                    <h2 className="text-lg sm:text-xl font-semibold text-foreground">Resumen ejecutivo</h2>
-                    <p className="text-xs text-muted-foreground max-w-lg">
-                      Vista rápida del rendimiento, stock y pedidos críticos.
-                    </p>
-                  </div>
-                  
-                  <div className="flex flex-wrap gap-1.5 sm:gap-2">
-                    <Button 
-                      className="rounded bg-sky-600 hover:bg-sky-700 text-white shadow-sm hover:shadow-md transition-all gap-1 sm:gap-1.5 text-xs h-8 sm:h-9"
-                      onClick={handleNuevaVenta}
-                    >
-                      <CarritoDeCompras className="h-3 w-3 sm:h-3.5 sm:w-3.5" />
-                      <span className="hidden sm:inline">Nueva venta</span>
-                      <span className="sm:hidden">Venta</span>
-                    </Button>
-                    <Button 
-                      variant="outline" 
-                      className="rounded border-slate-200 hover:bg-slate-50 gap-1 sm:gap-1.5 text-xs h-8 sm:h-9"
-                      onClick={handleAjustarStock}
-                    >
-                      <Paquete className="h-3 w-3 sm:h-3.5 sm:w-3.5" />
-                      <span className="hidden sm:inline">Stock</span>
-                    </Button>
-                    <Button 
-                      variant="outline" 
-                      className="rounded border-slate-200 hover:bg-slate-50 gap-1 sm:gap-1.5 text-xs h-8 sm:h-9"
-                      onClick={handleVerPedidos}
-                    >
-                      <Camion className="h-3 w-3 sm:h-3.5 sm:w-3.5" />
-                      <span className="hidden sm:inline">Pedidos</span>
-                    </Button>
-                  </div>
-                </div>
+          {/* Hero */}
+          <div className="relative overflow-hidden rounded-2xl bg-gradient-to-br from-teal-600 via-teal-500 to-cyan-500 shadow-sm">
+            <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top_right,_rgba(255,255,255,0.25),transparent_60%)]" />
+            <div className="relative p-4 sm:p-6 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+              <div className="min-w-0">
+                <nav className="flex items-center gap-1.5 text-xs text-white/70 mb-1">
+                  <span>Inicio</span><ChevronRight className="h-3 w-3" /><span className="text-white font-medium">Dashboard</span>
+                </nav>
+                <h2 className="text-xl sm:text-2xl font-bold text-white tracking-tight">Distribuidora Patricia</h2>
+                <p className="text-xs sm:text-sm text-white/80 mt-0.5">Rendimiento, cobranza y oportunidades de venta de un vistazo.</p>
+              </div>
+              <div className="flex flex-wrap gap-2">
+                <Button size="sm" className="rounded-xl bg-white text-teal-700 hover:bg-white/90 gap-1.5 shadow-sm" onClick={() => window.location.href = '/ventas/nueva'}>
+                  <ShoppingCart className="h-4 w-4" /> Nueva venta
+                </Button>
+                <Button size="sm" variant="outline" className="rounded-xl bg-white/10 text-white border-white/30 hover:bg-white/20 gap-1.5" onClick={() => setAliasModalOpen(true)}>
+                  <ArrowLeftRight className="h-4 w-4" /> {aliasConfig.alias || 'Alias transferencia'}
+                </Button>
               </div>
             </div>
           </div>
 
-          {/* KPIs Grid - Más compacto en móvil */}
-          <section className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-2 sm:gap-3">
+          {/* KPIs */}
+          <section className="grid grid-cols-2 lg:grid-cols-5 gap-3">
             {kpis.map((kpi) => {
               const Icon = kpi.icon
-              const isPositive = kpi.positive
-              const colorClasses = {
-                sky: 'bg-sky-50 text-sky-600 border-sky-100',
-                rose: 'bg-rose-50 text-rose-600 border-rose-100',
-                orange: 'bg-orange-50 text-orange-600 border-orange-100',
-                emerald: 'bg-emerald-50 text-emerald-600 border-emerald-100',
-              }[kpi.color]
-
+              const hasDelta = typeof kpi.delta === 'number'
+              const up = (kpi.delta ?? 0) >= 0
               return (
-                <Card
-                  key={kpi.id}
-                  className="group border-border/40 bg-white/80 backdrop-blur-sm shadow-sm hover:shadow-md transition-all duration-300 hover:-translate-y-0.5"
-                >
-                  <CardHeader className="flex flex-row items-center justify-between pb-1 sm:pb-2 p-2 sm:p-3">
-                    <CardTitle className="text-xs font-medium text-muted-foreground truncate pr-1">
-                      {kpi.title}
-                    </CardTitle>
-                    <div className={`h-6 w-6 sm:h-7 sm:w-7 rounded ${colorClasses} flex items-center justify-center border shrink-0`}>
-                      <Icon className="h-3 w-3 sm:h-3.5 sm:w-3.5" />
-                    </div>
-                  </CardHeader>
-                  <CardContent className="space-y-1 sm:space-y-1.5 p-2 sm:p-3 pt-0">
-                    <div className="flex items-baseline gap-1">
-                      <div className="text-base sm:text-lg lg:text-xl font-bold text-foreground tracking-tight truncate">
-                        {kpi.value}
+                <Card key={kpi.id} className="border-border/40 bg-white shadow-sm hover:shadow-md transition-all duration-300 hover:-translate-y-0.5 rounded-2xl">
+                  <CardContent className="p-3 sm:p-4 space-y-1.5">
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs font-medium text-muted-foreground truncate pr-1">{kpi.title}</span>
+                      <div className={`h-8 w-8 rounded-xl flex items-center justify-center border shrink-0 ${colorMap[kpi.color]}`}>
+                        <Icon className="h-4 w-4" />
                       </div>
                     </div>
-                    
-                    <div className="flex items-center gap-1 flex-wrap">
-                      <span
-                        className={`inline-flex items-center gap-0.5 text-xs font-medium px-1 py-0.5 rounded-full ${
-                          isPositive
-                            ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
-                            : 'bg-rose-50 text-rose-700 border border-rose-200'
-                        }`}
-                      >
-                        {isPositive ? (
-                          <TendenciaAlAlza className="h-2 w-2 sm:h-2.5 sm:w-2.5" />
-                        ) : (
-                          <TendenciaALaBaja className="h-2 w-2 sm:h-2.5 sm:w-2.5" />
-                        )}
-                        {Math.abs(kpi.change)}%
-                      </span>
-                      <span className="text-xs text-muted-foreground hidden sm:inline">vs período anterior</span>
-                    </div>
-                    
-                    <p className="text-xs text-muted-foreground truncate">{kpi.detail}</p>
-                    
-                    <div className="hidden sm:block h-6 sm:h-7 pt-0.5">
-                      <ResponsiveContainer width="100%" height="100%">
-                        <AreaChart data={kpi.sparkline.map((value, index) => ({ index, value }))}>
-                          <defs>
-                            <linearGradient id={`spark-${kpi.id}`} x1="0" y1="0" x2="0" y2="1">
-                              <stop offset="5%" stopColor={isPositive ? '#10b981' : '#f43f5e'} stopOpacity={0.3} />
-                              <stop offset="95%" stopColor={isPositive ? '#10b981' : '#f43f5e'} stopOpacity={0.05} />
-                            </linearGradient>
-                          </defs>
-                          <Area
-                            dataKey="value"
-                            type="monotone"
-                            stroke={isPositive ? '#10b981' : '#f43f5e'}
-                            fill={`url(#spark-${kpi.id})`}
-                            strokeWidth={1.5}
-                          />
-                        </AreaChart>
-                      </ResponsiveContainer>
+                    <div className="text-lg sm:text-xl lg:text-2xl font-bold text-foreground tracking-tight truncate">{kpi.value}</div>
+                    <div className="flex items-center gap-1 text-xs">
+                      {hasDelta && (
+                        <span className={`inline-flex items-center gap-0.5 font-medium px-1.5 py-0.5 rounded-full border ${up ? 'bg-emerald-50 text-emerald-700 border-emerald-200' : 'bg-rose-50 text-rose-700 border-rose-200'}`}>
+                          {up ? <TrendingUp className="h-3 w-3" /> : <TrendingDown className="h-3 w-3" />}
+                        </span>
+                      )}
+                      <span className="text-muted-foreground truncate">{kpi.detail}</span>
                     </div>
                   </CardContent>
                 </Card>
@@ -556,304 +297,91 @@ export default function DashboardPage() {
             })}
           </section>
 
-          {/* Main Content Grid */}
-          <div className="grid grid-cols-1 xl:grid-cols-12 gap-3 sm:gap-4">
-            
-            {/* Left Column - Charts */}
-            <div className="xl:col-span-8 space-y-3 sm:space-y-4">
-              
-              {/* Weekly Sales Chart */}
-              <Card className="border-border/40 bg-white shadow-sm">
-                <CardHeader className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 sm:gap-0 pb-1 sm:pb-2 p-2 sm:p-3">
-                  <div>
-                    <CardTitle className="text-sm sm:text-base font-semibold">Ventas y comparativa semanal</CardTitle>
-                    <p className="text-xs text-muted-foreground mt-0.5">Últimos 7 días</p>
-                  </div>
-                  <Badge variant="secondary" className="rounded-md sm:rounded-lg bg-emerald-50 text-emerald-700 border-emerald-200 font-medium text-xs w-fit">
-                    {weeklyChange > 0 ? '+' : ''}{weeklyChange.toFixed(1)}% vs semana anterior
-                  </Badge>
-                </CardHeader>
-                <CardContent className="p-2 sm:p-3 pt-0">
-                  <ChartContainer
-                    config={{
-                      current: { label: 'Semana actual', color: '#0ea5e9' },
-                      previous: { label: 'Semana anterior', color: '#cbd5e1' },
-                    }}
-                    className="h-40 sm:h-48 lg:h-56 w-full"
-                  >
-                    <LineChart data={salesWeekly} margin={{ left: 0, right: 8, top: 8, bottom: 8 }}>
-                      <CartesianGrid vertical={false} strokeDasharray="3 3" stroke="#f1f5f9" />
-                      <XAxis
-                        dataKey="day"
-                        tickLine={false}
-                        axisLine={false}
-                        tick={{ fill: '#64748b', fontSize: 11 }}
-                        dy={8}
-                      />
-                      <ChartTooltip
-                        content={<ChartTooltipContent />}
-                        formatter={(value) => formatCurrency(Number(value))}
-                      />
-                      <Line
-                        dataKey="previous"
-                        stroke="#cbd5e1"
-                        strokeWidth={2}
-                        dot={false}
-                        strokeDasharray="4 4"
-                      />
-                      <Line
-                        dataKey="current"
-                        stroke="#0ea5e9"
-                        strokeWidth={2.5}
-                        dot={{ fill: '#0ea5e9', strokeWidth: 2, r: 3, stroke: '#fff' }}
-                        activeDot={{ r: 5, strokeWidth: 0 }}
-                      />
-                    </LineChart>
-                  </ChartContainer>
-                </CardContent>
-              </Card>
+          {/* Ventas: mensual + diario */}
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-3 sm:gap-4">
+            <Card className="lg:col-span-2 border-border/40 bg-white shadow-sm rounded-2xl">
+              <CardHeader className="flex flex-row items-center justify-between p-3 sm:p-4 pb-1">
+                <div>
+                  <CardTitle className="text-sm sm:text-base font-semibold">Ventas últimos 6 meses</CardTitle>
+                  <p className="text-xs text-muted-foreground mt-0.5">Facturación mensual</p>
+                </div>
+                <Badge variant="secondary" className={`rounded-lg font-medium text-xs ${stats.monthDeltaPct >= 0 ? 'bg-emerald-50 text-emerald-700 border-emerald-200' : 'bg-rose-50 text-rose-700 border-rose-200'}`}>
+                  {stats.monthDeltaPct >= 0 ? '+' : ''}{stats.monthDeltaPct.toFixed(1)}% mensual
+                </Badge>
+              </CardHeader>
+              <CardContent className="p-3 sm:p-4 pt-0">
+                <ChartContainer config={{ total: { label: 'Ventas', color: '#0d9488' } }} className="h-48 sm:h-60 w-full">
+                  <BarChart data={monthlyComparison} margin={{ left: 0, right: 8, top: 8, bottom: 8 }}>
+                    <defs>
+                      <linearGradient id="barTeal" x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="0%" stopColor="#14b8a6" />
+                        <stop offset="100%" stopColor="#0d9488" />
+                      </linearGradient>
+                    </defs>
+                    <CartesianGrid vertical={false} strokeDasharray="3 3" stroke="#f1f5f9" />
+                    <XAxis dataKey="month" tickLine={false} axisLine={false} tick={{ fill: '#64748b', fontSize: 11 }} dy={8} />
+                    <ChartTooltip content={<ChartTooltipContent />} formatter={(value) => formatCurrency(Number(value))} />
+                    <Bar dataKey="total" fill="url(#barTeal)" radius={[6, 6, 0, 0]} />
+                  </BarChart>
+                </ChartContainer>
+              </CardContent>
+            </Card>
 
-              {/* Bottom Charts Row */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
-                {/* Monthly Comparison */}
-                <Card className="border-border/40 bg-white shadow-sm">
-                  <CardHeader className="flex flex-row items-center justify-between pb-1 p-2 sm:p-3">
-                    <CardTitle className="text-sm sm:text-base font-semibold">Comparativa mensual</CardTitle>
-                    <TendenciaAlAlza className="h-3.5 w-3.5 sm:h-4 sm:w-4 text-emerald-500" />
-                  </CardHeader>
-                  <CardContent className="p-2 sm:p-3 pt-0">
-                    <ChartContainer
-                      config={{ total: { label: 'Ventas', color: '#14b8a6' } }}
-                      className="h-32 sm:h-36 lg:h-40 w-full"
-                    >
-                      <BarChart data={monthlyComparison} margin={{ left: 0, right: 8, top: 8, bottom: 8 }}>
-                        <CartesianGrid vertical={false} strokeDasharray="3 3" stroke="#f1f5f9" />
-                        <XAxis
-                          dataKey="month"
-                          tickLine={false}
-                          axisLine={false}
-                          tick={{ fill: '#64748b', fontSize: 11 }}
-                          dy={8}
-                        />
-                        <ChartTooltip
-                          content={<ChartTooltipContent />}
-                          formatter={(value) => formatCurrency(Number(value))}
-                        />
-                        <Bar dataKey="total" fill="#14b8a6" radius={[4, 4, 0, 0]} />
-                      </BarChart>
-                    </ChartContainer>
-                  </CardContent>
-                </Card>
-
-                {/* Sales by Hour */}
-                <Card className="border-border/40 bg-white shadow-sm">
-                  <CardHeader className="flex flex-row items-center justify-between pb-1 p-2 sm:p-3">
-                    <CardTitle className="text-sm sm:text-base font-semibold">Ventas hoy (por hora)</CardTitle>
-                    <Reloj className="h-3.5 w-3.5 sm:h-4 sm:w-4 text-sky-500" />
-                  </CardHeader>
-                  <CardContent className="p-2 sm:p-3 pt-0">
-                    <ChartContainer
-                      config={{ total: { label: 'Ventas', color: '#38bdf8' } }}
-                      className="h-32 sm:h-36 lg:h-40 w-full"
-                    >
-                      <AreaChart data={salesByHour} margin={{ left: 0, right: 8, top: 8, bottom: 8 }}>
-                        <defs>
-                          <linearGradient id="fillToday" x1="0" y1="0" x2="0" y2="1">
-                            <stop offset="5%" stopColor="#38bdf8" stopOpacity={0.35} />
-                            <stop offset="95%" stopColor="#38bdf8" stopOpacity={0.05} />
-                          </linearGradient>
-                        </defs>
-                        <CartesianGrid vertical={false} strokeDasharray="3 3" stroke="#f1f5f9" />
-                        <XAxis
-                          dataKey="hour"
-                          tickLine={false}
-                          axisLine={false}
-                          tick={{ fill: '#64748b', fontSize: 11 }}
-                          dy={8}
-                        />
-                        <ChartTooltip
-                          content={<ChartTooltipContent />}
-                          formatter={(value) => formatCurrency(Number(value))}
-                        />
-                        <Area dataKey="total" stroke="#0284c7" fill="url(#fillToday)" strokeWidth={2} />
-                      </AreaChart>
-                    </ChartContainer>
-                  </CardContent>
-                </Card>
-              </div>
-            </div>
-
-            {/* Right Column - Product Distribution & Lists */}
-            <div className="xl:col-span-4 space-y-3 sm:space-y-4">
-              
-              {/* Product Distribution */}
-              <Card className="border-border/40 bg-white shadow-sm">
-                <CardHeader className="flex flex-row items-center justify-between pb-1 p-2 sm:p-3">
-                  <div>
-                    <CardTitle className="text-sm sm:text-base font-semibold">Distribución de productos</CardTitle>
-                    <p className="text-xs text-muted-foreground mt-0.5">Por categoría</p>
-                  </div>
-                  <Paquete className="h-3.5 w-3.5 sm:h-4 sm:w-4 text-slate-400" />
-                </CardHeader>
-                <CardContent className="p-2 sm:p-3 pt-0">
-                  <div className="h-28 sm:h-32 lg:h-36 relative">
-                    <ResponsiveContainer width="100%" height="100%">
-                      <PieChart>
-                        <Pie
-                          data={productDistribution}
-                          dataKey="value"
-                          nameKey="name"
-                          innerRadius={35}
-                          outerRadius={55}
-                          paddingAngle={3}
-                        >
-                          {productDistribution.map((entry) => (
-                            <Cell key={entry.name} fill={entry.color} strokeWidth={0} />
-                          ))}
-                        </Pie>
-                      </PieChart>
-                    </ResponsiveContainer>
-                    <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
-                      <div className="text-center">
-                        <div className="text-lg sm:text-xl font-bold text-slate-700">
-                          {productDistribution.length > 0 ? `${productDistribution[0].value}%` : '0%'}
-                        </div>
-                        <div className="text-xs text-muted-foreground">
-                          {productDistribution.length > 0 ? productDistribution[0].name : 'Sin datos'}
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                  
-                  <div className="mt-2 sm:mt-3 space-y-1 sm:space-y-1.5">
-                    {productDistribution.map((item) => (
-                      <div key={item.name} className="flex items-center justify-between text-xs">
-                        <div className="flex items-center gap-1.5">
-                          <span
-                            className="h-2 w-2 sm:h-2 sm:w-2 rounded-full"
-                            style={{ backgroundColor: item.color }}
-                          />
-                          <span className="text-muted-foreground">{item.name}</span>
-                        </div>
-                        <span className="font-medium text-foreground">{item.value}%</span>
-                      </div>
-                    ))}
-                  </div>
-                </CardContent>
-              </Card>
-
-              {/* Top Products Mini List */}
-              <Card className="border-border/40 bg-white shadow-sm">
-                <CardHeader className="flex flex-row items-center justify-between pb-1 p-2 sm:p-3">
-                  <CardTitle className="text-sm sm:text-base font-semibold">Productos más vendidos</CardTitle>
-                  <Button 
-                    variant="ghost" 
-                    size="sm" 
-                    className="h-6 sm:h-7 text-xs gap-1 text-sky-600 hover:text-sky-700 hover:bg-sky-50"
-                    onClick={handleVerRanking}
-                  >
-                    <span className="hidden sm:inline">Ver ranking</span>
-                    <span className="sm:hidden">Ver</span>
-                    <ArrowRight className="h-2.5 w-2.5 sm:h-3 sm:w-3" />
-                  </Button>
-                </CardHeader>
-                <CardContent className="space-y-1.5 sm:space-y-2 p-2 sm:p-3 pt-0">
-                  {topProducts.slice(0, 3).map((product, index) => (
-                    <div
-                      key={product.id}
-                      className="flex items-center justify-between p-2 rounded-lg bg-slate-50/50 hover:bg-slate-100/50 transition-colors group cursor-pointer"
-                      onClick={() => window.location.href = `/productos?id=${product.id}`}
-                    >
-                      <div className="flex items-center gap-2 sm:gap-2.5 min-w-0">
-                        <div className="h-6 w-6 sm:h-7 sm:w-7 rounded-lg bg-white border border-slate-200 flex items-center justify-center text-xs font-bold text-slate-400 group-hover:text-sky-600 transition-colors shrink-0">
-                          {index + 1}
-                        </div>
-                        <div className="min-w-0">
-                          <p className="text-xs font-medium text-foreground truncate">{product.name}</p>
-                          <p className="text-xs text-muted-foreground">{product.category}</p>
-                        </div>
-                      </div>
-                      <div className="text-right shrink-0">
-                        <p className="text-xs font-semibold text-foreground">{product.units} uds</p>
-                      </div>
-                    </div>
-                  ))}
-                </CardContent>
-              </Card>
-            </div>
+            <Card className="border-border/40 bg-white shadow-sm rounded-2xl">
+              <CardHeader className="p-3 sm:p-4 pb-1">
+                <CardTitle className="text-sm sm:text-base font-semibold">Ventas últimos 7 días</CardTitle>
+                <p className="text-xs text-muted-foreground mt-0.5">Tendencia diaria</p>
+              </CardHeader>
+              <CardContent className="p-3 sm:p-4 pt-0">
+                <ChartContainer config={{ total: { label: 'Ventas', color: '#06b6d4' } }} className="h-48 sm:h-60 w-full">
+                  <AreaChart data={salesLastDays} margin={{ left: 0, right: 8, top: 8, bottom: 8 }}>
+                    <defs>
+                      <linearGradient id="fillDays" x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="5%" stopColor="#06b6d4" stopOpacity={0.35} />
+                        <stop offset="95%" stopColor="#06b6d4" stopOpacity={0.04} />
+                      </linearGradient>
+                    </defs>
+                    <CartesianGrid vertical={false} strokeDasharray="3 3" stroke="#f1f5f9" />
+                    <XAxis dataKey="day" tickLine={false} axisLine={false} tick={{ fill: '#64748b', fontSize: 11 }} dy={8} />
+                    <ChartTooltip content={<ChartTooltipContent />} formatter={(value) => formatCurrency(Number(value))} />
+                    <Area dataKey="total" stroke="#0891b2" fill="url(#fillDays)" strokeWidth={2.5} />
+                  </AreaChart>
+                </ChartContainer>
+              </CardContent>
+            </Card>
           </div>
 
-          {/* Operational Sections Grid */}
+          {/* Vendedores + Rubros */}
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-3 sm:gap-4">
-            
-            {/* Low Stock - Ahora con datos reales */}
-            <Card className="border-border/40 bg-white shadow-sm">
-              <CardHeader className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 sm:gap-0 pb-2 p-2 sm:p-3">
-                <div>
-                  <CardTitle className="text-sm sm:text-base font-semibold flex items-center gap-1.5">
-                    <AlertCircle className="h-3.5 w-3.5 sm:h-4 sm:w-4 text-rose-500" />
-                    Stock bajo
-                  </CardTitle>
-                  <p className="text-xs text-muted-foreground mt-0.5">Productos que requieren atención inmediata</p>
-                </div>
-                <Button 
-                  variant="ghost" 
-                  size="sm" 
-                  className="h-6 sm:h-7 text-xs gap-1 w-fit"
-                  onClick={handleVerTodosStock}
-                >
-                  Ver todos <ArrowRight className="h-2.5 w-2.5 sm:h-3 sm:w-3" />
-                </Button>
+            {/* Ranking vendedores */}
+            <Card className="border-border/40 bg-white shadow-sm rounded-2xl">
+              <CardHeader className="p-3 sm:p-4 pb-2">
+                <CardTitle className="text-sm sm:text-base font-semibold flex items-center gap-1.5">
+                  <Trophy className="h-4 w-4 text-amber-500" /> Vendedores que más venden
+                </CardTitle>
+                <p className="text-xs text-muted-foreground mt-0.5">Por facturación · últimos 6 meses</p>
               </CardHeader>
-              <CardContent className="space-y-2 sm:space-y-3 p-2 sm:p-3 pt-0">
-                {lowStockProducts.slice(0, 3).map((product) => {
-                  const percent = Math.min(100, Math.round((product.stock / 10) * 100)) // 10 como stock mínimo
-                  const isCritical = product.stock < 5
-                  
+              <CardContent className="p-3 sm:p-4 pt-0 space-y-2">
+                {sellerRanking.length === 0 ? (
+                  <p className="text-xs text-muted-foreground text-center py-8">Sin datos de ventas.</p>
+                ) : sellerRanking.map((s, i) => {
+                  const pct = Math.round((s.total / maxSeller) * 100)
+                  const style = podiumStyle[i]
+                  const Icon = style?.icon
                   return (
-                    <div
-                      key={product.id}
-                      className="group rounded-lg border border-slate-200 bg-white p-2.5 sm:p-3 hover:border-rose-200 hover:shadow-sm transition-all"
-                    >
-                      <div className="flex items-center justify-between mb-1.5 sm:mb-2">
-                        <div className="flex items-center gap-2 sm:gap-2.5 min-w-0">
-                          <img
-                            src={product.imageUrl || '/placeholder.svg'}
-                            alt={product.name}
-                            className="h-8 w-8 sm:h-10 sm:w-10 rounded-lg object-cover border border-slate-100 shrink-0"
-                          />
-                          <div className="min-w-0">
-                            <p className="text-xs font-medium text-foreground truncate">{product.name}</p>
-                            <p className="text-xs text-muted-foreground">{product.category}</p>
-                          </div>
-                        </div>
-                        <Badge className={`${isCritical ? 'bg-rose-50 text-rose-700 border-rose-200' : 'bg-amber-50 text-amber-700 border-amber-200'} border text-xs shrink-0`}>
-                          {product.stock} uds
-                        </Badge>
+                    <div key={s.name} className="flex items-center gap-2.5">
+                      <div className={`h-8 w-8 rounded-xl flex items-center justify-center text-xs font-bold shrink-0 border ${style ? `${style.bg} ${style.text} ring-2 ${style.ring}` : 'bg-slate-50 text-slate-400 border-slate-200'}`}>
+                        {Icon ? <Icon className="h-4 w-4" /> : i + 1}
                       </div>
-                      
-                      <div className="space-y-1 sm:space-y-1.5">
-                        <div className="flex items-center justify-between text-xs">
-                          <span className="text-muted-foreground">Stock actual</span>
-                          <span className="font-medium text-foreground">{percent}% del mínimo</span>
+                      <div className="min-w-0 flex-1">
+                        <div className="flex items-center justify-between gap-2 mb-1">
+                          <span className="text-xs font-semibold text-foreground truncate">{s.name}</span>
+                          <span className="text-xs font-bold text-foreground shrink-0">{formatCurrency(s.total)}</span>
                         </div>
-                        <div className="h-1.5 rounded-full bg-slate-100 overflow-hidden">
-                          <div
-                            className={`h-full rounded-full transition-all duration-500 ${isCritical ? 'bg-rose-500' : 'bg-amber-500'}`}
-                            style={{ width: `${percent}%` }}
-                          />
+                        <div className="h-2 rounded-full bg-slate-100 overflow-hidden">
+                          <div className="h-full rounded-full bg-gradient-to-r from-teal-500 to-cyan-400 transition-all duration-700" style={{ width: `${pct}%` }} />
                         </div>
-                        <div className="flex items-center justify-between pt-0.5 sm:pt-1">
-                          <span className="text-xs text-muted-foreground">Mínimo: 10 uds</span>
-                          <Button 
-                            size="sm" 
-                            variant="outline" 
-                            className="h-5 sm:h-6 text-xs rounded border-slate-200 hover:bg-slate-50"
-                            onClick={() => handleReabastecer(product.id)}
-                          >
-                            Reabastecer
-                          </Button>
-                        </div>
+                        <p className="text-[11px] text-muted-foreground mt-0.5">{s.count} ventas</p>
                       </div>
                     </div>
                   )
@@ -861,332 +389,278 @@ export default function DashboardPage() {
               </CardContent>
             </Card>
 
-            {/* Debtors - Ahora con datos reales */}
-            <Card className="border-border/40 bg-white shadow-sm">
-              <CardHeader className="flex flex-col gap-2 sm:gap-3 pb-2 p-2 sm:p-3">
-                <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-1.5 sm:gap-2">
-                  <div>
-                    <CardTitle className="text-sm sm:text-base font-semibold flex items-center gap-1.5">
-                      <CreditCard className="h-3.5 w-3.5 sm:h-4 sm:w-4 text-orange-500" />
-                      Deudores
-                    </CardTitle>
-                    <p className="text-xs text-muted-foreground mt-0.5">Clientes con saldo pendiente</p>
-                  </div>
-                  <div className="relative w-full sm:w-48">
-                    <Buscar className="absolute left-2 sm:left-2.5 top-1/2 -translate-y-1/2 h-3 w-3 sm:h-3.5 sm:w-3.5 text-muted-foreground" />
-                    <Input
-                      placeholder="Buscar cliente..."
-                      className="pl-7 sm:pl-8 h-7 sm:h-8 rounded border-slate-200 focus:border-sky-300 focus:ring-sky-200 text-xs"
-                      value={debtorQuery}
-                      onChange={(event) => {
-                        setDebtorQuery(event.target.value)
-                        setDebtorPage(1)
-                      }}
-                    />
-                  </div>
-                </div>
+            {/* Rubros más vendidos */}
+            <Card className="border-border/40 bg-white shadow-sm rounded-2xl">
+              <CardHeader className="p-3 sm:p-4 pb-1">
+                <CardTitle className="text-sm sm:text-base font-semibold flex items-center gap-1.5">
+                  <Layers className="h-4 w-4 text-teal-500" /> Rubros más vendidos
+                </CardTitle>
+                <p className="text-xs text-muted-foreground mt-0.5">Por facturación · últimos 6 meses</p>
               </CardHeader>
-              <CardContent className="space-y-1.5 sm:space-y-2 p-2 sm:p-3 pt-0">
-                {pagedDebtors.map((debtor) => (
-                  <div
-                    key={debtor.id}
-                    className="flex items-center justify-between p-2 rounded-lg border border-slate-100 bg-slate-50/30 hover:bg-slate-50 hover:border-slate-200 transition-all"
-                  >
-                    <div className="flex items-center gap-2 sm:gap-2.5 min-w-0">
-                      <div className="h-7 w-7 sm:h-8 sm:w-8 rounded-full bg-gradient-to-br from-slate-100 to-slate-200 flex items-center justify-center text-xs font-bold text-slate-600 shrink-0">
-                        {debtor.name.charAt(0)}
-                      </div>
+              <CardContent className="p-3 sm:p-4 pt-0">
+                {categoryRanking.length === 0 ? (
+                  <p className="text-xs text-muted-foreground text-center py-8">Sin datos de rubros.</p>
+                ) : (
+                  <ChartContainer config={{ revenue: { label: 'Facturación', color: '#0d9488' } }} className="h-56 sm:h-64 w-full">
+                    <BarChart data={categoryRanking} layout="vertical" margin={{ left: 8, right: 16, top: 4, bottom: 4 }}>
+                      <CartesianGrid horizontal={false} strokeDasharray="3 3" stroke="#f1f5f9" />
+                      <XAxis type="number" hide />
+                      <YAxis type="category" dataKey="name" width={96} tickLine={false} axisLine={false} tick={{ fill: '#475569', fontSize: 11 }} />
+                      <ChartTooltip content={<ChartTooltipContent />} formatter={(value) => formatCurrency(Number(value))} />
+                      <Bar dataKey="revenue" radius={[0, 6, 6, 0]}>
+                        {categoryRanking.map((_, i) => <Cell key={i} fill={RUBRO_COLORS[i % RUBRO_COLORS.length]} />)}
+                      </Bar>
+                    </BarChart>
+                  </ChartContainer>
+                )}
+              </CardContent>
+            </Card>
+          </div>
+
+          {/* Productos: top + distribución */}
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-3 sm:gap-4">
+            <Card className="lg:col-span-2 border-border/40 bg-white shadow-sm rounded-2xl">
+              <CardHeader className="flex flex-row items-center justify-between p-3 sm:p-4 pb-2">
+                <CardTitle className="text-sm sm:text-base font-semibold flex items-center gap-1.5">
+                  <Package className="h-4 w-4 text-cyan-500" /> Productos más vendidos
+                </CardTitle>
+                <Button variant="ghost" size="sm" className="h-7 text-xs gap-1 text-teal-600 hover:text-teal-700 hover:bg-teal-50" onClick={() => window.location.href = '/productos?sort=ventas'}>
+                  Ver todos <ArrowRight className="h-3 w-3" />
+                </Button>
+              </CardHeader>
+              <CardContent className="p-3 sm:p-4 pt-0 space-y-1.5">
+                {topProducts.length === 0 ? (
+                  <p className="text-xs text-muted-foreground text-center py-8">Sin ventas registradas.</p>
+                ) : topProducts.map((p, i) => (
+                  <div key={p.id} className="flex items-center justify-between gap-2 p-2 rounded-xl hover:bg-slate-50 transition-colors cursor-pointer" onClick={() => window.location.href = `/productos?id=${p.id}`}>
+                    <div className="flex items-center gap-2.5 min-w-0">
+                      <div className="h-7 w-7 rounded-lg bg-teal-50 border border-teal-100 flex items-center justify-center text-xs font-bold text-teal-600 shrink-0">{i + 1}</div>
                       <div className="min-w-0">
-                        <p className="text-xs font-medium text-foreground truncate">{debtor.name}</p>
-                        <p className="text-xs text-muted-foreground flex items-center gap-1">
-                          <AlertCircle className="h-2 w-2 sm:h-2.5 sm:w-2.5" />
-                          Saldo pendiente
-                        </p>
+                        <p className="text-xs font-medium text-foreground truncate">{p.name}</p>
+                        <p className="text-[11px] text-muted-foreground truncate">{p.category || 'Sin rubro'}</p>
                       </div>
                     </div>
-                    <span className="text-xs font-bold text-foreground shrink-0">
-                      {formatCurrency(debtor.currentBalance)}
-                    </span>
+                    <div className="text-right shrink-0">
+                      <p className="text-xs font-bold text-foreground">{p.units} uds</p>
+                      <p className="text-[11px] text-muted-foreground">{formatCurrency(p.revenue || 0)}</p>
+                    </div>
                   </div>
                 ))}
-                
-                <div className="flex items-center justify-between pt-2 sm:pt-3 border-t border-slate-100">
-                  <span className="text-xs text-muted-foreground">
-                    Página {debtorPage} de {totalPages}
-                  </span>
-                  <div className="flex gap-1 sm:gap-1.5">
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      className="h-6 sm:h-7 text-xs rounded px-1.5 sm:px-2"
-                      disabled={debtorPage === 1}
-                      onClick={() => setDebtorPage((page) => Math.max(1, page - 1))}
-                    >
-                      <ChevronLeft className="h-2.5 w-2.5 sm:hidden" />
-                      <span className="hidden sm:inline">Anterior</span>
-                    </Button>
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      className="h-6 sm:h-7 text-xs rounded px-1.5 sm:px-2"
-                      disabled={debtorPage === totalPages}
-                      onClick={() => setDebtorPage((page) => Math.min(totalPages, page + 1))}
-                    >
-                      <ChevronRightIcon className="h-2.5 w-2.5 sm:hidden" />
-                      <span className="hidden sm:inline">Siguiente</span>
-                    </Button>
+              </CardContent>
+            </Card>
+
+            <Card className="border-border/40 bg-white shadow-sm rounded-2xl">
+              <CardHeader className="p-3 sm:p-4 pb-1">
+                <CardTitle className="text-sm sm:text-base font-semibold">Catálogo por rubro</CardTitle>
+                <p className="text-xs text-muted-foreground mt-0.5">% de productos</p>
+              </CardHeader>
+              <CardContent className="p-3 sm:p-4 pt-0">
+                <div className="h-32 relative">
+                  <ResponsiveContainer width="100%" height="100%">
+                    <PieChart>
+                      <Pie data={productDistribution} dataKey="value" nameKey="name" innerRadius={36} outerRadius={56} paddingAngle={3}>
+                        {productDistribution.map((entry) => <Cell key={entry.name} fill={entry.color} strokeWidth={0} />)}
+                      </Pie>
+                    </PieChart>
+                  </ResponsiveContainer>
+                  <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+                    <div className="text-center">
+                      <div className="text-lg font-bold text-slate-700">{productDistribution.length > 0 ? `${productDistribution[0].value}%` : '0%'}</div>
+                      <div className="text-[11px] text-muted-foreground truncate max-w-[80px]">{productDistribution.length > 0 ? productDistribution[0].name : 'Sin datos'}</div>
+                    </div>
                   </div>
+                </div>
+                <div className="mt-3 space-y-1">
+                  {productDistribution.slice(0, 5).map((item) => (
+                    <div key={item.name} className="flex items-center justify-between text-xs">
+                      <div className="flex items-center gap-1.5 min-w-0">
+                        <span className="h-2 w-2 rounded-full shrink-0" style={{ backgroundColor: item.color }} />
+                        <span className="text-muted-foreground truncate">{item.name}</span>
+                      </div>
+                      <span className="font-medium text-foreground shrink-0">{item.value}%</span>
+                    </div>
+                  ))}
                 </div>
               </CardContent>
             </Card>
           </div>
 
-          {/* Actividad de clientes — quién compra y quién dejó de comprar */}
-          {(() => {
-            const lista = (actividadView === 'inactivos' ? clientesActividad.inactivos : clientesActividad.activos)
-              .filter((c) => c.name?.toLowerCase().includes(actividadQuery.toLowerCase()))
-            return (
-              <Card className="border-border/40 bg-white shadow-sm">
-                <CardHeader className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pb-2 p-2 sm:p-3">
-                  <div>
-                    <CardTitle className="text-sm sm:text-base font-semibold flex items-center gap-1.5">
-                      <Usuarios className="h-3.5 w-3.5 sm:h-4 sm:w-4 text-teal-500" />
-                      Actividad de clientes
-                    </CardTitle>
-                    <p className="text-xs text-muted-foreground mt-0.5">Quién sigue comprando y quién dejó de hacerlo (corte {clientesActividad.dias} días)</p>
-                  </div>
-                  <div className="flex items-center gap-1.5">
-                    <button
-                      type="button"
-                      onClick={() => setActividadView('inactivos')}
-                      className={`px-2.5 py-1 rounded-lg text-xs font-medium border transition-colors ${actividadView === 'inactivos' ? 'bg-rose-500 text-white border-rose-500' : 'bg-white text-rose-600 border-rose-200 hover:bg-rose-50'}`}
-                    >
-                      Dejaron de comprar ({clientesActividad.inactivos.length})
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => setActividadView('activos')}
-                      className={`px-2.5 py-1 rounded-lg text-xs font-medium border transition-colors ${actividadView === 'activos' ? 'bg-emerald-500 text-white border-emerald-500' : 'bg-white text-emerald-600 border-emerald-200 hover:bg-emerald-50'}`}
-                    >
-                      Activos ({clientesActividad.activos.length})
-                    </button>
-                  </div>
-                </CardHeader>
-                <CardContent className="p-2 sm:p-3 pt-0 space-y-2">
-                  <div className="relative">
-                    <Buscar className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
-                    <Input
-                      placeholder="Buscar cliente..."
-                      value={actividadQuery}
-                      onChange={(e) => setActividadQuery(e.target.value)}
-                      className="pl-8 h-8 text-xs"
-                    />
-                  </div>
-                  {lista.length === 0 ? (
-                    <p className="text-xs text-muted-foreground text-center py-6">
-                      {actividadView === 'inactivos' ? 'No hay clientes inactivos en este corte.' : 'No hay clientes activos.'}
-                    </p>
-                  ) : (
-                    <div className="max-h-[420px] overflow-y-auto divide-y divide-slate-100">
-                      {lista.map((c) => (
-                        <div key={c.id} className="flex items-center justify-between gap-2 py-2">
+          {/* Cobranza + Oportunidades de venta */}
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-3 sm:gap-4">
+            {/* Deudores por antigüedad */}
+            <Card className="border-border/40 bg-white shadow-sm rounded-2xl">
+              <CardHeader className="p-3 sm:p-4 pb-2 space-y-2">
+                <div>
+                  <CardTitle className="text-sm sm:text-base font-semibold flex items-center gap-1.5">
+                    <CreditCard className="h-4 w-4 text-orange-500" /> Deudores por monto y antigüedad
+                  </CardTitle>
+                  <p className="text-xs text-muted-foreground mt-0.5">Priorizar cobranza: cuánto y desde cuándo deben</p>
+                </div>
+                <div className="relative">
+                  <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
+                  <Input placeholder="Buscar cliente..." value={deudorQuery} onChange={(e) => setDeudorQuery(e.target.value)} className="pl-8 h-8 text-xs rounded-xl" />
+                </div>
+              </CardHeader>
+              <CardContent className="p-3 sm:p-4 pt-0">
+                {filteredDeudores.length === 0 ? (
+                  <p className="text-xs text-muted-foreground text-center py-8">Sin deudores.</p>
+                ) : (
+                  <div className="max-h-[380px] overflow-y-auto divide-y divide-slate-100">
+                    {filteredDeudores.slice(0, 50).map((d) => {
+                      const meta = classMeta[d.classification] ?? classMeta.normal
+                      return (
+                        <div key={d.id} className="flex items-center justify-between gap-2 py-2 cursor-pointer hover:bg-slate-50 rounded-lg px-1" onClick={() => window.location.href = '/cuenta-corriente'}>
                           <div className="min-w-0">
-                            <p className="text-xs font-semibold text-foreground truncate">{c.name}</p>
-                            <p className="text-[11px] text-muted-foreground truncate">
-                              {c.sellerName ? `Vendedor: ${c.sellerName}` : 'Sin vendedor'}
-                              {c.phone ? ` · ${c.phone}` : ''}
-                            </p>
+                            <p className="text-xs font-semibold text-foreground truncate">{d.name}</p>
+                            <div className="flex items-center gap-1.5 mt-0.5">
+                              <Badge variant="outline" className={`text-[10px] py-0 ${meta.cls}`}>{meta.label}</Badge>
+                              {typeof d.daysSince === 'number' && (
+                                <span className="text-[10px] text-muted-foreground">hace {d.daysSince} días</span>
+                              )}
+                            </div>
                           </div>
-                          <div className="text-right shrink-0">
-                            <Badge
-                              variant="outline"
-                              className={`text-[10px] ${actividadView === 'inactivos' ? 'bg-rose-50 text-rose-700 border-rose-200' : 'bg-emerald-50 text-emerald-700 border-emerald-200'}`}
-                            >
-                              {c.daysSince === 0 ? 'Hoy' : `hace ${c.daysSince} días`}
-                            </Badge>
-                            <p className="text-[10px] text-muted-foreground mt-0.5">Últ.: {new Date(c.lastPurchase).toLocaleDateString('es-AR')}</p>
-                          </div>
+                          <span className="text-xs font-bold text-orange-600 shrink-0">{formatCurrency(d.balance)}</span>
                         </div>
-                      ))}
+                      )
+                    })}
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+
+            {/* Clientes que dejaron de comprar — para ofertar */}
+            <Card className="border-border/40 bg-white shadow-sm rounded-2xl">
+              <CardHeader className="p-3 sm:p-4 pb-2 space-y-2">
+                <div>
+                  <CardTitle className="text-sm sm:text-base font-semibold flex items-center gap-1.5">
+                    <Users className="h-4 w-4 text-rose-500" /> Dejaron de comprar — ofertar
+                  </CardTitle>
+                  <p className="text-xs text-muted-foreground mt-0.5">Sin compras en +30 días. Recuperalos con una oferta.</p>
+                </div>
+                <div className="relative">
+                  <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
+                  <Input placeholder="Buscar cliente..." value={inactivoQuery} onChange={(e) => setInactivoQuery(e.target.value)} className="pl-8 h-8 text-xs rounded-xl" />
+                </div>
+              </CardHeader>
+              <CardContent className="p-3 sm:p-4 pt-0">
+                {filteredInactivos.length === 0 ? (
+                  <p className="text-xs text-muted-foreground text-center py-8">No hay clientes inactivos.</p>
+                ) : (
+                  <div className="max-h-[380px] overflow-y-auto divide-y divide-slate-100">
+                    {filteredInactivos.slice(0, 50).map((c) => (
+                      <div key={c.id} className="flex items-center justify-between gap-2 py-2">
+                        <div className="min-w-0">
+                          <p className="text-xs font-semibold text-foreground truncate">{c.name}</p>
+                          <p className="text-[11px] text-muted-foreground truncate">
+                            {c.sellerName ? `Vend: ${c.sellerName}` : 'Sin vendedor'} · últ. {new Date(c.lastPurchase).toLocaleDateString('es-AR')}
+                          </p>
+                        </div>
+                        <div className="flex items-center gap-1.5 shrink-0">
+                          <Badge variant="outline" className="text-[10px] bg-rose-50 text-rose-700 border-rose-200">hace {c.daysSince}d</Badge>
+                          {c.phone && (
+                            <a href={waLink(c.phone, `Hola ${c.name}! Tenemos una oferta especial para vos en Distribuidora Patricia.`)} target="_blank" rel="noopener noreferrer" onClick={(e) => e.stopPropagation()}>
+                              <Button size="sm" variant="outline" className="h-7 w-7 p-0 rounded-lg text-emerald-600 border-emerald-200 hover:bg-emerald-50">
+                                <MessageCircle className="h-3.5 w-3.5" />
+                              </Button>
+                            </a>
+                          )}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+          </div>
+
+          {/* Stock bajo + Pedidos pendientes */}
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-3 sm:gap-4">
+            <Card className="border-border/40 bg-white shadow-sm rounded-2xl">
+              <CardHeader className="flex flex-row items-center justify-between p-3 sm:p-4 pb-2">
+                <CardTitle className="text-sm sm:text-base font-semibold flex items-center gap-1.5">
+                  <AlertCircle className="h-4 w-4 text-rose-500" /> Stock bajo
+                </CardTitle>
+                <Button variant="ghost" size="sm" className="h-7 text-xs gap-1" onClick={() => window.location.href = '/productos?filter=low-stock'}>
+                  Ver todos <ArrowRight className="h-3 w-3" />
+                </Button>
+              </CardHeader>
+              <CardContent className="p-3 sm:p-4 pt-0 space-y-2">
+                {lowStockProducts.slice(0, 5).map((product) => {
+                  const isCritical = product.stock < 5
+                  return (
+                    <div key={product.id} className="flex items-center justify-between gap-2 p-2 rounded-xl border border-slate-100 hover:border-rose-200 transition-colors">
+                      <div className="flex items-center gap-2.5 min-w-0">
+                        <img src={product.imageUrl || '/placeholder.svg'} alt={product.name} className="h-9 w-9 rounded-lg object-cover border border-slate-100 shrink-0" />
+                        <div className="min-w-0">
+                          <p className="text-xs font-medium text-foreground truncate">{product.name}</p>
+                          <p className="text-[11px] text-muted-foreground truncate">{product.category}</p>
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-1.5 shrink-0">
+                        <Badge className={`${isCritical ? 'bg-rose-50 text-rose-700 border-rose-200' : 'bg-amber-50 text-amber-700 border-amber-200'} border text-xs`}>{product.stock} uds</Badge>
+                        <Button size="sm" variant="outline" className="h-7 text-xs rounded-lg" onClick={() => window.location.href = `/productos?id=${product.id}&action=edit`}>Reponer</Button>
+                      </div>
                     </div>
-                  )}
-                </CardContent>
-              </Card>
-            )
-          })()}
+                  )
+                })}
+                {lowStockProducts.length === 0 && <p className="text-xs text-muted-foreground text-center py-8">Stock en orden.</p>}
+              </CardContent>
+            </Card>
+
+            <Card className="border-border/40 bg-white shadow-sm rounded-2xl">
+              <CardHeader className="flex flex-row items-center justify-between p-3 sm:p-4 pb-2">
+                <CardTitle className="text-sm sm:text-base font-semibold flex items-center gap-1.5">
+                  <Truck className="h-4 w-4 text-sky-500" /> Pedidos pendientes
+                </CardTitle>
+                <Button variant="ghost" size="sm" className="h-7 text-xs gap-1" onClick={() => window.location.href = '/pedidos'}>
+                  Gestionar <ArrowRight className="h-3 w-3" />
+                </Button>
+              </CardHeader>
+              <CardContent className="p-3 sm:p-4 pt-0 space-y-2">
+                {pendingOrders.slice(0, 5).map((o) => (
+                  <div key={o.id} className="flex items-center justify-between gap-2 p-2 rounded-xl border border-slate-100 hover:bg-slate-50 transition-colors cursor-pointer" onClick={() => window.location.href = '/pedidos'}>
+                    <div className="min-w-0">
+                      <p className="text-xs font-semibold text-foreground truncate">{o.clientName || 'Cliente'}</p>
+                      <p className="text-[11px] text-muted-foreground truncate">{o.items.reduce((a, it) => a + it.quantity, 0)} uds · {o.address || 'Sin dirección'}</p>
+                    </div>
+                    <Badge variant="outline" className={`text-[10px] shrink-0 ${o.status === 'delivery' ? 'bg-sky-50 text-sky-700 border-sky-200' : 'bg-amber-50 text-amber-700 border-amber-200'}`}>
+                      {o.status === 'delivery' ? 'En camino' : o.status === 'preparation' ? 'Preparando' : 'Pendiente'}
+                    </Badge>
+                  </div>
+                ))}
+                {pendingOrders.length === 0 && <p className="text-xs text-muted-foreground text-center py-8">Sin pedidos pendientes.</p>}
+              </CardContent>
+            </Card>
+          </div>
 
         </div>
       </div>
 
-      {/* Order Detail Modal */}
-      <Dialog open={Boolean(selectedOrder)} onOpenChange={() => setSelectedOrder(null)}>
-        <DialogContent className="sm:max-w-md rounded-xl sm:rounded-2xl border-slate-200 w-[calc(100vw-1rem)] sm:w-full">
-          <DialogHeader className="pb-2 sm:pb-3">
-            <DialogTitle className="text-sm sm:text-base font-semibold flex items-center gap-1.5 sm:gap-2">
-              <Paquete className="h-3.5 w-3.5 sm:h-4 sm:w-4 text-sky-500" />
-              Detalle del pedido
-            </DialogTitle>
-          </DialogHeader>
-          {selectedOrder && (
-            <div className="space-y-2 sm:space-y-3">
-              <div className="rounded-lg bg-slate-50 border border-slate-100 p-2.5 sm:p-3">
-                <p className="text-xs sm:text-sm font-semibold text-foreground">{selectedOrder.clientName || 'Cliente no especificado'}</p>
-                <p className="text-xs text-muted-foreground font-mono mt-0.5">{selectedOrder.id}</p>
-              </div>
-
-              <div className="grid grid-cols-2 gap-1.5 sm:gap-2">
-                <div className="rounded-lg bg-slate-50 border border-slate-100 p-2">
-                  <p className="text-xs text-muted-foreground mb-0.5">Estado</p>
-                  {(() => { const m = statusMeta[selectedOrder.status] ?? statusMeta['pending']; return (
-                  <div className={`inline-flex items-center gap-1 px-1 py-0.5 rounded text-xs font-medium border ${m.bg} ${m.color}`}>
-                    {m.label}
-                  </div>
-                  ); })()}
-                </div>
-                <div className="rounded-lg bg-slate-50 border border-slate-100 p-2">
-                  <p className="text-xs text-muted-foreground mb-0.5">Tiempo estimado</p>
-                  <p className="text-xs font-semibold text-foreground flex items-center gap-1">
-                    <Reloj className="h-2.5 w-2.5 sm:h-3 sm:w-3 text-slate-400" />
-                    {selectedOrder.status === 'delivery' ? '30 min' : '45 min'}
-                  </p>
-                </div>
-                <div className="rounded-lg bg-slate-50 border border-slate-100 p-2">
-                  <p className="text-xs text-muted-foreground mb-0.5">Productos</p>
-                  <p className="text-xs font-semibold text-foreground">
-                    {selectedOrder.items.reduce((acc, item) => acc + item.quantity, 0)} unidades
-                  </p>
-                </div>
-                <div className="rounded-lg bg-slate-50 border border-slate-100 p-2">
-                  <p className="text-xs text-muted-foreground mb-0.5">Dirección</p>
-                  <p className="text-xs font-semibold text-foreground truncate">{selectedOrder.address}</p>
-                </div>
-              </div>
-            </div>
-          )}
-          <DialogFooter className="gap-1.5 sm:gap-2 pt-2 sm:pt-3">
-            <Button 
-              variant="outline" 
-              className="rounded text-xs h-7 sm:h-8 px-2 sm:px-3" 
-              onClick={() => setSelectedOrder(null)}
-            >
-              Cerrar
-            </Button>
-            {selectedOrder && selectedOrder.status !== 'completed' && (
-              <Button 
-                className="rounded bg-sky-600 hover:bg-sky-700 text-xs h-7 sm:h-8 px-2 sm:px-3"
-                onClick={() => {
-                  if (!selectedOrder) return
-                  const nextAction = getNextAction(selectedOrder.status)
-                  handleUpdateOrderStatus(selectedOrder.id, nextAction.nextStatus)
-                }}
-              >
-                {getNextAction(selectedOrder.status).label}
-              </Button>
-            )}
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
-      {/* Date Range Picker Modal */}
-      <Dialog open={showDateRangePicker} onOpenChange={setShowDateRangePicker}>
-        <DialogContent className="sm:max-w-md rounded-xl sm:rounded-2xl border-slate-200 w-[calc(100vw-1rem)] sm:w-full">
-          <DialogHeader className="pb-2 sm:pb-3">
-            <DialogTitle className="text-sm sm:text-base font-semibold flex items-center gap-1.5 sm:gap-2">
-              <Calendar className="h-3.5 w-3.5 sm:h-4 sm:w-4 text-sky-500" />
-              Rango de fechas personalizado
-            </DialogTitle>
-          </DialogHeader>
-          <div className="space-y-3 sm:space-y-4">
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 sm:gap-3">
-              <div className="space-y-1.5">
-                <label className="text-xs sm:text-sm font-medium">Fecha de inicio</label>
-                <Input
-                  type="date"
-                  className="text-xs sm:text-sm h-8 sm:h-9"
-                  value={dateRange.start}
-                  onChange={(e) => setDateRange(prev => ({ ...prev, start: e.target.value }))}
-                />
-              </div>
-              <div className="space-y-1.5">
-                <label className="text-xs sm:text-sm font-medium">Fecha de fin</label>
-                <Input
-                  type="date"
-                  className="text-xs sm:text-sm h-8 sm:h-9"
-                  value={dateRange.end}
-                  onChange={(e) => setDateRange(prev => ({ ...prev, end: e.target.value }))}
-                />
-              </div>
-            </div>
-          </div>
-          <DialogFooter className="gap-1.5 sm:gap-2 pt-2 sm:pt-3">
-            <Button 
-              variant="outline" 
-              className="rounded text-xs h-7 sm:h-8 px-2 sm:px-3" 
-              onClick={() => {
-                setShowDateRangePicker(false)
-                setDateRange({ start: '', end: '' })
-              }}
-            >
-              Cancelar
-            </Button>
-            <Button 
-              className="rounded bg-sky-600 hover:bg-sky-700 text-xs h-7 sm:h-8 px-2 sm:px-3"
-              onClick={applyDateRange}
-              disabled={!dateRange.start || !dateRange.end}
-            >
-              Aplicar
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
       {/* Alias Transfer Config Modal */}
       <Dialog open={aliasModalOpen} onOpenChange={setAliasModalOpen}>
-        <DialogContent className="sm:max-w-md">
+        <DialogContent className="sm:max-w-md rounded-2xl">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
-              <ArrowLeftRight className="h-5 w-5 text-violet-600" />
-              Datos de Transferencia
+              <ArrowLeftRight className="h-5 w-5 text-teal-600" /> Datos de Transferencia
             </DialogTitle>
           </DialogHeader>
           <div className="space-y-4 py-2">
             <div className="space-y-2">
               <Label htmlFor="alias">Alias</Label>
-              <Input
-                id="alias"
-                placeholder="ej: distribuidora.patricia.mp"
-                value={aliasConfig.alias}
-                onChange={(e) => setAliasConfig(prev => ({ ...prev, alias: e.target.value }))}
-              />
+              <Input id="alias" placeholder="ej: distribuidora.patricia.mp" value={aliasConfig.alias} onChange={(e) => setAliasConfig(prev => ({ ...prev, alias: e.target.value }))} />
             </div>
             <div className="space-y-2">
               <Label htmlFor="titular">Titular</Label>
-              <Input
-                id="titular"
-                placeholder="ej: Juan Pérez"
-                value={aliasConfig.titular}
-                onChange={(e) => setAliasConfig(prev => ({ ...prev, titular: e.target.value }))}
-              />
+              <Input id="titular" placeholder="ej: Juan Pérez" value={aliasConfig.titular} onChange={(e) => setAliasConfig(prev => ({ ...prev, titular: e.target.value }))} />
             </div>
             <div className="space-y-2">
               <Label htmlFor="banco">Banco</Label>
-              <Input
-                id="banco"
-                placeholder="ej: Mercado Pago"
-                value={aliasConfig.banco}
-                onChange={(e) => setAliasConfig(prev => ({ ...prev, banco: e.target.value }))}
-              />
+              <Input id="banco" placeholder="ej: Mercado Pago" value={aliasConfig.banco} onChange={(e) => setAliasConfig(prev => ({ ...prev, banco: e.target.value }))} />
             </div>
           </div>
           <DialogFooter>
-            <Button variant="outline" onClick={() => setAliasModalOpen(false)}>
-              Cancelar
-            </Button>
-            <Button
-              className="bg-violet-600 hover:bg-violet-700"
-              onClick={handleSaveAlias}
-              disabled={aliasSaving}
-            >
+            <Button variant="outline" onClick={() => setAliasModalOpen(false)}>Cancelar</Button>
+            <Button className="bg-teal-600 hover:bg-teal-700" onClick={handleSaveAlias} disabled={aliasSaving}>
               {aliasSaving ? <><Loader2 className="h-4 w-4 animate-spin mr-2" />Guardando...</> : 'Guardar'}
             </Button>
           </DialogFooter>

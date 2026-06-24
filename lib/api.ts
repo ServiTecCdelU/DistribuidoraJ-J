@@ -91,6 +91,7 @@ import {
   getProductDistribution,
   getDashboardData,
   getClientesActividad,
+  getDeudoresAntiguedad,
 } from '@/services/dashboard-service'
 import { logAudit, getAuditLog } from '@/services/audit-service'
 import {
@@ -469,6 +470,9 @@ export const dashboardApi = {
   },
   async getClientesActividad(dias = 30) {
     return getClientesActividad(dias)
+  },
+  async getDeudoresAntiguedad() {
+    return getDeudoresAntiguedad()
   },
 }
 

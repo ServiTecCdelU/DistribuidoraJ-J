@@ -121,23 +121,56 @@ async function fetchDashboardData() {
     if (bucket) bucket.total += s.total ?? 0
   })
 
-  // Top productos
+  const salesThisMonth = salesLastMonths[5]?.total ?? 0
+  const salesPrevMonth = salesLastMonths[4]?.total ?? 0
+  const monthDeltaPct = salesPrevMonth > 0
+    ? ((salesThisMonth - salesPrevMonth) / salesPrevMonth) * 100
+    : 0
+
+  const productMap = new Map(products.map((p) => [p.id, p]))
+
+  // Top productos + rubros más vendidos (en una sola pasada por los items)
   const productSales: Record<string, { units: number; revenue: number }> = {}
+  const categoryAgg: Record<string, { units: number; revenue: number }> = {}
   sales.forEach((s) => {
     s.items?.forEach((item: any) => {
+      const qty = Number(item.quantity) || 0
+      const rev = (Number(item.price) || 0) * qty
       if (!productSales[item.productId]) productSales[item.productId] = { units: 0, revenue: 0 }
-      productSales[item.productId].units += item.quantity
-      productSales[item.productId].revenue += item.price * item.quantity
+      productSales[item.productId].units += qty
+      productSales[item.productId].revenue += rev
+      const cat = (productMap.get(item.productId)?.category || 'Sin rubro').trim() || 'Sin rubro'
+      if (!categoryAgg[cat]) categoryAgg[cat] = { units: 0, revenue: 0 }
+      categoryAgg[cat].units += qty
+      categoryAgg[cat].revenue += rev
     })
   })
   const topProducts = Object.entries(productSales)
     .map(([productId, st]) => {
-      const p = products.find((x) => x.id === productId)
+      const p = productMap.get(productId)
       return p ? { id: p.id, name: p.name, category: p.category, units: st.units, revenue: st.revenue, imageUrl: p.imageUrl } : null
     })
     .filter(Boolean)
     .sort((a, b) => b!.units - a!.units)
-    .slice(0, 5)
+    .slice(0, 6)
+
+  const categoryRanking = Object.entries(categoryAgg)
+    .map(([name, v]) => ({ name, units: v.units, revenue: v.revenue }))
+    .sort((a, b) => b.revenue - a.revenue)
+    .slice(0, 8)
+
+  // Ranking de vendedores (por facturación, últimos 6 meses)
+  const sellerAgg: Record<string, { total: number; count: number }> = {}
+  sales.forEach((s) => {
+    const name = (((s as any).seller_name ?? '') as string).trim() || 'Sin vendedor'
+    if (!sellerAgg[name]) sellerAgg[name] = { total: 0, count: 0 }
+    sellerAgg[name].total += s.total ?? 0
+    sellerAgg[name].count += 1
+  })
+  const sellerRanking = Object.entries(sellerAgg)
+    .map(([name, v]) => ({ name, total: v.total, count: v.count }))
+    .sort((a, b) => b.total - a.total)
+    .slice(0, 8)
 
   // Distribucion por categoria
   const categoryTotals: Record<string, number> = {}
@@ -159,7 +192,7 @@ async function fetchDashboardData() {
     .sort((a, b) => a.stock - b.stock)
 
   return {
-    stats,
+    stats: { ...stats, salesThisMonth, salesPrevMonth, monthDeltaPct },
     charts: {
       salesLastDays: salesLastDays.map((b) => ({ day: formatter7.format(b.date), total: b.total })),
       salesByHourToday: hourBuckets.filter((b) => b.total > 0),
@@ -170,6 +203,8 @@ async function fetchDashboardData() {
       topProducts,
       lowStockProducts,
       debtors,
+      categoryRanking,
+      sellerRanking,
     },
   }
 }
@@ -238,6 +273,61 @@ export const getClientesActividad = async (dias = 30): Promise<{ activos: Client
   inactivos.sort((a, b) => b.daysSince - a.daysSince)
   activos.sort((a, b) => a.daysSince - b.daysSince)
   return { activos, inactivos, dias }
+}
+
+export interface DeudorAntiguedad {
+  id: string
+  name: string
+  phone?: string
+  balance: number
+  classification: 'normal' | 'atrasado' | 'moroso' | 'incobrable'
+  debtSince?: string
+  daysSince?: number
+}
+
+// Deudores ordenados por monto, con la antigüedad de la deuda más vieja (tabla transacciones,
+// type='debt', primera con saldo > 0). Sirve para priorizar cobranza: cuánto y desde cuándo.
+export const getDeudoresAntiguedad = async (): Promise<DeudorAntiguedad[]> => {
+  const { data: cli } = await supabase
+    .from('clientes')
+    .select('id, name, phone, current_balance, debt_classification')
+    .gt('current_balance', 0)
+
+  const clientes = cli ?? []
+  const ids = clientes.map((c: any) => c.id)
+  const debtSinceMap: Record<string, Date> = {}
+
+  if (ids.length > 0) {
+    const { data: debts } = await supabase
+      .from('transacciones')
+      .select('client_id, date, saldo, amount')
+      .in('client_id', ids)
+      .eq('type', 'debt')
+      .order('date', { ascending: true })
+      .limit(20000)
+    for (const t of debts ?? []) {
+      const saldo = (t as any).saldo != null ? Number((t as any).saldo) : Number((t as any).amount)
+      if (saldo <= 0) continue
+      const cid = (t as any).client_id as string
+      if (!debtSinceMap[cid]) debtSinceMap[cid] = new Date((t as any).date)
+    }
+  }
+
+  const ahora = Date.now()
+  return clientes
+    .map((c: any) => {
+      const ds = debtSinceMap[c.id]
+      return {
+        id: c.id,
+        name: c.name,
+        phone: c.phone ?? undefined,
+        balance: Number(c.current_balance) || 0,
+        classification: (c.debt_classification ?? 'normal') as DeudorAntiguedad['classification'],
+        debtSince: ds ? ds.toISOString() : undefined,
+        daysSince: ds ? Math.floor((ahora - ds.getTime()) / 86400000) : undefined,
+      }
+    })
+    .sort((a, b) => b.balance - a.balance)
 }
 
 export const getDashboardStats = async () => (await getDashboardData()).stats
