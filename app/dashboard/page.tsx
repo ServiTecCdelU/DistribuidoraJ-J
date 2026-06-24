@@ -9,8 +9,6 @@ import { Badge } from '@/components/ui/badge'
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import dynamic from 'next/dynamic'
 
-const Area = dynamic(() => import('recharts').then(mod => ({ default: mod.Area })), { ssr: false })
-const AreaChart = dynamic(() => import('recharts').then(mod => ({ default: mod.AreaChart })), { ssr: false })
 const Bar = dynamic(() => import('recharts').then(mod => ({ default: mod.Bar })), { ssr: false })
 const BarChart = dynamic(() => import('recharts').then(mod => ({ default: mod.BarChart })), { ssr: false })
 const CartesianGrid = dynamic(() => import('recharts').then(mod => ({ default: mod.CartesianGrid })), { ssr: false })
@@ -334,18 +332,18 @@ export default function DashboardPage() {
               </CardHeader>
               <CardContent className="p-3 sm:p-4 pt-0">
                 <ChartContainer config={{ total: { label: 'Ventas', color: '#06b6d4' } }} className="h-48 sm:h-60 w-full">
-                  <AreaChart data={salesLastDays} margin={{ left: 0, right: 8, top: 8, bottom: 8 }}>
+                  <BarChart data={salesLastDays} margin={{ left: 0, right: 8, top: 8, bottom: 8 }}>
                     <defs>
-                      <linearGradient id="fillDays" x1="0" y1="0" x2="0" y2="1">
-                        <stop offset="5%" stopColor="#06b6d4" stopOpacity={0.35} />
-                        <stop offset="95%" stopColor="#06b6d4" stopOpacity={0.04} />
+                      <linearGradient id="barCyan" x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="0%" stopColor="#22d3ee" />
+                        <stop offset="100%" stopColor="#0891b2" />
                       </linearGradient>
                     </defs>
                     <CartesianGrid vertical={false} strokeDasharray="3 3" stroke="#f1f5f9" />
                     <XAxis dataKey="day" tickLine={false} axisLine={false} tick={{ fill: '#64748b', fontSize: 11 }} dy={8} />
                     <ChartTooltip content={<ChartTooltipContent />} formatter={(value) => formatCurrency(Number(value))} />
-                    <Area dataKey="total" stroke="#0891b2" fill="url(#fillDays)" strokeWidth={2.5} />
-                  </AreaChart>
+                    <Bar dataKey="total" fill="url(#barCyan)" radius={[6, 6, 0, 0]} />
+                  </BarChart>
                 </ChartContainer>
               </CardContent>
             </Card>
