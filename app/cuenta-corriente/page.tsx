@@ -757,22 +757,20 @@ ${bloques}
 
     const renderTabla = (titulo: string, movs: Transaction[], balance: number) => {
       if (movs.length === 0 && balance <= 0) return ''
-      const totalDeudas = movs.filter((t) => t.type === 'debt').reduce((s, t) => s + t.amount, 0)
-      const totalPagos = movs.filter((t) => t.type === 'payment').reduce((s, t) => s + t.amount, 0)
+      const totalEntregado = movs.filter((t) => t.type === 'debt').reduce((s, t) => s + t.amount, 0)
+      const totalPagado = movs.filter((t) => t.type === 'payment').reduce((s, t) => s + t.amount, 0)
+      let saldoAcum = 0
       const rows = movs.map((t) => {
         const esDeuda = t.type === 'debt'
-        const tieneSaldo = esDeuda && (t.saldo ?? 0) > 0
-        const dias = tieneSaldo ? String(diasDesde(t.date)) : '—'
-        const monto = esDeuda
-          ? `<span class="m-deuda">+${formatCurrency(t.amount)}</span>`
-          : `<span class="m-pago">−${formatCurrency(t.amount)}</span>`
-        const saldo = esDeuda && t.saldo != null ? formatCurrency(t.saldo) : '—'
+        saldoAcum += esDeuda ? t.amount : -t.amount
+        const entregado = esDeuda ? `<span class="m-deuda">${formatCurrency(t.amount)}</span>` : ''
+        const pagado = esDeuda ? '' : `<span class="m-pago">${formatCurrency(t.amount)}</span>`
         return `<tr>
-          <td>${esc(t.description || (esDeuda ? 'Venta' : 'Pago'))}</td>
           <td class="center nowrap">${formatDate(t.date)}</td>
-          <td class="center">${dias}</td>
-          <td class="right nowrap">${monto}</td>
-          <td class="right nowrap">${saldo}</td>
+          <td>${esc(t.description || (esDeuda ? 'Entrega de mercadería' : 'Pago recibido'))}</td>
+          <td class="right nowrap">${entregado}</td>
+          <td class="right nowrap">${pagado}</td>
+          <td class="right nowrap ${saldoAcum > 0 ? 'deuda' : 'ok'}">${formatCurrency(saldoAcum)}</td>
         </tr>`
       }).join('')
       const sinMov = movs.length === 0
@@ -781,17 +779,24 @@ ${bloques}
       return `<div class="seccion">
   <div class="sec-head">
     <span class="sec-title">${esc(titulo)}</span>
-    <span class="sec-bal ${balance > 0 ? 'deuda' : 'ok'}">${balance > 0 ? formatCurrency(balance) : 'Cuenta cancelada'}</span>
+    <span class="sec-bal ${balance > 0 ? 'deuda' : 'ok'}">${balance > 0 ? 'Debe ' + formatCurrency(balance) : 'Cuenta cancelada'}</span>
   </div>
   <table class="mov">
-    <colgroup><col style="width:42%"><col style="width:16%"><col style="width:9%"><col style="width:16.5%"><col style="width:16.5%"></colgroup>
-    <thead><tr><th>Concepto</th><th class="center">Fecha</th><th class="center">Días</th><th class="right">Monto</th><th class="right">Saldo</th></tr></thead>
+    <colgroup><col style="width:15%"><col style="width:37%"><col style="width:16%"><col style="width:16%"><col style="width:16%"></colgroup>
+    <thead><tr><th class="center">Fecha</th><th>Concepto</th><th class="right">Entregado</th><th class="right">Pagado</th><th class="right">Saldo</th></tr></thead>
     <tbody>${rows}${sinMov}</tbody>
-    <tfoot><tr>
-      <td colspan="3" class="foot-label">Totales</td>
-      <td class="right nowrap"><span class="m-deuda">+${formatCurrency(totalDeudas)}</span> / <span class="m-pago">−${formatCurrency(totalPagos)}</span></td>
-      <td class="right nowrap deuda">${formatCurrency(balance)}</td>
-    </tr></tfoot>
+    <tfoot>
+      <tr>
+        <td colspan="2" class="foot-label">Totales</td>
+        <td class="right nowrap"><span class="m-deuda">${formatCurrency(totalEntregado)}</span></td>
+        <td class="right nowrap"><span class="m-pago">${formatCurrency(totalPagado)}</span></td>
+        <td class="right nowrap"></td>
+      </tr>
+      <tr class="saldo-final-row">
+        <td colspan="4" class="foot-label-final">SALDO ADEUDADO (Entregado − Pagado)</td>
+        <td class="right nowrap ${balance > 0 ? 'deuda' : 'ok'}">${formatCurrency(balance)}</td>
+      </tr>
+    </tfoot>
   </table>
 </div>`
     }
@@ -834,6 +839,8 @@ table.mov{width:100%;border-collapse:collapse;table-layout:fixed}
 .mov th{font-size:9px;font-weight:700;color:#6b7280;background:#fcfcfd;text-transform:uppercase;letter-spacing:.03em}
 .mov tfoot td{border-top:2px solid #e5e7eb;border-bottom:none;font-weight:800;background:#fafafa;padding:6px 12px}
 .foot-label{font-size:10px;text-transform:uppercase;letter-spacing:.05em;color:#6b7280}
+.saldo-final-row td{background:#f0fdfa;border-top:1px solid #ccfbf1;font-size:13px}
+.foot-label-final{font-size:11px;text-transform:uppercase;letter-spacing:.04em;color:#0f766e}
 .right{text-align:right!important}.center{text-align:center!important}.nowrap{white-space:nowrap}
 .deuda{color:#dc2626}.ok{color:#059669}
 .m-deuda{font-weight:600;color:#b45309}.m-pago{font-weight:600;color:#059669}
