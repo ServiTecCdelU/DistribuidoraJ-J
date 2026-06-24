@@ -129,26 +129,57 @@ async function fetchDashboardData() {
 
   const productMap = new Map(products.map((p) => [p.id, p]))
 
-  // Top productos + rubros más vendidos (en una sola pasada por los items)
+  // Top productos + rubros más vendidos.
+  // Los ítems de venta usan IDs mayorista (mp_XXXX); en `productos` son prod_mp_XXXX.
+  const normId = (id: string) => (id?.startsWith('mp_') ? `prod_${id}` : id)
+
   const productSales: Record<string, { units: number; revenue: number }> = {}
-  const categoryAgg: Record<string, { units: number; revenue: number }> = {}
+  const soldIds = new Set<string>()
   sales.forEach((s) => {
     s.items?.forEach((item: any) => {
+      const pid = item.productId
+      if (!pid) return
       const qty = Number(item.quantity) || 0
       const rev = (Number(item.price) || 0) * qty
-      if (!productSales[item.productId]) productSales[item.productId] = { units: 0, revenue: 0 }
-      productSales[item.productId].units += qty
-      productSales[item.productId].revenue += rev
-      const cat = (productMap.get(item.productId)?.category || 'Sin rubro').trim() || 'Sin rubro'
-      if (!categoryAgg[cat]) categoryAgg[cat] = { units: 0, revenue: 0 }
-      categoryAgg[cat].units += qty
-      categoryAgg[cat].revenue += rev
+      if (!productSales[pid]) productSales[pid] = { units: 0, revenue: 0 }
+      productSales[pid].units += qty
+      productSales[pid].revenue += rev
+      soldIds.add(pid)
     })
   })
+
+  // Resolver rubro/nombre/imagen de los productos vendidos (incluye mayorista mp_ → prod_mp_)
+  const realIds = [...new Set([...soldIds].map(normId))]
+  const soldProdMap = new Map<string, { name: string; category: string; imageUrl: string }>()
+  for (let i = 0; i < realIds.length; i += 400) {
+    const chunk = realIds.slice(i, i + 400)
+    const { data } = await supabase
+      .from('productos')
+      .select('id, name, category, image_url')
+      .in('id', chunk)
+    ;(data ?? []).forEach((r: any) => {
+      soldProdMap.set(r.id, {
+        name: r.name ?? '',
+        category: (r.category ?? '').trim(),
+        imageUrl: r.image_url ?? '',
+      })
+    })
+  }
+  const resolveProd = (pid: string) =>
+    soldProdMap.get(normId(pid)) ?? productMap.get(pid)
+
+  const categoryAgg: Record<string, { units: number; revenue: number }> = {}
+  Object.entries(productSales).forEach(([pid, st]) => {
+    const cat = (resolveProd(pid)?.category || '').trim() || 'Sin rubro'
+    if (!categoryAgg[cat]) categoryAgg[cat] = { units: 0, revenue: 0 }
+    categoryAgg[cat].units += st.units
+    categoryAgg[cat].revenue += st.revenue
+  })
+
   const topProducts = Object.entries(productSales)
     .map(([productId, st]) => {
-      const p = productMap.get(productId)
-      return p ? { id: p.id, name: p.name, category: p.category, units: st.units, revenue: st.revenue, imageUrl: p.imageUrl } : null
+      const p = resolveProd(productId)
+      return p ? { id: normId(productId), name: p.name, category: p.category, units: st.units, revenue: st.revenue, imageUrl: (p as any).imageUrl ?? '' } : null
     })
     .filter(Boolean)
     .sort((a, b) => b!.units - a!.units)
