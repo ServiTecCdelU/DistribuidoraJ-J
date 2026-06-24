@@ -22,7 +22,7 @@ import { SuccessModal } from "@/components/pedidos/success-modal";
 import { StockCheckModal, type StockCheckItem, type ReplacementOption } from "@/components/pedidos/stock-check-modal";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { statusConfig } from "@/lib/order-constants";
-import { formatCurrency as formatPrice } from "@/lib/utils/format";
+import { formatCurrency as formatPrice, formatTime } from "@/lib/utils/format";
 import { salidasRemito, reconciliarCobro, reposicionEliminarRemito } from "@/lib/utils/stock-remito";
 import { ordersToMoveAll, ordersToMoveSelected } from "@/lib/utils/order-move";
 
@@ -1971,9 +1971,10 @@ tbody tr:nth-child(even){background:#fafafa}
                                   <p className={`text-xs font-semibold truncate ${isHeld ? "text-red-400 line-through" : "text-foreground"}`}>
                                     {client}{codigo && <span className="ml-1 font-normal text-muted-foreground">({codigo})</span>}
                                   </p>
-                                  {clientOrders.length > 1 && (
-                                    <p className="text-[10px] text-muted-foreground">{clientOrders.length} pedidos</p>
-                                  )}
+                                  <p className="text-[10px] text-muted-foreground">
+                                    🕒 {formatTime(displayOrder.createdAt)}
+                                    {clientOrders.length > 1 && ` · ${clientOrders.length} pedidos`}
+                                  </p>
                                 </td>
                                 <td className="px-4 py-2.5">
                                   <span className="text-xs text-foreground truncate">{displayOrder.sellerName || "—"}</span>
@@ -2122,6 +2123,7 @@ tbody tr:nth-child(even){background:#fafafa}
                                 {codigo && <span className="font-medium text-foreground/70">({codigo}) </span>}
                                 {displayOrder.sellerName || "Sin vendedor"}
                                 {clientOrders.length > 1 && ` (${clientOrders.length})`}
+                                <span> · 🕒 {formatTime(displayOrder.createdAt)}</span>
                               </p>
                               {notas.length > 0 && (
                                 <p className="text-[10px] text-amber-700 italic truncate" title={notas.join(" · ")}>
