@@ -48,7 +48,7 @@ import {
   Users, FileCheck, CheckCircle2, XCircle, Clock, Loader2, ExternalLink,
   ChevronLeft, DollarSign, ArrowDownCircle, ArrowUpCircle, Search, X,
   Banknote, CreditCard, Image as ImageIcon, AlertTriangle, Ban, Printer,
-  History, RotateCcw, Tag, Receipt, Download, SlidersHorizontal, Trash2,
+  History, RotateCcw, Tag, Receipt, Download, SlidersHorizontal, Trash2, FileDown,
 } from 'lucide-react'
 import { toast } from 'sonner'
 
@@ -736,6 +736,144 @@ ${bloques}
     }
   }
 
+  // Genera un PDF/impresión del estado de cuenta corriente del cliente seleccionado.
+  const handlePrintCuentaCliente = () => {
+    if (!selectedClient) return
+    const c = selectedClient
+    const esc = (s: string) => String(s ?? '').replace(/[&<>]/g, (ch) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' }[ch] as string))
+
+    const minorista = clientTransactions
+      .filter((t) => (t.cuenta ?? 'minorista') === 'minorista')
+      .sort((a, b) => a.date.getTime() - b.date.getTime())
+    const mayorista = clientTransactions
+      .filter((t) => t.cuenta === 'mayorista')
+      .sort((a, b) => a.date.getTime() - b.date.getTime())
+
+    const balanceMin = c.currentBalance
+    const balanceMay = c.currentBalanceMayorista ?? 0
+    const now = new Date()
+    const dateStr = new Intl.DateTimeFormat('es-AR', { day: '2-digit', month: 'long', year: 'numeric' }).format(now)
+    const horaStr = new Intl.DateTimeFormat('es-AR', { hour: '2-digit', minute: '2-digit' }).format(now)
+
+    const renderTabla = (titulo: string, movs: Transaction[], balance: number) => {
+      if (movs.length === 0 && balance <= 0) return ''
+      const totalDeudas = movs.filter((t) => t.type === 'debt').reduce((s, t) => s + t.amount, 0)
+      const totalPagos = movs.filter((t) => t.type === 'payment').reduce((s, t) => s + t.amount, 0)
+      const rows = movs.map((t) => {
+        const esDeuda = t.type === 'debt'
+        const tieneSaldo = esDeuda && (t.saldo ?? 0) > 0
+        const dias = tieneSaldo ? String(diasDesde(t.date)) : '—'
+        const monto = esDeuda
+          ? `<span class="m-deuda">+${formatCurrency(t.amount)}</span>`
+          : `<span class="m-pago">−${formatCurrency(t.amount)}</span>`
+        const saldo = esDeuda && t.saldo != null ? formatCurrency(t.saldo) : '—'
+        return `<tr>
+          <td>${esc(t.description || (esDeuda ? 'Venta' : 'Pago'))}</td>
+          <td class="center nowrap">${formatDate(t.date)}</td>
+          <td class="center">${dias}</td>
+          <td class="right nowrap">${monto}</td>
+          <td class="right nowrap">${saldo}</td>
+        </tr>`
+      }).join('')
+      const sinMov = movs.length === 0
+        ? `<tr><td colspan="5" class="empty">Sin movimientos registrados</td></tr>`
+        : ''
+      return `<div class="seccion">
+  <div class="sec-head">
+    <span class="sec-title">${esc(titulo)}</span>
+    <span class="sec-bal ${balance > 0 ? 'deuda' : 'ok'}">${balance > 0 ? formatCurrency(balance) : 'Cuenta cancelada'}</span>
+  </div>
+  <table class="mov">
+    <colgroup><col style="width:42%"><col style="width:16%"><col style="width:9%"><col style="width:16.5%"><col style="width:16.5%"></colgroup>
+    <thead><tr><th>Concepto</th><th class="center">Fecha</th><th class="center">Días</th><th class="right">Monto</th><th class="right">Saldo</th></tr></thead>
+    <tbody>${rows}${sinMov}</tbody>
+    <tfoot><tr>
+      <td colspan="3" class="foot-label">Totales</td>
+      <td class="right nowrap"><span class="m-deuda">+${formatCurrency(totalDeudas)}</span> / <span class="m-pago">−${formatCurrency(totalPagos)}</span></td>
+      <td class="right nowrap deuda">${formatCurrency(balance)}</td>
+    </tr></tfoot>
+  </table>
+</div>`
+    }
+
+    const clasif = c.currentBalance > 0 ? clasificarDeuda(c.debtSince) : null
+    const clasifLabel: Record<string, string> = { normal: 'Al día', moroso: 'Moroso', incobrable: 'Incobrable' }
+    const infoItems = [
+      c.codigo ? `<div><span class="lbl">Código</span><span class="val">${esc(c.codigo)}</span></div>` : '',
+      c.address ? `<div><span class="lbl">Dirección</span><span class="val">${esc(c.address)}${c.city ? ', ' + esc(c.city) : ''}</span></div>` : '',
+      c.phone ? `<div><span class="lbl">Teléfono</span><span class="val">${esc(c.phone)}</span></div>` : '',
+      c.sellerName ? `<div><span class="lbl">Vendedor</span><span class="val">${esc(c.sellerName)}</span></div>` : '',
+      (c.currentBalance > 0 && c.debtSince) ? `<div><span class="lbl">En cuenta corriente</span><span class="val">${diasDesde(c.debtSince)} días</span></div>` : '',
+      clasif ? `<div><span class="lbl">Clasificación</span><span class="val">${clasifLabel[clasif] || clasif}</span></div>` : '',
+    ].filter(Boolean).join('')
+
+    const html = `<!DOCTYPE html><html><head><title>Cuenta Corriente — ${esc(c.name)}</title><style>
+*{margin:0;padding:0;box-sizing:border-box;-webkit-print-color-adjust:exact;print-color-adjust:exact}
+body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;padding:24px;font-size:12px;color:#1f2937}
+.top{display:flex;justify-content:space-between;align-items:flex-start;padding-bottom:14px;border-bottom:3px solid #0d9488;margin-bottom:16px}
+.brand h1{font-size:22px;color:#0f766e;letter-spacing:-.02em}
+.brand .sub{font-size:12px;color:#6b7280;margin-top:2px;font-weight:600;text-transform:uppercase;letter-spacing:.08em}
+.emision{text-align:right;font-size:11px;color:#6b7280;line-height:1.5}
+.emision b{color:#1f2937;font-size:13px}
+.cli-block{display:flex;justify-content:space-between;gap:16px;background:#f0fdfa;border:1px solid #ccfbf1;border-radius:10px;padding:14px 16px;margin-bottom:16px}
+.cli-name{font-size:18px;font-weight:800;color:#134e4a}
+.cli-info{display:grid;grid-template-columns:1fr 1fr;gap:4px 24px;margin-top:8px}
+.cli-info .lbl{display:block;font-size:9px;text-transform:uppercase;letter-spacing:.05em;color:#6b7280;font-weight:700}
+.cli-info .val{font-size:12px;color:#1f2937}
+.saldo-card{text-align:right;min-width:170px}
+.saldo-card .saldo-lbl{font-size:10px;text-transform:uppercase;letter-spacing:.05em;color:#6b7280;font-weight:700}
+.saldo-card .saldo-val{font-size:26px;font-weight:900;line-height:1.1}
+.saldo-card .saldo-may{margin-top:6px;font-size:11px;color:#6b7280}
+.saldo-card .saldo-may b{font-size:14px;color:#dc2626}
+.seccion{margin-bottom:14px;border:1px solid #e5e7eb;border-radius:8px;overflow:hidden;page-break-inside:avoid}
+.sec-head{display:flex;justify-content:space-between;align-items:center;padding:8px 12px;background:#f9fafb;border-bottom:1px solid #e5e7eb}
+.sec-title{font-size:13px;font-weight:800;color:#0f766e}
+.sec-bal{font-weight:800;font-size:15px}
+table.mov{width:100%;border-collapse:collapse;table-layout:fixed}
+.mov th,.mov td{padding:5px 12px;border-bottom:1px solid #f3f4f6;vertical-align:top;text-align:left;line-height:1.4;word-break:break-word;overflow-wrap:anywhere}
+.mov th{font-size:9px;font-weight:700;color:#6b7280;background:#fcfcfd;text-transform:uppercase;letter-spacing:.03em}
+.mov tfoot td{border-top:2px solid #e5e7eb;border-bottom:none;font-weight:800;background:#fafafa;padding:6px 12px}
+.foot-label{font-size:10px;text-transform:uppercase;letter-spacing:.05em;color:#6b7280}
+.right{text-align:right!important}.center{text-align:center!important}.nowrap{white-space:nowrap}
+.deuda{color:#dc2626}.ok{color:#059669}
+.m-deuda{font-weight:600;color:#b45309}.m-pago{font-weight:600;color:#059669}
+.empty{color:#9ca3af;font-style:italic;text-align:center}
+.foot-note{margin-top:18px;padding-top:10px;border-top:1px solid #e5e7eb;font-size:9.5px;color:#9ca3af;text-align:center}
+@page{margin:12mm 10mm;@bottom-right{content:"Página " counter(page) " de " counter(pages);font-size:9px;color:#9ca3af}}
+@media print{body{padding:0}}
+</style></head><body>
+<div class="top">
+  <div class="brand"><h1>Distribuidora Patricia</h1><div class="sub">Estado de Cuenta Corriente</div></div>
+  <div class="emision">Emitido el<br><b>${dateStr}</b><br>${horaStr} hs</div>
+</div>
+<div class="cli-block">
+  <div>
+    <div class="cli-name">${esc(c.name)}</div>
+    <div class="cli-info">${infoItems}</div>
+  </div>
+  <div class="saldo-card">
+    <div class="saldo-lbl">Saldo minorista</div>
+    <div class="saldo-val ${balanceMin > 0 ? 'deuda' : 'ok'}">${balanceMin > 0 ? formatCurrency(balanceMin) : 'Cancelada'}</div>
+    ${balanceMay > 0 ? `<div class="saldo-may">Mayorista: <b>${formatCurrency(balanceMay)}</b></div>` : ''}
+  </div>
+</div>
+${renderTabla('Cuenta Minorista', minorista, balanceMin)}
+${renderTabla('Cuenta Mayorista', mayorista, balanceMay)}
+<div class="foot-note">Documento generado automáticamente · Distribuidora Patricia · No válido como factura</div>
+</body></html>`
+
+    const iframe = document.createElement('iframe')
+    iframe.style.cssText = 'position:fixed;top:0;left:0;width:0;height:0;border:0;opacity:0;'
+    document.body.appendChild(iframe)
+    const doc = iframe.contentWindow?.document
+    if (!doc) { document.body.removeChild(iframe); return }
+    doc.open(); doc.write(html); doc.close()
+    iframe.onload = () => {
+      iframe.contentWindow?.print()
+      setTimeout(() => document.body.removeChild(iframe), 1000)
+    }
+  }
+
   // Genera (o regenera) el recibo de un pago que no tiene PDF guardado
   const handleRegenerarRecibo = async (tx: Transaction) => {
     if (!selectedClient) return
@@ -878,6 +1016,16 @@ ${bloques}
             <h2 className="text-lg font-bold truncate">{selectedClient.name}</h2>
             <p className="text-sm text-muted-foreground">{selectedClient.sellerName || 'Sin vendedor asignado'}</p>
           </div>
+          <Button
+            variant="outline"
+            size="sm"
+            className="gap-2 rounded-xl shrink-0"
+            onClick={handlePrintCuentaCliente}
+            disabled={loadingDetail}
+          >
+            <FileDown className="h-4 w-4" />
+            <span className="hidden sm:inline">PDF</span>
+          </Button>
           <div className="text-right flex gap-3 sm:gap-4 shrink-0">
             <div>
               <p className="text-xs text-muted-foreground">Minorista</p>
