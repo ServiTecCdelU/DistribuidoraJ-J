@@ -182,6 +182,71 @@ export const saveReciboPdf = async (txId: string, pdfBase64: string): Promise<vo
     .eq('id', txId)
 }
 
+/**
+ * Elimina un pago registrado por error y revierte sus efectos:
+ * - Devuelve el monto al saldo del cliente (current_balance / current_balance_mayorista).
+ * - Recalcula los saldos por remito de esa cuenta: restaura cada deuda a su monto
+ *   original y vuelve a imputar los pagos restantes en orden cronológico (FIFO o
+ *   imputación puntual según tenían). Así el estado queda consistente sin importar
+ *   si el pago borrado era el último o uno intermedio.
+ * Solo borra transacciones de tipo 'payment'.
+ */
+export const deletePayment = async (txId: string): Promise<void> => {
+  const { data: tx } = await supabase
+    .from('transacciones')
+    .select('id, client_id, type, amount, cuenta')
+    .eq('id', txId)
+    .single()
+  if (!tx) throw new Error('Pago no encontrado')
+  if (tx.type !== 'payment') throw new Error('Solo se pueden eliminar pagos')
+
+  const cuenta: 'minorista' | 'mayorista' = (tx.cuenta as any) ?? 'minorista'
+  const clientId = tx.client_id
+  const amount = Number(tx.amount)
+  const balanceCol = cuenta === 'minorista' ? 'current_balance' : 'current_balance_mayorista'
+
+  // Borrar el pago primero
+  await supabase.from('transacciones').delete().eq('id', txId)
+
+  // Devolver el monto al saldo del cliente
+  const { data: client } = await supabase
+    .from('clientes')
+    .select(balanceCol)
+    .eq('id', clientId)
+    .single()
+  const newBalance = (Number((client as any)?.[balanceCol]) || 0) + amount
+  await supabase.from('clientes').update({ [balanceCol]: newBalance }).eq('id', clientId)
+
+  // Recalcular saldos por remito de la cuenta
+  try {
+    const cuentaFilter = cuenta === 'minorista' ? 'cuenta.eq.minorista,cuenta.is.null' : 'cuenta.eq.mayorista'
+    // Restaurar cada deuda (con saldo no-null) a su monto original
+    const { data: debts } = await supabase
+      .from('transacciones')
+      .select('id, amount, saldo')
+      .eq('client_id', clientId)
+      .eq('type', 'debt')
+      .not('saldo', 'is', null)
+      .or(cuentaFilter)
+    for (const d of debts ?? []) {
+      await supabase.from('transacciones').update({ saldo: Number(d.amount) }).eq('id', d.id)
+    }
+    // Re-imputar los pagos restantes en orden cronológico
+    const { data: pagos } = await supabase
+      .from('transacciones')
+      .select('id, amount, debt_id')
+      .eq('client_id', clientId)
+      .eq('type', 'payment')
+      .or(cuentaFilter)
+      .order('date', { ascending: true })
+    for (const p of pagos ?? []) {
+      await aplicarPagoADeudas(clientId, cuenta, Number(p.amount), (p as any).debt_id ?? undefined)
+    }
+  } catch {
+    // Si la columna saldo no existe, el balance del cliente ya quedó corregido
+  }
+}
+
 export const registerCashPayment = async (data: {
   clientId: string
   amount: number

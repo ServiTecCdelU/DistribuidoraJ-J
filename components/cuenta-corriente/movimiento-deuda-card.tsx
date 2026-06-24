@@ -5,7 +5,7 @@ import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import {
   ArrowDownCircle, ArrowUpCircle, ChevronDown, Download, Receipt, Truck,
-  AlertTriangle, RotateCcw, Tag, RefreshCw, Loader2,
+  AlertTriangle, RotateCcw, Tag, RefreshCw, Loader2, Trash2,
 } from 'lucide-react'
 import { formatCurrencyDecimals, formatDate } from '@/lib/utils/format'
 import { descargarDocumento } from '@/lib/utils/doc-actions'
@@ -21,6 +21,7 @@ interface MovimientoDeudaCardProps {
   devoluciones?: Devolucion[]
   onRegenerarRemito?: (sale: Sale) => Promise<void>
   onRegenerarRecibo?: (tx: Transaction) => Promise<void>
+  onEliminarPago?: (tx: Transaction) => void
 }
 
 // Columnas compartidas entre el encabezado (en la page) y cada fila
@@ -153,7 +154,7 @@ function ItemsTable({ items, showTotal = false }: { items: TableRow[]; showTotal
 }
 
 export function MovimientoDeudaCard({
-  tx, sale, devoluciones = [], onRegenerarRemito, onRegenerarRecibo,
+  tx, sale, devoluciones = [], onRegenerarRemito, onRegenerarRecibo, onEliminarPago,
 }: MovimientoDeudaCardProps) {
   const [expanded, setExpanded] = useState(false)
   const [regenerando, setRegenerando] = useState(false)
@@ -449,11 +450,20 @@ export function MovimientoDeudaCard({
         <span className={`text-[11px] font-medium tabular-nums text-right ${saldo == null ? 'text-muted-foreground' : pagada ? 'text-green-600' : parcial ? 'text-amber-600' : 'text-red-500'}`}>
           {saldo == null ? '—' : pagada ? '✓' : formatCurrencyDecimals(saldo)}
         </span>
-        {/* Expandir */}
+        {/* Expandir / Eliminar pago */}
         <div className="flex justify-center">
-          {expandable && (
+          {expandable ? (
             <ChevronDown className={`h-3.5 w-3.5 text-muted-foreground transition-transform ${expanded ? 'rotate-180' : ''}`} />
-          )}
+          ) : isPayment && !isDescuento && onEliminarPago ? (
+            <button
+              type="button"
+              className="text-muted-foreground hover:text-red-600 shrink-0"
+              onClick={(e) => { e.stopPropagation(); onEliminarPago(tx) }}
+              title="Eliminar este pago"
+            >
+              <Trash2 className="h-3.5 w-3.5" />
+            </button>
+          ) : null}
         </div>
       </div>
 

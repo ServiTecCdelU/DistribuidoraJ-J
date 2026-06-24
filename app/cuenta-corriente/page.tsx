@@ -762,6 +762,47 @@ ${bloques}
     toast.success('Recibo generado')
   }
 
+  // Eliminar un pago minorista cargado por error: devuelve el monto a la deuda
+  // y recalcula los saldos por remito.
+  const [pagoToDelete, setPagoToDelete] = useState<Transaction | null>(null)
+  const [deletingPago, setDeletingPago] = useState(false)
+  const handleEliminarPago = async () => {
+    if (!pagoToDelete || !selectedClient || !canManage) return
+    setDeletingPago(true)
+    try {
+      await paymentsApi.deletePayment(pagoToDelete.id)
+      const cuenta = pagoToDelete.cuenta ?? 'minorista'
+      const newBalance =
+        cuenta === 'mayorista'
+          ? (selectedClient.currentBalanceMayorista ?? 0) + pagoToDelete.amount
+          : selectedClient.currentBalance + pagoToDelete.amount
+      setSelectedClient((prev) =>
+        prev
+          ? cuenta === 'mayorista'
+            ? { ...prev, currentBalanceMayorista: newBalance }
+            : { ...prev, currentBalance: newBalance }
+          : prev
+      )
+      setDebtClients((prev) =>
+        prev.map((c) =>
+          c.id === selectedClient.id
+            ? cuenta === 'mayorista'
+              ? { ...c, currentBalanceMayorista: newBalance }
+              : { ...c, currentBalance: newBalance }
+            : c
+        )
+      )
+      const txs = await clientsApi.getTransactions(selectedClient.id)
+      setClientTransactions(txs)
+      setPagoToDelete(null)
+      toast.success('Pago eliminado')
+    } catch (err: any) {
+      toast.error(err.message || 'No se pudo eliminar el pago')
+    } finally {
+      setDeletingPago(false)
+    }
+  }
+
   const handleRegenerarRemito = async (sale: Sale) => {
     if (!sale.remitoNumber) { toast.error('La venta no tiene número de remito'); return }
     try {
@@ -999,6 +1040,7 @@ ${bloques}
                             devoluciones={devolsSale}
                             onRegenerarRemito={canManage ? handleRegenerarRemito : undefined}
                             onRegenerarRecibo={canManage ? handleRegenerarRecibo : undefined}
+                            onEliminarPago={canManage ? setPagoToDelete : undefined}
                           />
                         )
                       })}
@@ -1189,6 +1231,34 @@ ${bloques}
               <Button onClick={handleRegisterPayment} disabled={processing || !payAmount || parseFloat(payAmount) <= 0}>
                 {processing && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
                 Registrar pago
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+
+        {/* Dialog Eliminar pago */}
+        <Dialog open={!!pagoToDelete} onOpenChange={(open) => !open && setPagoToDelete(null)}>
+          <DialogContent className="sm:max-w-sm">
+            <DialogHeader>
+              <DialogTitle>Eliminar pago</DialogTitle>
+              <DialogDescription>
+                Se borrará este pago y el monto volverá a la deuda del cliente. No se puede deshacer.
+              </DialogDescription>
+            </DialogHeader>
+            {pagoToDelete && (
+              <div className="space-y-1 text-sm">
+                <p><strong>Monto:</strong> {formatCurrency(pagoToDelete.amount)}</p>
+                <p className="text-muted-foreground">{pagoToDelete.description}</p>
+                {pagoToDelete.reciboNumero && (
+                  <p className="text-xs text-muted-foreground">Recibo {pagoToDelete.reciboNumero}</p>
+                )}
+              </div>
+            )}
+            <DialogFooter>
+              <Button variant="outline" onClick={() => setPagoToDelete(null)}>Cancelar</Button>
+              <Button variant="destructive" onClick={handleEliminarPago} disabled={deletingPago}>
+                {deletingPago && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
+                Eliminar
               </Button>
             </DialogFooter>
           </DialogContent>
