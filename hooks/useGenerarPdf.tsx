@@ -1429,7 +1429,7 @@ const ReciboDevolucionCopia = ({ data, copia }: { data: ReciboDevolucionData; co
 const ReciboDevolucionPDF = ({ data }: { data: ReciboDevolucionData }) => {
   return (
     <Document>
-      <Page size="A4" style={reciboStyles.page}>
+      <Page size="A4" orientation="landscape" style={reciboStyles.page}>
         <View style={reciboStyles.half}>
           <ReciboDevolucionCopia data={data} copia="ORIGINAL · Cliente" />
         </View>
