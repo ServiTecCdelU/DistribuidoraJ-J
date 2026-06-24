@@ -169,15 +169,32 @@ export function ModalDetalleVenta({
     }
   };
 
-  const descargarRecibo = (dev: Devolucion) => {
-    if (!dev.reciboPdfBase64) {
-      toast.error("Esta devolución no tiene recibo guardado");
-      return;
+  const descargarRecibo = async (dev: Devolucion) => {
+    try {
+      // Regenerar el PDF al vuelo (los recibos viejos quedaron en vertical/mal orientados).
+      const { generarReciboDevolucion } = await import("@/hooks/useGenerarPdf");
+      const base64 = await generarReciboDevolucion({
+        reciboNumero: dev.reciboNumero,
+        fecha: dev.createdAt,
+        clientName: dev.clientName,
+        clientAddress: venta?.clientAddress,
+        clientPhone: venta?.clientPhone,
+        saleNumber: dev.saleNumber,
+        items: dev.items.map((it) => ({
+          name: it.name,
+          quantity: it.quantity,
+          price: it.price,
+          destino: it.destino,
+        })),
+        total: dev.total,
+      });
+      const link = document.createElement("a");
+      link.href = `data:application/pdf;base64,${base64}`;
+      link.download = `recibo-devolucion-${dev.reciboNumero}.pdf`;
+      link.click();
+    } catch {
+      toast.error("No se pudo generar el recibo de devolución");
     }
-    const link = document.createElement("a");
-    link.href = `data:application/pdf;base64,${dev.reciboPdfBase64}`;
-    link.download = `recibo-devolucion-${dev.reciboNumero}.pdf`;
-    link.click();
   };
 
   const descargarReciboDescuento = (desc: DescuentoVenta) => {

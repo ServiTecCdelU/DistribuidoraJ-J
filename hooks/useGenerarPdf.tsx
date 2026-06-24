@@ -1328,8 +1328,8 @@ export interface ReciboDevolucionData {
   saleNumber?: string;
   items: ReciboDevolucionItem[];
   total: number;
-  saldoAnterior: number;
-  saldoNuevo: number;
+  saldoAnterior?: number;
+  saldoNuevo?: number;
 }
 
 const devStyles = StyleSheet.create({
@@ -1395,20 +1395,22 @@ const ReciboDevolucionCopia = ({ data, copia }: { data: ReciboDevolucionData; co
       </View>
 
       {/* Saldos */}
-      <View style={reciboStyles.saldosRow}>
-        <View style={reciboStyles.saldoCell}>
-          <Text style={reciboStyles.saldoLabel}>Saldo anterior</Text>
-          <Text style={reciboStyles.saldoValue}>{formatCurrency(data.saldoAnterior)}</Text>
+      {data.saldoAnterior != null && data.saldoNuevo != null && (
+        <View style={reciboStyles.saldosRow}>
+          <View style={reciboStyles.saldoCell}>
+            <Text style={reciboStyles.saldoLabel}>Saldo anterior</Text>
+            <Text style={reciboStyles.saldoValue}>{formatCurrency(data.saldoAnterior)}</Text>
+          </View>
+          <View style={reciboStyles.saldoCell}>
+            <Text style={reciboStyles.saldoLabel}>Esta devolución</Text>
+            <Text style={reciboStyles.saldoValue}>-{formatCurrency(data.total)}</Text>
+          </View>
+          <View style={reciboStyles.saldoCellFinal}>
+            <Text style={reciboStyles.saldoLabel}>Saldo actual</Text>
+            <Text style={reciboStyles.saldoValue}>{formatCurrency(data.saldoNuevo)}</Text>
+          </View>
         </View>
-        <View style={reciboStyles.saldoCell}>
-          <Text style={reciboStyles.saldoLabel}>Esta devolución</Text>
-          <Text style={reciboStyles.saldoValue}>-{formatCurrency(data.total)}</Text>
-        </View>
-        <View style={reciboStyles.saldoCellFinal}>
-          <Text style={reciboStyles.saldoLabel}>Saldo actual</Text>
-          <Text style={reciboStyles.saldoValue}>{formatCurrency(data.saldoNuevo)}</Text>
-        </View>
-      </View>
+      )}
 
       {/* Firma */}
       <View style={reciboStyles.firma}>
