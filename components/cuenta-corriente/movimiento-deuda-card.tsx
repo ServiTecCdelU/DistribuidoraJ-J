@@ -430,6 +430,16 @@ export function MovimientoDeudaCard({
               </span>
             ) : null
           )}
+          {isPayment && !isDescuento && onEliminarPago && (
+            <button
+              type="button"
+              className="inline-flex items-center gap-0.5 text-[11px] text-red-500 hover:text-red-700 hover:underline shrink-0"
+              onClick={(e) => { e.stopPropagation(); onEliminarPago(tx) }}
+              title="Eliminar este pago"
+            >
+              <Trash2 className="h-3 w-3" />Eliminar
+            </button>
+          )}
           {tieneNoEntregados && !expanded && (
             <Badge variant="outline" className="text-[10px] px-1 py-0 h-4 text-amber-600 border-amber-300 shrink-0">
               {noEntregadosUnified.length} no entregado{noEntregadosUnified.length > 1 ? 's' : ''}
@@ -450,20 +460,11 @@ export function MovimientoDeudaCard({
         <span className={`text-[11px] font-medium tabular-nums text-right ${saldo == null ? 'text-muted-foreground' : pagada ? 'text-green-600' : parcial ? 'text-amber-600' : 'text-red-500'}`}>
           {saldo == null ? '—' : pagada ? '✓' : formatCurrencyDecimals(saldo)}
         </span>
-        {/* Expandir / Eliminar pago */}
+        {/* Expandir */}
         <div className="flex justify-center">
-          {expandable ? (
+          {expandable && (
             <ChevronDown className={`h-3.5 w-3.5 text-muted-foreground transition-transform ${expanded ? 'rotate-180' : ''}`} />
-          ) : isPayment && !isDescuento && onEliminarPago ? (
-            <button
-              type="button"
-              className="text-muted-foreground hover:text-red-600 shrink-0"
-              onClick={(e) => { e.stopPropagation(); onEliminarPago(tx) }}
-              title="Eliminar este pago"
-            >
-              <Trash2 className="h-3.5 w-3.5" />
-            </button>
-          ) : null}
+          )}
         </div>
       </div>
 
