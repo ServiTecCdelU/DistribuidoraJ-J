@@ -34,6 +34,8 @@ import { ChartContainer, ChartTooltip, ChartTooltipContent } from '@/components/
 import { Skeleton } from '@/components/ui/skeleton'
 import { dashboardApi, ordersApi, transferApi } from '@/lib/api'
 import type { TransferConfig } from '@/lib/api'
+import type { MontoDisponible } from '@/services/rentabilidad-service'
+import { Wallet } from 'lucide-react'
 import type { Product, Order } from '@/lib/types'
 import { formatCurrency } from '@/lib/utils/format'
 import { Label } from '@/components/ui/label'
@@ -102,6 +104,7 @@ export default function DashboardPage() {
   const [categoryRanking, setCategoryRanking] = useState<CategoryRank[]>([])
   const [deudores, setDeudores] = useState<DeudorAntiguedad[]>([])
   const [inactivos, setInactivos] = useState<ClienteActividad[]>([])
+  const [montoDisponible, setMontoDisponible] = useState<MontoDisponible | null>(null)
 
   const [deudorQuery, setDeudorQuery] = useState('')
   const [inactivoQuery, setInactivoQuery] = useState('')
@@ -113,12 +116,14 @@ export default function DashboardPage() {
   const loadDashboardData = useCallback(async (isMounted?: () => boolean) => {
     setLoading(true)
     try {
-      const [data, orders, transferCfg, actividad, deudoresData] = await Promise.all([
+      const now = new Date()
+      const [data, orders, transferCfg, actividad, deudoresData, monto] = await Promise.all([
         dashboardApi.getDashboardData(),
         ordersApi.getActive(),
         transferApi.getConfig(),
         dashboardApi.getClientesActividad(30),
         dashboardApi.getDeudoresAntiguedad(),
+        dashboardApi.getMontoDisponibleMes(now.getFullYear(), now.getMonth() + 1),
       ])
       if (isMounted && !isMounted()) return
       setStats(data.stats as typeof stats)
@@ -133,6 +138,7 @@ export default function DashboardPage() {
       setAliasConfig(transferCfg)
       setInactivos(actividad.inactivos as ClienteActividad[])
       setDeudores(deudoresData as DeudorAntiguedad[])
+      setMontoDisponible(monto)
     } catch (error) {
       if (isMounted && !isMounted()) return
       toast.error('Error al cargar el dashboard')
@@ -284,6 +290,42 @@ export default function DashboardPage() {
               )
             })}
           </section>
+
+          {/* Monto disponible (rentabilidad del mes) */}
+          {montoDisponible && (
+            <Card className="border-border/40 bg-white shadow-sm rounded-2xl overflow-hidden">
+              <div className="grid grid-cols-1 lg:grid-cols-[minmax(0,300px)_1fr]">
+                {/* Resultado */}
+                <div className={`p-4 sm:p-6 flex flex-col justify-center ${montoDisponible.total >= 0 ? 'bg-gradient-to-br from-teal-600 to-cyan-500' : 'bg-gradient-to-br from-rose-600 to-orange-500'}`}>
+                  <div className="flex items-center gap-2 text-white/80 text-xs font-medium">
+                    <Wallet className="h-4 w-4" /> Monto aproximado que me queda
+                  </div>
+                  <div className="text-2xl sm:text-3xl font-bold text-white tracking-tight mt-1">
+                    {formatCurrency(montoDisponible.total)}
+                  </div>
+                  <p className="text-[11px] text-white/70 mt-1">Mes en curso · estimado</p>
+                </div>
+                {/* Desglose */}
+                <div className="p-4 sm:p-5 grid grid-cols-2 sm:grid-cols-3 gap-x-4 gap-y-3">
+                  {[
+                    { label: 'Efectivo (mes)', value: montoDisponible.efectivoMes, sign: 1 },
+                    { label: 'Transferencia (mes)', value: montoDisponible.transferenciaMes, sign: 1 },
+                    { label: 'Cta cte clientes', value: montoDisponible.ctaCteClientes, sign: 1 },
+                    { label: 'Cta cte mayorista', value: montoDisponible.ctaCteMayorista, sign: -1 },
+                    { label: 'Comisiones (mes)', value: montoDisponible.comisionesMes, sign: -1 },
+                    { label: 'Gastos (mes)', value: montoDisponible.gastosMes, sign: -1 },
+                  ].map((it) => (
+                    <div key={it.label} className="min-w-0">
+                      <p className="text-[11px] text-muted-foreground truncate">{it.label}</p>
+                      <p className={`text-sm font-bold tracking-tight ${it.sign > 0 ? 'text-emerald-600' : 'text-rose-600'}`}>
+                        {it.sign > 0 ? '+' : '−'}{formatCurrency(it.value)}
+                      </p>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </Card>
+          )}
 
           {/* Ventas: mensual + diario */}
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-3 sm:gap-4">

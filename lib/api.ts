@@ -474,6 +474,10 @@ export const dashboardApi = {
   async getDeudoresAntiguedad() {
     return getDeudoresAntiguedad()
   },
+  async getMontoDisponibleMes(year: number, month: number) {
+    const { getMontoDisponibleMes } = await import('@/services/rentabilidad-service')
+    return getMontoDisponibleMes(year, month)
+  },
 }
 
 export const auditApi = {

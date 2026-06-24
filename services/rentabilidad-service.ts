@@ -4,6 +4,7 @@ import { getSalesByDateRange } from '@/services/sales-service'
 import { getSellers } from '@/services/sellers-service'
 import { getGastosFijos, getGastosVariables } from '@/services/gastos-service'
 import type { GastoFijo, GastoVariable } from '@/services/gastos-service'
+import { getBalanceMayorista } from '@/services/mayorista-cuenta-service'
 
 // Margen bruto asumido cuando no se puede estimar el costo de un producto.
 const MARGEN_DEFAULT_PCT = 30
@@ -207,5 +208,58 @@ export const getRentabilidadMensual = async (
     cantidadVentas: ventas.length,
     gastosFijosVigentes: fijosVig,
     gastosVariablesDelMes: variables,
+  }
+}
+
+// "Monto aproximado que me queda" del mes:
+//   efectivo + transferencia (cobrado en el mes)
+//   + cta cte clientes (por cobrar, saldo vivo)
+//   − cta cte mayorista (deuda con proveedor, saldo vivo)
+//   − comisiones del mes − gastos del mes
+export interface MontoDisponible {
+  efectivoMes: number
+  transferenciaMes: number
+  ctaCteClientes: number
+  ctaCteMayorista: number
+  comisionesMes: number
+  gastosMes: number
+  total: number
+}
+
+export const getMontoDisponibleMes = async (
+  year: number,
+  month: number,
+): Promise<MontoDisponible> => {
+  const start = new Date(year, month - 1, 1, 0, 0, 0, 0)
+  const end = new Date(year, month, 0, 23, 59, 59, 999)
+
+  const [rent, cajaRes, clientesRes, ctaCteMayorista] = await Promise.all([
+    getRentabilidadMensual(year, month),
+    supabase
+      .from('caja')
+      .select('cash_total, transfer_total')
+      .gte('opened_at', start.toISOString())
+      .lte('opened_at', end.toISOString()),
+    supabase.from('clientes').select('current_balance').gt('current_balance', 0),
+    getBalanceMayorista(),
+  ])
+
+  const efectivoMes = (cajaRes.data ?? []).reduce((a, r: any) => a + (Number(r.cash_total) || 0), 0)
+  const transferenciaMes = (cajaRes.data ?? []).reduce((a, r: any) => a + (Number(r.transfer_total) || 0), 0)
+  const ctaCteClientes = (clientesRes.data ?? []).reduce((a, r: any) => a + (Number(r.current_balance) || 0), 0)
+  const comisionesMes = rent.comisiones
+  const gastosMes = rent.gastosFijos + rent.gastosVariables
+
+  const total = efectivoMes + transferenciaMes + ctaCteClientes - ctaCteMayorista - comisionesMes - gastosMes
+
+  const r2 = (n: number) => Math.round(n * 100) / 100
+  return {
+    efectivoMes: r2(efectivoMes),
+    transferenciaMes: r2(transferenciaMes),
+    ctaCteClientes: r2(ctaCteClientes),
+    ctaCteMayorista: r2(ctaCteMayorista),
+    comisionesMes: r2(comisionesMes),
+    gastosMes: r2(gastosMes),
+    total: r2(total),
   }
 }
