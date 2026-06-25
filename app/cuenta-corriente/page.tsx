@@ -1001,6 +1001,7 @@ ${renderTabla('Cuenta Mayorista', mayorista, balanceMay)}
     const txMinorista = clientTransactions.filter((tx) => !tx.cuenta || tx.cuenta === 'minorista')
     const txMayorista = clientTransactions.filter((tx) => tx.cuenta === 'mayorista')
     const balanceMayorista = selectedClient.currentBalanceMayorista ?? 0
+    const saldoMin = saldoMinoristaDisplay(selectedClient.currentBalance)
     const salesById = new Map(clientSales.map((s) => [s.id, s]))
     // Deudas (remitos/ventas) con saldo pendiente, para imputar pagos
     const deudasPendientes = txMinorista
@@ -1036,9 +1037,7 @@ ${renderTabla('Cuenta Mayorista', mayorista, balanceMay)}
           <div className="text-right flex gap-3 sm:gap-4 shrink-0">
             <div>
               <p className="text-xs text-muted-foreground">Minorista</p>
-              <p className={`text-lg font-bold ${selectedClient.currentBalance > 0 ? 'text-red-600' : 'text-green-600'}`}>
-                {selectedClient.currentBalance > 0 ? formatCurrency(selectedClient.currentBalance) : 'Cancelada'}
-              </p>
+              <p className={`text-lg font-bold ${saldoMin.className}`}>{saldoMin.text}</p>
             </div>
             {balanceMayorista > 0 && (
               <div>
@@ -1141,9 +1140,7 @@ ${renderTabla('Cuenta Mayorista', mayorista, balanceMay)}
                   <DollarSign className="h-4 w-4 text-teal-600" />
                   Cuenta Minorista
                 </h3>
-                <span className={`text-base font-bold ${selectedClient.currentBalance > 0 ? 'text-red-600' : 'text-green-600'}`}>
-                  {selectedClient.currentBalance > 0 ? formatCurrency(selectedClient.currentBalance) : 'Cancelada'}
-                </span>
+                <span className={`text-base font-bold ${saldoMin.className}`}>{saldoMin.text}</span>
               </div>
 
               <div className="flex flex-wrap gap-2">
@@ -2369,6 +2366,13 @@ ${renderTabla('Cuenta Mayorista', mayorista, balanceMay)}
       )}
     </MainLayout>
   )
+}
+
+// Saldo minorista del cliente: deuda (rojo), saldo a favor (negativo, teal) o cancelada
+function saldoMinoristaDisplay(balance: number): { text: string; className: string } {
+  if (balance > 0) return { text: formatCurrency(balance), className: 'text-red-600' }
+  if (balance < 0) return { text: `A favor ${formatCurrency(-balance)}`, className: 'text-teal-600' }
+  return { text: 'Cancelada', className: 'text-green-600' }
 }
 
 // Número de días con color según el estado del día de pago
