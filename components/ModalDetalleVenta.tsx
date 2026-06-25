@@ -388,15 +388,43 @@ export function ModalDetalleVenta({
               Productos ({venta.items.length})
             </p>
             <div className="space-y-2 max-h-48 overflow-y-auto pr-1">
-              {venta.items.map((item, i) => {
-                const dto = (item as any).itemDiscount || 0;
-                const precioConDto = item.price * (1 - dto / 100);
-                const subtotalItem = precioConDto * item.quantity;
-                return (
+              {(() => {
+                // Cantidad NO entregada por producto (faltante/rotura/no quiso), parseada de las
+                // incidencias. Sirve para mostrar la cantidad EMITIDA en el remito (entregado + no
+                // entregado) en vez de solo la cobrada, así el detalle coincide con el remito impreso.
+                const noEnt = new Map<string, { falto: number; rompio: number; noQuiso: number }>();
+                const addInc = (arr: string[], k: "falto" | "rompio" | "noQuiso") => {
+                  for (const s of arr) {
+                    const mt = s.match(/^(.*)\sx(\d+)$/);
+                    if (!mt) continue;
+                    const name = mt[1].trim();
+                    const cur = noEnt.get(name) || { falto: 0, rompio: 0, noQuiso: 0 };
+                    cur[k] += parseInt(mt[2], 10);
+                    noEnt.set(name, cur);
+                  }
+                };
+                addInc(incidencias.faltantes, "falto");
+                addInc(incidencias.roturas, "rompio");
+                addInc(incidencias.noQuiere, "noQuiso");
+                return venta.items.map((item, i) => {
+                  const dto = (item as any).itemDiscount || 0;
+                  const precioConDto = item.price * (1 - dto / 100);
+                  const subtotalItem = precioConDto * item.quantity;
+                  const inc = noEnt.get(item.name);
+                  const noEntTotal = inc ? inc.falto + inc.rompio + inc.noQuiso : 0;
+                  const cantRemito = item.quantity + noEntTotal;
+                  const detalle = inc
+                    ? [
+                        inc.falto > 0 ? `faltó ${inc.falto}` : null,
+                        inc.rompio > 0 ? `se rompió ${inc.rompio}` : null,
+                        inc.noQuiso > 0 ? `no quiso ${inc.noQuiso}` : null,
+                      ].filter(Boolean).join(" · ")
+                    : "";
+                  return (
                   <div key={i} className="flex items-center justify-between p-3 rounded-lg bg-muted/40">
                     <div className="flex items-center gap-3">
                       <div className="h-10 w-10 rounded-lg bg-background border border-border/50 flex items-center justify-center text-xs font-medium text-muted-foreground">
-                        x{item.quantity}
+                        x{cantRemito}
                       </div>
                       <div>
                         <p className="font-medium text-sm text-foreground">{item.name}</p>
@@ -409,12 +437,18 @@ export function ModalDetalleVenta({
                             </>
                           )}
                         </div>
+                        {noEntTotal > 0 && (
+                          <p className="text-[11px] text-amber-700 mt-0.5">
+                            Remito {cantRemito} · entregó {item.quantity} · {detalle}
+                          </p>
+                        )}
                       </div>
                     </div>
                     <p className="font-semibold text-foreground">{formatearMoneda(subtotalItem)}</p>
                   </div>
-                );
-              })}
+                  );
+                });
+              })()}
             </div>
           </div>
 
