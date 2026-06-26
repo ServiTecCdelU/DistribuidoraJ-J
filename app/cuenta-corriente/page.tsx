@@ -785,7 +785,7 @@ ${bloques}
         <td colspan="2" class="foot-label">Totales</td>
         <td class="right nowrap"><span class="m-deuda">${formatCurrency(totalEntregado)}</span></td>
         <td class="right nowrap"><span class="m-pago">${formatCurrency(totalPagado)}</span></td>
-        <td></td>
+        <td class="right nowrap ${clsSaldo(diferencia)}">${fmtSaldo(diferencia)}</td>
       </tr>
       <tr class="saldo-final-row">
         <td colspan="4" class="foot-label-final">SALDO (Debe − Haber)</td>
