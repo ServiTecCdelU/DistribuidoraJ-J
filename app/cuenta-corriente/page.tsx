@@ -400,10 +400,6 @@ export default function CuentaCorrientePage() {
       toast.error('Ingresá un monto válido')
       return
     }
-    if (amount > selectedClient.currentBalance) {
-      toast.error('El monto no puede superar la deuda actual')
-      return
-    }
     setProcessing(true)
     try {
       const methods: Record<string, string> = {
@@ -431,8 +427,8 @@ export default function CuentaCorrientePage() {
       // Recibo numerado: generar PDF, guardarlo y descargarlo
       await emitirRecibo(txPago, selectedClient.currentBalance, methods[payMethod] || methods.otro)
 
-      // Actualizar estado local
-      const newBalance = Math.max(0, selectedClient.currentBalance - amount)
+      // Actualizar estado local (puede quedar negativo = saldo a favor)
+      const newBalance = selectedClient.currentBalance - amount
       setSelectedClient((prev) => prev ? { ...prev, currentBalance: newBalance } : prev)
       setDebtClients((prev) =>
         prev.map((c) =>
@@ -548,10 +544,6 @@ export default function CuentaCorrientePage() {
       return
     }
     const balanceMayorista = selectedClient.currentBalanceMayorista ?? 0
-    if (amount > balanceMayorista) {
-      toast.error('El monto no puede superar la deuda mayorista actual')
-      return
-    }
     setProcessing(true)
     try {
       const methods: Record<string, string> = {
@@ -571,7 +563,7 @@ export default function CuentaCorrientePage() {
 
       await emitirRecibo(txPagoMay, balanceMayorista, methods[payMayoristaMethod] || methods.otro)
 
-      const newBalance = Math.max(0, balanceMayorista - amount)
+      const newBalance = balanceMayorista - amount
       setSelectedClient((prev) => prev ? { ...prev, currentBalanceMayorista: newBalance } : prev)
       setDebtClients((prev) =>
         prev.map((c) =>
