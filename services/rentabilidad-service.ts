@@ -1,6 +1,6 @@
 import { supabase } from '@/lib/supabase'
 import type { Sale } from '@/lib/types'
-import { getSalesByDateRange } from '@/services/sales-service'
+import { getSalesByDateRangeLite } from '@/services/sales-service'
 import { getSellers } from '@/services/sellers-service'
 import { getGastosFijos, getGastosVariables } from '@/services/gastos-service'
 import type { GastoFijo, GastoVariable } from '@/services/gastos-service'
@@ -168,7 +168,7 @@ export const getRentabilidadMensual = async (
   const finMes = `${year}-${mm}-${String(end.getDate()).padStart(2, '0')}`
 
   const [ventas, sellers, fijos, variables] = await Promise.all([
-    getSalesByDateRange(start, end),
+    getSalesByDateRangeLite(start, end),
     getSellers(),
     getGastosFijos(),
     getGastosVariables(year, month),

@@ -706,3 +706,19 @@ export const getSalesByDateRange = async (
 
   return (data ?? []).map(mapSale)
 }
+
+// Igual que getSalesByDateRange pero sin columnas pesadas (PDFs base64).
+// Para cálculos que solo necesitan total/items/vendedor (rentabilidad, dashboard).
+export const getSalesByDateRangeLite = async (
+  startDate: Date,
+  endDate: Date,
+): Promise<Sale[]> => {
+  const { data } = await supabase
+    .from('ventas')
+    .select('id, total, items, seller_id, seller_name, client_id, created_at')
+    .gte('created_at', startDate.toISOString())
+    .lte('created_at', endDate.toISOString())
+    .order('created_at', { ascending: false })
+
+  return (data ?? []).map(mapSale)
+}
