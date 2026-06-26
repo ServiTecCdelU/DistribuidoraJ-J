@@ -772,7 +772,6 @@ ${bloques}
       return `<div class="seccion">
   <div class="sec-head">
     <span class="sec-title">${esc(titulo)}</span>
-    <span class="sec-bal ${balance > 0 ? 'deuda' : 'ok'}">${balance > 0 ? 'Debe ' + formatCurrency(balance) : 'Cuenta cancelada'}</span>
   </div>
   <table class="mov">
     <colgroup><col style="width:13%"><col style="width:39%"><col style="width:16%"><col style="width:16%"><col style="width:16%"></colgroup>
