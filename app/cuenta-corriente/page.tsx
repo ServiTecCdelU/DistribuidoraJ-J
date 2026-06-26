@@ -800,24 +800,23 @@ ${bloques}
     const clasifLabel: Record<string, string> = { normal: 'Al día', moroso: 'Moroso', incobrable: 'Incobrable' }
     const infoItems = [
       c.codigo ? `<div><span class="lbl">Código</span><span class="val">${esc(c.codigo)}</span></div>` : '',
-      c.address ? `<div><span class="lbl">Dirección</span><span class="val">${esc(c.address)}${c.city ? ', ' + esc(c.city) : ''}</span></div>` : '',
       c.phone ? `<div><span class="lbl">Teléfono</span><span class="val">${esc(c.phone)}</span></div>` : '',
       c.sellerName ? `<div><span class="lbl">Vendedor</span><span class="val">${esc(c.sellerName)}</span></div>` : '',
       (c.currentBalance > 0 && c.debtSince) ? `<div><span class="lbl">En cuenta corriente</span><span class="val">${diasDesde(c.debtSince)} días</span></div>` : '',
       clasif ? `<div><span class="lbl">Clasificación</span><span class="val">${clasifLabel[clasif] || clasif}</span></div>` : '',
     ].filter(Boolean).join('')
 
-    const html = `<!DOCTYPE html><html><head><title>Cuenta Corriente — ${esc(c.name)}</title><style>
+    const html = `<!DOCTYPE html><html><head><title> </title><style>
 *{margin:0;padding:0;box-sizing:border-box;-webkit-print-color-adjust:exact;print-color-adjust:exact}
 body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;padding:24px;font-size:12px;color:#1f2937}
-.top{display:flex;justify-content:space-between;align-items:flex-start;padding-bottom:14px;border-bottom:3px solid #0d9488;margin-bottom:16px}
-.brand h1{font-size:22px;color:#0f766e;letter-spacing:-.02em}
-.brand .sub{font-size:12px;color:#6b7280;margin-top:2px;font-weight:600;text-transform:uppercase;letter-spacing:.08em}
-.emision{text-align:right;font-size:11px;color:#6b7280;line-height:1.5}
-.emision b{color:#1f2937;font-size:13px}
+.top{display:flex;align-items:baseline;gap:12px;padding-bottom:12px;border-bottom:3px solid #0d9488;margin-bottom:16px}
+.top h1{font-size:20px;color:#0f766e;letter-spacing:-.02em}
+.top .sub{font-size:12px;color:#6b7280;font-weight:600;text-transform:uppercase;letter-spacing:.08em}
+.top .emision{margin-left:auto;font-size:11px;color:#6b7280}
+.top .emision b{color:#1f2937}
 .cli-block{display:flex;justify-content:space-between;gap:16px;background:#f0fdfa;border:1px solid #ccfbf1;border-radius:10px;padding:14px 16px;margin-bottom:16px}
 .cli-name{font-size:18px;font-weight:800;color:#134e4a}
-.cli-info{display:grid;grid-template-columns:1fr 1fr;gap:4px 24px;margin-top:8px}
+.cli-info{display:flex;flex-wrap:wrap;gap:6px 24px;margin-top:8px}
 .cli-info .lbl{display:block;font-size:9px;text-transform:uppercase;letter-spacing:.05em;color:#6b7280;font-weight:700}
 .cli-info .val{font-size:12px;color:#1f2937}
 .saldo-card{text-align:right;min-width:170px}
@@ -845,8 +844,9 @@ table.mov{width:100%;border-collapse:collapse;table-layout:fixed}
 @media print{body{padding:0}}
 </style></head><body>
 <div class="top">
-  <div class="brand"><h1>Distribuidora J&amp;J</h1><div class="sub">Estado de Cuenta Corriente</div></div>
-  <div class="emision">Emitido el<br><b>${dateStr}</b><br>${horaStr} hs</div>
+  <h1>Distribuidora J&amp;J</h1>
+  <span class="sub">Estado de Cuenta Corriente</span>
+  <span class="emision">Emitido el <b>${dateStr}</b> ${horaStr} hs</span>
 </div>
 <div class="cli-block">
   <div>
