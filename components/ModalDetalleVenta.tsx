@@ -137,17 +137,34 @@ export function ModalDetalleVenta({
 
   if (!venta) return null;
 
-  const handleDescargar = (type: "invoice" | "remito") => {
+  // El listado liviano no trae los PDF base64: si falta, se baja on-demand al momento.
+  const resolverPdf = async (type: "invoice" | "remito"): Promise<string | undefined> => {
+    const enMemoria = type === "invoice" ? (venta as any).invoicePdfBase64 : (venta as any).remitoPdfBase64;
+    if (enMemoria) return enMemoria;
+    const { supabase } = await import("@/lib/supabase");
+    if ((venta as any).rechazado) {
+      const { data } = await supabase.from("pedidos").select("remito_pdf_base64").eq("id", venta.id).single();
+      return (data as any)?.remito_pdf_base64 ?? undefined;
+    }
+    const col = type === "invoice" ? "invoice_pdf_base64" : "remito_pdf_base64";
+    const { data } = await supabase.from("ventas").select(col).eq("id", venta.id).single();
+    return (data as any)?.[col] ?? undefined;
+  };
+
+  const handleDescargar = async (type: "invoice" | "remito") => {
     setDownloading(type);
-    const base64 = type === "invoice" ? (venta as any).invoicePdfBase64 : (venta as any).remitoPdfBase64;
-    const tipo = type === "invoice" ? "boleta" as const : "remito" as const;
-    const numero = type === "invoice" ? venta.invoiceNumber : venta.remitoNumber;
-    descargarDocumento(base64, tipo, numero, venta.clientName);
-    setDownloading(null);
+    try {
+      const base64 = await resolverPdf(type);
+      const tipo = type === "invoice" ? "boleta" as const : "remito" as const;
+      const numero = type === "invoice" ? venta.invoiceNumber : venta.remitoNumber;
+      descargarDocumento(base64, tipo, numero, venta.clientName);
+    } finally {
+      setDownloading(null);
+    }
   };
 
   const handleWhatsapp = async (type: "invoice" | "remito") => {
-    const base64 = type === "invoice" ? (venta as any).invoicePdfBase64 : (venta as any).remitoPdfBase64;
+    const base64 = await resolverPdf(type);
     const tipo = type === "invoice" ? "boleta" as const : "remito" as const;
     const numero = type === "invoice" ? venta.invoiceNumber : venta.remitoNumber;
     await enviarWhatsapp(
