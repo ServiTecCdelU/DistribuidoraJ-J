@@ -779,19 +779,13 @@ ${bloques}
     <thead>
       <tr><th class="center">Fecha</th><th>Concepto</th><th class="right">Debe</th><th class="right">Haber</th><th class="right">Saldo</th></tr>
     </thead>
-    <tbody>${rows}${sinMov}
-      <tr class="tot-row">
-        <td colspan="2" class="foot-label">Totales</td>
-        <td class="right nowrap"><span class="m-deuda">${formatCurrency(totalEntregado)}</span></td>
-        <td class="right nowrap"><span class="m-pago">${formatCurrency(totalPagado)}</span></td>
-        <td class="right nowrap ${clsSaldo(diferencia)}">${fmtSaldo(diferencia)}</td>
-      </tr>
-      <tr class="saldo-final-row">
-        <td colspan="4" class="foot-label-final">SALDO (Debe − Haber)</td>
-        <td class="right nowrap ${clsSaldo(diferencia)}">${fmtSaldo(diferencia)}</td>
-      </tr>
-    </tbody>
+    <tbody>${rows}${sinMov}</tbody>
   </table>
+  <div class="totales-box">
+    <div class="tot-item"><span class="tot-lbl">Total Debe</span><span class="tot-val deuda">${formatCurrency(totalEntregado)}</span></div>
+    <div class="tot-item"><span class="tot-lbl">Total Haber</span><span class="tot-val ok">${formatCurrency(totalPagado)}</span></div>
+    <div class="tot-item destacado"><span class="tot-lbl">Saldo</span><span class="tot-val ${clsSaldo(diferencia)}">${fmtSaldo(diferencia)}</span></div>
+  </div>
 </div>`
     }
 
@@ -834,6 +828,11 @@ table.mov{width:100%;border-collapse:collapse;table-layout:fixed}
 .foot-label{font-size:10px;text-transform:uppercase;letter-spacing:.05em;color:#6b7280}
 .saldo-final-row td{background:#f0fdfa;border-top:1px solid #ccfbf1;font-size:13px}
 .foot-label-final{font-size:11px;text-transform:uppercase;letter-spacing:.04em;color:#0f766e}
+.totales-box{display:flex;justify-content:flex-end;border-top:2px solid #e5e7eb;background:#fafafa}
+.totales-box .tot-item{display:flex;flex-direction:column;align-items:flex-end;gap:2px;padding:8px 18px;border-left:1px solid #e5e7eb}
+.totales-box .tot-item.destacado{background:#f0fdfa}
+.totales-box .tot-lbl{font-size:9px;text-transform:uppercase;letter-spacing:.05em;color:#6b7280;font-weight:700}
+.totales-box .tot-val{font-size:15px;font-weight:800}
 .right{text-align:right!important}.center{text-align:center!important}.nowrap{white-space:nowrap}
 .deuda{color:#dc2626}.ok{color:#059669}
 .m-deuda{font-weight:600;color:#b45309}.m-pago{font-weight:600;color:#059669}
