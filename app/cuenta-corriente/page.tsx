@@ -1013,19 +1013,33 @@ ${renderTabla('Cuenta Mayorista', mayorista, balanceMay)}
       const pend = deudas.map((d) => ({ d, saldo: d.amount }))
       const pagosPorDeuda = new Map<string, Transaction[]>()
       const sueltos: Transaction[] = []
+      const asignar = (deudaId: string, p: Transaction) => {
+        const arr = pagosPorDeuda.get(deudaId) ?? []
+        arr.push(p); pagosPorDeuda.set(deudaId, arr)
+      }
       for (const p of pagos) {
-        let target = p.debtId ? pend.find((x) => x.d.id === p.debtId && x.saldo > 0) : undefined
-        if (!target) target = pend.find((x) => x.saldo > 0)
-        if (!target) { sueltos.push(p); continue }
-        const arr = pagosPorDeuda.get(target.d.id) ?? []
-        arr.push(p); pagosPorDeuda.set(target.d.id, arr)
+        // 1. Imputación puntual: el pago tiene la deuda exacta a la que se aplicó.
+        if (p.debtId) {
+          const t = pend.find((x) => x.d.id === p.debtId)
+          if (t) { asignar(t.d.id, p); t.saldo = Math.max(0, t.saldo - p.amount); continue }
+        }
+        // 2. Pago/devolución ligado a una venta puntual (sale_id).
+        if (p.saleId) {
+          const t = pend.find((x) => x.d.saleId === p.saleId)
+          if (t) { asignar(t.d.id, p); t.saldo = Math.max(0, t.saldo - p.amount); continue }
+        }
+        // 3. FIFO: cancela cruzando las deudas pendientes y se ancla donde TERMINA
+        //    (la última venta que toca), así dos pagos no se apilan sobre la misma venta.
         let monto = p.amount
+        let ancla: string | undefined
         for (const x of pend) {
           if (monto <= 0) break
           if (x.saldo <= 0) continue
           const aplica = Math.min(x.saldo, monto)
           x.saldo -= aplica; monto -= aplica
+          ancla = x.d.id
         }
+        if (ancla) asignar(ancla, p); else sueltos.push(p)
       }
       const out: Transaction[] = []
       for (const { d } of pend) {
