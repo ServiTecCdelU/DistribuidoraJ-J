@@ -737,6 +737,7 @@ ${bloques}
     const minorista = ordenarLibroMayor(clientTransactions.filter((t) => (t.cuenta ?? 'minorista') === 'minorista'))
     const mayorista = ordenarLibroMayor(clientTransactions.filter((t) => t.cuenta === 'mayorista'))
 
+    const salesById = new Map(clientSales.map((s) => [s.id, s]))
     const balanceMin = c.currentBalance
     const balanceMay = c.currentBalanceMayorista ?? 0
     const now = new Date()
@@ -758,25 +759,36 @@ ${bloques}
         saldoAcum += esDeuda ? t.amount : -t.amount
         const entregado = esDeuda ? `<span class="m-deuda">${formatCurrency(t.amount)}</span>` : ''
         const pagado = esDeuda ? '' : `<span class="m-pago">${formatCurrency(t.amount)}</span>`
+        const concepto = esDeuda ? 'Venta' : 'Pago'
+        let descripcion: string
+        if (esDeuda) {
+          const sale = t.saleId ? salesById.get(t.saleId) : undefined
+          descripcion = sale?.remitoNumber ? `Remito N° ${sale.remitoNumber}` : (t.description || '—')
+        } else {
+          let d = (t.description || '').replace(/^Pago\s+(en\s+|por\s+)?/i, '')
+          d = d ? d.charAt(0).toUpperCase() + d.slice(1) : 'Pago recibido'
+          descripcion = d
+        }
         return `<tr>
           <td class="center nowrap">${formatDate(t.date)}</td>
-          <td>${esc(t.description || (esDeuda ? 'Entrega de mercadería' : 'Pago recibido'))}</td>
+          <td>${concepto}</td>
+          <td>${esc(descripcion)}</td>
           <td class="right nowrap">${entregado}</td>
           <td class="right nowrap">${pagado}</td>
           <td class="right nowrap ${clsSaldo(saldoAcum)}">${fmtSaldo(saldoAcum)}</td>
         </tr>`
       }).join('')
       const sinMov = movs.length === 0
-        ? `<tr><td colspan="5" class="empty">Sin movimientos registrados</td></tr>`
+        ? `<tr><td colspan="6" class="empty">Sin movimientos registrados</td></tr>`
         : ''
       return `<div class="seccion">
   <div class="sec-head">
     <span class="sec-title">${esc(titulo)}</span>
   </div>
   <table class="mov">
-    <colgroup><col style="width:13%"><col style="width:39%"><col style="width:16%"><col style="width:16%"><col style="width:16%"></colgroup>
+    <colgroup><col style="width:11%"><col style="width:12%"><col style="width:29%"><col style="width:16%"><col style="width:16%"><col style="width:16%"></colgroup>
     <thead>
-      <tr><th class="center">Fecha</th><th>Concepto</th><th class="right">Debe</th><th class="right">Haber</th><th class="right">Saldo</th></tr>
+      <tr><th class="center">Fecha</th><th>Concepto</th><th>Descripción</th><th class="right">Debe</th><th class="right">Haber</th><th class="right">Saldo</th></tr>
     </thead>
     <tbody>${rows}${sinMov}</tbody>
   </table>
