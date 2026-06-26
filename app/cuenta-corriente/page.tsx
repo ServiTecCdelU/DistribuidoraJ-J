@@ -779,8 +779,7 @@ ${bloques}
     <thead>
       <tr><th class="center">Fecha</th><th>Concepto</th><th class="right">Debe</th><th class="right">Haber</th><th class="right">Saldo</th></tr>
     </thead>
-    <tbody>${rows}${sinMov}</tbody>
-    <tfoot>
+    <tbody>${rows}${sinMov}
       <tr class="tot-row">
         <td colspan="2" class="foot-label">Totales</td>
         <td class="right nowrap"><span class="m-deuda">${formatCurrency(totalEntregado)}</span></td>
@@ -791,7 +790,7 @@ ${bloques}
         <td colspan="4" class="foot-label-final">SALDO (Debe − Haber)</td>
         <td class="right nowrap ${clsSaldo(diferencia)}">${fmtSaldo(diferencia)}</td>
       </tr>
-    </tfoot>
+    </tbody>
   </table>
 </div>`
     }
