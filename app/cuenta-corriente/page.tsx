@@ -742,12 +742,8 @@ ${bloques}
     const c = selectedClient
     const esc = (s: string) => String(s ?? '').replace(/[&<>]/g, (ch) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' }[ch] as string))
 
-    const minorista = clientTransactions
-      .filter((t) => (t.cuenta ?? 'minorista') === 'minorista')
-      .sort((a, b) => a.date.getTime() - b.date.getTime())
-    const mayorista = clientTransactions
-      .filter((t) => t.cuenta === 'mayorista')
-      .sort((a, b) => a.date.getTime() - b.date.getTime())
+    const minorista = ordenarLibroMayor(clientTransactions.filter((t) => (t.cuenta ?? 'minorista') === 'minorista'))
+    const mayorista = ordenarLibroMayor(clientTransactions.filter((t) => t.cuenta === 'mayorista'))
 
     const balanceMin = c.currentBalance
     const balanceMay = c.currentBalanceMayorista ?? 0
@@ -759,10 +755,9 @@ ${bloques}
       if (movs.length === 0 && balance <= 0) return ''
       const totalEntregado = movs.filter((t) => t.type === 'debt').reduce((s, t) => s + t.amount, 0)
       const totalPagado = movs.filter((t) => t.type === 'payment').reduce((s, t) => s + t.amount, 0)
-      let saldoAcum = 0
+      // Cada pago (haber) queda arriba de la venta (debe) que cancela; totales arriba.
       const rows = movs.map((t) => {
         const esDeuda = t.type === 'debt'
-        saldoAcum += esDeuda ? t.amount : -t.amount
         const entregado = esDeuda ? `<span class="m-deuda">${formatCurrency(t.amount)}</span>` : ''
         const pagado = esDeuda ? '' : `<span class="m-pago">${formatCurrency(t.amount)}</span>`
         return `<tr>
@@ -770,11 +765,10 @@ ${bloques}
           <td>${esc(t.description || (esDeuda ? 'Entrega de mercadería' : 'Pago recibido'))}</td>
           <td class="right nowrap">${entregado}</td>
           <td class="right nowrap">${pagado}</td>
-          <td class="right nowrap ${saldoAcum > 0 ? 'deuda' : 'ok'}">${formatCurrency(saldoAcum)}</td>
         </tr>`
       }).join('')
       const sinMov = movs.length === 0
-        ? `<tr><td colspan="5" class="empty">Sin movimientos registrados</td></tr>`
+        ? `<tr><td colspan="4" class="empty">Sin movimientos registrados</td></tr>`
         : ''
       return `<div class="seccion">
   <div class="sec-head">
@@ -782,21 +776,20 @@ ${bloques}
     <span class="sec-bal ${balance > 0 ? 'deuda' : 'ok'}">${balance > 0 ? 'Debe ' + formatCurrency(balance) : 'Cuenta cancelada'}</span>
   </div>
   <table class="mov">
-    <colgroup><col style="width:15%"><col style="width:37%"><col style="width:16%"><col style="width:16%"><col style="width:16%"></colgroup>
-    <thead><tr><th class="center">Fecha</th><th>Concepto</th><th class="right">Entregado</th><th class="right">Pagado</th><th class="right">Saldo</th></tr></thead>
-    <tbody>${rows}${sinMov}</tbody>
-    <tfoot>
-      <tr>
+    <colgroup><col style="width:16%"><col style="width:48%"><col style="width:18%"><col style="width:18%"></colgroup>
+    <thead>
+      <tr class="tot-row">
         <td colspan="2" class="foot-label">Totales</td>
         <td class="right nowrap"><span class="m-deuda">${formatCurrency(totalEntregado)}</span></td>
         <td class="right nowrap"><span class="m-pago">${formatCurrency(totalPagado)}</span></td>
-        <td class="right nowrap"></td>
       </tr>
       <tr class="saldo-final-row">
-        <td colspan="4" class="foot-label-final">SALDO ADEUDADO (Entregado − Pagado)</td>
+        <td colspan="3" class="foot-label-final">SALDO ADEUDADO (Debe − Haber)</td>
         <td class="right nowrap ${balance > 0 ? 'deuda' : 'ok'}">${formatCurrency(balance)}</td>
       </tr>
-    </tfoot>
+      <tr><th class="center">Fecha</th><th>Concepto</th><th class="right">Debe</th><th class="right">Haber</th></tr>
+    </thead>
+    <tbody>${rows}${sinMov}</tbody>
   </table>
 </div>`
     }
@@ -837,7 +830,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;padding:
 table.mov{width:100%;border-collapse:collapse;table-layout:fixed}
 .mov th,.mov td{padding:5px 12px;border-bottom:1px solid #f3f4f6;vertical-align:top;text-align:left;line-height:1.4;word-break:break-word;overflow-wrap:anywhere}
 .mov th{font-size:9px;font-weight:700;color:#6b7280;background:#fcfcfd;text-transform:uppercase;letter-spacing:.03em}
-.mov tfoot td{border-top:2px solid #e5e7eb;border-bottom:none;font-weight:800;background:#fafafa;padding:6px 12px}
+.mov .tot-row td{border-bottom:1px solid #e5e7eb;font-weight:800;background:#fafafa;padding:6px 12px}
 .foot-label{font-size:10px;text-transform:uppercase;letter-spacing:.05em;color:#6b7280}
 .saldo-final-row td{background:#f0fdfa;border-top:1px solid #ccfbf1;font-size:13px}
 .foot-label-final{font-size:11px;text-transform:uppercase;letter-spacing:.04em;color:#0f766e}
@@ -1004,50 +997,7 @@ ${renderTabla('Cuenta Mayorista', mayorista, balanceMay)}
     const saldoMin = saldoMinoristaDisplay(selectedClient.currentBalance)
     const salesById = new Map(clientSales.map((s) => [s.id, s]))
 
-    // Orden tipo libro mayor: las ventas (debe) van por fecha; cada pago (haber) se ubica
-    // ARRIBA de la venta que cancela (FIFO: la deuda pendiente más antigua, o la imputación
-    // puntual si el pago tiene debtId). Los pagos sin deuda asignable quedan al final.
-    const ordenarLibroMayor = (txs: Transaction[]): Transaction[] => {
-      const deudas = txs.filter((t) => t.type === 'debt').sort((a, b) => a.date.getTime() - b.date.getTime())
-      const pagos = txs.filter((t) => t.type !== 'debt').sort((a, b) => a.date.getTime() - b.date.getTime())
-      const pend = deudas.map((d) => ({ d, saldo: d.amount }))
-      const pagosPorDeuda = new Map<string, Transaction[]>()
-      const sueltos: Transaction[] = []
-      const asignar = (deudaId: string, p: Transaction) => {
-        const arr = pagosPorDeuda.get(deudaId) ?? []
-        arr.push(p); pagosPorDeuda.set(deudaId, arr)
-      }
-      for (const p of pagos) {
-        // 1. Imputación puntual: el pago tiene la deuda exacta a la que se aplicó.
-        if (p.debtId) {
-          const t = pend.find((x) => x.d.id === p.debtId)
-          if (t) { asignar(t.d.id, p); t.saldo = Math.max(0, t.saldo - p.amount); continue }
-        }
-        // 2. Pago/devolución ligado a una venta puntual (sale_id).
-        if (p.saleId) {
-          const t = pend.find((x) => x.d.saleId === p.saleId)
-          if (t) { asignar(t.d.id, p); t.saldo = Math.max(0, t.saldo - p.amount); continue }
-        }
-        // 3. FIFO: cancela cruzando las deudas pendientes y se ancla donde TERMINA
-        //    (la última venta que toca), así dos pagos no se apilan sobre la misma venta.
-        let monto = p.amount
-        let ancla: string | undefined
-        for (const x of pend) {
-          if (monto <= 0) break
-          if (x.saldo <= 0) continue
-          const aplica = Math.min(x.saldo, monto)
-          x.saldo -= aplica; monto -= aplica
-          ancla = x.d.id
-        }
-        if (ancla) asignar(ancla, p); else sueltos.push(p)
-      }
-      const out: Transaction[] = []
-      for (const { d } of pend) {
-        for (const p of pagosPorDeuda.get(d.id) ?? []) out.push(p)
-        out.push(d)
-      }
-      return [...out, ...sueltos]
-    }
+    // Orden tipo libro mayor (helper a nivel módulo, ver ordenarLibroMayor)
     const txMinoristaOrdenado = ordenarLibroMayor(txMinorista)
     const totalDebe = txMinorista.filter((t) => t.type === 'debt').reduce((a, t) => a + t.amount, 0)
     const totalHaber = txMinorista.filter((t) => t.type !== 'debt').reduce((a, t) => a + t.amount, 0)
@@ -2432,6 +2382,47 @@ ${renderTabla('Cuenta Mayorista', mayorista, balanceMay)}
       )}
     </MainLayout>
   )
+}
+
+// Orden tipo libro mayor: las ventas (debe) van por fecha; cada pago (haber) se ubica ARRIBA
+// de la venta que cancela (imputación puntual por debtId/saleId, o FIFO anclado donde el pago
+// termina, para no apilar dos pagos sobre la misma venta). Pagos sin deuda asignable: al final.
+function ordenarLibroMayor(txs: Transaction[]): Transaction[] {
+  const deudas = txs.filter((t) => t.type === 'debt').sort((a, b) => a.date.getTime() - b.date.getTime())
+  const pagos = txs.filter((t) => t.type !== 'debt').sort((a, b) => a.date.getTime() - b.date.getTime())
+  const pend = deudas.map((d) => ({ d, saldo: d.amount }))
+  const pagosPorDeuda = new Map<string, Transaction[]>()
+  const sueltos: Transaction[] = []
+  const asignar = (deudaId: string, p: Transaction) => {
+    const arr = pagosPorDeuda.get(deudaId) ?? []
+    arr.push(p); pagosPorDeuda.set(deudaId, arr)
+  }
+  for (const p of pagos) {
+    if (p.debtId) {
+      const t = pend.find((x) => x.d.id === p.debtId)
+      if (t) { asignar(t.d.id, p); t.saldo = Math.max(0, t.saldo - p.amount); continue }
+    }
+    if (p.saleId) {
+      const t = pend.find((x) => x.d.saleId === p.saleId)
+      if (t) { asignar(t.d.id, p); t.saldo = Math.max(0, t.saldo - p.amount); continue }
+    }
+    let monto = p.amount
+    let ancla: string | undefined
+    for (const x of pend) {
+      if (monto <= 0) break
+      if (x.saldo <= 0) continue
+      const aplica = Math.min(x.saldo, monto)
+      x.saldo -= aplica; monto -= aplica
+      ancla = x.d.id
+    }
+    if (ancla) asignar(ancla, p); else sueltos.push(p)
+  }
+  const out: Transaction[] = []
+  for (const { d } of pend) {
+    for (const p of pagosPorDeuda.get(d.id) ?? []) out.push(p)
+    out.push(d)
+  }
+  return [...out, ...sueltos]
 }
 
 // Saldo minorista del cliente: deuda (rojo), saldo a favor (negativo, teal) o cancelada
