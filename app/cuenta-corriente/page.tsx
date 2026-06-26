@@ -1003,6 +1003,41 @@ ${renderTabla('Cuenta Mayorista', mayorista, balanceMay)}
     const balanceMayorista = selectedClient.currentBalanceMayorista ?? 0
     const saldoMin = saldoMinoristaDisplay(selectedClient.currentBalance)
     const salesById = new Map(clientSales.map((s) => [s.id, s]))
+
+    // Orden tipo libro mayor: las ventas (debe) van por fecha; cada pago (haber) se ubica
+    // ARRIBA de la venta que cancela (FIFO: la deuda pendiente más antigua, o la imputación
+    // puntual si el pago tiene debtId). Los pagos sin deuda asignable quedan al final.
+    const ordenarLibroMayor = (txs: Transaction[]): Transaction[] => {
+      const deudas = txs.filter((t) => t.type === 'debt').sort((a, b) => a.date.getTime() - b.date.getTime())
+      const pagos = txs.filter((t) => t.type !== 'debt').sort((a, b) => a.date.getTime() - b.date.getTime())
+      const pend = deudas.map((d) => ({ d, saldo: d.amount }))
+      const pagosPorDeuda = new Map<string, Transaction[]>()
+      const sueltos: Transaction[] = []
+      for (const p of pagos) {
+        let target = p.debtId ? pend.find((x) => x.d.id === p.debtId && x.saldo > 0) : undefined
+        if (!target) target = pend.find((x) => x.saldo > 0)
+        if (!target) { sueltos.push(p); continue }
+        const arr = pagosPorDeuda.get(target.d.id) ?? []
+        arr.push(p); pagosPorDeuda.set(target.d.id, arr)
+        let monto = p.amount
+        for (const x of pend) {
+          if (monto <= 0) break
+          if (x.saldo <= 0) continue
+          const aplica = Math.min(x.saldo, monto)
+          x.saldo -= aplica; monto -= aplica
+        }
+      }
+      const out: Transaction[] = []
+      for (const { d } of pend) {
+        for (const p of pagosPorDeuda.get(d.id) ?? []) out.push(p)
+        out.push(d)
+      }
+      return [...out, ...sueltos]
+    }
+    const txMinoristaOrdenado = ordenarLibroMayor(txMinorista)
+    const totalDebe = txMinorista.filter((t) => t.type === 'debt').reduce((a, t) => a + t.amount, 0)
+    const totalHaber = txMinorista.filter((t) => t.type !== 'debt').reduce((a, t) => a + t.amount, 0)
+
     // Deudas (remitos/ventas) con saldo pendiente, para imputar pagos
     const deudasPendientes = txMinorista
       .filter((tx) => tx.type === 'debt' && tx.saldo != null && tx.saldo > 0)
@@ -1169,17 +1204,34 @@ ${renderTabla('Cuenta Mayorista', mayorista, balanceMay)}
               ) : (
                 <div className="overflow-x-auto">
                   <div className="min-w-[640px] rounded-lg border overflow-hidden">
+                    {/* Totales arriba */}
+                    <div className={`${MOVIMIENTO_GRID} px-3 py-2 bg-foreground text-background text-xs font-bold`}>
+                      <span className="uppercase tracking-wide">Totales</span>
+                      <span />
+                      <span />
+                      <span className="text-right tabular-nums text-red-300">{formatCurrency(totalDebe)}</span>
+                      <span className="text-right tabular-nums text-green-300">{formatCurrency(totalHaber)}</span>
+                      <span />
+                    </div>
+                    <div className={`${MOVIMIENTO_GRID} px-3 py-1.5 bg-muted border-b text-xs font-semibold`}>
+                      <span className="uppercase tracking-wide text-muted-foreground">Saldo</span>
+                      <span />
+                      <span />
+                      <span />
+                      <span className="text-right tabular-nums">{formatCurrency(totalDebe - totalHaber)}</span>
+                      <span />
+                    </div>
                     {/* Encabezado */}
                     <div className={`${MOVIMIENTO_GRID} px-3 py-2 bg-muted/50 border-b text-[11px] font-semibold uppercase tracking-wide text-muted-foreground`}>
                       <span>Concepto</span>
                       <span className="text-right">Fecha</span>
                       <span className="text-center">Días</span>
-                      <span className="text-right">Monto</span>
-                      <span className="text-right">Saldo</span>
+                      <span className="text-right">Debe</span>
+                      <span className="text-right">Haber</span>
                       <span />
                     </div>
                     <div className="divide-y">
-                      {txMinorista.map((tx) => {
+                      {txMinoristaOrdenado.map((tx) => {
                         const sale = tx.saleId ? salesById.get(tx.saleId) : undefined
                         const devolsSale = sale
                           ? clientDevoluciones.filter((d) => d.saleId === sale.id)

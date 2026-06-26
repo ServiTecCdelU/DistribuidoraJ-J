@@ -296,7 +296,6 @@ export function MovimientoDeudaCard({
   const tieneRemito = !!sale?.remitoNumber
   const saldo = !isPayment && tx.saldo != null ? tx.saldo : null
   const pagada = saldo != null && saldo <= 0
-  const parcial = saldo != null && saldo > 0 && saldo < tx.amount
 
   // Construir lista unificada de no entregados
   // 1. items_no_entregados de la venta (path nuevo, precio completo)
@@ -497,13 +496,13 @@ export function MovimientoDeudaCard({
         <div className="text-center">
           {!isPayment && !pagada ? <DiasCell date={tx.date} /> : null}
         </div>
-        {/* Monto */}
-        <span className={`text-sm font-bold tabular-nums text-right ${isPayment ? 'text-green-600' : 'text-red-600'}`}>
-          {isPayment ? '-' : '+'}{formatCurrencyDecimals(tx.amount)}
+        {/* Debe (ventas / deudas) */}
+        <span className="text-sm font-bold tabular-nums text-right text-red-600">
+          {!isPayment ? formatCurrencyDecimals(tx.amount) : '—'}
         </span>
-        {/* Saldo */}
-        <span className={`text-xs font-medium tabular-nums text-right ${saldo == null ? 'text-muted-foreground' : pagada ? 'text-green-600' : parcial ? 'text-amber-600' : 'text-red-500'}`}>
-          {saldo == null ? '—' : pagada ? '✓' : formatCurrencyDecimals(saldo)}
+        {/* Haber (pagos) */}
+        <span className="text-sm font-bold tabular-nums text-right text-green-600">
+          {isPayment ? formatCurrencyDecimals(tx.amount) : '—'}
         </span>
         {/* Expandir */}
         <div className="flex justify-center">
