@@ -1602,9 +1602,11 @@ body{font-family:-apple-system,sans-serif;padding:24px;font-size:12px;color:#1f2
 .header .ruta-line{font-size:13px;font-weight:700;color:#111827}
 .header .ruta-line .blank{display:inline-block;min-width:120px;border-bottom:1px solid #9ca3af}
 .header .fecha{font-size:12px;font-weight:600;color:#374151}
-.seller-block{margin-bottom:18px;page-break-inside:avoid}
-.seller-title{font-size:12px;font-weight:800;text-transform:uppercase;letter-spacing:0.04em;color:#0f766e;background:#ccfbf1;padding:5px 10px;border-radius:6px;margin-bottom:4px}
+.seller-block{margin-bottom:18px}
+.seller-title{font-size:12px;font-weight:800;text-transform:uppercase;letter-spacing:0.04em;color:#0f766e;background:#ccfbf1;padding:5px 10px;border-radius:6px;margin-bottom:4px;page-break-after:avoid}
 table{width:100%;border-collapse:collapse}
+thead{display:table-header-group}
+tr{page-break-inside:avoid}
 th,td{padding:5px 8px;border-bottom:1px solid #e5e7eb;text-align:left;vertical-align:middle}
 th{font-size:9px;font-weight:700;color:#6b7280;background:#f9fafb;border-bottom:1px solid #d1d5db;text-transform:uppercase;letter-spacing:0.04em}
 td{font-size:12px}
@@ -1637,7 +1639,12 @@ tbody tr:nth-child(even){background:#fafafa}
     });
 
     Array.from(bySeller.entries())
-      .sort((a, b) => a[0].localeCompare(b[0], "es"))
+      .sort((a, b) => {
+        const aSin = a[0] === "Sin vendedor";
+        const bSin = b[0] === "Sin vendedor";
+        if (aSin !== bSin) return aSin ? 1 : -1;
+        return a[0].localeCompare(b[0], "es");
+      })
       .forEach(([seller, groups]) => {
         html += `<div class="seller-block"><div class="seller-title">Vendedor: ${escapeHtml(seller)}</div>`;
         html += `<table><thead><tr>`;
