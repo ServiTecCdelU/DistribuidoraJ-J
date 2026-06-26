@@ -1189,10 +1189,10 @@ ${renderTabla('Cuenta Mayorista', mayorista, balanceMay)}
                       <span>Fecha</span>
                       <span>Concepto</span>
                       <span>Descripción</span>
+                      <span>Acciones</span>
                       <span className="text-right">Debe</span>
                       <span className="text-right">Haber</span>
                       <span className="text-right">Saldo</span>
-                      <span className="text-right">Acciones</span>
                     </div>
                     <div className="divide-y">
                       {movimientosConSaldo.map(({ tx, saldoAcum }) => {
@@ -1219,10 +1219,10 @@ ${renderTabla('Cuenta Mayorista', mayorista, balanceMay)}
                       <span className="uppercase tracking-wide">Totales</span>
                       <span />
                       <span />
+                      <span />
                       <span className="text-right tabular-nums text-red-300">{formatCurrency(totalDebe)}</span>
                       <span className="text-right tabular-nums text-green-300">{formatCurrency(totalHaber)}</span>
                       <span className="text-right tabular-nums">{formatCurrency(totalDebe - totalHaber)}</span>
-                      <span />
                     </div>
                   </div>
                 </div>

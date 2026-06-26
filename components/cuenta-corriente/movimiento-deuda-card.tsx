@@ -25,10 +25,10 @@ interface MovimientoDeudaCardProps {
   onEliminarPago?: (tx: Transaction) => void
 }
 
-// Columnas compartidas entre el encabezado (en la page) y cada fila — igual al PDF:
-// Fecha · Concepto · Descripción · Debe · Haber · Saldo · Acciones
+// Columnas compartidas entre el encabezado (en la page) y cada fila:
+// Fecha · Concepto · Descripción · Acciones · Debe · Haber · Saldo
 export const MOVIMIENTO_GRID =
-  'grid grid-cols-[5rem_4.5rem_minmax(8rem,1fr)_6.5rem_6.5rem_6.5rem_8rem] items-center gap-x-2'
+  'grid grid-cols-[5rem_4.5rem_minmax(8rem,1fr)_8rem_6.5rem_6.5rem_6.5rem] items-center gap-x-2'
 
 const COLOR_DIA: Record<EstadoDiaPago, string> = {
   falta: 'text-green-600',
@@ -440,29 +440,8 @@ export function MovimientoDeudaCard({
           )}
         </div>
 
-        {/* Debe (ventas / deudas) */}
-        <span className="text-sm font-bold tabular-nums text-right text-red-600">
-          {!isPayment ? formatCurrencyDecimals(tx.amount) : '—'}
-        </span>
-        {/* Haber (pagos) */}
-        <span className="text-sm font-bold tabular-nums text-right text-green-600">
-          {isPayment ? formatCurrencyDecimals(tx.amount) : '—'}
-        </span>
-        {/* Saldo acumulado */}
-        <span className={`text-sm font-semibold tabular-nums text-right ${
-          saldoAcumulado == null ? 'text-muted-foreground'
-            : saldoAcumulado > 0 ? 'text-red-600'
-            : saldoAcumulado < 0 ? 'text-green-600' : 'text-muted-foreground'
-        }`}>
-          {saldoAcumulado == null
-            ? '—'
-            : saldoAcumulado < 0
-              ? `A favor ${formatCurrencyDecimals(-saldoAcumulado)}`
-              : formatCurrencyDecimals(saldoAcumulado)}
-        </span>
-
         {/* Acciones: recibo de pago y eliminar */}
-        <div className="flex items-center justify-end gap-1.5">
+        <div className="flex items-center justify-start gap-1.5">
           {/* Recibo de DEVOLUCIÓN (mismo de Ventas) — no recibo de pago */}
           {isDevolucion && devMatch && (
             <button
@@ -530,6 +509,27 @@ export function MovimientoDeudaCard({
             </button>
           )}
         </div>
+
+        {/* Debe (ventas / deudas) */}
+        <span className="text-sm font-bold tabular-nums text-right text-red-600">
+          {!isPayment ? formatCurrencyDecimals(tx.amount) : '—'}
+        </span>
+        {/* Haber (pagos) */}
+        <span className="text-sm font-bold tabular-nums text-right text-green-600">
+          {isPayment ? formatCurrencyDecimals(tx.amount) : '—'}
+        </span>
+        {/* Saldo acumulado */}
+        <span className={`text-sm font-semibold tabular-nums text-right ${
+          saldoAcumulado == null ? 'text-muted-foreground'
+            : saldoAcumulado > 0 ? 'text-red-600'
+            : saldoAcumulado < 0 ? 'text-green-600' : 'text-muted-foreground'
+        }`}>
+          {saldoAcumulado == null
+            ? '—'
+            : saldoAcumulado < 0
+              ? `A favor ${formatCurrencyDecimals(-saldoAcumulado)}`
+              : formatCurrencyDecimals(saldoAcumulado)}
+        </span>
       </div>
 
       {/* Panel expandido — descuento */}
