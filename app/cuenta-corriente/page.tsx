@@ -747,9 +747,15 @@ ${bloques}
       if (movs.length === 0 && balance <= 0) return ''
       const totalEntregado = movs.filter((t) => t.type === 'debt').reduce((s, t) => s + t.amount, 0)
       const totalPagado = movs.filter((t) => t.type === 'payment').reduce((s, t) => s + t.amount, 0)
-      // Cada pago (haber) queda arriba de la venta (debe) que cancela; totales arriba.
-      const rows = movs.map((t) => {
+      const diferencia = totalEntregado - totalPagado
+      const fmtSaldo = (v: number) => (v < 0 ? `A favor ${formatCurrency(-v)}` : formatCurrency(v))
+      const clsSaldo = (v: number) => (v > 0 ? 'deuda' : v < 0 ? 'ok' : '')
+      // Orden cronológico con saldo acumulado (extracto / libro mayor).
+      const cronologico = [...movs].sort((a, b) => a.date.getTime() - b.date.getTime())
+      let saldoAcum = 0
+      const rows = cronologico.map((t) => {
         const esDeuda = t.type === 'debt'
+        saldoAcum += esDeuda ? t.amount : -t.amount
         const entregado = esDeuda ? `<span class="m-deuda">${formatCurrency(t.amount)}</span>` : ''
         const pagado = esDeuda ? '' : `<span class="m-pago">${formatCurrency(t.amount)}</span>`
         return `<tr>
@@ -757,10 +763,11 @@ ${bloques}
           <td>${esc(t.description || (esDeuda ? 'Entrega de mercadería' : 'Pago recibido'))}</td>
           <td class="right nowrap">${entregado}</td>
           <td class="right nowrap">${pagado}</td>
+          <td class="right nowrap ${clsSaldo(saldoAcum)}">${fmtSaldo(saldoAcum)}</td>
         </tr>`
       }).join('')
       const sinMov = movs.length === 0
-        ? `<tr><td colspan="4" class="empty">Sin movimientos registrados</td></tr>`
+        ? `<tr><td colspan="5" class="empty">Sin movimientos registrados</td></tr>`
         : ''
       return `<div class="seccion">
   <div class="sec-head">
@@ -768,20 +775,23 @@ ${bloques}
     <span class="sec-bal ${balance > 0 ? 'deuda' : 'ok'}">${balance > 0 ? 'Debe ' + formatCurrency(balance) : 'Cuenta cancelada'}</span>
   </div>
   <table class="mov">
-    <colgroup><col style="width:16%"><col style="width:48%"><col style="width:18%"><col style="width:18%"></colgroup>
+    <colgroup><col style="width:13%"><col style="width:39%"><col style="width:16%"><col style="width:16%"><col style="width:16%"></colgroup>
     <thead>
+      <tr><th class="center">Fecha</th><th>Concepto</th><th class="right">Debe</th><th class="right">Haber</th><th class="right">Saldo</th></tr>
+    </thead>
+    <tbody>${rows}${sinMov}</tbody>
+    <tfoot>
       <tr class="tot-row">
         <td colspan="2" class="foot-label">Totales</td>
         <td class="right nowrap"><span class="m-deuda">${formatCurrency(totalEntregado)}</span></td>
         <td class="right nowrap"><span class="m-pago">${formatCurrency(totalPagado)}</span></td>
+        <td></td>
       </tr>
       <tr class="saldo-final-row">
-        <td colspan="3" class="foot-label-final">SALDO ADEUDADO (Debe − Haber)</td>
-        <td class="right nowrap ${balance > 0 ? 'deuda' : 'ok'}">${formatCurrency(balance)}</td>
+        <td colspan="4" class="foot-label-final">SALDO (Debe − Haber)</td>
+        <td class="right nowrap ${clsSaldo(diferencia)}">${fmtSaldo(diferencia)}</td>
       </tr>
-      <tr><th class="center">Fecha</th><th>Concepto</th><th class="right">Debe</th><th class="right">Haber</th></tr>
-    </thead>
-    <tbody>${rows}${sinMov}</tbody>
+    </tfoot>
   </table>
 </div>`
     }
