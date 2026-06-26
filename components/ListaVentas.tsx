@@ -41,7 +41,7 @@ import type { ListaVentasProps } from "../types";
 import { formatDate, formatTime, formatCurrency } from "@/lib/utils/format";
 import { toDate } from "@/services/supabase-helpers";
 import { toast } from "sonner";
-import { useMemo, useState, useCallback } from "react";
+import { useMemo, useState, useCallback, useEffect } from "react";
 import {
   Dialog,
   DialogContent,
@@ -178,6 +178,14 @@ export function ListaVentas({
   const [tmpFiltros, setTmpFiltros] = useState<typeof filtros>(filtros);
   const openFilterModal = () => { setTmpFiltros(filtros); setFilterModalOpen(true); };
   const applyFilters = () => { onCambiarFiltros(tmpFiltros as any); setFilterModalOpen(false); };
+
+  // Buscador: el texto se escribe en estado local y la búsqueda se dispara al presionar
+  // Enter (o la lupa). Evita la consulta al servidor + re-render en cada tecla, que trababa
+  // la escritura.
+  const [localSearch, setLocalSearch] = useState(searchQuery);
+  useEffect(() => { setLocalSearch(searchQuery); }, [searchQuery]);
+  const ejecutarBusqueda = () => onCambiarFiltros({ searchQuery: localSearch.trim() });
+  const limpiarBusqueda = () => { setLocalSearch(""); onCambiarFiltros({ searchQuery: "" }); };
   const clearTmpFilters = () => setTmpFiltros({ ...EMPTY_FILTROS } as any);
 
   // ─── export Excel ─────────────────────────────────────────────────────────
@@ -328,24 +336,27 @@ export function ListaVentas({
           <div className="flex gap-2">
             {/* Búsqueda — siempre visible */}
             <div className="relative flex-1 min-w-0">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+              <button type="button" onClick={ejecutarBusqueda} title="Buscar" className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground">
+                <Search className="h-4 w-4" />
+              </button>
               <Input
-                placeholder="Buscar por cliente, vendedor, producto, remito, hoja de ruta o N°..."
-                value={searchQuery}
-                onChange={(e) => onCambiarFiltros({ searchQuery: e.target.value })}
+                placeholder="Buscar por cliente, vendedor, producto, remito, hoja de ruta o N°... (Enter para buscar)"
+                value={localSearch}
+                onChange={(e) => setLocalSearch(e.target.value)}
+                onKeyDown={(e) => { if (e.key === "Enter") ejecutarBusqueda(); }}
                 className="pl-10 h-10 bg-background"
               />
-              {searchQuery && (
-                <button onClick={() => onCambiarFiltros({ searchQuery: "" })} className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground">
+              {localSearch && (
+                <button onClick={limpiarBusqueda} className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground">
                   <X className="h-4 w-4" />
                 </button>
               )}
             </div>
 
-            {/* Botón Filtros mobile */}
+            {/* Botón Filtros — abre el modal con todos los filtros (deja el buscador ancho) */}
             <Button
               variant="outline"
-              className="md:hidden h-10 gap-2 shrink-0 relative"
+              className="h-10 gap-2 shrink-0 relative"
               onClick={openFilterModal}
             >
               <Filter className="h-4 w-4" />
@@ -357,8 +368,8 @@ export function ListaVentas({
               )}
             </Button>
 
-            {/* Filtros inline — solo desktop */}
-            <div className="hidden md:flex flex-wrap gap-2">
+            {/* Filtros inline desktop — movidos al modal de Filtros (oculto) */}
+            <div className="hidden">
               <Select value={periodFilter} onValueChange={(v) => onCambiarFiltros({ periodFilter: v as any, ...(v !== "custom" ? { dateFrom: "", dateTo: "" } : {}) })}>
                 <SelectTrigger className="h-10 w-[140px]">
                   <Calendar className="h-3.5 w-3.5 mr-2 text-muted-foreground" />
@@ -454,9 +465,9 @@ export function ListaVentas({
             </div>
           </div>
 
-          {/* Rango personalizado desktop */}
-          {periodFilter === "custom" && (
-            <div className="hidden md:flex flex-wrap items-center gap-3 mt-3 p-3 bg-muted/30 rounded-xl border border-border/50">
+          {/* Rango personalizado — movido al modal de Filtros (oculto) */}
+          {false && periodFilter === "custom" && (
+            <div className="hidden">
               <span className="text-xs font-medium text-muted-foreground">Desde</span>
               <Input type="date" value={dateFrom} onChange={(e) => onCambiarFiltros({ dateFrom: e.target.value })} className="bg-background h-9 w-[160px]" />
               <span className="text-xs font-medium text-muted-foreground">Hasta</span>
