@@ -25,9 +25,10 @@ interface MovimientoDeudaCardProps {
   onEliminarPago?: (tx: Transaction) => void
 }
 
-// Columnas compartidas entre el encabezado (en la page) y cada fila
+// Columnas compartidas entre el encabezado (en la page) y cada fila — igual al PDF:
+// Fecha · Concepto · Descripción · Debe · Haber · Saldo · Acciones
 export const MOVIMIENTO_GRID =
-  'grid grid-cols-[minmax(8rem,1fr)_5rem_2.75rem_7.5rem_7.5rem_7rem_0.75rem] items-center gap-x-2'
+  'grid grid-cols-[5rem_4.5rem_minmax(8rem,1fr)_6.5rem_6.5rem_6.5rem_8rem] items-center gap-x-2'
 
 const COLOR_DIA: Record<EstadoDiaPago, string> = {
   falta: 'text-green-600',
@@ -298,6 +299,17 @@ export function MovimientoDeudaCard({
   const saldo = !isPayment && tx.saldo != null ? tx.saldo : null
   const pagada = saldo != null && saldo <= 0
 
+  // Concepto y Descripción separados (igual que el PDF)
+  const concepto = isPayment ? 'Pago' : 'Venta'
+  const descripcionMov = (() => {
+    if (isPayment) {
+      if (isDescuento) return `Descuento${sale?.saleNumber ? ` · Venta ${sale.saleNumber}` : ''}${descuento.motivo ? ` · ${descuento.motivo}` : ''}`
+      const d = (tx.description || '').replace(/^Pago\s+(en\s+|por\s+)?/i, '')
+      return d ? d.charAt(0).toUpperCase() + d.slice(1) : 'Pago recibido'
+    }
+    return sale?.remitoNumber ? `Remito N° ${sale.remitoNumber}` : (tx.description || 'Venta')
+  })()
+
   // Construir lista unificada de no entregados
   // 1. items_no_entregados de la venta (path nuevo, precio completo)
   const noEntregadosVenta: TableRow[] = (sale?.itemsNoEntregados ?? []).map((it) => ({
@@ -403,22 +415,54 @@ export function MovimientoDeudaCard({
         className={`${MOVIMIENTO_GRID} px-3 py-2 ${expandable ? 'cursor-pointer hover:bg-muted/30' : ''}`}
         onClick={expandable ? () => setExpanded((v) => !v) : undefined}
       >
+        {/* Fecha */}
+        <span className="text-xs text-muted-foreground tabular-nums">{formatDate(tx.date)}</span>
+
         {/* Concepto */}
-        <div className="flex items-center gap-1.5 min-w-0">
+        <span className="flex items-center gap-1 text-sm font-medium">
           {isPayment
             ? <ArrowDownCircle className="h-4 w-4 text-green-600 shrink-0" />
             : <ArrowUpCircle className="h-4 w-4 text-red-600 shrink-0" />
           }
-          <span className="text-sm font-medium truncate">
-            {isDescuento
-              ? `Descuento${sale?.saleNumber ? ` · Venta ${sale.saleNumber}` : ''}${descuento.motivo ? ` · ${descuento.motivo}` : ''}`
-              : tx.description}
-          </span>
-          {tieneRemito && (
-            <span className="inline-flex items-center gap-0.5 text-xs text-blue-600 shrink-0">
-              <Truck className="h-3.5 w-3.5" />{sale!.remitoNumber}
-            </span>
+          {concepto}
+        </span>
+
+        {/* Descripción */}
+        <div className="flex items-center gap-1.5 min-w-0">
+          <span className="text-sm truncate">{descripcionMov}</span>
+          {tieneNoEntregados && !expanded && (
+            <Badge variant="outline" className="text-[11px] px-1 py-0 h-4 text-amber-600 border-amber-300 shrink-0">
+              {noEntregadosUnified.length} no entregado{noEntregadosUnified.length > 1 ? 's' : ''}
+            </Badge>
           )}
+          {expandable && (
+            <ChevronDown className={`h-4 w-4 text-muted-foreground shrink-0 transition-transform ${expanded ? 'rotate-180' : ''}`} />
+          )}
+        </div>
+
+        {/* Debe (ventas / deudas) */}
+        <span className="text-sm font-bold tabular-nums text-right text-red-600">
+          {!isPayment ? formatCurrencyDecimals(tx.amount) : '—'}
+        </span>
+        {/* Haber (pagos) */}
+        <span className="text-sm font-bold tabular-nums text-right text-green-600">
+          {isPayment ? formatCurrencyDecimals(tx.amount) : '—'}
+        </span>
+        {/* Saldo acumulado */}
+        <span className={`text-sm font-semibold tabular-nums text-right ${
+          saldoAcumulado == null ? 'text-muted-foreground'
+            : saldoAcumulado > 0 ? 'text-red-600'
+            : saldoAcumulado < 0 ? 'text-green-600' : 'text-muted-foreground'
+        }`}>
+          {saldoAcumulado == null
+            ? '—'
+            : saldoAcumulado < 0
+              ? `A favor ${formatCurrencyDecimals(-saldoAcumulado)}`
+              : formatCurrencyDecimals(saldoAcumulado)}
+        </span>
+
+        {/* Acciones: recibo de pago y eliminar */}
+        <div className="flex items-center justify-end gap-1.5">
           {/* Recibo de DEVOLUCIÓN (mismo de Ventas) — no recibo de pago */}
           {isDevolucion && devMatch && (
             <button
@@ -429,7 +473,7 @@ export function MovimientoDeudaCard({
               title="Descargar recibo de devolución"
             >
               {descargandoDevol ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <RotateCcw className="h-3.5 w-3.5" />}
-              {devMatch.reciboNumero || 'Recibo devol.'}
+              <span className="truncate max-w-[3.5rem]">{devMatch.reciboNumero || 'Recibo'}</span>
             </button>
           )}
           {isPayment && !isDevolucion && (
@@ -444,7 +488,7 @@ export function MovimientoDeudaCard({
                   }}
                   title="Descargar recibo"
                 >
-                  <Receipt className="h-3.5 w-3.5" />{tx.reciboNumero || 'Recibo'}
+                  <Receipt className="h-3.5 w-3.5" /><span className="truncate max-w-[3.5rem]">{tx.reciboNumero || 'Recibo'}</span>
                 </button>
                 {onRegenerarRecibo && (
                   <button
@@ -467,60 +511,23 @@ export function MovimientoDeudaCard({
                 title="Generar y descargar el recibo de este pago"
               >
                 {regenerandoRecibo ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Receipt className="h-3.5 w-3.5" />}
-                Generar recibo
+                Recibo
               </button>
             ) : tx.reciboNumero ? (
               <span className="inline-flex items-center gap-0.5 text-xs text-teal-600 shrink-0">
-                <Receipt className="h-3.5 w-3.5" />{tx.reciboNumero}
+                <Receipt className="h-3.5 w-3.5" /><span className="truncate max-w-[3.5rem]">{tx.reciboNumero}</span>
               </span>
             ) : null
           )}
           {isPayment && !isDescuento && onEliminarPago && (
             <button
               type="button"
-              className="inline-flex items-center gap-0.5 text-xs text-red-500 hover:text-red-700 hover:underline shrink-0"
+              className="inline-flex items-center text-xs text-red-500 hover:text-red-700 shrink-0"
               onClick={(e) => { e.stopPropagation(); onEliminarPago(tx) }}
               title="Eliminar este pago"
             >
-              <Trash2 className="h-3.5 w-3.5" />Eliminar
+              <Trash2 className="h-3.5 w-3.5" />
             </button>
-          )}
-          {tieneNoEntregados && !expanded && (
-            <Badge variant="outline" className="text-[11px] px-1 py-0 h-4 text-amber-600 border-amber-300 shrink-0">
-              {noEntregadosUnified.length} no entregado{noEntregadosUnified.length > 1 ? 's' : ''}
-            </Badge>
-          )}
-        </div>
-        {/* Fecha */}
-        <span className="text-xs text-muted-foreground text-right tabular-nums">{formatDate(tx.date)}</span>
-        {/* Días en cuenta corriente (solo deudas pendientes) */}
-        <div className="text-center">
-          {!isPayment && !pagada ? <DiasCell date={tx.date} /> : null}
-        </div>
-        {/* Debe (ventas / deudas) */}
-        <span className="text-sm font-bold tabular-nums text-right text-red-600">
-          {!isPayment ? formatCurrencyDecimals(tx.amount) : '—'}
-        </span>
-        {/* Haber (pagos) */}
-        <span className="text-sm font-bold tabular-nums text-right text-green-600">
-          {isPayment ? formatCurrencyDecimals(tx.amount) : '—'}
-        </span>
-        {/* Saldo acumulado */}
-        <span className={`text-sm font-semibold tabular-nums text-right ${
-          saldoAcumulado == null ? 'text-muted-foreground'
-            : saldoAcumulado > 0 ? 'text-red-600'
-            : saldoAcumulado < 0 ? 'text-green-600' : 'text-muted-foreground'
-        }`}>
-          {saldoAcumulado == null
-            ? '—'
-            : saldoAcumulado < 0
-              ? `A favor ${formatCurrencyDecimals(-saldoAcumulado)}`
-              : formatCurrencyDecimals(saldoAcumulado)}
-        </span>
-        {/* Expandir */}
-        <div className="flex justify-center">
-          {expandable && (
-            <ChevronDown className={`h-4 w-4 text-muted-foreground transition-transform ${expanded ? 'rotate-180' : ''}`} />
           )}
         </div>
       </div>

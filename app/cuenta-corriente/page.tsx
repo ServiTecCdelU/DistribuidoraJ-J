@@ -1183,16 +1183,16 @@ ${renderTabla('Cuenta Mayorista', mayorista, balanceMay)}
                 <p className="text-sm text-muted-foreground text-center py-2">Sin movimientos</p>
               ) : (
                 <div className="overflow-x-auto">
-                  <div className="min-w-[760px] rounded-lg border overflow-hidden">
+                  <div className="min-w-[820px] rounded-lg border overflow-hidden">
                     {/* Encabezado */}
                     <div className={`${MOVIMIENTO_GRID} px-3 py-2 bg-muted/50 border-b text-[11px] font-semibold uppercase tracking-wide text-muted-foreground`}>
+                      <span>Fecha</span>
                       <span>Concepto</span>
-                      <span className="text-right">Fecha</span>
-                      <span className="text-center">Días</span>
+                      <span>Descripción</span>
                       <span className="text-right">Debe</span>
                       <span className="text-right">Haber</span>
                       <span className="text-right">Saldo</span>
-                      <span />
+                      <span className="text-right">Acciones</span>
                     </div>
                     <div className="divide-y">
                       {movimientosConSaldo.map(({ tx, saldoAcum }) => {
