@@ -65,6 +65,8 @@ export function ModalDetalleVenta({
   const [downloading, setDownloading] = useState<"invoice" | "remito" | null>(null);
   const [generandoDoble, setGenerandoDoble] = useState(false);
   const [incidencias, setIncidencias] = useState<{ roturas: string[]; faltantes: string[]; noQuiere: string[] }>({ roturas: [], faltantes: [], noQuiere: [] });
+  // Montos no entregados (para mostrar monto original del remito − pérdidas/faltantes = cobrado)
+  const [noEntMontos, setNoEntMontos] = useState<{ rotura: number; faltante: number; noQuiso: number }>({ rotura: 0, faltante: 0, noQuiso: 0 });
   const [verTodosIncidencias, setVerTodosIncidencias] = useState(false);
   const [modalDevAbierto, setModalDevAbierto] = useState(false);
   const [modalDescAbierto, setModalDescAbierto] = useState(false);
@@ -90,6 +92,27 @@ export function ModalDetalleVenta({
     }
     devolucionesApi.getBySale(venta.id).then(setDevoluciones).catch(() => {});
     ajustesVentaApi.getDescuentosBySale(venta.id).then(setDescuentos).catch(() => {});
+  }, [venta?.id, abierto]);
+
+  useEffect(() => {
+    if (!venta?.id || !abierto) return;
+    setNoEntMontos({ rotura: 0, faltante: 0, noQuiso: 0 });
+    supabase
+      .from("ventas")
+      .select("items_no_entregados")
+      .eq("id", venta.id)
+      .single()
+      .then(({ data }) => {
+        const arr = (data as any)?.items_no_entregados ?? [];
+        const acc = { rotura: 0, faltante: 0, noQuiso: 0 };
+        for (const it of arr) {
+          const monto = (it.price || 0) * (1 - (it.itemDiscount || 0) / 100) * (it.quantity || 0);
+          if (it.motivo === "rotura") acc.rotura += monto;
+          else if (it.motivo === "faltante") acc.faltante += monto;
+          else acc.noQuiso += monto;
+        }
+        setNoEntMontos(acc);
+      });
   }, [venta?.id, abierto]);
 
   useEffect(() => {
@@ -661,12 +684,48 @@ export function ModalDetalleVenta({
               <span className="font-medium">Estado</span>
               <span className="text-xl font-bold">Rechazado por el cliente</span>
             </div>
-          ) : (
-            <div className="flex items-center justify-between p-4 rounded-xl bg-foreground text-background">
-              <span className="font-medium">Total</span>
-              <span className="text-2xl font-bold">{formatearMoneda(venta.total)}</span>
-            </div>
-          )}
+          ) : (() => {
+            const totalNoEnt = noEntMontos.rotura + noEntMontos.faltante + noEntMontos.noQuiso;
+            if (totalNoEnt <= 0.005) {
+              return (
+                <div className="flex items-center justify-between p-4 rounded-xl bg-foreground text-background">
+                  <span className="font-medium">Total</span>
+                  <span className="text-2xl font-bold">{formatearMoneda(venta.total)}</span>
+                </div>
+              );
+            }
+            const original = venta.total + totalNoEnt;
+            return (
+              <div className="p-4 rounded-xl bg-foreground text-background space-y-1.5">
+                <div className="flex items-center justify-between text-sm opacity-80">
+                  <span>Total remito (original)</span>
+                  <span className="font-semibold">{formatearMoneda(original)}</span>
+                </div>
+                {noEntMontos.rotura > 0.005 && (
+                  <div className="flex items-center justify-between text-sm text-rose-300">
+                    <span>Rotura (pérdida)</span>
+                    <span>-{formatearMoneda(noEntMontos.rotura)}</span>
+                  </div>
+                )}
+                {noEntMontos.faltante > 0.005 && (
+                  <div className="flex items-center justify-between text-sm text-amber-300">
+                    <span>Faltante</span>
+                    <span>-{formatearMoneda(noEntMontos.faltante)}</span>
+                  </div>
+                )}
+                {noEntMontos.noQuiso > 0.005 && (
+                  <div className="flex items-center justify-between text-sm opacity-70">
+                    <span>No quiso</span>
+                    <span>-{formatearMoneda(noEntMontos.noQuiso)}</span>
+                  </div>
+                )}
+                <div className="flex items-center justify-between pt-1.5 border-t border-background/20">
+                  <span className="font-medium">Cobrado</span>
+                  <span className="text-2xl font-bold">{formatearMoneda(venta.total)}</span>
+                </div>
+              </div>
+            );
+          })()}
 
           {/* Incidencias del pedido */}
           {(() => {

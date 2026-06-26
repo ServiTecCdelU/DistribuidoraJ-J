@@ -41,6 +41,7 @@ export interface Venta {
   clientCuit?: string;
   clientTaxCategory?: string;
   items: VentaItem[];
+  itemsNoEntregados?: { name: string; price: number; quantity: number; itemDiscount?: number; motivo?: string; codigo?: string }[];
   total: number;
   paymentType: "cash" | "credit" | "mixed";
   paymentMethod?: "efectivo" | "transferencia";
@@ -132,7 +133,7 @@ const PAYMENT_BADGE_CLASSES: Record<string, string> = {
 // Columnas de la lista SIN los PDF base64 (remito_pdf_base64 / invoice_pdf_base64).
 // Esos pesan cientos de KB y solo se necesitan al descargar/compartir → se cargan on-demand.
 const VENTA_LIST_COLS =
-  'id,client_id,client_name,client_phone,client_address,client_cuit,client_tax_category,items,total,payment_type,payment_method,cash_amount,credit_amount,created_at,invoice_number,invoice_emitted,afip_data,invoice_drive_url,invoice_drive_file_id,remito_drive_url,remito_drive_file_id,remito_number,hoja_ruta_number,seller_id,seller_name,sale_number,delivery_method,delivery_address,discount,discount_type'
+  'id,client_id,client_name,client_phone,client_address,client_cuit,client_tax_category,items,items_no_entregados,total,payment_type,payment_method,cash_amount,credit_amount,created_at,invoice_number,invoice_emitted,afip_data,invoice_drive_url,invoice_drive_file_id,remito_drive_url,remito_drive_file_id,remito_number,hoja_ruta_number,seller_id,seller_name,sale_number,delivery_method,delivery_address,discount,discount_type'
 const PEDIDO_RECHAZADO_COLS =
   'id,client_id,client_name,client_phone,items,updated_at,created_at,remito_number,hoja_ruta_number,seller_name,seller_id,address,status'
 
@@ -146,6 +147,7 @@ function mapVenta(d: Record<string, any>): Venta {
     clientCuit: d.client_cuit ?? undefined,
     clientTaxCategory: d.client_tax_category ?? undefined,
     items: d.items ?? [],
+    itemsNoEntregados: d.items_no_entregados ?? [],
     total: Number(d.total) || 0,
     paymentType: d.payment_type ?? "cash",
     paymentMethod: d.payment_method ?? "efectivo",

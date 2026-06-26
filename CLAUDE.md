@@ -95,6 +95,7 @@ Hacer UN SOLO commit y push cuando el usuario confirme que todo funciona o cuand
 
 ## Decisiones de Arquitectura (no revertir)
 
+- **EL REMITO ES INMODIFICABLE.** Una vez generado (al pasar el pedido a reparto, con el pedido completo), el remito NO se regenera, NO se pisa y NO se recalcula NUNCA — ni al cobrar, ni al marcar roturas/faltantes, ni al sincronizar precios. Es la fuente de verdad de cantidades y total originales. Las roturas/faltantes se registran SOLO en `items_no_entregados` + `transacciones` y se descuentan en la presentación (caja/ventas), jamás tocando el remito. Al cobrar, el remito del pedido se COPIA tal cual a la venta (`saveRemitoToSale`), sin regenerar el PDF.
 - El carrito es un unico componente `UnifiedCart` (`components/cart/UnifiedCart.tsx`) que se adapta por rol (`admin`, `seller`, `null`). La logica vive en `hooks/useCart.ts`.
 - AFIP billing unificado en `lib/facturacion-helper.ts`.
 - Componentes de tienda en `components/tienda/` (hero-carousel, top-products).

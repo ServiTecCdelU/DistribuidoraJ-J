@@ -514,8 +514,9 @@ export function ListaVentas({
             {/* Header desktop */}
             <div className="hidden md:grid grid-cols-12 gap-4 p-4 bg-muted/30 text-xs font-semibold text-muted-foreground uppercase tracking-wider">
               <div className="col-span-2">Venta</div>
-              <div className="col-span-3">Cliente</div>
-              <div className="col-span-2">Fecha</div>
+              <div className="col-span-2">Cliente</div>
+              <div className="col-span-1">Fecha</div>
+              <div className="col-span-2 text-right">Incidencias</div>
               <div className="col-span-2 text-right">Total</div>
               <div className="col-span-2 text-center">Pago</div>
               <div className="col-span-1 text-center">Acc.</div>
@@ -541,6 +542,13 @@ export function ListaVentas({
                     ) : (
                       <>
                         <p className="font-bold text-sm text-foreground">{fmt(venta.total)}</p>
+                        {(() => {
+                          const inc = ((venta as any).itemsNoEntregados ?? []).reduce(
+                            (a: number, i: any) => a + (i.price || 0) * (1 - (i.itemDiscount || 0) / 100) * (i.quantity || 0),
+                            0,
+                          );
+                          return inc > 0.005 ? <p className="text-[10px] text-rose-600 font-medium">Incid: -{fmt(inc)}</p> : null;
+                        })()}
                         <Badge variant="outline" className={`text-[10px] ${payBadgeCls(venta.paymentType, venta.paymentMethod)}`}>
                           {payLabel(venta.paymentType, venta.paymentMethod)}
                         </Badge>
@@ -559,7 +567,7 @@ export function ListaVentas({
                     <p className="text-[10px] text-muted-foreground truncate max-w-[120px]">{venta.id.replace(/^venta_/, "") || "directa"}</p>
                   </div>
                 </div>
-                <div className="hidden md:flex md:col-span-3 items-center gap-2">
+                <div className="hidden md:flex md:col-span-2 items-center gap-2">
                   <Avatar className="h-8 w-8">
                     <AvatarFallback className="bg-muted text-muted-foreground text-xs"><User className="h-3.5 w-3.5" /></AvatarFallback>
                   </Avatar>
@@ -569,8 +577,19 @@ export function ListaVentas({
                     {venta.hojaRutaNumber && <p className="text-[10px] text-teal-600 font-medium truncate">Hoja de ruta: {venta.hojaRutaNumber}</p>}
                   </div>
                 </div>
-                <div className="hidden md:flex md:col-span-2 items-center text-sm text-muted-foreground">
+                <div className="hidden md:flex md:col-span-1 items-center text-sm text-muted-foreground">
                   <div><p>{fmtDate(venta.createdAt)}</p><p className="text-xs">{fmtTime(venta.createdAt)}</p></div>
+                </div>
+                <div className="hidden md:flex md:col-span-2 items-center justify-end">
+                  {(() => {
+                    const inc = ((venta as any).itemsNoEntregados ?? []).reduce(
+                      (a: number, i: any) => a + (i.price || 0) * (1 - (i.itemDiscount || 0) / 100) * (i.quantity || 0),
+                      0,
+                    );
+                    return inc > 0.005
+                      ? <p className="font-semibold text-rose-600 text-sm">-{fmt(inc)}</p>
+                      : <p className="text-muted-foreground/50 text-sm">—</p>;
+                  })()}
                 </div>
                 <div className="hidden md:flex md:col-span-2 items-center justify-end">
                   {venta.rechazado ? (

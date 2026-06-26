@@ -184,7 +184,7 @@ const CajaPdfDocument = ({ register, sales, losses = [], pagos = [], rejected = 
   const totalSales = register.totalSales ?? totalCalc;
   const salesCount = register.salesCount ?? sales.length;
   const pagosTotal = pagos.reduce((a, p) => a + p.monto, 0);
-  const expectedCash = register.initialAmount + cashTotal - pagosTotal;
+  const expectedCash = register.initialAmount + cashTotal;
 
   return (
     <Document>
@@ -925,7 +925,6 @@ export default function CajaPage() {
     return { efectivoTotal, transferTotal, cashTotal: efectivoTotal + transferTotal, creditTotal, total, count: sales.length, lossTotal, lossCount: losses.length, comisionesTotal, comisionesCount: pagosComisiones.length };
   }, [sales, losses, pagosComisiones]);
 
-  const expectedCash = (currentRegister?.initialAmount || 0) + todayStats.efectivoTotal - todayStats.comisionesTotal;
 
   // Stats para el modal de cierre (puede ser caja actual o una del historial)
   const closingStats = useMemo(() => {
@@ -952,7 +951,7 @@ export default function CajaPage() {
     return { efectivoTotal, transferTotal, creditTotal, total, count: src.length };
   }, [closingSales, sales]);
   const closingRegisterData = closingRegister ?? currentRegister;
-  const closingExpectedCash = (closingRegisterData?.initialAmount || 0) + closingStats.efectivoTotal - todayStats.comisionesTotal;
+  const closingExpectedCash = (closingRegisterData?.initialAmount || 0) + closingStats.efectivoTotal;
 
   const handleOpenRegister = async () => {
     if (!initialAmount || !user) return;
@@ -1334,16 +1333,14 @@ export default function CajaPage() {
                       <p className="text-[16px] sm:text-xl font-bold tabular-nums">{formatCurrency(todayStats.creditTotal)}</p>
                     </CardContent>
                   </Card>
-                  <Card className="col-span-2 lg:col-span-1">
+                  <Card className="col-span-2 lg:col-span-1 border-red-500/30 bg-red-500/5">
                     <CardContent className="px-2.5 py-1 sm:p-4 text-center sm:text-left">
                       <div className="flex items-center justify-center sm:justify-start gap-1.5 sm:gap-2 mb-0.5 sm:mb-1">
-                        <Banknote className="h-3.5 w-3.5 sm:h-4 sm:w-4 text-amber-500 shrink-0" />
-                        <span className="text-[13px] sm:text-xs text-muted-foreground truncate">Efectivo esperado</span>
+                        <AlertTriangle className="h-3.5 w-3.5 sm:h-4 sm:w-4 text-red-500 shrink-0" />
+                        <span className="text-[13px] sm:text-xs text-muted-foreground truncate">Pérdidas del día</span>
                       </div>
-                      <p className="text-[16px] sm:text-xl font-bold tabular-nums">{formatCurrency(expectedCash)}</p>
-                      <p className="text-[12px] sm:text-xs text-muted-foreground">
-                        Inicial + efectivo - comisiones
-                      </p>
+                      <p className="text-[16px] sm:text-xl font-bold tabular-nums text-red-600">{todayStats.lossTotal > 0 ? `-${formatCurrency(todayStats.lossTotal)}` : formatCurrency(0)}</p>
+                      <p className="text-[12px] sm:text-xs text-muted-foreground">{todayStats.lossCount} roturas</p>
                     </CardContent>
                   </Card>
                 </div>
@@ -1503,9 +1500,16 @@ export default function CajaPage() {
                                     </div>
                                     <p className="text-xs text-muted-foreground">{formatDateShort(new Date(sale.createdAt))}</p>
                                   </div>
-                                  {/* Col 3: total / vendedor */}
+                                  {/* Col 3: total / incidencia / vendedor */}
                                   <div className="text-right">
                                     <p className="font-semibold text-xs tabular-nums">{formatCurrency(sale.total || 0)}</p>
+                                    {(() => {
+                                      const inc = ((sale as any).itemsNoEntregados ?? []).reduce(
+                                        (a: number, i: any) => a + (i.price || 0) * (1 - (i.itemDiscount || 0) / 100) * (i.quantity || 0),
+                                        0,
+                                      );
+                                      return inc > 0.005 ? <p className="text-[10px] text-rose-600 font-medium">Incid -{formatCurrency(inc)}</p> : null;
+                                    })()}
                                     <p className="text-xs text-muted-foreground truncate">{sale.sellerName || "—"}</p>
                                   </div>
                                 </div>
@@ -1529,85 +1533,58 @@ export default function CajaPage() {
                           ))}
                         </div>
 
-                        {/* DESKTOP: lista en una línea */}
-                        <div className="hidden sm:block space-y-1">
-                        {salesFiltradas.map((sale) => {
-                          const paymentLabel = sale.paymentType === "cash"
-                            ? ((sale as any).paymentMethod === "transferencia" ? "Transferencia" : "Efectivo")
-                            : sale.paymentType === "credit"
-                              ? "Cta.Cte."
-                              : "Mixto";
-                          const badgeClass = sale.paymentType === "cash"
-                            ? ((sale as any).paymentMethod === "transferencia"
-                              ? "bg-violet-100 text-violet-800"
-                              : "bg-green-100 text-green-800")
-                            : sale.paymentType === "credit"
-                              ? "bg-blue-100 text-blue-800"
-                              : "bg-amber-100 text-amber-800";
-                          return (
-                            <div
-                              key={sale.id}
-                              className="flex items-center justify-between py-1.5 border-b border-border/50 last:border-0 gap-2"
-                            >
-                              <div className="flex items-center gap-2 min-w-0 flex-1">
-                                <span className="text-sm font-medium truncate">
-                                  {sale.clientName || "Consumidor Final"}
-                                </span>
-                                {sale.saleNumber && (
-                                  <span className="text-xs text-muted-foreground shrink-0">
-                                    #{sale.saleNumber}
-                                  </span>
-                                )}
-                                <span className="text-xs text-muted-foreground shrink-0">
-                                  {formatTimeStr(new Date(sale.createdAt))}
-                                </span>
-                              </div>
-                              <div className="flex items-center gap-2 shrink-0">
-                                {(sale as any).comprobanteTransferencia && (
-                                  <button
-                                    type="button"
-                                    onClick={() => setComprobanteUrl((sale as any).comprobanteTransferencia)}
-                                    className="text-violet-600 hover:text-violet-800"
-                                    title="Ver comprobante de transferencia"
-                                  >
-                                    <Receipt className="h-4 w-4" />
-                                  </button>
-                                )}
-                                <Badge className={`text-[10px] border-0 ${badgeClass}`}>
-                                  {paymentLabel}
-                                </Badge>
-                                <span className="text-sm font-semibold text-right tabular-nums">
-                                  {formatCurrency(sale.total || 0)}
-                                </span>
-                              </div>
-                            </div>
-                          );
-                        })}
-                        {rejectedOrders.map((o) => (
-                          <div
-                            key={o.id}
-                            className="flex items-center justify-between py-1.5 border-b border-border/50 last:border-0 gap-2"
-                          >
-                            <div className="flex items-center gap-2 min-w-0 flex-1">
-                              <span className="text-sm font-medium truncate">
-                                {o.clientName || "Consumidor Final"}
-                              </span>
-                              {o.remitoNumber && (
-                                <span className="text-xs text-muted-foreground shrink-0">
-                                  {o.remitoNumber}
-                                </span>
-                              )}
-                              <span className="text-xs text-muted-foreground shrink-0">
-                                {formatTimeStr(new Date(o.date))}
-                              </span>
-                            </div>
-                            <div className="flex items-center gap-2 shrink-0">
-                              <Badge className="text-[10px] border-0 bg-red-100 text-red-700">
-                                Rechazado
-                              </Badge>
-                            </div>
+                        {/* DESKTOP: tabla de columnas */}
+                        <div className="hidden sm:block rounded-xl border divide-y overflow-hidden">
+                          {/* Encabezado */}
+                          <div className="grid grid-cols-[6rem_minmax(6rem,8rem)_minmax(0,1fr)_8rem_7rem_7rem] gap-x-2 px-3 py-2 bg-muted/50 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
+                            <span>Fecha</span>
+                            <span>Venta</span>
+                            <span>Cliente</span>
+                            <span className="text-center">Forma de pago</span>
+                            <span className="text-right">Incidencia</span>
+                            <span className="text-right">Total</span>
                           </div>
-                        ))}
+                          {salesFiltradas.map((sale) => {
+                            const paymentLabel = sale.paymentType === "cash"
+                              ? ((sale as any).paymentMethod === "transferencia" ? "Transferencia" : "Efectivo")
+                              : sale.paymentType === "credit" ? "Cta.Cte." : "Mixto";
+                            const badgeClass = sale.paymentType === "cash"
+                              ? ((sale as any).paymentMethod === "transferencia" ? "bg-violet-100 text-violet-800" : "bg-green-100 text-green-800")
+                              : sale.paymentType === "credit" ? "bg-blue-100 text-blue-800" : "bg-amber-100 text-amber-800";
+                            const inc = ((sale as any).itemsNoEntregados ?? []).reduce(
+                              (a: number, i: any) => a + (i.price || 0) * (1 - (i.itemDiscount || 0) / 100) * (i.quantity || 0),
+                              0,
+                            );
+                            return (
+                              <div key={sale.id} className="grid grid-cols-[6rem_minmax(6rem,8rem)_minmax(0,1fr)_8rem_7rem_7rem] gap-x-2 px-3 py-2 items-center text-sm">
+                                <span className="text-xs text-muted-foreground leading-tight">{formatDateShort(new Date(sale.createdAt))}<br />{formatTimeStr(new Date(sale.createdAt))}</span>
+                                <span className="text-xs text-muted-foreground truncate">{sale.saleNumber ? `#${sale.saleNumber}` : (sale.remitoNumber || "—")}</span>
+                                <span className="font-medium truncate">{sale.clientName || "Consumidor Final"}</span>
+                                <span className="flex items-center justify-center gap-1">
+                                  {(sale as any).comprobanteTransferencia && (
+                                    <button type="button" onClick={() => setComprobanteUrl((sale as any).comprobanteTransferencia)} className="text-violet-600 hover:text-violet-800" title="Ver comprobante de transferencia">
+                                      <Receipt className="h-3.5 w-3.5" />
+                                    </button>
+                                  )}
+                                  <Badge className={`text-[10px] border-0 ${badgeClass}`}>{paymentLabel}</Badge>
+                                </span>
+                                <span className="text-right tabular-nums">
+                                  {inc > 0.005 ? <span className="text-rose-600 font-semibold">-{formatCurrency(inc)}</span> : <span className="text-muted-foreground/40">—</span>}
+                                </span>
+                                <span className="text-right font-semibold tabular-nums">{formatCurrency(sale.total || 0)}</span>
+                              </div>
+                            );
+                          })}
+                          {rejectedOrders.map((o) => (
+                            <div key={o.id} className="grid grid-cols-[6rem_minmax(6rem,8rem)_minmax(0,1fr)_8rem_7rem_7rem] gap-x-2 px-3 py-2 items-center text-sm">
+                              <span className="text-xs text-muted-foreground">{formatDateShort(new Date(o.date))}</span>
+                              <span className="text-xs text-muted-foreground truncate">{o.remitoNumber || "—"}</span>
+                              <span className="font-medium truncate">{o.clientName || "Consumidor Final"}</span>
+                              <span className="flex justify-center"><Badge className="text-[10px] border-0 bg-red-100 text-red-700">Rechazado</Badge></span>
+                              <span className="text-right text-muted-foreground/40">—</span>
+                              <span className="text-right text-muted-foreground/40">—</span>
+                            </div>
+                          ))}
                         </div>
                       </>
                     )}
