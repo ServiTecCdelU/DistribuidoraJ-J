@@ -1008,8 +1008,13 @@ ${renderTabla('Cuenta Mayorista', mayorista, balanceMay)}
     const saldoMin = saldoMinoristaDisplay(selectedClient.currentBalance)
     const salesById = new Map(clientSales.map((s) => [s.id, s]))
 
-    // Orden tipo libro mayor (helper a nivel módulo, ver ordenarLibroMayor)
-    const txMinoristaOrdenado = ordenarLibroMayor(txMinorista)
+    // Orden cronológico con saldo acumulado (igual que el PDF / extracto)
+    const txMinoristaOrdenado = [...txMinorista].sort((a, b) => a.date.getTime() - b.date.getTime())
+    let saldoCorrido = 0
+    const movimientosConSaldo = txMinoristaOrdenado.map((tx) => {
+      saldoCorrido += tx.type === 'debt' ? tx.amount : -tx.amount
+      return { tx, saldoAcum: saldoCorrido }
+    })
     const totalDebe = txMinorista.filter((t) => t.type === 'debt').reduce((a, t) => a + t.amount, 0)
     const totalHaber = txMinorista.filter((t) => t.type !== 'debt').reduce((a, t) => a + t.amount, 0)
 
@@ -1178,24 +1183,7 @@ ${renderTabla('Cuenta Mayorista', mayorista, balanceMay)}
                 <p className="text-sm text-muted-foreground text-center py-2">Sin movimientos</p>
               ) : (
                 <div className="overflow-x-auto">
-                  <div className="min-w-[640px] rounded-lg border overflow-hidden">
-                    {/* Totales arriba */}
-                    <div className={`${MOVIMIENTO_GRID} px-3 py-2 bg-foreground text-background text-xs font-bold`}>
-                      <span className="uppercase tracking-wide">Totales</span>
-                      <span />
-                      <span />
-                      <span className="text-right tabular-nums text-red-300">{formatCurrency(totalDebe)}</span>
-                      <span className="text-right tabular-nums text-green-300">{formatCurrency(totalHaber)}</span>
-                      <span />
-                    </div>
-                    <div className={`${MOVIMIENTO_GRID} px-3 py-1.5 bg-muted border-b text-xs font-semibold`}>
-                      <span className="uppercase tracking-wide text-muted-foreground">Saldo</span>
-                      <span />
-                      <span />
-                      <span />
-                      <span className="text-right tabular-nums">{formatCurrency(totalDebe - totalHaber)}</span>
-                      <span />
-                    </div>
+                  <div className="min-w-[760px] rounded-lg border overflow-hidden">
                     {/* Encabezado */}
                     <div className={`${MOVIMIENTO_GRID} px-3 py-2 bg-muted/50 border-b text-[11px] font-semibold uppercase tracking-wide text-muted-foreground`}>
                       <span>Concepto</span>
@@ -1203,10 +1191,11 @@ ${renderTabla('Cuenta Mayorista', mayorista, balanceMay)}
                       <span className="text-center">Días</span>
                       <span className="text-right">Debe</span>
                       <span className="text-right">Haber</span>
+                      <span className="text-right">Saldo</span>
                       <span />
                     </div>
                     <div className="divide-y">
-                      {txMinoristaOrdenado.map((tx) => {
+                      {movimientosConSaldo.map(({ tx, saldoAcum }) => {
                         const sale = tx.saleId ? salesById.get(tx.saleId) : undefined
                         const devolsSale = sale
                           ? clientDevoluciones.filter((d) => d.saleId === sale.id)
@@ -1217,12 +1206,23 @@ ${renderTabla('Cuenta Mayorista', mayorista, balanceMay)}
                             tx={tx}
                             sale={sale}
                             devoluciones={devolsSale}
+                            saldoAcumulado={saldoAcum}
                             onRegenerarRemito={canManage ? handleRegenerarRemito : undefined}
                             onRegenerarRecibo={canManage ? handleRegenerarRecibo : undefined}
                             onEliminarPago={canManage ? setPagoToDelete : undefined}
                           />
                         )
                       })}
+                    </div>
+                    {/* Totales abajo */}
+                    <div className={`${MOVIMIENTO_GRID} px-3 py-2 bg-foreground text-background text-xs font-bold border-t`}>
+                      <span className="uppercase tracking-wide">Totales</span>
+                      <span />
+                      <span />
+                      <span className="text-right tabular-nums text-red-300">{formatCurrency(totalDebe)}</span>
+                      <span className="text-right tabular-nums text-green-300">{formatCurrency(totalHaber)}</span>
+                      <span className="text-right tabular-nums">{formatCurrency(totalDebe - totalHaber)}</span>
+                      <span />
                     </div>
                   </div>
                 </div>

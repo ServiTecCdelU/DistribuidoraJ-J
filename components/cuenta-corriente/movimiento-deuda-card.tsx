@@ -19,6 +19,7 @@ interface MovimientoDeudaCardProps {
   tx: Transaction
   sale?: Sale
   devoluciones?: Devolucion[]
+  saldoAcumulado?: number
   onRegenerarRemito?: (sale: Sale) => Promise<void>
   onRegenerarRecibo?: (tx: Transaction) => Promise<void>
   onEliminarPago?: (tx: Transaction) => void
@@ -26,7 +27,7 @@ interface MovimientoDeudaCardProps {
 
 // Columnas compartidas entre el encabezado (en la page) y cada fila
 export const MOVIMIENTO_GRID =
-  'grid grid-cols-[minmax(8rem,1fr)_5rem_2.75rem_7.5rem_7.5rem_0.75rem] items-center gap-x-2'
+  'grid grid-cols-[minmax(8rem,1fr)_5rem_2.75rem_7.5rem_7.5rem_7rem_0.75rem] items-center gap-x-2'
 
 const COLOR_DIA: Record<EstadoDiaPago, string> = {
   falta: 'text-green-600',
@@ -154,7 +155,7 @@ function ItemsTable({ items, showTotal = false }: { items: TableRow[]; showTotal
 }
 
 export function MovimientoDeudaCard({
-  tx, sale, devoluciones = [], onRegenerarRemito, onRegenerarRecibo, onEliminarPago,
+  tx, sale, devoluciones = [], saldoAcumulado, onRegenerarRemito, onRegenerarRecibo, onEliminarPago,
 }: MovimientoDeudaCardProps) {
   const [expanded, setExpanded] = useState(false)
   const [regenerando, setRegenerando] = useState(false)
@@ -503,6 +504,18 @@ export function MovimientoDeudaCard({
         {/* Haber (pagos) */}
         <span className="text-sm font-bold tabular-nums text-right text-green-600">
           {isPayment ? formatCurrencyDecimals(tx.amount) : '—'}
+        </span>
+        {/* Saldo acumulado */}
+        <span className={`text-sm font-semibold tabular-nums text-right ${
+          saldoAcumulado == null ? 'text-muted-foreground'
+            : saldoAcumulado > 0 ? 'text-red-600'
+            : saldoAcumulado < 0 ? 'text-green-600' : 'text-muted-foreground'
+        }`}>
+          {saldoAcumulado == null
+            ? '—'
+            : saldoAcumulado < 0
+              ? `A favor ${formatCurrencyDecimals(-saldoAcumulado)}`
+              : formatCurrencyDecimals(saldoAcumulado)}
         </span>
         {/* Expandir */}
         <div className="flex justify-center">
