@@ -18,21 +18,22 @@ async function fetchDashboardData() {
   todayEnd.setHours(23, 59, 59, 999)
 
   const [salesRes, productsRes, ordersRes, debtorsRes] = await Promise.all([
+    // Solo las columnas que usa el dashboard: evita arrastrar PDFs base64 y datos AFIP (muy pesado)
     supabase
       .from('ventas')
-      .select('*')
+      .select('id, total, created_at, items, seller_name')
       .gte('created_at', sixMonthsAgo.toISOString())
       .order('created_at', { ascending: false }),
     supabase
       .from('productos')
-      .select('*'),
+      .select('id, name, price, stock, image_url, category, disabled, created_at'),
     supabase
       .from('pedidos')
       .select('id', { count: 'exact', head: true })
       .neq('status', 'completed'),
     supabase
       .from('clientes')
-      .select('*')
+      .select('id, name, cuit, email, phone, address, tax_category, credit_limit, current_balance, notes, created_at')
       .gt('current_balance', 0),
   ])
 

@@ -29,6 +29,9 @@ import {
   Loader2,
   ArrowLeftRight,
   MessageCircle,
+  Coins,
+  Landmark,
+  Clock,
 } from 'lucide-react'
 import { ChartContainer, ChartTooltip, ChartTooltipContent } from '@/components/ui/chart'
 import { Skeleton } from '@/components/ui/skeleton'
@@ -322,6 +325,55 @@ export default function DashboardPage() {
                       </p>
                     </div>
                   ))}
+                </div>
+              </div>
+            </Card>
+          )}
+
+          {/* Plata líquida — lo que realmente tengo en el bolsillo */}
+          {montoDisponible && (
+            <Card className="border-border/40 bg-white shadow-sm rounded-2xl overflow-hidden">
+              <div className="grid grid-cols-1 lg:grid-cols-[minmax(0,300px)_1fr]">
+                {/* Resultado */}
+                <div className="p-4 sm:p-6 flex flex-col justify-center bg-gradient-to-br from-emerald-600 to-teal-500">
+                  <div className="flex items-center gap-2 text-white/80 text-xs font-medium">
+                    <Wallet className="h-4 w-4" /> Plata líquida (en el bolsillo)
+                  </div>
+                  <div className="text-2xl sm:text-3xl font-bold text-white tracking-tight mt-1">
+                    {formatCurrency(montoDisponible.efectivoMes + montoDisponible.transferenciaMes)}
+                  </div>
+                  <p className="text-[11px] text-white/70 mt-1">Cobrado este mes · efectivo + banco</p>
+                </div>
+                {/* Desglose */}
+                <div className="p-4 sm:p-5 grid grid-cols-1 sm:grid-cols-3 gap-x-4 gap-y-3 items-center">
+                  <div className="flex items-center gap-2.5 min-w-0">
+                    <div className="h-9 w-9 rounded-xl flex items-center justify-center border bg-emerald-50 text-emerald-600 border-emerald-100 shrink-0">
+                      <Coins className="h-4 w-4" />
+                    </div>
+                    <div className="min-w-0">
+                      <p className="text-[11px] text-muted-foreground truncate">Efectivo en caja</p>
+                      <p className="text-sm font-bold text-foreground tracking-tight">{formatCurrency(montoDisponible.efectivoMes)}</p>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-2.5 min-w-0">
+                    <div className="h-9 w-9 rounded-xl flex items-center justify-center border bg-teal-50 text-teal-600 border-teal-100 shrink-0">
+                      <Landmark className="h-4 w-4" />
+                    </div>
+                    <div className="min-w-0">
+                      <p className="text-[11px] text-muted-foreground truncate">En el banco (transfer.)</p>
+                      <p className="text-sm font-bold text-foreground tracking-tight">{formatCurrency(montoDisponible.transferenciaMes)}</p>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-2.5 min-w-0">
+                    <div className="h-9 w-9 rounded-xl flex items-center justify-center border bg-amber-50 text-amber-600 border-amber-100 shrink-0">
+                      <Clock className="h-4 w-4" />
+                    </div>
+                    <div className="min-w-0">
+                      <p className="text-[11px] text-muted-foreground truncate">Por cobrar (cta cte)</p>
+                      <p className="text-sm font-bold text-amber-600 tracking-tight">{formatCurrency(montoDisponible.ctaCteClientes)}</p>
+                      <p className="text-[10px] text-muted-foreground">no lo tenés todavía</p>
+                    </div>
+                  </div>
                 </div>
               </div>
             </Card>
