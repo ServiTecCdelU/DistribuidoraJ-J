@@ -1183,7 +1183,7 @@ ${renderTabla('Cuenta Mayorista', mayorista, balanceMay)}
                 <p className="text-sm text-muted-foreground text-center py-2">Sin movimientos</p>
               ) : (
                 <div className="overflow-x-auto">
-                  <div className="min-w-[820px] rounded-lg border overflow-hidden">
+                  <div className="min-w-[880px] rounded-lg border overflow-hidden">
                     {/* Encabezado */}
                     <div className={`${MOVIMIENTO_GRID} px-3 py-2 bg-muted/50 border-b text-[11px] font-semibold uppercase tracking-wide text-muted-foreground`}>
                       <span>Fecha</span>

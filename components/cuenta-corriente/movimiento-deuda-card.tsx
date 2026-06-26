@@ -28,7 +28,7 @@ interface MovimientoDeudaCardProps {
 // Columnas compartidas entre el encabezado (en la page) y cada fila:
 // Fecha · Concepto · Descripción · Acciones · Debe · Haber · Saldo
 export const MOVIMIENTO_GRID =
-  'grid grid-cols-[5rem_4.5rem_minmax(8rem,1fr)_8rem_6.5rem_6.5rem_6.5rem] items-center gap-x-2'
+  'grid grid-cols-[5rem_4.5rem_minmax(8rem,1fr)_12rem_6.5rem_6.5rem_6.5rem] items-center gap-x-2'
 
 const COLOR_DIA: Record<EstadoDiaPago, string> = {
   falta: 'text-green-600',
@@ -452,7 +452,7 @@ export function MovimientoDeudaCard({
               title="Descargar recibo de devolución"
             >
               {descargandoDevol ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <RotateCcw className="h-3.5 w-3.5" />}
-              <span className="truncate max-w-[3.5rem]">{devMatch.reciboNumero || 'Recibo'}</span>
+              <span className="whitespace-nowrap">{devMatch.reciboNumero || 'Recibo'}</span>
             </button>
           )}
           {isPayment && !isDevolucion && (
@@ -467,7 +467,7 @@ export function MovimientoDeudaCard({
                   }}
                   title="Descargar recibo"
                 >
-                  <Receipt className="h-3.5 w-3.5" /><span className="truncate max-w-[3.5rem]">{tx.reciboNumero || 'Recibo'}</span>
+                  <Receipt className="h-3.5 w-3.5" /><span className="whitespace-nowrap">{tx.reciboNumero || 'Recibo'}</span>
                 </button>
                 {onRegenerarRecibo && (
                   <button
@@ -494,7 +494,7 @@ export function MovimientoDeudaCard({
               </button>
             ) : tx.reciboNumero ? (
               <span className="inline-flex items-center gap-0.5 text-xs text-teal-600 shrink-0">
-                <Receipt className="h-3.5 w-3.5" /><span className="truncate max-w-[3.5rem]">{tx.reciboNumero}</span>
+                <Receipt className="h-3.5 w-3.5" /><span className="whitespace-nowrap">{tx.reciboNumero}</span>
               </span>
             ) : null
           )}
