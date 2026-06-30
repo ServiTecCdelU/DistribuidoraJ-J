@@ -467,6 +467,8 @@ export function ProductModal({
                   onValueChange={(val) => {
                     if (val === "__new_category__") {
                       setShowNewCategoryInput(true);
+                    } else if (val === "__edit_categories__") {
+                      setShowEditCategories(true);
                     } else {
                       setFormData({ ...formData, category: val });
                       setShowNewCategoryInput(false);
@@ -486,8 +488,17 @@ export function ProductModal({
                         Nuevo rubro
                       </span>
                     </SelectItem>
+                    {onRenameCategory && categories.length > 0 && (
+                      <SelectItem value="__edit_categories__" className="font-medium">
+                        <span className="flex items-center gap-1.5">
+                          <Pencil className="h-3.5 w-3.5" />
+                          Editar rubros
+                        </span>
+                      </SelectItem>
+                    )}
                   </SelectContent>
                 </Select>
+                {renderCategoryEditor()}
                 {showNewCategoryInput && (
                   <div className="flex gap-1.5">
                     <Input
