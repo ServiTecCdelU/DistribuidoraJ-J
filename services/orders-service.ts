@@ -268,7 +268,7 @@ export const updateCheckedItems = async (id: string, checkedItems: string[]): Pr
     .eq('id', id)
 }
 
-export const createOrder = async (data: {
+export interface CreateOrderInput {
   clientId?: string
   clientName: string
   clientPhone?: string
@@ -285,10 +285,26 @@ export const createOrder = async (data: {
   discount?: number
   discountType?: 'percent' | 'fixed'
   notes?: string
-}): Promise<Order> => {
+  // Idempotencia para encolado offline: UUID generado en el cliente. Si un reintento
+  // (timeout/pérdida de señal) reenvía el mismo pedido, el índice único en BD evita
+  // duplicarlo y se devuelve el pedido ya creado.
+  clientRequestId?: string
+}
+
+export const createOrder = async (data: CreateOrderInput): Promise<Order> => {
+  // Idempotencia: si este pedido ya se insertó en un intento previo, devolverlo sin recrear.
+  if (data.clientRequestId) {
+    const { data: existing } = await supabase
+      .from('pedidos')
+      .select('*')
+      .eq('client_request_id', data.clientRequestId)
+      .maybeSingle()
+    if (existing) return mapOrder(existing)
+  }
+
   const docId = await generateReadableId('pedidos', 'pedido', data.clientName)
 
-  await supabase.from('pedidos').insert({
+  const { error: insertError } = await supabase.from('pedidos').insert({
     id: docId,
     client_id: data.clientId ?? null,
     client_name: data.clientName,
@@ -296,6 +312,7 @@ export const createOrder = async (data: {
     seller_name: data.sellerName ?? null,
     transportista_id: null,
     transportista_name: null,
+    client_request_id: data.clientRequestId ?? null,
     items: data.items.map((item) => ({
       productId: item.product.id,
       name: item.product.name,
@@ -315,6 +332,20 @@ export const createOrder = async (data: {
     notes: data.notes?.trim() || null,
     sale_id: null,
   })
+
+  // Carrera de reintentos: otro intento con el mismo clientRequestId ya insertó el pedido
+  // (índice único). No es un error: devolver el pedido existente.
+  if (insertError) {
+    if (insertError.code === '23505' && data.clientRequestId) {
+      const { data: existing } = await supabase
+        .from('pedidos')
+        .select('*')
+        .eq('client_request_id', data.clientRequestId)
+        .maybeSingle()
+      if (existing) return mapOrder(existing)
+    }
+    throw insertError
+  }
 
   // Guardar la direccion en la libreta del cliente (por ciudad) si no existe
   if (data.clientId && data.address && data.city) {

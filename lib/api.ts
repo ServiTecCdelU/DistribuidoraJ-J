@@ -79,6 +79,7 @@ import {
   deleteRemitoFromOrder,
   setClientOrdersHeld,
   setOrderHeld,
+  type CreateOrderInput,
 } from '@/services/orders-service'
 import {
   getDashboardStats,
@@ -393,19 +394,7 @@ export const ordersApi = {
   async setOrderHeld(id: string, held: boolean): Promise<void> {
     return setOrderHeld(id, held)
   },
-  async createOrder(data: {
-    clientId: string
-    clientName: string
-    sellerId?: string
-    sellerName?: string
-    items: CartItem[]
-    address: string
-    lat?: number
-    lng?: number
-    status: OrderStatus
-    source?: string
-    notes?: string
-  }): Promise<Order> {
+  async createOrder(data: CreateOrderInput): Promise<Order> {
     return createOrder(data)
   },
 }

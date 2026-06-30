@@ -6,6 +6,7 @@ import { clientsApi, sellersApi, ordersApi } from "@/lib/api";
 import { getMayoristaProductos } from "@/services/mayorista-service";
 import { processSaleMayorista } from "@/services/sales-service";
 import { crearPedidoMayorista } from "@/services/pedidos-mayorista-service";
+import { submitOrderResilient } from "@/lib/offline-orders";
 import type { Product, Client, CartItem, Seller, City } from "@/lib/types";
 import { toast } from "sonner";
 import { formatCurrency, normalizeCuit } from "@/lib/utils/format";
@@ -860,9 +861,10 @@ export function useCart(role: UserRole, userEmail?: string, externalProducts?: P
         return "order";
       }
 
-      // Admin/seller delivery: Firestore directo
+      // Admin/seller delivery: pedido resiliente (se encola si no hay señal y se
+      // sube solo al recuperar conexión). Evita el "procesando..." infinito.
       if (deliveryMethod === "delivery") {
-        await ordersApi.createOrder({
+        const result = await submitOrderResilient({
           clientId: resolvedClientId,
           clientName: resolvedClientName || "Cliente",
           clientPhone: resolvedClientPhone,
@@ -879,7 +881,11 @@ export function useCart(role: UserRole, userEmail?: string, externalProducts?: P
           discountType: discountValue > 0 ? discountType : undefined,
           notes: orderNotes,
         });
-        toast.success("Pedido creado correctamente");
+        if (result.mode === "queued") {
+          toast.success("Pedido guardado — se enviará al recuperar señal");
+        } else {
+          toast.success("Pedido creado correctamente");
+        }
         resetCart();
         return "order";
       } else {

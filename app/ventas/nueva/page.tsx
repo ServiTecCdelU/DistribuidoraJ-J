@@ -46,6 +46,7 @@ import { cn } from "@/lib/utils";
 import { useCart } from "@/hooks/useCart";
 import type { UserRole } from "@/hooks/useCart";
 import { UnifiedCart } from "@/components/cart/UnifiedCart";
+import { OfflineQueueBadge } from "@/components/cart/OfflineQueueBadge";
 import { useAuth } from "@/hooks/use-auth";
 import { searchProductosParaVenta, getRubrosHabilitados } from "@/services/mayorista-service";
 import type { Product, CartItem } from "@/lib/types";
@@ -357,6 +358,8 @@ function NuevaVentaContent({
           }
           stackOnMobile
         />
+
+        <OfflineQueueBadge />
 
         <div className="flex flex-col gap-2 lg:flex-row">
           <div className="relative flex-1">
