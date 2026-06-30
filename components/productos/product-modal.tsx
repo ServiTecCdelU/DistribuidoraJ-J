@@ -24,7 +24,7 @@ import { Switch } from "@/components/ui/switch";
 import { Separator } from "@/components/ui/separator";
 import type { Product } from "@/lib/types";
 import { cn } from "@/lib/utils";
-import { Loader2, Upload, ImageIcon, X, Plus, PackagePlus, PackageMinus } from "lucide-react";
+import { Loader2, Upload, ImageIcon, X, Plus, PackagePlus, PackageMinus, Pencil } from "lucide-react";
 
 const DEFAULT_IMAGE = "/logo.png";
 
@@ -55,6 +55,8 @@ interface ProductModalProps {
   onOpenChange: (open: boolean) => void;
   product: Product | null;
   onSave: (product: Omit<Product, "id" | "createdAt">, stockAdjustment?: StockAdjustment) => Promise<void>;
+  /** Renombra un rubro existente en todos los productos que lo usan */
+  onRenameCategory?: (oldName: string, newName: string) => Promise<void>;
   availableCategories?: string[];
   availableMarcas?: string[];
   /** Mobile: acción de habilitar/deshabilitar dentro del modal de edición */
@@ -67,6 +69,7 @@ export function ProductModal({
   onOpenChange,
   product,
   onSave,
+  onRenameCategory,
   availableCategories,
   availableMarcas,
   onToggleDisabled,
@@ -81,6 +84,10 @@ export function ProductModal({
 
   const [showNewCategoryInput, setShowNewCategoryInput] = useState(false);
   const [newCategoryInput, setNewCategoryInput] = useState("");
+  const [showEditCategories, setShowEditCategories] = useState(false);
+  const [editingCatOld, setEditingCatOld] = useState<string | null>(null);
+  const [editingCatValue, setEditingCatValue] = useState("");
+  const [renamingCat, setRenamingCat] = useState(false);
   const [showNewMarcaInput, setShowNewMarcaInput] = useState(false);
   const [newMarcaInput, setNewMarcaInput] = useState("");
 
@@ -128,6 +135,9 @@ export function ProductModal({
       setShowNewMarcaInput(false);
       setNewCategoryInput("");
       setNewMarcaInput("");
+      setShowEditCategories(false);
+      setEditingCatOld(null);
+      setEditingCatValue("");
       setStockAdjustType("add");
       setStockAdjustQty(0);
       setStockAdjustReason("");
@@ -199,6 +209,108 @@ export function ProductModal({
     setNewCategoryInput("");
     setShowNewCategoryInput(false);
   };
+
+  const saveRenameCategory = async () => {
+    const trimmed = editingCatValue.trim();
+    if (!trimmed || !editingCatOld || trimmed === editingCatOld) {
+      setEditingCatOld(null);
+      setEditingCatValue("");
+      return;
+    }
+    if (!onRenameCategory) return;
+    setRenamingCat(true);
+    try {
+      const oldName = editingCatOld;
+      await onRenameCategory(oldName, trimmed);
+      setCategories((prev) => [...new Set(prev.map((c) => (c === oldName ? trimmed : c)))]);
+      setFormData((prev) =>
+        prev.category === oldName ? { ...prev, category: trimmed } : prev,
+      );
+      setEditingCatOld(null);
+      setEditingCatValue("");
+    } finally {
+      setRenamingCat(false);
+    }
+  };
+
+  const renderCategoryEditor = () =>
+    showEditCategories ? (
+      <div className="space-y-1.5 rounded-lg border border-border bg-muted/20 p-2">
+        <div className="flex items-center justify-between">
+          <span className="text-xs font-medium text-muted-foreground">Editar rubros existentes</span>
+          <Button
+            type="button"
+            variant="ghost"
+            size="icon"
+            className="h-7 w-7"
+            onClick={() => {
+              setShowEditCategories(false);
+              setEditingCatOld(null);
+              setEditingCatValue("");
+            }}
+          >
+            <X className="h-4 w-4" />
+          </Button>
+        </div>
+        <div className="max-h-44 overflow-y-auto space-y-1">
+          {categories.length === 0 && (
+            <p className="px-2 py-1 text-xs text-muted-foreground">No hay rubros para editar.</p>
+          )}
+          {categories.map((cat) =>
+            editingCatOld === cat ? (
+              <div key={cat} className="flex gap-1.5">
+                <Input
+                  value={editingCatValue}
+                  onChange={(e) => setEditingCatValue(e.target.value)}
+                  className="h-9 text-sm"
+                  autoFocus
+                  disabled={renamingCat}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") { e.preventDefault(); saveRenameCategory(); }
+                    if (e.key === "Escape") { setEditingCatOld(null); setEditingCatValue(""); }
+                  }}
+                />
+                <Button
+                  type="button"
+                  size="sm"
+                  className="h-9 px-2.5"
+                  onClick={saveRenameCategory}
+                  disabled={renamingCat || !editingCatValue.trim()}
+                >
+                  {renamingCat ? <Loader2 className="h-4 w-4 animate-spin" /> : "OK"}
+                </Button>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="icon"
+                  className="h-9 w-9"
+                  onClick={() => { setEditingCatOld(null); setEditingCatValue(""); }}
+                  disabled={renamingCat}
+                >
+                  <X className="h-4 w-4" />
+                </Button>
+              </div>
+            ) : (
+              <div
+                key={cat}
+                className="flex items-center justify-between gap-2 rounded-md px-2 py-1 hover:bg-muted/50"
+              >
+                <span className="text-sm truncate">{cat}</span>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="icon"
+                  className="h-7 w-7 flex-shrink-0"
+                  onClick={() => { setEditingCatOld(cat); setEditingCatValue(cat); }}
+                >
+                  <Pencil className="h-3.5 w-3.5" />
+                </Button>
+              </div>
+            ),
+          )}
+        </div>
+      </div>
+    ) : null;
 
   const addNewMarca = () => {
     const trimmed = newMarcaInput.trim();
@@ -642,6 +754,8 @@ export function ProductModal({
                       onValueChange={(val) => {
                         if (val === "__new_category__") {
                           setShowNewCategoryInput(true);
+                        } else if (val === "__edit_categories__") {
+                          setShowEditCategories(true);
                         } else {
                           setFormData({ ...formData, category: val });
                           setShowNewCategoryInput(false);
@@ -666,8 +780,21 @@ export function ProductModal({
                             Nueva categoría
                           </span>
                         </SelectItem>
+                        {onRenameCategory && categories.length > 0 && (
+                          <SelectItem
+                            value="__edit_categories__"
+                            className="font-medium"
+                          >
+                            <span className="flex items-center gap-1.5">
+                              <Pencil className="h-3.5 w-3.5" />
+                              Editar rubros
+                            </span>
+                          </SelectItem>
+                        )}
                       </SelectContent>
                     </Select>
+
+                    {renderCategoryEditor()}
 
                     {showNewCategoryInput && (
                       <div className="flex gap-1.5">

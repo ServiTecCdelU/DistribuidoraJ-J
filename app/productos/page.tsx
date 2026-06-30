@@ -987,6 +987,18 @@ tr.cat td{border:none}
     productsApi.getCategories().then(setAvailableCategories).catch(() => {});
   }, []);
 
+  const handleRenameCategory = useCallback(async (oldName: string, newName: string) => {
+    try {
+      await productsApi.renameCategory(oldName, newName);
+      toast.success(`Rubro "${oldName}" renombrado a "${newName}"`);
+      refreshCategories();
+      await fetchProducts(currentPage, searchQuery, categoryFilter, stockFilter);
+    } catch (err: any) {
+      toast.error(err?.message || "Error al renombrar el rubro");
+      throw err;
+    }
+  }, [refreshCategories, fetchProducts, currentPage, searchQuery, categoryFilter, stockFilter]);
+
   useEffect(() => {
     refreshCategories();
   }, [refreshCategories]);
@@ -1921,6 +1933,7 @@ tr.cat td{border:none}
         onOpenChange={setModalOpen}
         product={editingProduct}
         onSave={handleSave}
+        onRenameCategory={handleRenameCategory}
         availableCategories={availableCategories}
         isDisabled={!!(editingProduct as any)?.disabled}
         onToggleDisabled={editingProduct ? () => {

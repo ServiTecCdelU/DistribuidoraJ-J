@@ -11,6 +11,7 @@ import {
   updateProduct,
   getProductStats,
   getProductCategories,
+  renameProductCategory,
 } from '@/services/products-service'
 import type { ProductSearchParams, ProductSearchResult } from '@/services/products-service'
 import {
@@ -162,6 +163,9 @@ export const productsApi = {
   },
   async getCategories() {
     return getProductCategories()
+  },
+  async renameCategory(oldName: string, newName: string): Promise<void> {
+    return renameProductCategory(oldName, newName)
   },
   async create(product: Omit<Product, 'id' | 'createdAt'>): Promise<Product> {
     return createProduct(product)

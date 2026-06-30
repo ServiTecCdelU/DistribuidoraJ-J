@@ -210,6 +210,20 @@ export const getProductCategories = async (): Promise<string[]> => {
   return [...new Set(all)].sort()
 }
 
+export const renameProductCategory = async (
+  oldName: string,
+  newName: string
+): Promise<void> => {
+  const from = oldName.trim()
+  const to = newName.trim()
+  if (!from || !to || from === to) return
+  const { error } = await supabase
+    .from('productos')
+    .update({ category: to })
+    .eq('category', from)
+  if (error) throw error
+}
+
 export const getProductById = async (id: string): Promise<Product | undefined> => {
   const { data } = await supabase
     .from('productos')
