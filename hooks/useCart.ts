@@ -10,6 +10,7 @@ import { submitOrderResilient } from "@/lib/offline-orders";
 import type { Product, Client, CartItem, Seller, City } from "@/lib/types";
 import { toast } from "sonner";
 import { formatCurrency, normalizeCuit } from "@/lib/utils/format";
+import { effectiveDiscountMax, clampDiscount } from "@/lib/utils/discount";
 
 export type UserRole = "admin" | "seller" | null;
 
@@ -276,6 +277,9 @@ export function useCart(role: UserRole, userEmail?: string, externalProducts?: P
     () => sellers.find((s) => s.id === selectedSeller),
     [sellers, selectedSeller],
   );
+  // Tope de descuento del vendedor actual (configurable por vendedor en su perfil).
+  // undefined = sin vendedor asignado (admin directo) → sin tope propio.
+  const sellerMaxDiscount = selectedSellerData?.maxDiscount;
 
   // Auto-seleccionar primera dirección guardada al elegir cliente
   useEffect(() => {
@@ -564,16 +568,24 @@ export function useCart(role: UserRole, userEmail?: string, externalProducts?: P
   const setItemDiscount = useCallback((productId: string, discount: number) => {
     setCart((prev) => prev.map((item) => {
       if (item.product.id !== productId) return item;
-      // Si el producto tiene un máximo configurado se respeta; si no, libre (100%).
-      const max = (item.product.descuento ?? 0) > 0 ? (item.product.descuento as number) : 100;
-      if (discount > max) toast.error(`Descuento máximo del producto: ${max}%`);
-      const clamped = Math.max(0, Math.min(max, discount));
+      // Máximo combinado: tope del producto y tope del vendedor (perfil).
+      const productMax = (item.product.descuento ?? 0) > 0 ? (item.product.descuento as number) : 100;
+      const sellerCap = sellerMaxDiscount != null ? sellerMaxDiscount : 100;
+      const max = effectiveDiscountMax(item.product.descuento, sellerMaxDiscount);
+      if (discount > max) {
+        toast.error(
+          sellerCap < productMax
+            ? `Tu descuento máximo permitido es ${max}%`
+            : `Descuento máximo del producto: ${max}%`,
+        );
+      }
+      const clamped = clampDiscount(discount, max);
       if (clamped > 0) {
         return { ...item, itemDiscount: clamped, regalo: undefined, regaloOtroCantidad: undefined };
       }
       return { ...item, itemDiscount: undefined };
     }));
-  }, []);
+  }, [sellerMaxDiscount]);
 
   const setItemRegaloMismo = useCallback((productId: string, n: number) => {
     setCart((prev) => prev.map((item) => {

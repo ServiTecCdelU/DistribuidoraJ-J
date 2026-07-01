@@ -102,6 +102,7 @@ export default function EmpleadosPage() {
     isTransportista: false,
     commissionRate: 10,
     transportistaCommissionRate: 10,
+    maxDiscount: 6,
     isActive: true,
   })
   const [saving, setSaving] = useState(false)
@@ -147,6 +148,7 @@ export default function EmpleadosPage() {
       isTransportista: false,
       commissionRate: 10,
       transportistaCommissionRate: 10,
+      maxDiscount: 6,
       isActive: true,
     })
     setModalOpen(true)
@@ -163,6 +165,7 @@ export default function EmpleadosPage() {
       isTransportista: seller.employeeType === 'transportista' || seller.employeeType === 'ambos',
       commissionRate: seller.commissionRate,
       transportistaCommissionRate: seller.transportistaCommissionRate ?? 10,
+      maxDiscount: seller.maxDiscount ?? 6,
       isActive: seller.isActive,
     })
     setModalOpen(true)
@@ -244,6 +247,7 @@ export default function EmpleadosPage() {
       codigoVendedor: formData.codigoVendedor.trim() || undefined,
       employeeType,
       commissionRate: formData.isVendedor ? formData.commissionRate : 0,
+      maxDiscount: formData.maxDiscount,
       isActive: formData.isActive,
     }
     if (formData.isTransportista) {
@@ -881,6 +885,24 @@ export default function EmpleadosPage() {
                   </div>
                 </div>
               </div>
+              {formData.isVendedor && (
+                <div className="grid gap-2">
+                  <Label htmlFor="maxDiscount">Descuento máximo permitido</Label>
+                  <div className="flex items-center gap-1.5">
+                    <Input
+                      id="maxDiscount"
+                      type="number"
+                      min="0"
+                      max="100"
+                      step="0.5"
+                      value={formData.maxDiscount}
+                      onChange={(e) => setFormData({ ...formData, maxDiscount: Number(e.target.value) })}
+                      className="h-8 w-24 text-sm text-center"
+                    />
+                    <span className="text-sm text-muted-foreground">% máximo de descuento que puede aplicar en sus ventas</span>
+                  </div>
+                </div>
+              )}
               <div className="grid gap-2">
                 <Label htmlFor="email">Email</Label>
                 <Input
@@ -966,6 +988,11 @@ export default function EmpleadosPage() {
                   <span className={`inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium ${getCommissionColor(selectedSeller.transportistaCommissionRate ?? 0)}`}>
                     <Truck className="h-3 w-3 mr-1" />
                     {selectedSeller.transportistaCommissionRate ?? 0}% transportista
+                  </span>
+                )}
+                {(selectedSeller.employeeType === 'vendedor' || selectedSeller.employeeType === 'ambos') && (
+                  <span className="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium bg-amber-100 text-amber-700">
+                    Desc. máx {selectedSeller.maxDiscount ?? 6}%
                   </span>
                 )}
                 {selectedSeller.phone && (
