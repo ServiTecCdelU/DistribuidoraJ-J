@@ -851,6 +851,7 @@ export default function EmpleadosPage() {
                           max="100"
                           step="0.5"
                           value={formData.commissionRate}
+                          onFocus={(e) => e.target.select()}
                           onChange={(e) => setFormData({ ...formData, commissionRate: Number(e.target.value) })}
                           className="h-8 w-20 text-sm text-center"
                         />
@@ -876,6 +877,7 @@ export default function EmpleadosPage() {
                           max="100"
                           step="0.5"
                           value={formData.transportistaCommissionRate}
+                          onFocus={(e) => e.target.select()}
                           onChange={(e) => setFormData({ ...formData, transportistaCommissionRate: Number(e.target.value) })}
                           className="h-8 w-20 text-sm text-center"
                         />
@@ -896,6 +898,7 @@ export default function EmpleadosPage() {
                       max="100"
                       step="0.5"
                       value={formData.maxDiscount}
+                      onFocus={(e) => e.target.select()}
                       onChange={(e) => setFormData({ ...formData, maxDiscount: Number(e.target.value) })}
                       className="h-8 w-24 text-sm text-center"
                     />
