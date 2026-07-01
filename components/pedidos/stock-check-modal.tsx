@@ -16,6 +16,8 @@ export interface StockCheckItem {
   name: string;
   quantity: number;
   stock: number;
+  price?: number;
+  itemDiscount?: number;
 }
 
 export interface ReplacementOption {
@@ -34,6 +36,7 @@ interface StockCheckModalProps {
     excludeProductIds: string[],
     replacements: Record<string, ReplacementOption>,
     quantities: Record<string, number>,
+    discounts: Record<string, number>,
   ) => void;
   // Busca productos del mismo tipo (otra marca) con stock para reemplazar el faltante
   findReplacements?: (item: StockCheckItem) => Promise<ReplacementOption[]>;
@@ -55,6 +58,7 @@ function QtyStepper({ value, onChange }: { value: number; onChange: (v: number) 
         type="number"
         min={1}
         value={value}
+        onFocus={(e) => e.target.select()}
         onChange={(e) => {
           const v = parseInt(e.target.value, 10);
           onChange(Number.isNaN(v) || v < 1 ? 1 : v);
@@ -72,6 +76,27 @@ function QtyStepper({ value, onChange }: { value: number; onChange: (v: number) 
   );
 }
 
+function DiscountInput({ value, onChange }: { value: number; onChange: (v: number) => void }) {
+  return (
+    <div className="flex items-center gap-1 shrink-0" title="Descuento %">
+      <input
+        type="number"
+        min={0}
+        max={100}
+        value={value || ""}
+        placeholder="0"
+        onFocus={(e) => e.target.select()}
+        onChange={(e) => {
+          const v = parseInt(e.target.value, 10);
+          onChange(Number.isNaN(v) ? 0 : Math.min(100, Math.max(0, v)));
+        }}
+        className="h-6 w-10 text-center text-xs font-semibold border rounded-md bg-white [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+      />
+      <span className="text-[11px] text-gray-500">%</span>
+    </div>
+  );
+}
+
 export function StockCheckModal({ open, onClose, items, onConfirm, findReplacements, searchReplacements }: StockCheckModalProps) {
   // Faltantes que el usuario marca para incluir igual (sabe que físicamente sí están)
   const [incluirIgual, setIncluirIgual] = React.useState<Set<string>>(new Set());
@@ -79,6 +104,8 @@ export function StockCheckModal({ open, onClose, items, onConfirm, findReplaceme
   const [replacements, setReplacements] = React.useState<Record<string, ReplacementOption>>({});
   // Cantidades editables: productId -> cantidad
   const [quantities, setQuantities] = React.useState<Record<string, number>>({});
+  // Descuentos editables por producto: productId -> porcentaje
+  const [discounts, setDiscounts] = React.useState<Record<string, number>>({});
   // Panel de opciones abierto para un faltante + sus opciones cargadas
   const [openFor, setOpenFor] = React.useState<string | null>(null);
   const [options, setOptions] = React.useState<ReplacementOption[]>([]);
@@ -93,6 +120,7 @@ export function StockCheckModal({ open, onClose, items, onConfirm, findReplaceme
       setIncluirIgual(new Set());
       setReplacements({});
       setQuantities(Object.fromEntries(items.map((i) => [i.productId, i.quantity])));
+      setDiscounts(Object.fromEntries(items.map((i) => [i.productId, i.itemDiscount ?? 0])));
       setOpenFor(null);
       setOptions([]);
       setSearchText("");
@@ -124,6 +152,8 @@ export function StockCheckModal({ open, onClose, items, onConfirm, findReplaceme
 
   const qtyOf = (id: string) => quantities[id] ?? items.find((i) => i.productId === id)?.quantity ?? 1;
   const setQty = (id: string, v: number) => setQuantities((prev) => ({ ...prev, [id]: Math.max(1, v) }));
+  const discOf = (id: string) => discounts[id] ?? 0;
+  const setDisc = (id: string, v: number) => setDiscounts((prev) => ({ ...prev, [id]: Math.min(100, Math.max(0, v)) }));
 
   // Categorías recalculadas según la cantidad editada (bajar la cantidad puede cubrir el faltante)
   const sinStock = items.filter((i) => i.stock < qtyOf(i.productId));
@@ -229,6 +259,7 @@ export function StockCheckModal({ open, onClose, items, onConfirm, findReplaceme
                           </span>
                         </label>
                         <div className="flex items-center gap-2">
+                          <DiscountInput value={discOf(item.productId)} onChange={(v) => setDisc(item.productId, v)} />
                           <QtyStepper value={qtyOf(item.productId)} onChange={(v) => setQty(item.productId, v)} />
                           <span className={`text-[11px] whitespace-nowrap ${verde ? "text-emerald-600" : "text-red-600"}`}>
                             stock {item.stock}
@@ -341,7 +372,7 @@ export function StockCheckModal({ open, onClose, items, onConfirm, findReplaceme
                 })}
               </div>
               <p className="text-[11px] text-muted-foreground mt-1.5">
-                Ajustá la cantidad, tildá si tenés stock físico aunque el sistema no lo registre, o reemplazá por otra marca con stock.
+                Ajustá la cantidad, el descuento %, tildá si tenés stock físico aunque el sistema no lo registre, o reemplazá por otra marca con stock.
               </p>
             </div>
           )}
@@ -358,6 +389,7 @@ export function StockCheckModal({ open, onClose, items, onConfirm, findReplaceme
                   <div key={item.productId} className="flex items-center justify-between gap-2 px-3 py-2 bg-green-50 border border-green-200 rounded-xl text-sm">
                     <span className="font-medium text-green-800 truncate flex-1">{item.name}</span>
                     <div className="flex items-center gap-2">
+                      <DiscountInput value={discOf(item.productId)} onChange={(v) => setDisc(item.productId, v)} />
                       <QtyStepper value={qtyOf(item.productId)} onChange={(v) => setQty(item.productId, v)} />
                       <span className="text-[11px] text-green-600 whitespace-nowrap">stock {item.stock}</span>
                     </div>
@@ -370,7 +402,7 @@ export function StockCheckModal({ open, onClose, items, onConfirm, findReplaceme
 
         <div className="p-4 pt-3 border-t space-y-2 shrink-0">
           {hayAlgoParaGenerar ? (
-            <Button className="w-full" onClick={() => onConfirm(excluidos, replacements, quantities)}>
+            <Button className="w-full" onClick={() => onConfirm(excluidos, replacements, quantities, discounts)}>
               {excluidos.length > 0 ? "Generar remito sin los faltantes" : "Generar remito"}
             </Button>
           ) : (

@@ -193,7 +193,7 @@ export default function PedidosPage() {
     }
   }, []);
 
-  const generateRemitoForOrder = useCallback(async (order: Order, excludeProductIds: string[] = [], replacements: Record<string, ReplacementOption> = {}, quantities: Record<string, number> = {}) => {
+  const generateRemitoForOrder = useCallback(async (order: Order, excludeProductIds: string[] = [], replacements: Record<string, ReplacementOption> = {}, quantities: Record<string, number> = {}, discounts: Record<string, number> = {}) => {
     setGeneratingDoc(true);
     // El stock se descuenta al generar el remito (la mercadería sale del depósito). Si este pedido
     // ya lo descontó antes (regenerar remito / reimprimir PDF), no volver a descontar.
@@ -202,12 +202,20 @@ export default function PedidosPage() {
       // Aplicar cantidades editadas y reemplazos por otra marca (mantiene descuento %, cambia producto/precio).
       // El descuento es un porcentaje: se preserva y se aplica sobre el nuevo precio.
       let huboCambioCantidad = false;
+      // Aplica el % de descuento editado por el admin: setea itemDiscount si > 0, lo quita si es 0.
+      const conDescuento = (item: any): any => {
+        const d = discounts[item.productId];
+        if (d == null) return item;
+        const pct = Math.min(100, Math.max(0, Number(d) || 0));
+        const { itemDiscount: _omit, ...rest } = item;
+        return pct > 0 ? { ...rest, itemDiscount: pct } : { ...rest };
+      };
       const replacedItems = order.items.map((i: any) => {
         const nuevaCant = quantities[i.productId];
         const cant = nuevaCant != null && nuevaCant !== i.quantity ? (huboCambioCantidad = true, nuevaCant) : i.quantity;
         const r = replacements[i.productId];
-        if (!r) return cant !== i.quantity ? { ...i, quantity: cant } : i;
-        return { ...i, productId: r.productId, name: r.name, price: r.price, codigo: r.codigo, quantity: cant };
+        if (!r) return conDescuento(cant !== i.quantity ? { ...i, quantity: cant } : i);
+        return conDescuento({ ...i, productId: r.productId, name: r.name, price: r.price, codigo: r.codigo, quantity: cant });
       });
 
       const filteredItems = excludeProductIds.length > 0
@@ -341,6 +349,8 @@ export default function PedidosPage() {
         name: item.name,
         quantity: item.quantity,
         stock: stockMap.get(prodId) ?? 0,
+        price: item.price,
+        itemDiscount: (item as any).itemDiscount ?? 0,
       };
     });
 
@@ -350,10 +360,10 @@ export default function PedidosPage() {
     setStockCheckOpen(true);
   }, [detailOrder, generateRemitoForOrder]);
 
-  const handleStockCheckConfirm = useCallback(async (excludeProductIds: string[], replacements: Record<string, ReplacementOption>, quantities: Record<string, number>) => {
+  const handleStockCheckConfirm = useCallback(async (excludeProductIds: string[], replacements: Record<string, ReplacementOption>, quantities: Record<string, number>, discounts: Record<string, number>) => {
     setStockCheckOpen(false);
     if (stockCheckOrder) {
-      await generateRemitoForOrder(stockCheckOrder, excludeProductIds, replacements, quantities);
+      await generateRemitoForOrder(stockCheckOrder, excludeProductIds, replacements, quantities, discounts);
     }
     setStockCheckOrder(null);
     setStockCheckItems([]);
