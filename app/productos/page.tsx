@@ -33,6 +33,7 @@ import { registrarMovimiento, getProductosARevisar, type ProductoARevisar } from
 import type { Product, MayoristaProducto } from "@/lib/types";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { formatCurrency, formatCompactNumber } from "@/lib/utils/format";
+import { downloadBase64Pdf } from "@/services/pdf-service";
 import {
   getMayoristaProductos,
   applyGananciaToProducts,
@@ -246,19 +247,6 @@ export default function ProductosPage() {
   // El price guardado ya es el precio por unidad
   const precioMostrar = (p: Product): number => p.price;
 
-  const printHtml = (html: string) => {
-    const iframe = document.createElement("iframe");
-    iframe.style.cssText = "position:fixed;top:0;left:0;width:0;height:0;border:0;opacity:0;";
-    document.body.appendChild(iframe);
-    const doc = iframe.contentWindow?.document;
-    if (!doc) { document.body.removeChild(iframe); return; }
-    doc.open(); doc.write(html); doc.close();
-    iframe.onload = () => {
-      iframe.contentWindow?.print();
-      setTimeout(() => document.body.removeChild(iframe), 1000);
-    };
-  };
-
   const exportarListaPdf = async () => {
     setExportandoPdf(true);
     const toastId = "export-pdf";
@@ -334,8 +322,8 @@ tr.cat td{background:#0f172a;color:#fff;font-weight:700;font-size:11px;text-tran
 tr.cat .cat-count{font-weight:400;color:#94a3b8}
 tr.cat td{border:none}
 .footer{margin-top:18px;text-align:center;font-size:10px;color:#9ca3af;border-top:1px solid #e5e7eb;padding-top:8px}
-@page{margin:0}
-@media print{body{padding:14mm}tr.cat{page-break-after:avoid}tr{page-break-inside:avoid}}
+@page{margin:14mm}
+@media print{body{padding:0}thead{display:table-header-group}tr.cat{page-break-after:avoid}tr{page-break-inside:avoid}}
 </style></head><body>
 <div class="header"><div><h1>Distribuidora J&J</h1><div class="sub">Lista de Precios</div></div><div class="meta"><div>${fecha}</div><div>${lista.length} productos</div></div></div>
 <div class="legend">Precios de venta vigentes por unidad.</div>
@@ -343,7 +331,18 @@ tr.cat td{border:none}
 <div class="footer">Generado el ${fecha} · Distribuidora J&J</div>
 </body></html>`;
 
-      printHtml(html);
+      const fechaArchivo = new Date().toISOString().slice(0, 10);
+      const filename = `lista_precios_${fechaArchivo}.pdf`;
+      const res = await fetch("/api/generate-pdf", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ html, filename }),
+      });
+      const data = await res.json();
+      if (!res.ok || !data?.pdf) {
+        throw new Error(data?.error || "Error generando PDF");
+      }
+      downloadBase64Pdf(data.pdf, filename);
       toast.success(`Lista generada con ${lista.length} productos`, { id: toastId });
     } catch {
       toast.error("Error al generar la lista", { id: toastId });
