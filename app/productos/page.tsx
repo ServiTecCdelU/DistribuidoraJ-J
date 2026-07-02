@@ -1168,6 +1168,15 @@ tr.cat td{border:none}
             <div className="w-px h-5 bg-border mx-1" />
 
             <Button
+              size="sm"
+              onClick={handleCreate}
+              className="gap-1.5 h-7 px-2.5"
+            >
+              <Plus className="h-3.5 w-3.5" />
+              <span className="text-xs">Nuevo</span>
+            </Button>
+
+            <Button
               variant="ghost"
               size="sm"
               onClick={() => setRemitoImportOpen(true)}
