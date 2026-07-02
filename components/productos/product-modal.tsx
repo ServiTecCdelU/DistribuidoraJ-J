@@ -754,7 +754,7 @@ export function ProductModal({
 
               {/* Clasificación: Categoría + Marca lado a lado en desktop */}
               <div className="space-y-4">
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div>
                   {/* Categoría */}
                   <div className="space-y-2">
                     <Label className="text-sm font-medium">
@@ -850,107 +850,6 @@ export function ProductModal({
                       </div>
                     )}
                   </div>
-
-                  {/* Marca */}
-                  <div className="space-y-2">
-                    <Label className="text-sm font-medium">Marca</Label>
-                    <Select
-                      value={formData.marca}
-                      onValueChange={(val) => {
-                        if (val === "__new_marca__") {
-                          setShowNewMarcaInput(true);
-                        } else {
-                          setFormData({ ...formData, marca: val });
-                          setShowNewMarcaInput(false);
-                        }
-                      }}
-                    >
-                      <SelectTrigger className="h-10">
-                        <SelectValue placeholder="Seleccioná..." />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {marcas.map((marca) => (
-                          <SelectItem key={marca} value={marca}>
-                            {marca}
-                          </SelectItem>
-                        ))}
-                        <SelectItem
-                          value="__new_marca__"
-                          className="text-primary font-medium"
-                        >
-                          <span className="flex items-center gap-1.5">
-                            <Plus className="h-3.5 w-3.5" />
-                            Nueva marca
-                          </span>
-                        </SelectItem>
-                      </SelectContent>
-                    </Select>
-
-                    {showNewMarcaInput && (
-                      <div className="flex gap-1.5">
-                        <Input
-                          value={newMarcaInput}
-                          onChange={(e) => setNewMarcaInput(e.target.value)}
-                          placeholder="Nueva marca..."
-                          className="h-9 text-sm"
-                          autoFocus
-                          onKeyDown={(e) => {
-                            if (e.key === "Enter") {
-                              e.preventDefault();
-                              addNewMarca();
-                            }
-                            if (e.key === "Escape") {
-                              setShowNewMarcaInput(false);
-                              setNewMarcaInput("");
-                            }
-                          }}
-                        />
-                        <Button
-                          type="button"
-                          size="sm"
-                          className="h-9 px-2.5"
-                          onClick={addNewMarca}
-                          disabled={!newMarcaInput.trim()}
-                        >
-                          OK
-                        </Button>
-                        <Button
-                          type="button"
-                          variant="ghost"
-                          size="icon"
-                          className="h-9 w-9"
-                          onClick={() => {
-                            setShowNewMarcaInput(false);
-                            setNewMarcaInput("");
-                          }}
-                        >
-                          <X className="h-4 w-4" />
-                        </Button>
-                      </div>
-                    )}
-                  </div>
-                </div>
-
-                {/* Sin TACC */}
-                <div className="flex items-center justify-between p-3 rounded-lg border border-border bg-muted/30">
-                  <div className="space-y-0.5">
-                    <Label
-                      htmlFor="sin-tacc"
-                      className="text-sm font-medium cursor-pointer"
-                    >
-                      Producto Sin TACC
-                    </Label>
-                    <p className="text-xs text-muted-foreground">
-                      Apto para celíacos
-                    </p>
-                  </div>
-                  <Switch
-                    id="sin-tacc"
-                    checked={formData.sinTacc}
-                    onCheckedChange={(checked) =>
-                      setFormData({ ...formData, sinTacc: checked })
-                    }
-                  />
                 </div>
               </div>
 
@@ -1170,84 +1069,6 @@ export function ProductModal({
                     )}
                   </div>
                 )}
-              </div>
-
-              <Separator />
-
-              {/* Imagen compacta */}
-              <div className="space-y-2">
-                <Label className="text-sm font-medium">Imagen del producto</Label>
-
-                <div className="flex items-center gap-3">
-                  {/* Miniatura */}
-                  <div className="h-14 w-14 rounded-lg border border-border overflow-hidden flex-shrink-0 bg-muted">
-                    <img
-                      src={displayImage}
-                      alt="Preview"
-                      className="w-full h-full object-cover"
-                      onError={(e) => {
-                        e.currentTarget.src = DEFAULT_IMAGE;
-                      }}
-                    />
-                  </div>
-
-                  {/* Controles */}
-                  <div className="flex-1 space-y-2">
-                    <Button
-                      type="button"
-                      variant="outline"
-                      size="sm"
-                      className="w-full h-9 gap-2 text-xs justify-start"
-                      onClick={() => fileInputRef.current?.click()}
-                    >
-                      <Upload className="h-3.5 w-3.5 flex-shrink-0" />
-                      {imagePreview && !imagePreview.startsWith("http")
-                        ? "Cambiar archivo"
-                        : "Subir imagen"}
-                    </Button>
-
-                    <div className="relative">
-                      <ImageIcon className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
-                      <Input
-                        id="imageUrl"
-                        value={
-                          formData.imageUrl && !formData.imageUrl.startsWith("data:")
-                            ? formData.imageUrl
-                            : ""
-                        }
-                        onChange={(e) => {
-                          const val = e.target.value;
-                          setFormData({ ...formData, imageUrl: val });
-                          setImagePreview(val || null);
-                        }}
-                        placeholder="O pegá una URL..."
-                        className="pl-8 h-9 text-xs"
-                      />
-                    </div>
-                  </div>
-
-                  {/* Limpiar */}
-                  {imagePreview && (
-                    <Button
-                      type="button"
-                      variant="ghost"
-                      size="icon"
-                      className="h-8 w-8 flex-shrink-0 text-muted-foreground hover:text-destructive"
-                      onClick={clearImage}
-                      title="Quitar imagen"
-                    >
-                      <X className="h-4 w-4" />
-                    </Button>
-                  )}
-                </div>
-
-                <input
-                  ref={fileInputRef}
-                  type="file"
-                  accept="image/*"
-                  onChange={handleImageChange}
-                  className="hidden"
-                />
               </div>
             </>
           )}
