@@ -625,20 +625,20 @@ const guiaStyles = StyleSheet.create({
     paddingVertical: 2,
     paddingHorizontal: 1,
     fontWeight: "bold",
-    fontSize: 9,
+    fontSize: 8,
     marginTop: 3,
   },
   tableRow: {
     flexDirection: "row",
     paddingVertical: 1,
     paddingHorizontal: 1,
-    fontSize: 9,
+    fontSize: 8,
   },
   colCnt:    { width: "7%",  textAlign: "center" },
-  colDescr:  { width: "54%", paddingLeft: 2 },
-  colDto:    { width: "5%",  textAlign: "right" },
-  colPrecio: { width: "17%", textAlign: "right" },
-  colTotal:  { width: "17%", textAlign: "right" },
+  colDescr:  { width: "64%", paddingLeft: 2, paddingRight: 4 },
+  colDto:    { width: "4%",  textAlign: "right" },
+  colPrecio: { width: "12%", textAlign: "right" },
+  colTotal:  { width: "13%", textAlign: "right" },
   // ── Pie ──
   footerWrap: {
     flexDirection: "row",
@@ -656,7 +656,7 @@ const guiaStyles = StyleSheet.create({
 });
 
 /** Trunca descripción a maxLen caracteres para evitar salto de línea. */
-const truncDesc = (s: string, max = 40): string =>
+const truncDesc = (s: string, max = 62): string =>
   s.length > max ? s.slice(0, max - 1) + "…" : s;
 
 /** Formatea fecha como "DD MM AAAA" (formato guía de muestra). */
