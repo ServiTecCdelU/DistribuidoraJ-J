@@ -234,6 +234,41 @@ export const getProductById = async (id: string): Promise<Product | undefined> =
   return data ? mapRow(data) : undefined
 }
 
+/**
+ * Sugiere un código único para un producto manual nuevo.
+ * Formato: "P" + número correlativo de 5 dígitos (ej: P00001).
+ * Toma el mayor sufijo existente con ese prefijo y le suma 1,
+ * evitando colisiones con códigos de barras numéricos del mayorista.
+ */
+export const suggestUniqueCodigo = async (): Promise<string> => {
+  const PREFIX = 'P'
+  const PAD = 5
+  const { data } = await supabase
+    .from('productos')
+    .select('codigo')
+    .like('codigo', `${PREFIX}%`)
+
+  let max = 0
+  for (const row of data ?? []) {
+    const suffix = String(row.codigo ?? '').slice(PREFIX.length)
+    const n = parseInt(suffix, 10)
+    if (!isNaN(n) && n > max) max = n
+  }
+  return `${PREFIX}${String(max + 1).padStart(PAD, '0')}`
+}
+
+/** True si el código ya está usado por algún producto. */
+export const codigoExists = async (codigo: string): Promise<boolean> => {
+  const c = codigo.trim()
+  if (!c) return false
+  const { data } = await supabase
+    .from('productos')
+    .select('id')
+    .eq('codigo', c)
+    .limit(1)
+  return (data?.length ?? 0) > 0
+}
+
 export const createProduct = async (
   product: Omit<Product, 'id' | 'createdAt'>
 ): Promise<Product> => {

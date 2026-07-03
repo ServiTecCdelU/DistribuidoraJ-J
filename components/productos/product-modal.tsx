@@ -62,6 +62,8 @@ interface ProductModalProps {
   /** Mobile: acción de habilitar/deshabilitar dentro del modal de edición */
   onToggleDisabled?: () => void;
   isDisabled?: boolean;
+  /** Sugiere un código único para un producto nuevo */
+  onSuggestCodigo?: () => Promise<string>;
 }
 
 export function ProductModal({
@@ -74,6 +76,7 @@ export function ProductModal({
   availableMarcas,
   onToggleDisabled,
   isDisabled,
+  onSuggestCodigo,
 }: ProductModalProps) {
   const [loading, setLoading] = useState(false);
   const [imagePreview, setImagePreview] = useState<string | null>(null);
@@ -115,7 +118,9 @@ export function ProductModal({
     category: "",
     marca: "Sin identificar" as string,
     sinTacc: false,
+    codigo: "",
   });
+  const [suggestingCodigo, setSuggestingCodigo] = useState(false);
 
   useEffect(() => {
     const cats = availableCategories
@@ -158,6 +163,7 @@ export function ProductModal({
         category: product.category,
         marca: (product as any).marca || "Sin identificar",
         sinTacc: (product as any).sinTacc || false,
+        codigo: (product as any).codigo || "",
       });
       setImagePreview(product.imageUrl || null);
       setStockAdjustType("add");
@@ -190,6 +196,7 @@ export function ProductModal({
         category: "",
         marca: "Sin identificar",
         sinTacc: false,
+        codigo: "",
       });
       setImagePreview(null);
       setStockAdjustType("add");
@@ -200,6 +207,23 @@ export function ProductModal({
       setGanancia("");
     }
   }, [product, open]);
+
+  // Al abrir para crear un producto nuevo, sugerir un código único libre.
+  useEffect(() => {
+    if (open && !product && onSuggestCodigo) {
+      let cancelled = false;
+      setSuggestingCodigo(true);
+      onSuggestCodigo()
+        .then((codigo) => {
+          if (!cancelled) setFormData((prev) => ({ ...prev, codigo }));
+        })
+        .catch(() => {})
+        .finally(() => {
+          if (!cancelled) setSuggestingCodigo(false);
+        });
+      return () => { cancelled = true; };
+    }
+  }, [open, product, onSuggestCodigo]);
 
   const addNewCategory = () => {
     const trimmed = newCategoryInput.trim();
@@ -396,6 +420,7 @@ export function ProductModal({
         description: effectiveData.description || "",
         imageUrl: effectiveData.imageUrl || "",
         stock: finalStock,
+        codigo: effectiveData.codigo?.trim() || undefined,
         ...precioFields,
         ...(isMayorista && loteNum > 0
           ? { unidadesPorBulto: loteNum }
@@ -747,6 +772,31 @@ export function ProductModal({
                     rows={2}
                     className="resize-none"
                   />
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="codigo" className="text-sm font-medium">
+                    Código
+                  </Label>
+                  <div className="relative">
+                    <Input
+                      id="codigo"
+                      value={formData.codigo}
+                      onChange={(e) =>
+                        setFormData({ ...formData, codigo: e.target.value })
+                      }
+                      placeholder={suggestingCodigo ? "Generando código..." : "Ej: P00001"}
+                      className="h-10 font-mono"
+                    />
+                    {suggestingCodigo && (
+                      <Loader2 className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 animate-spin text-muted-foreground" />
+                    )}
+                  </div>
+                  {!isEditing && (
+                    <p className="text-xs text-muted-foreground">
+                      Sugerido automáticamente. Podés cambiarlo si querés.
+                    </p>
+                  )}
                 </div>
               </div>
 

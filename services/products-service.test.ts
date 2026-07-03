@@ -1,10 +1,20 @@
 import { describe, it, expect, beforeEach, vi } from "vitest";
 
-// Mock del cliente Supabase: captura la fila insertada.
-const { insert, from } = vi.hoisted(() => {
+// Mock del cliente Supabase: captura la fila insertada y simula queries select.
+const { insert, from, setSelectData } = vi.hoisted(() => {
   const insert = vi.fn().mockResolvedValue({ data: null, error: null });
-  const from = vi.fn(() => ({ insert }));
-  return { insert, from };
+  let selectData: any[] = [];
+  const setSelectData = (d: any[]) => { selectData = d; };
+  const builder: any = {
+    insert,
+    select: () => builder,
+    like: () => builder,
+    eq: () => builder,
+    limit: () => builder,
+    then: (resolve: (v: { data: any[] }) => unknown) => resolve({ data: selectData }),
+  };
+  const from = vi.fn(() => builder);
+  return { insert, from, setSelectData };
 });
 vi.mock("@/lib/supabase", () => ({ supabase: { from } }));
 
@@ -13,7 +23,7 @@ vi.mock("@/services/supabase-helpers", () => ({
   generateReadableId: vi.fn().mockResolvedValue("producto_milanesa_1"),
 }));
 
-import { createProduct } from "./products-service";
+import { createProduct, suggestUniqueCodigo, codigoExists } from "./products-service";
 import type { Product } from "@/lib/types";
 
 const baseInput: Omit<Product, "id" | "createdAt"> = {
@@ -29,6 +39,7 @@ describe("createProduct", () => {
   beforeEach(() => {
     insert.mockClear();
     from.mockClear();
+    setSelectData([]);
   });
 
   it("inserta en la tabla productos con el ID legible generado", async () => {
@@ -73,5 +84,42 @@ describe("createProduct", () => {
     expect(row.descuento).toBe(0);
     expect(row.precio_base).toBeNull();
     expect(row.ganancia_global).toBeNull();
+  });
+});
+
+describe("suggestUniqueCodigo", () => {
+  beforeEach(() => setSelectData([]));
+
+  it("sugiere P00001 cuando no hay códigos con el prefijo", async () => {
+    setSelectData([]);
+    expect(await suggestUniqueCodigo()).toBe("P00001");
+  });
+
+  it("incrementa el mayor sufijo existente", async () => {
+    setSelectData([{ codigo: "P00003" }, { codigo: "P00010" }, { codigo: "P00007" }]);
+    expect(await suggestUniqueCodigo()).toBe("P00011");
+  });
+
+  it("ignora sufijos no numéricos", async () => {
+    setSelectData([{ codigo: "Pabc" }, { codigo: "P00004" }]);
+    expect(await suggestUniqueCodigo()).toBe("P00005");
+  });
+});
+
+describe("codigoExists", () => {
+  beforeEach(() => setSelectData([]));
+
+  it("devuelve false para código vacío sin consultar", async () => {
+    expect(await codigoExists("  ")).toBe(false);
+  });
+
+  it("devuelve true cuando la consulta trae al menos una fila", async () => {
+    setSelectData([{ id: "producto_x_1" }]);
+    expect(await codigoExists("P00001")).toBe(true);
+  });
+
+  it("devuelve false cuando la consulta no trae filas", async () => {
+    setSelectData([]);
+    expect(await codigoExists("P99999")).toBe(false);
   });
 });

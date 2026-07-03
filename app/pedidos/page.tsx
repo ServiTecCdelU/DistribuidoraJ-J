@@ -1778,19 +1778,6 @@ tbody tr:nth-child(even){background:#fafafa}
             Limpiar filtros
           </Button>
         )}
-        {outdatedPriceOrders.length > 0 && (
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={handleSyncPrices}
-            disabled={syncingPrices}
-            className="gap-2 border-2 border-red-600 bg-red-600 text-white font-bold shadow-lg shadow-red-300 hover:bg-red-700 animate-pulse ring-2 ring-red-400 ring-offset-1"
-            title="Hay pedidos con precios por debajo del precio de venta actual"
-          >
-            {syncingPrices ? <Loader2 className="h-4 w-4 animate-spin" /> : <AlertTriangle className="h-4 w-4" />}
-            <span>¡Actualizar precios! ({outdatedPriceOrders.length})</span>
-          </Button>
-        )}
         {filterStatus !== "pending" && (
           <Button
             variant="outline"

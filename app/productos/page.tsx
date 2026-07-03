@@ -1942,6 +1942,7 @@ tr.cat td{border:none}
         product={editingProduct}
         onSave={handleSave}
         onRenameCategory={handleRenameCategory}
+        onSuggestCodigo={productsApi.suggestCodigo}
         availableCategories={availableCategories}
         isDisabled={!!(editingProduct as any)?.disabled}
         onToggleDisabled={editingProduct ? () => {

@@ -12,6 +12,8 @@ import {
   getProductStats,
   getProductCategories,
   renameProductCategory,
+  suggestUniqueCodigo,
+  codigoExists,
 } from '@/services/products-service'
 import type { ProductSearchParams, ProductSearchResult } from '@/services/products-service'
 import {
@@ -166,6 +168,12 @@ export const productsApi = {
   },
   async renameCategory(oldName: string, newName: string): Promise<void> {
     return renameProductCategory(oldName, newName)
+  },
+  async suggestCodigo(): Promise<string> {
+    return suggestUniqueCodigo()
+  },
+  async codigoExists(codigo: string): Promise<boolean> {
+    return codigoExists(codigo)
   },
   async create(product: Omit<Product, 'id' | 'createdAt'>): Promise<Product> {
     return createProduct(product)
