@@ -29,7 +29,22 @@ export const getSellers = async (): Promise<Seller[]> => {
     .select('*')
     .order('created_at', { ascending: false })
 
-  return (data ?? []).map(mapSeller)
+  const sellers = (data ?? []).map(mapSeller)
+
+  // Derivar totales pendientes desde ventas (fuente de verdad), igual que el detalle.
+  // Evita que la lista quede desincronizada de las comisiones reales.
+  const { getCommissionsBySeller } = await import('@/services/commissions-service')
+  return Promise.all(
+    sellers.map(async (s) => {
+      const commissions = await getCommissionsBySeller(s.id)
+      const pendientes = commissions.filter((c) => !c.isPaid)
+      return {
+        ...s,
+        totalSales: pendientes.reduce((sum, c) => sum + c.saleTotal, 0),
+        totalCommission: pendientes.reduce((sum, c) => sum + c.commissionAmount, 0),
+      }
+    }),
+  )
 }
 
 export const getSellerById = async (id: string): Promise<Seller | undefined> => {
@@ -39,7 +54,15 @@ export const getSellerById = async (id: string): Promise<Seller | undefined> => 
     .eq('id', id)
     .maybeSingle()
 
-  return data ? mapSeller(data) : undefined
+  if (!data) return undefined
+  const seller = mapSeller(data)
+  const { getCommissionsBySeller } = await import('@/services/commissions-service')
+  const pendientes = (await getCommissionsBySeller(seller.id)).filter((c) => !c.isPaid)
+  return {
+    ...seller,
+    totalSales: pendientes.reduce((sum, c) => sum + c.saleTotal, 0),
+    totalCommission: pendientes.reduce((sum, c) => sum + c.commissionAmount, 0),
+  }
 }
 
 export const createSeller = async (
