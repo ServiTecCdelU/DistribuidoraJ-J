@@ -41,7 +41,6 @@ import {
   Users,
   TrendingUp,
   DollarSign,
-  Percent,
   X,
   CheckCircle,
   Clock,
@@ -85,7 +84,12 @@ export default function EmpleadosPage() {
   const [commissions, setCommissions] = useState<SellerCommission[]>([])
   const [loadingCommissions, setLoadingCommissions] = useState(false)
   const [pagos, setPagos] = useState<any[]>([])
-  const [resetting, setResetting] = useState(false)
+
+  // Filtros de comisiones (rango de fechas + estado) y pago por período
+  const [comDesde, setComDesde] = useState('')
+  const [comHasta, setComHasta] = useState('')
+  const [comEstado, setComEstado] = useState<'pendiente' | 'pagado' | 'todos'>('pendiente')
+  const [paying, setPaying] = useState(false)
 
   // Pedidos activos del empleado
   const [activeOrders, setActiveOrders] = useState<Order[]>([])
@@ -181,6 +185,9 @@ export default function EmpleadosPage() {
     setDetailModalOpen(true)
     setExpandedOrderId(null)
     setActiveOrders([])
+    setComDesde('')
+    setComHasta('')
+    setComEstado('pendiente')
     setLoadingCommissions(true)
     setLoadingOrders(true)
     try {
@@ -250,9 +257,6 @@ export default function EmpleadosPage() {
       maxDiscount: formData.maxDiscount,
       isActive: formData.isActive,
     }
-    if (formData.isTransportista) {
-      payload.transportistaCommissionRate = formData.transportistaCommissionRate
-    }
     try {
       if (editingSeller) {
         const updated = await sellersApi.update(editingSeller.id, payload)
@@ -271,11 +275,104 @@ export default function EmpleadosPage() {
     }
   }
 
-  const handleResetCommissions = async () => {
+  const buildComisionesPDF = (
+    seller: Seller,
+    desde: Date | null,
+    hasta: Date | null,
+    items: SellerCommission[],
+    monto: number,
+  ) => {
+    const win = window.open('', '_blank')
+    if (!win) {
+      toast.error('Habilitá las ventanas emergentes para generar el PDF')
+      return
+    }
+    const now = new Date()
+    const stamp = new Intl.DateTimeFormat('es-AR', {
+      day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit',
+    }).format(now)
+    const periodoTxt = desde || hasta
+      ? `${desde ? formatDate(desde) : '—'} al ${hasta ? formatDate(hasta) : '—'}`
+      : 'Todas las comisiones pendientes'
+    const ventas = items.filter((c) => c.commissionAmount >= 0)
+    const devol = items.filter((c) => c.commissionAmount < 0)
+    const totalVentas = ventas.reduce((s, c) => s + c.saleTotal, 0)
+
+    const rows = (list: SellerCommission[]) =>
+      list.map((c) => `
+        <tr>
+          <td>${formatDate(c.createdAt)}</td>
+          <td>${c.saleNumber ? String(c.saleNumber) : '—'}</td>
+          <td>${c.clientName ? c.clientName : '—'}</td>
+          <td class="num">${formatCurrency(c.saleTotal)}</td>
+          <td class="num">${c.commissionRate}%</td>
+          <td class="num">${formatCurrency(c.commissionAmount)}</td>
+        </tr>`).join('')
+
+    const html = `<!doctype html><html><head><meta charset="utf-8"/>
+      <title>Comisiones ${seller.name}</title>
+      <style>
+        @page { size: A4; margin: 16mm; }
+        * { font-family: Arial, sans-serif; color: #111; }
+        h1 { font-size: 20px; margin: 0 0 4px; }
+        h2 { font-size: 14px; margin: 18px 0 6px; }
+        .sub { color: #555; font-size: 12px; margin: 0 0 2px; }
+        table { width: 100%; border-collapse: collapse; font-size: 11px; margin-top: 4px; }
+        th, td { border: 1px solid #ccc; padding: 5px 6px; text-align: left; }
+        th { background: #f1f5f9; }
+        .num { text-align: right; white-space: nowrap; }
+        .totbox { margin-top: 14px; padding: 10px 14px; background: #ecfdf5; border: 1px solid #a7f3d0; border-radius: 8px; display: inline-block; }
+        .totbox .lbl { font-size: 11px; color: #555; }
+        .totbox .val { font-size: 20px; font-weight: bold; color: #047857; }
+        .footer { margin-top: 24px; font-size: 10px; color: #888; }
+      </style></head><body>
+      <h1>Liquidación de Comisiones</h1>
+      <p class="sub"><strong>Vendedor:</strong> ${seller.name}${seller.codigoVendedor ? ` (cód. ${seller.codigoVendedor})` : ''}</p>
+      <p class="sub"><strong>Comisión:</strong> ${seller.commissionRate}%</p>
+      <p class="sub"><strong>Período:</strong> ${periodoTxt}</p>
+      <p class="sub"><strong>Ventas incluidas:</strong> ${ventas.length} — Total ventas: ${formatCurrency(totalVentas)}</p>
+      <h2>Ventas y comisiones</h2>
+      <table>
+        <thead><tr><th>Fecha</th><th>Venta</th><th>Cliente</th><th class="num">Total venta</th><th class="num">%</th><th class="num">Comisión</th></tr></thead>
+        <tbody>${ventas.length ? rows(ventas) : '<tr><td colspan="6">Sin ventas en el período</td></tr>'}</tbody>
+      </table>
+      ${devol.length ? `<h2>Devoluciones / ajustes</h2>
+      <table>
+        <thead><tr><th>Fecha</th><th>Ref.</th><th>Cliente</th><th class="num">Total</th><th class="num">%</th><th class="num">Ajuste</th></tr></thead>
+        <tbody>${rows(devol)}</tbody>
+      </table>` : ''}
+      <div class="totbox"><div class="lbl">TOTAL A PAGAR</div><div class="val">${formatCurrency(monto)}</div></div>
+      <div class="footer">Generado el ${stamp} — Distribuidora Patricia</div>
+      </body></html>`
+    win.document.write(html)
+    win.document.close()
+    win.onload = () => { win.print() }
+  }
+
+  const handlePagarPeriodo = async () => {
     if (!selectedSeller) return
-    setResetting(true)
+    const desdeDate = comDesde ? new Date(`${comDesde}T00:00:00`) : null
+    const hastaDate = comHasta ? new Date(`${comHasta}T23:59:59.999`) : null
+    const items = commissions.filter(
+      (c) =>
+        !c.isPaid &&
+        (!desdeDate || c.createdAt >= desdeDate) &&
+        (!hastaDate || c.createdAt <= hastaDate),
+    )
+    if (items.length === 0) {
+      toast.error('No hay comisiones pendientes en el período seleccionado')
+      return
+    }
+    const monto = items.reduce((s, c) => s + c.commissionAmount, 0)
+    setPaying(true)
     try {
-      await sellersApi.resetCommissions(selectedSeller.id, selectedSeller.name)
+      await sellersApi.pagarComisionesPeriodo(
+        selectedSeller.id,
+        selectedSeller.name,
+        desdeDate ?? new Date(0),
+        hastaDate ?? new Date(),
+      )
+      buildComisionesPDF(selectedSeller, desdeDate, hastaDate, items, monto)
       const [updatedCommissions, pagosData] = await Promise.all([
         sellersApi.getCommissions(selectedSeller.id),
         sellersApi.getPagosComisiones(selectedSeller.id),
@@ -283,11 +380,11 @@ export default function EmpleadosPage() {
       setCommissions(updatedCommissions.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()))
       setPagos(pagosData)
       await loadSellers()
-      toast.success('Comisiones reseteadas y pago registrado')
+      toast.success('Comisiones pagadas y PDF generado')
     } catch (error: any) {
-      toast.error(error?.message || 'Error al resetear comisiones')
+      toast.error(error?.message || 'Error al pagar comisiones')
     } finally {
-      setResetting(false)
+      setPaying(false)
     }
   }
 
@@ -331,15 +428,26 @@ export default function EmpleadosPage() {
   const activeSellers = sellers.filter(s => s.isActive).length
   const totalSales = sellers.reduce((sum, s) => sum + (s.totalSales || 0), 0)
   const totalCommissions = sellers.reduce((sum, s) => sum + (s.totalCommission || 0), 0)
-  const avgCommissionRate = sellers.length > 0
-    ? sellers.reduce((sum, s) => sum + s.commissionRate, 0) / sellers.length
-    : 0
 
   // Commissions for detail modal
   const pendingCommissions = commissions.filter(c => !c.isPaid)
   const pendingTotal = pendingCommissions.reduce((sum, c) => sum + c.commissionAmount, 0)
   const allSalesTotal = commissions.reduce((sum, c) => sum + c.saleTotal, 0)
   const allCommissionsTotal = commissions.reduce((sum, c) => sum + c.commissionAmount, 0)
+
+  // Filtro de comisiones (rango + estado) para la lista del detalle
+  const comDesdeDate = comDesde ? new Date(`${comDesde}T00:00:00`) : null
+  const comHastaDate = comHasta ? new Date(`${comHasta}T23:59:59.999`) : null
+  const inComRange = (c: SellerCommission) =>
+    (!comDesdeDate || c.createdAt >= comDesdeDate) &&
+    (!comHastaDate || c.createdAt <= comHastaDate)
+  const filteredCommissions = commissions.filter(
+    (c) =>
+      inComRange(c) &&
+      (comEstado === 'todos' || (comEstado === 'pagado' ? c.isPaid : !c.isPaid)),
+  )
+  const pendingInRange = commissions.filter((c) => !c.isPaid && inComRange(c))
+  const pendingInRangeTotal = pendingInRange.reduce((sum, c) => sum + c.commissionAmount, 0)
 
   // Pedidos activos agrupados por día y luego por cliente (más reciente primero)
   const ordersByDay = activeOrders.reduce<Record<string, { label: string; clients: Record<string, Order[]> }>>((acc, order) => {
@@ -358,7 +466,7 @@ export default function EmpleadosPage() {
   return (
     <MainLayout allowedRoles={['admin']} title="Empleados" description="Gestiona tu equipo de vendedores y transportistas">
       {/* Stats Cards - Solo visible en desktop */}
-      <div className="hidden lg:grid grid-cols-4 gap-4 mb-6">
+      <div className="hidden lg:grid grid-cols-3 gap-4 mb-6">
         <Card className="bg-gradient-to-br from-primary/5 to-primary/10 border-primary/20">
           <CardContent className="p-4">
             <div className="flex items-center gap-3">
@@ -394,19 +502,6 @@ export default function EmpleadosPage() {
               <div>
                 <p className="text-sm text-muted-foreground">Comisiones Totales</p>
                 <p className="text-2xl font-bold text-foreground">{formatCurrency(totalCommissions)}</p>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-        <Card className="bg-gradient-to-br from-emerald-500/5 to-emerald-500/10 border-emerald-500/20">
-          <CardContent className="p-4">
-            <div className="flex items-center gap-3">
-              <div className="p-2 rounded-lg bg-emerald-500/10">
-                <Percent className="h-5 w-5 text-emerald-600 dark:text-emerald-400" />
-              </div>
-              <div>
-                <p className="text-sm text-muted-foreground">Comision Promedio</p>
-                <p className="text-2xl font-bold text-foreground">{avgCommissionRate.toFixed(1)}%</p>
               </div>
             </div>
           </CardContent>
@@ -587,15 +682,12 @@ export default function EmpleadosPage() {
                           </td>
                           <td className="p-4 text-center">
                             <div className="flex flex-col items-center gap-1">
-                              {(seller.employeeType === 'vendedor' || seller.employeeType === 'ambos') && (
+                              {(seller.employeeType === 'vendedor' || seller.employeeType === 'ambos') ? (
                                 <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${getCommissionColor(seller.commissionRate)}`}>
                                   <ShoppingCart className="h-2.5 w-2.5 mr-1" />{seller.commissionRate}%
                                 </span>
-                              )}
-                              {(seller.employeeType === 'transportista' || seller.employeeType === 'ambos') && (
-                                <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${getCommissionColor(seller.transportistaCommissionRate ?? 0)}`}>
-                                  <Truck className="h-2.5 w-2.5 mr-1" />{seller.transportistaCommissionRate ?? 0}%
-                                </span>
+                              ) : (
+                                <span className="text-xs text-muted-foreground">-</span>
                               )}
                             </div>
                           </td>
@@ -707,11 +799,6 @@ export default function EmpleadosPage() {
                           {(seller.employeeType === 'vendedor' || seller.employeeType === 'ambos') && (
                             <span className={`inline-flex items-center px-1.5 py-0.5 rounded-full text-[10px] font-medium ${getCommissionColor(seller.commissionRate)}`}>
                               <ShoppingCart className="h-2.5 w-2.5 mr-0.5" />{seller.commissionRate}%
-                            </span>
-                          )}
-                          {(seller.employeeType === 'transportista' || seller.employeeType === 'ambos') && (
-                            <span className={`inline-flex items-center px-1.5 py-0.5 rounded-full text-[10px] font-medium ${getCommissionColor(seller.transportistaCommissionRate ?? 0)}`}>
-                              <Truck className="h-2.5 w-2.5 mr-0.5" />{seller.transportistaCommissionRate ?? 0}%
                             </span>
                           )}
                         </div>
@@ -869,21 +956,6 @@ export default function EmpleadosPage() {
                       <Truck className="h-4 w-4 text-violet-500" />
                       <span className="text-sm font-medium">Transportista</span>
                     </label>
-                    {formData.isTransportista && (
-                      <div className="flex items-center gap-1.5">
-                        <Input
-                          type="number"
-                          min="0"
-                          max="100"
-                          step="0.5"
-                          value={formData.transportistaCommissionRate}
-                          onFocus={(e) => e.target.select()}
-                          onChange={(e) => setFormData({ ...formData, transportistaCommissionRate: Number(e.target.value) })}
-                          className="h-8 w-20 text-sm text-center"
-                        />
-                        <span className="text-sm text-muted-foreground">%</span>
-                      </div>
-                    )}
                   </div>
                 </div>
               </div>
@@ -985,12 +1057,6 @@ export default function EmpleadosPage() {
                   <span className={`inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium ${getCommissionColor(selectedSeller.commissionRate)}`}>
                     <ShoppingCart className="h-3 w-3 mr-1" />
                     {selectedSeller.commissionRate}% vendedor
-                  </span>
-                )}
-                {(selectedSeller.employeeType === 'transportista' || selectedSeller.employeeType === 'ambos') && (
-                  <span className={`inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium ${getCommissionColor(selectedSeller.transportistaCommissionRate ?? 0)}`}>
-                    <Truck className="h-3 w-3 mr-1" />
-                    {selectedSeller.transportistaCommissionRate ?? 0}% transportista
                   </span>
                 )}
                 {(selectedSeller.employeeType === 'vendedor' || selectedSeller.employeeType === 'ambos') && (
@@ -1178,24 +1244,73 @@ export default function EmpleadosPage() {
                 </div>
               )}
 
-              {/* Commissions List */}
+              {/* Commissions List con filtros por fecha/estado */}
               <div>
-                <div className="flex items-center justify-between mb-3">
-                  <h4 className="font-semibold text-foreground">Comisiones Pendientes</h4>
-                  {pendingCommissions.length > 0 && (
+                <div className="flex items-center justify-between mb-3 gap-2 flex-wrap">
+                  <h4 className="font-semibold text-foreground">
+                    {comEstado === 'pagado' ? 'Historial de Comisiones' : comEstado === 'todos' ? 'Comisiones' : 'Comisiones Pendientes'}
+                  </h4>
+                  {comEstado !== 'pagado' && pendingInRange.length > 0 && (
                     <Button
                       size="sm"
-                      variant="destructive"
-                      onClick={handleResetCommissions}
-                      disabled={resetting}
+                      onClick={handlePagarPeriodo}
+                      disabled={paying}
                       className="gap-2"
                     >
-                      {resetting ? (
+                      {paying ? (
                         <Loader2 className="h-4 w-4 animate-spin" />
                       ) : (
                         <Banknote className="h-4 w-4" />
                       )}
-                      Pagar y Resetear ({formatCurrency(pendingTotal)})
+                      Pagar ({formatCurrency(pendingInRangeTotal)})
+                    </Button>
+                  )}
+                </div>
+
+                {/* Filtros */}
+                <div className="flex items-end gap-2 flex-wrap mb-3 p-3 rounded-xl border border-border/60 bg-muted/30">
+                  <div className="grid gap-1">
+                    <Label htmlFor="comDesde" className="text-xs text-muted-foreground">Desde</Label>
+                    <Input
+                      id="comDesde"
+                      type="date"
+                      value={comDesde}
+                      onChange={(e) => setComDesde(e.target.value)}
+                      className="h-9 w-[150px]"
+                    />
+                  </div>
+                  <div className="grid gap-1">
+                    <Label htmlFor="comHasta" className="text-xs text-muted-foreground">Hasta</Label>
+                    <Input
+                      id="comHasta"
+                      type="date"
+                      value={comHasta}
+                      onChange={(e) => setComHasta(e.target.value)}
+                      className="h-9 w-[150px]"
+                    />
+                  </div>
+                  <div className="grid gap-1">
+                    <Label htmlFor="comEstado" className="text-xs text-muted-foreground">Estado</Label>
+                    <select
+                      id="comEstado"
+                      className="h-9 rounded-md border border-input bg-background px-3 text-sm text-foreground shadow-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+                      value={comEstado}
+                      onChange={(e) => setComEstado(e.target.value as 'pendiente' | 'pagado' | 'todos')}
+                    >
+                      <option value="pendiente">No pagas</option>
+                      <option value="pagado">Pagas (historial)</option>
+                      <option value="todos">Todas</option>
+                    </select>
+                  </div>
+                  {(comDesde || comHasta || comEstado !== 'pendiente') && (
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="h-9"
+                      onClick={() => { setComDesde(''); setComHasta(''); setComEstado('pendiente') }}
+                    >
+                      <X className="h-4 w-4 mr-1" />
+                      Limpiar
                     </Button>
                   )}
                 </div>
@@ -1209,14 +1324,20 @@ export default function EmpleadosPage() {
                       </div>
                     ))}
                   </div>
-                ) : commissions.length === 0 ? (
+                ) : filteredCommissions.length === 0 ? (
                   <div className="text-center py-8 text-muted-foreground border rounded-lg border-dashed">
                     <DollarSign className="h-8 w-8 mx-auto mb-2 opacity-50" />
-                    <p>No hay comisiones registradas</p>
+                    <p>
+                      {comEstado === 'pagado'
+                        ? 'No hay comisiones pagas en el período'
+                        : comEstado === 'todos'
+                          ? 'No hay comisiones en el período'
+                          : 'No hay comisiones pendientes en el período'}
+                    </p>
                   </div>
                 ) : (
                   <div className="space-y-2 max-h-[min(300px,40vh)] overflow-y-auto">
-                    {commissions.map((commission) => (
+                    {filteredCommissions.map((commission) => (
                       <div
                         key={commission.id}
                         className={`rounded-lg border p-4 flex items-center justify-between gap-4 ${

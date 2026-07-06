@@ -3,7 +3,10 @@ import type { SellerCommission } from '@/lib/types'
 
 /**
  * Deriva comisiones desde la tabla `ventas` (source of truth).
- * El estado pagado se determina por la fecha del último pago en `pagos_comisiones`.
+ * El estado pagado se determina por los pagos registrados en `pagos_comisiones`:
+ * un pago con período [periodo_desde, periodo_hasta] cubre las comisiones cuya
+ * fecha cae dentro de esa ventana. Pagos legacy sin período usan cutoff por
+ * `created_at` (todo lo anterior o igual queda pagado).
  */
 export const getCommissionsBySeller = async (sellerId: string): Promise<SellerCommission[]> => {
   // Traer tasa de comisión del vendedor
@@ -24,22 +27,36 @@ export const getCommissionsBySeller = async (sellerId: string): Promise<SellerCo
 
   if (!ventas || ventas.length === 0) return []
 
-  // Último pago registrado para determinar cutoff de "pagado"
-  const { data: ultimoPago } = await supabase
+  // Todos los pagos registrados (con o sin período) para determinar cobertura de "pagado"
+  const { data: pagos } = await supabase
     .from('pagos_comisiones')
-    .select('created_at')
+    .select('*')
     .eq('seller_id', sellerId)
-    .order('created_at', { ascending: false })
-    .limit(1)
-    .maybeSingle()
 
-  const paidCutoff = ultimoPago?.created_at ? new Date(ultimoPago.created_at) : null
+  type PagoWindow = { desde: number | null; hasta: number | null; cutoff: number }
+  const windows: PagoWindow[] = (pagos ?? []).map((p: any) => ({
+    desde: p.periodo_desde ? new Date(p.periodo_desde).getTime() : null,
+    hasta: p.periodo_hasta ? new Date(p.periodo_hasta).getTime() : null,
+    cutoff: new Date(p.created_at).getTime(),
+  }))
+
+  // Devuelve la fecha del pago que cubre esta comisión, o null si está pendiente.
+  const coveredBy = (createdAtMs: number): number | null => {
+    for (const w of windows) {
+      if (w.desde != null && w.hasta != null) {
+        if (createdAtMs >= w.desde && createdAtMs <= w.hasta) return w.cutoff
+      } else if (createdAtMs <= w.cutoff) {
+        return w.cutoff
+      }
+    }
+    return null
+  }
 
   const ventaEntries: SellerCommission[] = ventas.map((v) => {
     const saleTotal = Number(v.total) || 0
     const commissionAmount = saleTotal * (commissionRate / 100)
     const createdAt = new Date(v.created_at)
-    const isPaid = paidCutoff ? createdAt <= paidCutoff : false
+    const paidAtMs = coveredBy(createdAt.getTime())
 
     return {
       id: v.id,
@@ -50,8 +67,8 @@ export const getCommissionsBySeller = async (sellerId: string): Promise<SellerCo
       saleTotal,
       commissionRate,
       commissionAmount,
-      isPaid,
-      paidAt: isPaid && paidCutoff ? paidCutoff : undefined,
+      isPaid: paidAtMs != null,
+      paidAt: paidAtMs != null ? new Date(paidAtMs) : undefined,
       createdAt,
     }
   })
@@ -64,7 +81,7 @@ export const getCommissionsBySeller = async (sellerId: string): Promise<SellerCo
 
   const devEntries: SellerCommission[] = (devoluciones ?? []).map((d) => {
     const createdAt = new Date(d.created_at)
-    const isPaid = paidCutoff ? createdAt <= paidCutoff : false
+    const paidAtMs = coveredBy(createdAt.getTime())
     return {
       id: d.id,
       sellerId,
@@ -74,8 +91,8 @@ export const getCommissionsBySeller = async (sellerId: string): Promise<SellerCo
       saleTotal: -(Number(d.total) || 0),
       commissionRate: Number(d.commission_rate) || commissionRate,
       commissionAmount: -(Number(d.commission_amount) || 0),
-      isPaid,
-      paidAt: isPaid && paidCutoff ? paidCutoff : undefined,
+      isPaid: paidAtMs != null,
+      paidAt: paidAtMs != null ? new Date(paidAtMs) : undefined,
       createdAt,
     }
   })

@@ -174,6 +174,8 @@ export interface PagoComision {
   cantidadComisiones: number
   createdAt: Date
   nota?: string
+  periodoDesde?: Date
+  periodoHasta?: Date
 }
 
 function mapPago(d: Record<string, any>): PagoComision {
@@ -185,7 +187,57 @@ function mapPago(d: Record<string, any>): PagoComision {
     cantidadComisiones: Number(d.cantidad_comisiones) || 0,
     createdAt: new Date(d.created_at),
     nota: d.nota ?? undefined,
+    periodoDesde: d.periodo_desde ? new Date(d.periodo_desde) : undefined,
+    periodoHasta: d.periodo_hasta ? new Date(d.periodo_hasta) : undefined,
   }
+}
+
+/**
+ * Paga exactamente las comisiones PENDIENTES cuya fecha cae en [desde, hasta].
+ * Registra un pago con el período pagado; a partir de ahí esas comisiones
+ * quedan cubiertas (ver getCommissionsBySeller).
+ */
+export const pagarComisionesPeriodo = async (
+  sellerId: string,
+  sellerName: string,
+  desde: Date,
+  hasta: Date,
+  nota?: string,
+): Promise<PagoComision> => {
+  const { getCommissionsBySeller } = await import('@/services/commissions-service')
+  const commissions = await getCommissionsBySeller(sellerId)
+  const desdeMs = desde.getTime()
+  const hastaMs = hasta.getTime()
+  const aPagar = commissions.filter(
+    (c) => !c.isPaid && c.createdAt.getTime() >= desdeMs && c.createdAt.getTime() <= hastaMs,
+  )
+
+  if (aPagar.length === 0) {
+    throw new Error('No hay comisiones pendientes en el período seleccionado')
+  }
+
+  const monto = aPagar.reduce((sum, c) => sum + c.commissionAmount, 0)
+
+  const pagoId = `pago_${sellerId}_${Date.now()}`
+  const row = {
+    id: pagoId,
+    seller_id: sellerId,
+    seller_name: sellerName,
+    monto,
+    cantidad_comisiones: aPagar.length,
+    nota: nota || null,
+    periodo_desde: desde.toISOString(),
+    periodo_hasta: hasta.toISOString(),
+  }
+
+  const { data, error } = await supabase
+    .from('pagos_comisiones')
+    .insert(row)
+    .select()
+    .single()
+
+  if (error) throw error
+  return mapPago(data)
 }
 
 export const resetCommissions = async (sellerId: string, sellerName: string, nota?: string): Promise<PagoComision> => {

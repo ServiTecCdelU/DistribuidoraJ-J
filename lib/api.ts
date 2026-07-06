@@ -56,6 +56,7 @@ import {
   getSellers,
   updateSeller,
   resetCommissions,
+  pagarComisionesPeriodo,
   getPagosComisiones,
 } from '@/services/sellers-service'
 import type { PagoComision } from '@/services/sellers-service'
@@ -435,6 +436,9 @@ export const sellersApi = {
   },
   async resetCommissions(sellerId: string, sellerName: string, nota?: string): Promise<PagoComision> {
     return resetCommissions(sellerId, sellerName, nota)
+  },
+  async pagarComisionesPeriodo(sellerId: string, sellerName: string, desde: Date, hasta: Date, nota?: string): Promise<PagoComision> {
+    return pagarComisionesPeriodo(sellerId, sellerName, desde, hasta, nota)
   },
   async getPagosComisiones(sellerId: string): Promise<PagoComision[]> {
     return getPagosComisiones(sellerId)
