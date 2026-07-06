@@ -282,11 +282,6 @@ export default function EmpleadosPage() {
     items: SellerCommission[],
     monto: number,
   ) => {
-    const win = window.open('', '_blank')
-    if (!win) {
-      toast.error('Habilitá las ventanas emergentes para generar el PDF')
-      return
-    }
     const now = new Date()
     const stamp = new Intl.DateTimeFormat('es-AR', {
       day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit',
@@ -344,9 +339,39 @@ export default function EmpleadosPage() {
       <div class="totbox"><div class="lbl">TOTAL A PAGAR</div><div class="val">${formatCurrency(monto)}</div></div>
       <div class="footer">Generado el ${stamp} — Distribuidora Patricia</div>
       </body></html>`
-    win.document.write(html)
-    win.document.close()
-    win.onload = () => { win.print() }
+
+    // Imprimir vía iframe oculto para no abrir una pestaña "about:blank"
+    const iframe = document.createElement('iframe')
+    iframe.style.position = 'fixed'
+    iframe.style.right = '0'
+    iframe.style.bottom = '0'
+    iframe.style.width = '0'
+    iframe.style.height = '0'
+    iframe.style.border = '0'
+    document.body.appendChild(iframe)
+    const doc = iframe.contentWindow?.document
+    if (!doc) {
+      document.body.removeChild(iframe)
+      toast.error('No se pudo generar el PDF')
+      return
+    }
+    doc.open()
+    doc.write(html)
+    doc.close()
+    const cleanup = () => {
+      setTimeout(() => {
+        if (iframe.parentNode) iframe.parentNode.removeChild(iframe)
+      }, 1000)
+    }
+    iframe.onload = () => {
+      const w = iframe.contentWindow
+      if (!w) { cleanup(); return }
+      w.focus()
+      w.onafterprint = cleanup
+      w.print()
+      // Fallback por si onafterprint no dispara
+      setTimeout(cleanup, 60000)
+    }
   }
 
   const handlePagarPeriodo = async () => {
