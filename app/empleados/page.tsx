@@ -364,6 +364,7 @@ export default function EmpleadosPage() {
       return
     }
     const monto = items.reduce((s, c) => s + c.commissionAmount, 0)
+    if (!confirm(`Vas a pagar ${items.length} comisiones por ${formatCurrency(monto)}. ¿Confirmás?`)) return
     setPaying(true)
     try {
       await sellersApi.pagarComisionesPeriodo(
@@ -386,6 +387,24 @@ export default function EmpleadosPage() {
     } finally {
       setPaying(false)
     }
+  }
+
+  const handlePdfPreview = () => {
+    if (!selectedSeller) return
+    const desdeDate = comDesde ? new Date(`${comDesde}T00:00:00`) : null
+    const hastaDate = comHasta ? new Date(`${comHasta}T23:59:59.999`) : null
+    const items = commissions.filter(
+      (c) =>
+        !c.isPaid &&
+        (!desdeDate || c.createdAt >= desdeDate) &&
+        (!hastaDate || c.createdAt <= hastaDate),
+    )
+    if (items.length === 0) {
+      toast.error('No hay comisiones pendientes en el período seleccionado')
+      return
+    }
+    const monto = items.reduce((s, c) => s + c.commissionAmount, 0)
+    buildComisionesPDF(selectedSeller, desdeDate, hastaDate, items, monto)
   }
 
   const filteredSellers = sellers.filter(seller => {
@@ -448,6 +467,10 @@ export default function EmpleadosPage() {
   )
   const pendingInRange = commissions.filter((c) => !c.isPaid && inComRange(c))
   const pendingInRangeTotal = pendingInRange.reduce((sum, c) => sum + c.commissionAmount, 0)
+  // Primer día a pagar = fecha de la comisión pendiente más antigua
+  const firstPendingDate = pendingCommissions.length > 0
+    ? new Date(Math.min(...pendingCommissions.map((c) => c.createdAt.getTime())))
+    : null
 
   // Pedidos activos agrupados por día y luego por cliente (más reciente primero)
   const ordersByDay = activeOrders.reduce<Record<string, { label: string; clients: Record<string, Order[]> }>>((acc, order) => {
@@ -1251,21 +1274,49 @@ export default function EmpleadosPage() {
                     {comEstado === 'pagado' ? 'Historial de Comisiones' : comEstado === 'todos' ? 'Comisiones' : 'Comisiones Pendientes'}
                   </h4>
                   {comEstado !== 'pagado' && pendingInRange.length > 0 && (
-                    <Button
-                      size="sm"
-                      onClick={handlePagarPeriodo}
-                      disabled={paying}
-                      className="gap-2"
-                    >
-                      {paying ? (
-                        <Loader2 className="h-4 w-4 animate-spin" />
-                      ) : (
-                        <Banknote className="h-4 w-4" />
-                      )}
-                      Pagar ({formatCurrency(pendingInRangeTotal)})
-                    </Button>
+                    <div className="flex items-center gap-2">
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={handlePdfPreview}
+                        className="gap-2"
+                      >
+                        <Eye className="h-4 w-4" />
+                        PDF
+                      </Button>
+                      <Button
+                        size="sm"
+                        onClick={handlePagarPeriodo}
+                        disabled={paying}
+                        className="gap-2"
+                      >
+                        {paying ? (
+                          <Loader2 className="h-4 w-4 animate-spin" />
+                        ) : (
+                          <Banknote className="h-4 w-4" />
+                        )}
+                        Pagar ({formatCurrency(pendingInRangeTotal)})
+                      </Button>
+                    </div>
                   )}
                 </div>
+
+                {/* Recordatorio: primer día a pagar */}
+                {comEstado !== 'pagado' && firstPendingDate && (
+                  <div className="mb-3 flex items-center gap-2 flex-wrap text-sm rounded-lg border border-amber-200 dark:border-amber-800 bg-amber-50/60 dark:bg-amber-900/10 px-3 py-2">
+                    <Clock className="h-4 w-4 text-amber-600 dark:text-amber-400 shrink-0" />
+                    <span className="text-foreground">
+                      Primer día a pagar: <strong>{formatDate(firstPendingDate)}</strong>
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => setComDesde(firstPendingDate.toISOString().slice(0, 10))}
+                      className="text-xs font-medium text-primary hover:underline"
+                    >
+                      Usar como "Desde"
+                    </button>
+                  </div>
+                )}
 
                 {/* Filtros */}
                 <div className="flex items-end gap-2 flex-wrap mb-3 p-3 rounded-xl border border-border/60 bg-muted/30">
