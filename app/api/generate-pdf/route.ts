@@ -82,7 +82,7 @@ export async function POST(request: NextRequest) {
       } catch {}
     }
     return NextResponse.json(
-      { error: error.message || "Error generando PDF" },
+      { error: error?.message || "Error generando PDF" },
       { status: 500 },
     );
   }
