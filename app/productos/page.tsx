@@ -1782,7 +1782,7 @@ tr.cat td{border:none}
                               )}
                             >
                               <td className="px-3 py-2.5 font-mono text-xs text-muted-foreground whitespace-nowrap">
-                                {product.description || "—"}
+                                {product.codigo || product.description || "—"}
                               </td>
                               <td className="px-3 py-2.5 font-medium max-w-[260px] truncate">
                                 <span>{product.name}</span>
