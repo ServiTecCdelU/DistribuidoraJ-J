@@ -102,24 +102,26 @@ export const getMayoristaRubros = async (): Promise<string[]> => {
   return Array.from(set).sort()
 }
 
+// Rubros para el filtro de la venta: category de productos habilitados (misma
+// fuente que searchProductosParaVenta). Paginado para superar el límite de 1000 filas.
 export const getRubrosHabilitados = async (): Promise<string[]> => {
-  const { data, error } = await supabase
-    .from('mayorista_productos')
-    .select('rubro')
-    .eq('habilitado', true)
-    .not('rubro', 'is', null)
-    .not('rubro', 'eq', '')
-  if (error) throw error
-  const set = new Set((data ?? []).map((d: any) => d.rubro as string))
-  // Incluir rubros (category) de productos manuales — no están en mayorista_productos
-  const { data: manualCats } = await supabase
-    .from('productos')
-    .select('category')
-    .like('id', 'producto%')
-    .or('disabled.eq.false,disabled.is.null')
-    .not('category', 'is', null)
-    .not('category', 'eq', '')
-  ;(manualCats ?? []).forEach((r: any) => { if (r.category) set.add(r.category as string) })
+  const set = new Set<string>()
+  const PAGE = 1000
+  let from = 0
+  while (true) {
+    const { data, error } = await supabase
+      .from('productos')
+      .select('category')
+      .or('disabled.eq.false,disabled.is.null')
+      .not('category', 'is', null)
+      .not('category', 'eq', '')
+      .range(from, from + PAGE - 1)
+    if (error) throw error
+    if (!data || data.length === 0) break
+    for (const r of data as any[]) { if (r.category) set.add(r.category as string) }
+    if (data.length < PAGE) break
+    from += PAGE
+  }
   return Array.from(set).sort()
 }
 
@@ -160,17 +162,19 @@ export interface VentaProductSearchResult {
 
 type VentaProductItem = VentaProductSearchResult['data'][number]
 
-// Productos manuales (creados en el admin) — viven solo en "productos", sin fila en
-// mayorista_productos. id con prefijo "producto..." (los de mayorista son "prod_mp_...").
-const fetchProductosManualesParaVenta = async (
-  search?: string,
-  rubro?: string,
-  soloDescuento = false,
-): Promise<VentaProductItem[]> => {
+// Fuente única para la venta: tabla "productos" habilitados. Incluye tanto los
+// productos que provienen del mayorista (id "prod_mp_*") como los creados a mano
+// (id "producto_*"). El rubro es productos.category — lo que el admin gestiona y
+// ve —, no el rubro legacy del listado mayorista (que quedaba desincronizado y
+// dividía un mismo rubro en variantes tipo "MEDICAMENTO" / "MEDICAMENTOS").
+export const searchProductosParaVenta = async (params: VentaProductSearchParams): Promise<VentaProductSearchResult> => {
+  const { search, rubro, page = 1, pageSize = 10, soloDescuento = false } = params
+  const from = (page - 1) * pageSize
+  const to = from + pageSize - 1
+
   let query = supabase
     .from('productos')
-    .select('id, name, codigo, code, precio_venta, price, stock, unidades_por_bulto, se_divide_en, descuento, regalo_mismo, regalo_mismo_max, regalo_otro_max, regalo_producto_id, regalo_producto_nombre, category')
-    .like('id', 'producto%')
+    .select('id, name, codigo, code, precio_venta, price, stock, unidades_por_bulto, se_divide_en, descuento, regalo_mismo, regalo_mismo_max, regalo_otro_max, regalo_producto_id, regalo_producto_nombre, category', { count: 'exact' })
     .or('disabled.eq.false,disabled.is.null')
     .order('name', { ascending: true })
 
@@ -184,13 +188,23 @@ const fetchProductosManualesParaVenta = async (
     query = query.or('descuento.gt.0,regalo_mismo.eq.true,regalo_producto_id.not.is.null')
   }
 
-  const { data } = await query
-  return (data ?? []).map((p: any): VentaProductItem => {
+  query = query.range(from, to)
+
+  const { data, error, count } = await query
+  if (error) throw error
+
+  const total = count ?? 0
+  const results = (data ?? []).map((p: any): VentaProductItem => {
     const precioVenta = Number(p.precio_venta) || Number(p.price) || 0
+    // Código: productos.codigo/code o, si faltan, el sufijo del id mayorista (prod_mp_XXXX → XXXX)
+    const codigo =
+      p.codigo ||
+      p.code ||
+      (typeof p.id === 'string' && p.id.startsWith('prod_mp_') ? p.id.slice('prod_mp_'.length) : '')
     return {
       id: p.id,
       nombre: p.name ?? '',
-      codigo: p.codigo ?? p.code ?? '',
+      codigo,
       precioUnitarioMayorista: 0,
       rubro: p.category ?? '',
       categoria: p.category ?? '',
@@ -207,111 +221,9 @@ const fetchProductosManualesParaVenta = async (
       regaloProductoNombre: p.regalo_producto_nombre ?? null,
     }
   })
-}
-
-export const searchProductosParaVenta = async (params: VentaProductSearchParams): Promise<VentaProductSearchResult> => {
-  const { search, rubro, page = 1, pageSize = 10, soloDescuento = false, vendedorId } = params
-  const from = (page - 1) * pageSize
-
-  // Productos manuales van primero (set chico, se traen completos y se paginan en memoria).
-  const manuales = await fetchProductosManualesParaVenta(search, rubro, soloDescuento)
-  const totalManuales = manuales.length
-
-  // Cuántos slots de la página ocupan los manuales y cuántos quedan para mayorista.
-  const manualesSlice = manuales.slice(from, from + pageSize)
-  const mayoristaNeeded = pageSize - manualesSlice.length
-  const mayoristaFrom = Math.max(0, from - totalManuales)
-  const mayoristaTo = mayoristaFrom + mayoristaNeeded - 1
-
-  let query = supabase
-    .from('mayorista_productos')
-    .select('id, codigo, descripcion, precio_lista, rubro, categoria, producto_id, habilitado', { count: 'exact' })
-    .eq('habilitado', true)
-    .order('descripcion', { ascending: true })
-
-  if (search) {
-    query = query.or(`descripcion.ilike.%${search}%,codigo.ilike.%${search}%`)
-  }
-  if (rubro) {
-    query = query.eq('rubro', rubro)
-  }
-
-  // Solo productos con alguna oferta activa (descuento o regalo), sin distinción de vendedor.
-  if (soloDescuento) {
-    const conDto = await supabase
-      .from('productos')
-      .select('id')
-      .or('descuento.gt.0,regalo_mismo.eq.true,regalo_producto_id.not.is.null')
-    const ids = (conDto.data ?? []).map((p: any) => p.id)
-    if (ids.length === 0) {
-      const total = totalManuales
-      return {
-        data: manualesSlice,
-        total,
-        page,
-        pageSize,
-        totalPages: Math.ceil(total / pageSize),
-      }
-    }
-    query = query.in('producto_id', ids)
-  }
-
-  // Solo consultar mayorista si esta página necesita completarse con sus filas.
-  let mpRows: any[] = []
-  let mayoristaCount = 0
-  if (mayoristaNeeded > 0) {
-    query = query.range(mayoristaFrom, mayoristaTo)
-    const { data, error, count } = await query
-    if (error) throw error
-    mpRows = data ?? []
-    mayoristaCount = count ?? 0
-  } else {
-    // Necesitamos el count total de mayorista para la paginación aunque no traigamos filas.
-    const { count } = await query.select('id', { count: 'exact', head: true })
-    mayoristaCount = count ?? 0
-  }
-
-  const total = totalManuales + mayoristaCount
-
-  // Join con productos para obtener precio_venta, stock, unidades_por_bulto, se_divide_en
-  const prodIds = mpRows.map((r: any) => r.producto_id).filter(Boolean)
-  const productosMap = new Map<string, Record<string, any>>()
-  if (prodIds.length > 0) {
-    const { data: prodRows } = await supabase
-      .from('productos')
-      .select('id, precio_venta, price, stock, unidades_por_bulto, se_divide_en, descuento, regalo_mismo, regalo_mismo_max, regalo_otro_max, regalo_producto_id, regalo_producto_nombre')
-      .in('id', prodIds)
-    ;(prodRows ?? []).forEach((p: any) => productosMap.set(p.id, p))
-  }
-
-  const results = mpRows.map((mp: any) => {
-    const prod = productosMap.get(mp.producto_id)
-    const precioVenta = prod ? (Number(prod.precio_venta) || Number(prod.price) || 0) : 0
-    const descuento = prod?.descuento != null ? Number(prod.descuento) : 0
-    return {
-      id: mp.id,
-      nombre: mp.descripcion ?? '',
-      codigo: mp.codigo ?? '',
-      precioUnitarioMayorista: Number(mp.precio_lista) || 0,
-      rubro: mp.rubro ?? '',
-      categoria: mp.categoria ?? '',
-      productoId: mp.producto_id ?? '',
-      unidadesPorBulto: prod?.unidades_por_bulto ?? undefined,
-      seDivideEn: prod?.se_divide_en ? Number(prod.se_divide_en) : undefined,
-      precioVenta,
-      stockLocal: prod?.stock ?? 0,
-      descuento,
-      regaloMismo: prod?.regalo_mismo ?? false,
-      regaloMismoMax: prod?.regalo_mismo_max != null ? Number(prod.regalo_mismo_max) : null,
-      regaloOtroMax: prod?.regalo_otro_max != null ? Number(prod.regalo_otro_max) : null,
-      regaloProductoId: prod?.regalo_producto_id ?? null,
-      regaloProductoNombre: prod?.regalo_producto_nombre ?? null,
-    }
-  })
 
   return {
-    // Manuales primero, luego mayorista (completando la página).
-    data: [...manualesSlice, ...results],
+    data: results,
     total,
     page,
     pageSize,

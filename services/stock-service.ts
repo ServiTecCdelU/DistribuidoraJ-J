@@ -34,9 +34,22 @@ export const registrarMovimiento = async (params: {
 }): Promise<void> => {
   const { productoId, tipo, cantidad, referencia } = params
 
-  // Aceptar tanto "mp_XXXX" como "prod_mp_XXXX" y normalizar ambos IDs.
-  const prodId = productoId.startsWith('prod_') ? productoId : `prod_${productoId}`
-  const mpId = productoId.startsWith('prod_') ? productoId.slice('prod_'.length) : productoId
+  // Normalizar IDs. Casos:
+  //  - "prod_mp_XXXX" (id de productos mayorista) → mp id = "mp_XXXX"
+  //  - "mp_XXXX"      (id de mayorista)           → prod id = "prod_mp_XXXX"
+  //  - "producto_XXX" (id de productos manual)    → sin equivalente en mayorista
+  let prodId: string
+  let mpId: string
+  if (productoId.startsWith('prod_')) {
+    prodId = productoId
+    mpId = productoId.slice('prod_'.length)
+  } else if (productoId.startsWith('mp_')) {
+    prodId = `prod_${productoId}`
+    mpId = productoId
+  } else {
+    prodId = productoId
+    mpId = ''
+  }
 
   // Fuente de verdad = productos.stock (lo que ve la UI y el carrito).
   // Se cae a stock_local solo si el producto no existe en `productos`.
@@ -49,13 +62,15 @@ export const registrarMovimiento = async (params: {
   let stockAnterior: number
   if (prod && prod.stock != null) {
     stockAnterior = Number(prod.stock)
-  } else {
+  } else if (mpId) {
     const { data: mp } = await supabase
       .from('mayorista_productos')
       .select('stock_local')
       .eq('id', mpId)
       .maybeSingle()
     stockAnterior = Number(mp?.stock_local ?? 0)
+  } else {
+    stockAnterior = 0
   }
 
   // El stock físico nunca debe quedar negativo
@@ -63,7 +78,7 @@ export const registrarMovimiento = async (params: {
 
   // Registrar movimiento
   await supabase.from('stock_movimientos').insert({
-    mayorista_producto_id: mpId,
+    mayorista_producto_id: mpId || null,
     tipo,
     cantidad,
     stock_anterior: stockAnterior,
@@ -72,10 +87,12 @@ export const registrarMovimiento = async (params: {
   })
 
   // Mantener ambas tablas sincronizadas con el mismo valor
-  await supabase
-    .from('mayorista_productos')
-    .update({ stock_local: stockPosterior })
-    .eq('id', mpId)
+  if (mpId) {
+    await supabase
+      .from('mayorista_productos')
+      .update({ stock_local: stockPosterior })
+      .eq('id', mpId)
+  }
   await supabase
     .from('productos')
     .update({ stock: stockPosterior })
