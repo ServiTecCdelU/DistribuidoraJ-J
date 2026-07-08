@@ -7,7 +7,9 @@ const supabase = createClient(
 );
 
 const PROD_ID = "prod_mp_0215912"; // AGUA X 6.5L SIMBA (código 0215912)
-const CANTIDAD = 126;
+const MP_ID = "mp_0215912";
+const STOCK_CORRECTO = 8;
+const MOTIVO = "Corrección: venta R-2026-00663 quedó frenada en 0 (stock insuficiente por remito R-2026-00660 fantasma ya eliminado)";
 
 (async () => {
   const { data: prod } = await supabase
@@ -15,34 +17,24 @@ const CANTIDAD = 126;
     .select("id, name, stock")
     .eq("id", PROD_ID)
     .maybeSingle();
+  if (!prod) return console.log("No existe", PROD_ID);
 
-  if (!prod) {
-    console.log("No se encontró el producto", PROD_ID, "— NO se modificó nada.");
-    return;
-  }
-
-  const mpId = PROD_ID.startsWith("prod_") ? PROD_ID.slice("prod_".length) : "";
   const stockAnterior = Number(prod.stock) || 0;
-  const stockPosterior = Math.max(0, stockAnterior + CANTIDAD);
+  const cantidad = STOCK_CORRECTO - stockAnterior; // -118
+  if (cantidad === 0) return console.log("Ya está en", STOCK_CORRECTO, "— nada que hacer.");
 
   const { error: movErr } = await supabase.from("stock_movimientos").insert({
-    mayorista_producto_id: mpId || null,
+    mayorista_producto_id: MP_ID,
     tipo: "ajuste",
-    cantidad: CANTIDAD,
+    cantidad,
     stock_anterior: stockAnterior,
-    stock_posterior: stockPosterior,
-    motivo: "Reposición manual — remito r-2026-00660 eliminado sin reponer stock",
+    stock_posterior: STOCK_CORRECTO,
+    motivo: MOTIVO,
   });
   if (movErr) throw movErr;
 
-  if (mpId) {
-    await supabase.from("mayorista_productos").update({ stock_local: stockPosterior }).eq("id", mpId);
-  }
-  const { error: upErr } = await supabase
-    .from("productos")
-    .update({ stock: stockPosterior })
-    .eq("id", PROD_ID);
-  if (upErr) throw upErr;
+  await supabase.from("mayorista_productos").update({ stock_local: STOCK_CORRECTO }).eq("id", MP_ID);
+  await supabase.from("productos").update({ stock: STOCK_CORRECTO }).eq("id", PROD_ID);
 
-  console.log(`OK: ${prod.name} — stock ${stockAnterior} -> ${stockPosterior} (+${CANTIDAD}), movimiento registrado.`);
+  console.log(`OK: ${prod.name} — stock ${stockAnterior} -> ${STOCK_CORRECTO} (${cantidad}), corrección registrada.`);
 })();
