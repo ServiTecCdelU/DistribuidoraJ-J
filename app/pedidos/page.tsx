@@ -447,6 +447,21 @@ export default function PedidosPage() {
     if (!pendingDelete) return;
     const { ids, label } = pendingDelete;
     try {
+      // Reponer el stock de los pedidos que ya lo tenían descontado (remito generado): al
+      // eliminarse, la mercadería vuelve al depósito. Queda registrado en el historial del producto.
+      const toDelete = orders.filter((o) => ids.includes(o.id));
+      const { registrarMovimiento } = await import("@/services/stock-service");
+      for (const o of toDelete) {
+        const reposiciones = reposicionEliminarRemito(o.stockDescontado === true, o.items as any[]);
+        for (const mov of reposiciones) {
+          await registrarMovimiento({
+            productoId: mov.productId,
+            tipo: "ajuste",
+            cantidad: mov.cantidad, // entrada: vuelve al stock
+            referencia: `Eliminación pedido ${o.remitoNumber ?? ""} — ${o.clientName ?? ""}`.trim(),
+          });
+        }
+      }
       await Promise.all(ids.map((id) => ordersApi.deleteOrder(id)));
       setOrders((prev) => prev.filter((o) => !ids.includes(o.id)));
       setHeldOrderIds((prev) => { const n = new Set(prev); ids.forEach((id) => n.delete(id)); return n; });
@@ -458,7 +473,7 @@ export default function PedidosPage() {
     } finally {
       setPendingDelete(null);
     }
-  }, [pendingDelete]);
+  }, [pendingDelete, orders]);
 
   // handleGenerateInvoice — deshabilitado temporalmente
   const handleGenerateInvoice = useCallback(async (_order: Order) => {}, []);
