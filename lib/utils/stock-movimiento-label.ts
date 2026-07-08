@@ -19,6 +19,9 @@ export function badgeDeMovimiento(tipo: string, motivo: string | null): Movimien
     if (/^rechazo/i.test(motivo)) {
       return { label: "Rechazo", className: "bg-rose-100 text-rose-700 border-rose-200" };
     }
+    if (/eliminaci[oó]n pedido|remito.*eliminad|eliminad.*remito/i.test(motivo)) {
+      return { label: "Remito eliminado", className: "bg-slate-200 text-slate-700 border-slate-300 line-through" };
+    }
     if (/eliminaci[oó]n remito|devoluci[oó]n|faltante/i.test(motivo)) {
       return { label: "Devolución", className: "bg-orange-100 text-orange-700 border-orange-200" };
     }
