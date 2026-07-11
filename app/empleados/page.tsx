@@ -52,6 +52,7 @@ import {
   Package,
   Calendar,
   ChevronDown,
+  ArrowLeft,
 } from 'lucide-react'
 import { toast } from 'sonner'
 
@@ -513,6 +514,8 @@ export default function EmpleadosPage() {
 
   return (
     <MainLayout allowedRoles={['admin']} title="Empleados" description="Gestiona tu equipo de vendedores y transportistas">
+      {!detailModalOpen && (
+      <>
       {/* Stats Cards - Solo visible en desktop */}
       <div className="hidden lg:grid grid-cols-3 gap-4 mb-6">
         <Card className="bg-gradient-to-br from-primary/5 to-primary/10 border-primary/20">
@@ -935,6 +938,8 @@ export default function EmpleadosPage() {
           <span className="sr-only">Nuevo Empleado</span>
         </Button>
       </div>
+      </>
+      )}
 
       {/* Create/Edit Modal */}
       <Dialog open={modalOpen} onOpenChange={setModalOpen}>
@@ -1069,29 +1074,29 @@ export default function EmpleadosPage() {
         </DialogContent>
       </Dialog>
 
-      {/* Detail Modal with Commissions */}
-      <Dialog open={detailModalOpen} onOpenChange={setDetailModalOpen}>
-        <DialogContent className="sm:max-w-3xl max-h-[85vh] overflow-y-auto">
-          <DialogHeader>
-            <DialogTitle className="flex items-center gap-3">
-              {selectedSeller && (
-                <>
-                  <div className="h-10 w-10 rounded-full bg-primary/10 flex items-center justify-center">
-                    <span className="text-lg font-semibold text-primary">
-                      {selectedSeller.name.charAt(0).toUpperCase()}
-                    </span>
-                  </div>
-                  <div>
-                    <p className="font-semibold">{selectedSeller.name}</p>
-                    <p className="text-sm font-normal text-muted-foreground">{selectedSeller.email}</p>
-                  </div>
-                </>
-              )}
-            </DialogTitle>
-          </DialogHeader>
+      {/* Detail View (inline, reemplaza la tabla) */}
+      {detailModalOpen && selectedSeller && (
+        <div className="rounded-xl border border-border bg-card shadow-sm">
+          <div className="flex items-center justify-between gap-3 p-4 border-b border-border rounded-t-xl">
+            <div className="flex items-center gap-3 min-w-0">
+              <div className="h-10 w-10 rounded-full bg-primary/10 flex items-center justify-center shrink-0">
+                <span className="text-lg font-semibold text-primary">
+                  {selectedSeller.name.charAt(0).toUpperCase()}
+                </span>
+              </div>
+              <div className="min-w-0">
+                <p className="font-semibold truncate">{selectedSeller.name}</p>
+                <p className="text-sm font-normal text-muted-foreground truncate">{selectedSeller.email}</p>
+              </div>
+            </div>
+            <Button variant="outline" onClick={() => setDetailModalOpen(false)} className="gap-2 shrink-0">
+              <ArrowLeft className="h-4 w-4" />
+              Volver
+            </Button>
+          </div>
 
           {selectedSeller && (
-            <div className="space-y-6 pt-2">
+            <div className="space-y-6 p-4 md:p-6">
               {/* Employee Info Badges */}
               <div className="flex items-center gap-2 flex-wrap">
                 <span className={`inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium ${EMPLOYEE_TYPE_BADGE[selectedSeller.employeeType]}`}>
@@ -1480,8 +1485,8 @@ export default function EmpleadosPage() {
               </div>
             </div>
           )}
-        </DialogContent>
-      </Dialog>
+        </div>
+      )}
 
       {/* Delete Confirmation */}
       <ConfirmDialog
