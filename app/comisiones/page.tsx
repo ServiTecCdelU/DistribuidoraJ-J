@@ -46,13 +46,14 @@ export default function ComisionesPage() {
     return () => { mounted = false }
   }, [user?.sellerId])
 
-  const total = commissions.reduce((acc, c) => acc + c.commissionAmount, 0)
+  // Mismos números que ve el admin en Empleados: comisiones finales = brutas − devoluciones.
+  const comisionesBrutas = commissions.filter((c) => c.commissionAmount >= 0).reduce((acc, c) => acc + c.commissionAmount, 0)
+  const devolucionesTotal = commissions.filter((c) => c.commissionAmount < 0).reduce((acc, c) => acc + c.commissionAmount, 0) // negativo
+  const total = comisionesBrutas + devolucionesTotal // neto = comisiones finales
   const pendingTotal = commissions.filter((c) => !c.isPaid).reduce((acc, c) => acc + c.commissionAmount, 0)
   const paidTotal = commissions.filter((c) => c.isPaid).reduce((acc, c) => acc + c.commissionAmount, 0)
   const pendingCount = commissions.filter((c) => !c.isPaid).length
-  const avgRate = commissions.length > 0
-    ? (commissions.reduce((acc, c) => acc + c.commissionRate, 0) / commissions.length).toFixed(0)
-    : null
+  const devolucionesCount = commissions.filter((c) => c.commissionAmount < 0).length
 
   return (
     <MainLayout allowedRoles={['admin', 'seller']} title="Mis Comisiones" description="Resumen y detalle de tus comisiones">
@@ -72,14 +73,14 @@ export default function ComisionesPage() {
         <>
           {/* ── Tarjetas resumen ── */}
           <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-6">
-            <Card>
+            <Card className="border-teal-200 dark:border-teal-800 bg-teal-50/50 dark:bg-teal-900/10">
               <CardHeader className="pb-1 pt-4 px-4 flex flex-row items-center justify-between space-y-0">
-                <CardTitle className="text-xs font-medium text-muted-foreground leading-tight">Total acumulado</CardTitle>
-                <TrendingUp className="h-4 w-4 text-muted-foreground shrink-0" />
+                <CardTitle className="text-xs font-medium text-muted-foreground leading-tight">Comisiones finales</CardTitle>
+                <TrendingUp className="h-4 w-4 text-teal-600 shrink-0" />
               </CardHeader>
               <CardContent className="pb-4 px-4">
-                <div className="text-xl font-bold truncate">{formatPrice(total)}</div>
-                <p className="text-xs text-muted-foreground mt-0.5">{commissions.length} ventas</p>
+                <div className="text-xl font-bold text-teal-600 dark:text-teal-400 truncate">{formatPrice(total)}</div>
+                <p className="text-xs text-muted-foreground mt-0.5">Comisiones − devoluciones</p>
               </CardContent>
             </Card>
             <Card>
@@ -104,12 +105,12 @@ export default function ComisionesPage() {
             </Card>
             <Card>
               <CardHeader className="pb-1 pt-4 px-4 flex flex-row items-center justify-between space-y-0">
-                <CardTitle className="text-xs font-medium text-muted-foreground leading-tight">Tasa promedio</CardTitle>
-                <DollarSign className="h-4 w-4 text-muted-foreground shrink-0" />
+                <CardTitle className="text-xs font-medium text-muted-foreground leading-tight">Devoluciones</CardTitle>
+                <DollarSign className="h-4 w-4 text-rose-500 shrink-0" />
               </CardHeader>
               <CardContent className="pb-4 px-4">
-                <div className="text-xl font-bold">{avgRate ? `${avgRate}%` : '—'}</div>
-                <p className="text-xs text-muted-foreground mt-0.5">por venta</p>
+                <div className="text-xl font-bold text-rose-600 dark:text-rose-400 truncate">{formatPrice(Math.abs(devolucionesTotal))}</div>
+                <p className="text-xs text-muted-foreground mt-0.5">{devolucionesCount} {devolucionesCount === 1 ? 'devolución' : 'devoluciones'}</p>
               </CardContent>
             </Card>
           </div>
