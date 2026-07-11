@@ -30,6 +30,7 @@ import { sellersApi, ordersApi } from '@/lib/api'
 import type { Seller, SellerCommission, EmployeeType, Order } from '@/lib/types'
 import { formatCurrency, formatDate } from '@/lib/utils/format'
 import { statusConfig } from '@/lib/order-constants'
+import { resumenComisiones } from '@/lib/utils/comisiones'
 import {
   Plus,
   Search,
@@ -529,9 +530,11 @@ export default function EmpleadosPage() {
   const allSalesTotal = ventaEntries.reduce((sum, c) => sum + c.saleTotal, 0)
   const devSalesTotal = devEntries.reduce((sum, c) => sum + c.saleTotal, 0) // negativo
   const ventasNetas = allSalesTotal + devSalesTotal
-  const comisionesBrutas = ventaEntries.reduce((sum, c) => sum + c.commissionAmount, 0)
-  const devolucionesTotal = devEntries.reduce((sum, c) => sum + c.commissionAmount, 0)
-  const comisionesFinales = comisionesBrutas + devolucionesTotal
+  // Totales de comisiones: MISMA fuente que ve el vendedor (resumenComisiones).
+  const resumenDetalle = resumenComisiones(commissionsInRange)
+  const comisionesBrutas = resumenDetalle.brutas
+  const devolucionesTotal = -resumenDetalle.devoluciones // negativo (se muestra con Math.abs)
+  const comisionesFinales = resumenDetalle.finales
   const filteredCommissions = commissions.filter(
     (c) =>
       inComRange(c) &&

@@ -18,6 +18,7 @@ import { getCommissionsBySeller } from '@/services/commissions-service'
 import { useAuth } from '@/hooks/use-auth'
 import type { SellerCommission } from '@/lib/types'
 import { formatCurrency as formatPrice, formatDate } from '@/lib/utils/format'
+import { resumenComisiones } from '@/lib/utils/comisiones'
 import { TrendingUp, Clock, CheckCircle2, DollarSign } from 'lucide-react'
 
 export default function ComisionesPage() {
@@ -46,14 +47,14 @@ export default function ComisionesPage() {
     return () => { mounted = false }
   }, [user?.sellerId])
 
-  // Mismos números que ve el admin en Empleados: comisiones finales = brutas − devoluciones.
-  const comisionesBrutas = commissions.filter((c) => c.commissionAmount >= 0).reduce((acc, c) => acc + c.commissionAmount, 0)
-  const devolucionesTotal = commissions.filter((c) => c.commissionAmount < 0).reduce((acc, c) => acc + c.commissionAmount, 0) // negativo
-  const total = comisionesBrutas + devolucionesTotal // neto = comisiones finales
-  const pendingTotal = commissions.filter((c) => !c.isPaid).reduce((acc, c) => acc + c.commissionAmount, 0)
-  const paidTotal = commissions.filter((c) => c.isPaid).reduce((acc, c) => acc + c.commissionAmount, 0)
-  const pendingCount = commissions.filter((c) => !c.isPaid).length
-  const devolucionesCount = commissions.filter((c) => c.commissionAmount < 0).length
+  // Mismos números que ve el admin en Empleados (misma fuente: resumenComisiones).
+  const resumen = resumenComisiones(commissions)
+  const total = resumen.finales // neto = comisiones finales
+  const pendingTotal = resumen.pendiente
+  const paidTotal = resumen.cobrado
+  const pendingCount = resumen.pendienteCount
+  const devolucionesTotal = resumen.devoluciones // magnitud positiva
+  const devolucionesCount = resumen.devolucionesCount
 
   return (
     <MainLayout allowedRoles={['admin', 'seller']} title="Mis Comisiones" description="Resumen y detalle de tus comisiones">
