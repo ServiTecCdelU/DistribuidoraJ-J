@@ -66,4 +66,5 @@ export interface ListaVentasProps {
   sellers?: { id: string; name: string }[];
   isAdmin?: boolean;
   onExportData?: (period: string, from?: string, to?: string) => Promise<Venta[]>;
+  devolucionesPorVenta?: Record<string, number>;
 }

@@ -43,6 +43,7 @@ import type { Sale } from "@/lib/types";
 import { supabase } from "@/lib/supabase";
 import { generateReadableId } from "@/services/supabase-helpers";
 import { formatCurrency, formatTime } from "@/lib/utils/format";
+import { incidenciasCaja } from "@/lib/utils/incidencias";
 import { toast } from "sonner";
 import { Document, Page as PdfPage, Text, View, StyleSheet, pdf } from "@react-pdf/renderer";
 
@@ -82,6 +83,9 @@ const formatTimeStr = (d: Date) =>
 
 // Clave de día (para mapear una venta a la caja de su jornada).
 const dayKeyOf = (d: Date) => `${d.getFullYear()}-${d.getMonth()}-${d.getDate()}`;
+
+// Pérdida (rotura + faltante) y devolución (no_quiso) de una venta.
+const calcIncidencia = (sale: any) => incidenciasCaja((sale as any)?.itemsNoEntregados);
 
 // Venta de un cliente ubicada dentro de una caja (para el buscador por cliente).
 interface VentaClienteCaja {
@@ -1500,15 +1504,17 @@ export default function CajaPage() {
                                     </div>
                                     <p className="text-xs text-muted-foreground">{formatDateShort(new Date(sale.createdAt))}</p>
                                   </div>
-                                  {/* Col 3: total / incidencia / vendedor */}
+                                  {/* Col 3: total / pérdida / devolución / vendedor */}
                                   <div className="text-right">
                                     <p className="font-semibold text-xs tabular-nums">{formatCurrency(sale.total || 0)}</p>
                                     {(() => {
-                                      const inc = ((sale as any).itemsNoEntregados ?? []).reduce(
-                                        (a: number, i: any) => a + (i.price || 0) * (1 - (i.itemDiscount || 0) / 100) * (i.quantity || 0),
-                                        0,
+                                      const { perdida, devolucion } = calcIncidencia(sale);
+                                      return (
+                                        <>
+                                          {perdida > 0.005 && <p className="text-[10px] text-rose-600 font-medium">Pérd -{formatCurrency(perdida)}</p>}
+                                          {devolucion > 0.005 && <p className="text-[10px] text-amber-600 font-medium">Devol -{formatCurrency(devolucion)}</p>}
+                                        </>
                                       );
-                                      return inc > 0.005 ? <p className="text-[10px] text-rose-600 font-medium">Incid -{formatCurrency(inc)}</p> : null;
                                     })()}
                                     <p className="text-xs text-muted-foreground truncate">{sale.sellerName || "—"}</p>
                                   </div>
@@ -1536,12 +1542,13 @@ export default function CajaPage() {
                         {/* DESKTOP: tabla de columnas */}
                         <div className="hidden sm:block rounded-xl border divide-y overflow-hidden">
                           {/* Encabezado */}
-                          <div className="grid grid-cols-[6rem_minmax(6rem,8rem)_minmax(0,1fr)_8rem_7rem_7rem] gap-x-2 px-3 py-2 bg-muted/50 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
+                          <div className="grid grid-cols-[6rem_minmax(6rem,8rem)_minmax(0,1fr)_8rem_6rem_6rem_7rem] gap-x-2 px-3 py-2 bg-muted/50 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
                             <span>Fecha</span>
                             <span>Venta</span>
                             <span>Cliente</span>
                             <span className="text-center">Forma de pago</span>
-                            <span className="text-right">Incidencia</span>
+                            <span className="text-right">Pérdida</span>
+                            <span className="text-right">Devolución</span>
                             <span className="text-right">Total</span>
                           </div>
                           {salesFiltradas.map((sale) => {
@@ -1551,12 +1558,9 @@ export default function CajaPage() {
                             const badgeClass = sale.paymentType === "cash"
                               ? ((sale as any).paymentMethod === "transferencia" ? "bg-violet-100 text-violet-800" : "bg-green-100 text-green-800")
                               : sale.paymentType === "credit" ? "bg-blue-100 text-blue-800" : "bg-amber-100 text-amber-800";
-                            const inc = ((sale as any).itemsNoEntregados ?? []).reduce(
-                              (a: number, i: any) => a + (i.price || 0) * (1 - (i.itemDiscount || 0) / 100) * (i.quantity || 0),
-                              0,
-                            );
+                            const { perdida, devolucion } = calcIncidencia(sale);
                             return (
-                              <div key={sale.id} className="grid grid-cols-[6rem_minmax(6rem,8rem)_minmax(0,1fr)_8rem_7rem_7rem] gap-x-2 px-3 py-2 items-center text-sm">
+                              <div key={sale.id} className="grid grid-cols-[6rem_minmax(6rem,8rem)_minmax(0,1fr)_8rem_6rem_6rem_7rem] gap-x-2 px-3 py-2 items-center text-sm">
                                 <span className="text-xs text-muted-foreground leading-tight">{formatDateShort(new Date(sale.createdAt))}<br />{formatTimeStr(new Date(sale.createdAt))}</span>
                                 <span className="text-xs text-muted-foreground truncate">{sale.saleNumber ? `#${sale.saleNumber}` : (sale.remitoNumber || "—")}</span>
                                 <span className="font-medium truncate">{sale.clientName || "Consumidor Final"}</span>
@@ -1569,18 +1573,22 @@ export default function CajaPage() {
                                   <Badge className={`text-[10px] border-0 ${badgeClass}`}>{paymentLabel}</Badge>
                                 </span>
                                 <span className="text-right tabular-nums">
-                                  {inc > 0.005 ? <span className="text-rose-600 font-semibold">-{formatCurrency(inc)}</span> : <span className="text-muted-foreground/40">—</span>}
+                                  {perdida > 0.005 ? <span className="text-rose-600 font-semibold">-{formatCurrency(perdida)}</span> : <span className="text-muted-foreground/40">—</span>}
+                                </span>
+                                <span className="text-right tabular-nums">
+                                  {devolucion > 0.005 ? <span className="text-amber-600 font-semibold">-{formatCurrency(devolucion)}</span> : <span className="text-muted-foreground/40">—</span>}
                                 </span>
                                 <span className="text-right font-semibold tabular-nums">{formatCurrency(sale.total || 0)}</span>
                               </div>
                             );
                           })}
                           {rejectedOrders.map((o) => (
-                            <div key={o.id} className="grid grid-cols-[6rem_minmax(6rem,8rem)_minmax(0,1fr)_8rem_7rem_7rem] gap-x-2 px-3 py-2 items-center text-sm">
+                            <div key={o.id} className="grid grid-cols-[6rem_minmax(6rem,8rem)_minmax(0,1fr)_8rem_6rem_6rem_7rem] gap-x-2 px-3 py-2 items-center text-sm">
                               <span className="text-xs text-muted-foreground">{formatDateShort(new Date(o.date))}</span>
                               <span className="text-xs text-muted-foreground truncate">{o.remitoNumber || "—"}</span>
                               <span className="font-medium truncate">{o.clientName || "Consumidor Final"}</span>
                               <span className="flex justify-center"><Badge className="text-[10px] border-0 bg-red-100 text-red-700">Rechazado</Badge></span>
+                              <span className="text-right text-muted-foreground/40">—</span>
                               <span className="text-right text-muted-foreground/40">—</span>
                               <span className="text-right text-muted-foreground/40">—</span>
                             </div>

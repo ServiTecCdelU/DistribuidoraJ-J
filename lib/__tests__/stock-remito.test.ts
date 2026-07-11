@@ -65,14 +65,14 @@ describe("reconciliarCobro", () => {
 
   it("con stock ya descontado: repone faltante y no_quiere, ignora rotura", () => {
     expect(reconciliarCobro(true, ajustes)).toEqual([
-      { productId: "mp_002", cantidad: 3 },
-      { productId: "mp_003", cantidad: 1 },
+      { productId: "mp_002", cantidad: 3, motivo: "faltante" },
+      { productId: "mp_003", cantidad: 1, motivo: "no_quiere" },
     ]);
   });
 
   it("sin stock descontado (legacy): solo descuenta la rotura", () => {
     expect(reconciliarCobro(false, ajustes)).toEqual([
-      { productId: "mp_001", cantidad: -2 },
+      { productId: "mp_001", cantidad: -2, motivo: "rotura" },
     ]);
   });
 

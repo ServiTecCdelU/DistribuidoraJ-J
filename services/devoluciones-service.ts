@@ -197,6 +197,26 @@ export async function getDevolucionesBySale(saleId: string): Promise<Devolucion[
   return (data ?? []).map(mapDevolucion)
 }
 
+// Total devuelto (nota de crédito) por venta, para un conjunto de ventas.
+// Devuelve un mapa saleId -> monto total devuelto.
+export async function getDevolucionesTotalsBySales(
+  saleIds: string[],
+): Promise<Record<string, number>> {
+  const ids = [...new Set(saleIds.filter(Boolean))]
+  if (ids.length === 0) return {}
+  const { data } = await supabase
+    .from('devoluciones')
+    .select('sale_id, total')
+    .in('sale_id', ids)
+  const map: Record<string, number> = {}
+  for (const d of data ?? []) {
+    const sid = (d as any).sale_id as string | null
+    if (!sid) continue
+    map[sid] = (map[sid] || 0) + (Number((d as any).total) || 0)
+  }
+  return map
+}
+
 export async function getDevolucionesByClient(clientId: string): Promise<Devolucion[]> {
   if (!clientId) return []
   const { data } = await supabase

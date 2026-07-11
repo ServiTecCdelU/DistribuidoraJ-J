@@ -20,6 +20,8 @@ export interface AjusteCobro {
 export interface MovStock {
   productId: string
   cantidad: number
+  // Motivo del ajuste de cobro (para etiquetar el historial del producto). Opcional.
+  motivo?: TipoAjusteCobro
 }
 
 const salidaItem = (item: ItemRemito): number =>
@@ -67,9 +69,9 @@ export function reconciliarCobro(
   if (stockDescontado) {
     return ajustes
       .filter((a) => (a.type === 'faltante' || a.type === 'no_quiere') && a.quantity > 0)
-      .map((a) => ({ productId: a.productId, cantidad: a.quantity }))
+      .map((a) => ({ productId: a.productId, cantidad: a.quantity, motivo: a.type }))
   }
   return ajustes
     .filter((a) => a.type === 'rotura' && a.quantity > 0)
-    .map((a) => ({ productId: a.productId, cantidad: -a.quantity }))
+    .map((a) => ({ productId: a.productId, cantidad: -a.quantity, motivo: a.type }))
 }

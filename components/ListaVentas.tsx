@@ -39,6 +39,7 @@ import {
 import Link from "next/link";
 import type { ListaVentasProps } from "../types";
 import { formatDate, formatTime, formatCurrency } from "@/lib/utils/format";
+import { incidenciasVenta } from "@/lib/utils/incidencias";
 import { toDate } from "@/services/supabase-helpers";
 import { toast } from "sonner";
 import { useMemo, useState, useCallback, useEffect } from "react";
@@ -76,6 +77,9 @@ const payBadgeCls = (pt: string, pm?: string) => {
   if (pt === "mixed") return "bg-amber-100 text-amber-700 border-amber-200 dark:bg-amber-900/30 dark:text-amber-400 dark:border-amber-800";
   return "";
 };
+
+// Pérdida (rotura), faltante y rechazo (no_quiso) de una venta.
+const calcIncidencia = (venta: any) => incidenciasVenta((venta as any)?.itemsNoEntregados);
 
 const periodLabels: Record<string, string> = {
   all: "Todas",
@@ -123,6 +127,7 @@ export function ListaVentas({
   sellers = [],
   isAdmin = false,
   onExportData,
+  devolucionesPorVenta = {},
 }: ListaVentasProps) {
   const {
     searchQuery, invoiceFilter, paymentFilter, periodFilter, dateFrom, dateTo,
@@ -515,10 +520,12 @@ export function ListaVentas({
             <div className="hidden md:grid grid-cols-12 gap-4 p-4 bg-muted/30 text-xs font-semibold text-muted-foreground uppercase tracking-wider">
               <div className="col-span-2">Venta</div>
               <div className="col-span-2">Cliente</div>
-              <div className="col-span-1">Fecha</div>
-              <div className="col-span-2 text-right">Incidencias</div>
+              <div className="col-span-1 text-right">Pérdida</div>
+              <div className="col-span-1 text-right">Faltante</div>
+              <div className="col-span-1 text-right">Rechazo</div>
+              <div className="col-span-1 text-right">Nota Créd.</div>
               <div className="col-span-2 text-right">Total</div>
-              <div className="col-span-2 text-center">Pago</div>
+              <div className="col-span-1 text-center">Pago</div>
               <div className="col-span-1 text-center">Acc.</div>
             </div>
 
@@ -543,11 +550,16 @@ export function ListaVentas({
                       <>
                         <p className="font-bold text-sm text-foreground">{fmt(venta.total)}</p>
                         {(() => {
-                          const inc = ((venta as any).itemsNoEntregados ?? []).reduce(
-                            (a: number, i: any) => a + (i.price || 0) * (1 - (i.itemDiscount || 0) / 100) * (i.quantity || 0),
-                            0,
+                          const { perdida, faltante, rechazo } = calcIncidencia(venta);
+                          const nc = devolucionesPorVenta[venta.id] || 0;
+                          return (
+                            <>
+                              {perdida > 0.005 && <p className="text-[10px] text-rose-600 font-medium">Pérd: -{fmt(perdida)}</p>}
+                              {faltante > 0.005 && <p className="text-[10px] text-orange-600 font-medium">Falt: -{fmt(faltante)}</p>}
+                              {rechazo > 0.005 && <p className="text-[10px] text-amber-600 font-medium">Rech: -{fmt(rechazo)}</p>}
+                              {nc > 0.005 && <p className="text-[10px] text-violet-600 font-medium">N.Créd: -{fmt(nc)}</p>}
+                            </>
                           );
-                          return inc > 0.005 ? <p className="text-[10px] text-rose-600 font-medium">Incid: -{fmt(inc)}</p> : null;
                         })()}
                         <Badge variant="outline" className={`text-[10px] ${payBadgeCls(venta.paymentType, venta.paymentMethod)}`}>
                           {payLabel(venta.paymentType, venta.paymentMethod)}
@@ -564,7 +576,7 @@ export function ListaVentas({
                   </div>
                   <div>
                     <p className="font-semibold text-foreground text-sm">{venta.saleNumber || venta.remitoNumber || `N° ${ventas.length - index}`}</p>
-                    <p className="text-[10px] text-muted-foreground truncate max-w-[120px]">{venta.id.replace(/^venta_/, "") || "directa"}</p>
+                    <p className="text-[10px] text-muted-foreground">{fmtDate(venta.createdAt)} · {fmtTime(venta.createdAt)}</p>
                   </div>
                 </div>
                 <div className="hidden md:flex md:col-span-2 items-center gap-2">
@@ -577,20 +589,34 @@ export function ListaVentas({
                     {venta.hojaRutaNumber && <p className="text-[10px] text-teal-600 font-medium truncate">Hoja de ruta: {venta.hojaRutaNumber}</p>}
                   </div>
                 </div>
-                <div className="hidden md:flex md:col-span-1 items-center text-sm text-muted-foreground">
-                  <div><p>{fmtDate(venta.createdAt)}</p><p className="text-xs">{fmtTime(venta.createdAt)}</p></div>
-                </div>
-                <div className="hidden md:flex md:col-span-2 items-center justify-end">
-                  {(() => {
-                    const inc = ((venta as any).itemsNoEntregados ?? []).reduce(
-                      (a: number, i: any) => a + (i.price || 0) * (1 - (i.itemDiscount || 0) / 100) * (i.quantity || 0),
-                      0,
-                    );
-                    return inc > 0.005
-                      ? <p className="font-semibold text-rose-600 text-sm">-{fmt(inc)}</p>
-                      : <p className="text-muted-foreground/50 text-sm">—</p>;
-                  })()}
-                </div>
+                {(() => {
+                  const { perdida, faltante, rechazo } = calcIncidencia(venta);
+                  const nc = devolucionesPorVenta[venta.id] || 0;
+                  return (
+                    <>
+                      <div className="hidden md:flex md:col-span-1 items-center justify-end">
+                        {perdida > 0.005
+                          ? <p className="font-semibold text-rose-600 text-sm">-{fmt(perdida)}</p>
+                          : <p className="text-muted-foreground/50 text-sm">—</p>}
+                      </div>
+                      <div className="hidden md:flex md:col-span-1 items-center justify-end">
+                        {faltante > 0.005
+                          ? <p className="font-semibold text-orange-600 text-sm">-{fmt(faltante)}</p>
+                          : <p className="text-muted-foreground/50 text-sm">—</p>}
+                      </div>
+                      <div className="hidden md:flex md:col-span-1 items-center justify-end">
+                        {rechazo > 0.005
+                          ? <p className="font-semibold text-amber-600 text-sm">-{fmt(rechazo)}</p>
+                          : <p className="text-muted-foreground/50 text-sm">—</p>}
+                      </div>
+                      <div className="hidden md:flex md:col-span-1 items-center justify-end">
+                        {nc > 0.005
+                          ? <p className="font-semibold text-violet-600 text-sm">-{fmt(nc)}</p>
+                          : <p className="text-muted-foreground/50 text-sm">—</p>}
+                      </div>
+                    </>
+                  );
+                })()}
                 <div className="hidden md:flex md:col-span-2 items-center justify-end">
                   {venta.rechazado ? (
                     <Badge variant="outline" className="px-2.5 py-1 bg-red-100 text-red-700 border-red-200">Rechazado</Badge>
@@ -598,7 +624,7 @@ export function ListaVentas({
                     <p className="font-bold text-foreground text-base">{fmt(venta.total)}</p>
                   )}
                 </div>
-                <div className="hidden md:flex md:col-span-2 items-center justify-center">
+                <div className="hidden md:flex md:col-span-1 items-center justify-center">
                   {!venta.rechazado && (
                     <Badge variant="outline" className={`gap-1.5 px-2.5 py-1 ${payBadgeCls(venta.paymentType, venta.paymentMethod)}`}>
                       {payIcon(venta.paymentType, venta.paymentMethod)}

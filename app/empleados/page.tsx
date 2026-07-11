@@ -25,6 +25,7 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
+import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs'
 import { sellersApi, ordersApi } from '@/lib/api'
 import type { Seller, SellerCommission, EmployeeType, Order } from '@/lib/types'
 import { formatCurrency, formatDate } from '@/lib/utils/format'
@@ -85,6 +86,8 @@ export default function EmpleadosPage() {
   const [commissions, setCommissions] = useState<SellerCommission[]>([])
   const [loadingCommissions, setLoadingCommissions] = useState(false)
   const [pagos, setPagos] = useState<any[]>([])
+  const [expandedPagoId, setExpandedPagoId] = useState<string | null>(null)
+  const [calcModalOpen, setCalcModalOpen] = useState(false)
 
   // Filtros de comisiones (rango de fechas + estado) y pago por período
   const [comDesde, setComDesde] = useState('')
@@ -185,6 +188,7 @@ export default function EmpleadosPage() {
     setSelectedSeller(seller)
     setDetailModalOpen(true)
     setExpandedOrderId(null)
+    setExpandedPagoId(null)
     setActiveOrders([])
     setComDesde('')
     setComHasta('')
@@ -293,6 +297,8 @@ export default function EmpleadosPage() {
     const ventas = items.filter((c) => c.commissionAmount >= 0)
     const devol = items.filter((c) => c.commissionAmount < 0)
     const totalVentas = ventas.reduce((s, c) => s + c.saleTotal, 0)
+    const devMonto = Math.abs(devol.reduce((s, c) => s + c.saleTotal, 0))
+    const ventasNetas = totalVentas - devMonto
 
     const rows = (list: SellerCommission[]) =>
       list.map((c) => `
@@ -320,6 +326,15 @@ export default function EmpleadosPage() {
         .totbox { margin-top: 14px; padding: 10px 14px; background: #ecfdf5; border: 1px solid #a7f3d0; border-radius: 8px; display: inline-block; }
         .totbox .lbl { font-size: 11px; color: #555; }
         .totbox .val { font-size: 20px; font-weight: bold; color: #047857; }
+        .pasos { margin-top: 12px; width: 420px; }
+        .paso { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; padding: 7px 10px; border-bottom: 1px solid #eee; font-size: 13px; }
+        .paso .n { display: inline-block; width: 20px; height: 20px; line-height: 20px; text-align: center; border-radius: 50%; background: #ccfbf1; color: #0f766e; font-weight: bold; font-size: 11px; margin-right: 8px; }
+        .paso .v { font-weight: bold; white-space: nowrap; }
+        .paso .neg { color: #b91c1c; }
+        .paso.sub { background: #f8fafc; font-weight: 600; }
+        .paso.final { background: #ecfdf5; border: 2px solid #5eead4; border-radius: 10px; margin-top: 8px; padding: 12px; }
+        .paso.final .lbl { font-size: 16px; font-weight: bold; }
+        .paso.final .v { font-size: 22px; color: #0d9488; }
         .footer { margin-top: 24px; font-size: 10px; color: #888; }
       </style></head><body>
       <h1>Liquidación de Comisiones</h1>
@@ -337,7 +352,14 @@ export default function EmpleadosPage() {
         <thead><tr><th>Fecha</th><th>Ref.</th><th>Cliente</th><th class="num">Total</th><th class="num">%</th><th class="num">Ajuste</th></tr></thead>
         <tbody>${rows(devol)}</tbody>
       </table>` : ''}
-      <div class="totbox"><div class="lbl">TOTAL A PAGAR</div><div class="val">${formatCurrency(monto)}</div></div>
+      <h2>Cómo se calcula lo que se le paga</h2>
+      <div class="pasos">
+        <div class="paso"><span><span class="n">1</span>Vendió</span><span class="v">${formatCurrency(totalVentas)}</span></div>
+        <div class="paso"><span><span class="n">2</span>Devoluciones</span><span class="v neg">− ${formatCurrency(devMonto)}</span></div>
+        <div class="paso sub"><span style="margin-left:28px">Venta menos devolución</span><span class="v">${formatCurrency(ventasNetas)}</span></div>
+        <div class="paso"><span><span class="n">3</span>Comisión ${seller.commissionRate}%</span><span class="v" style="font-weight:normal;color:#555;font-size:11px">${seller.commissionRate}% × ${formatCurrency(ventasNetas)}</span></div>
+        <div class="paso final"><span class="lbl">Se le paga</span><span class="v">${formatCurrency(monto)}</span></div>
+      </div>
       <div class="footer">Generado el ${stamp} — Distribuidora Patricia</div>
       </body></html>`
 
@@ -433,6 +455,24 @@ export default function EmpleadosPage() {
     buildComisionesPDF(selectedSeller, desdeDate, hastaDate, items, monto)
   }
 
+  // Comisiones incluidas en un pago (se marcaron pagas con cutoff = createdAt del pago)
+  const getPagoItems = (pago: any): SellerCommission[] =>
+    commissions.filter(
+      (c) => c.isPaid && c.paidAt && Math.abs(c.paidAt.getTime() - new Date(pago.createdAt).getTime()) < 1000,
+    )
+
+  const handlePagoPdf = (pago: any) => {
+    if (!selectedSeller) return
+    const items = getPagoItems(pago)
+    buildComisionesPDF(
+      selectedSeller,
+      pago.periodoDesde ?? null,
+      pago.periodoHasta ?? null,
+      items,
+      pago.monto,
+    )
+  }
+
   const filteredSellers = sellers.filter(seller => {
     const query = searchQuery.toLowerCase()
     const matchesSearch =
@@ -474,18 +514,24 @@ export default function EmpleadosPage() {
   const totalSales = sellers.reduce((sum, s) => sum + (s.totalSales || 0), 0)
   const totalCommissions = sellers.reduce((sum, s) => sum + (s.totalCommission || 0), 0)
 
-  // Commissions for detail modal
-  const pendingCommissions = commissions.filter(c => !c.isPaid)
-  const pendingTotal = pendingCommissions.reduce((sum, c) => sum + c.commissionAmount, 0)
-  const allSalesTotal = commissions.reduce((sum, c) => sum + c.saleTotal, 0)
-  const allCommissionsTotal = commissions.reduce((sum, c) => sum + c.commissionAmount, 0)
-
   // Filtro de comisiones (rango + estado) para la lista del detalle
   const comDesdeDate = comDesde ? new Date(`${comDesde}T00:00:00`) : null
   const comHastaDate = comHasta ? new Date(`${comHasta}T23:59:59.999`) : null
   const inComRange = (c: SellerCommission) =>
     (!comDesdeDate || c.createdAt >= comDesdeDate) &&
     (!comHastaDate || c.createdAt <= comHastaDate)
+
+  // Totales del detalle — respetan el rango de fechas elegido abajo
+  const commissionsInRange = commissions.filter(inComRange)
+  const pendingCommissions = commissionsInRange.filter(c => !c.isPaid)
+  const ventaEntries = commissionsInRange.filter(c => c.commissionAmount >= 0)
+  const devEntries = commissionsInRange.filter(c => c.commissionAmount < 0)
+  const allSalesTotal = ventaEntries.reduce((sum, c) => sum + c.saleTotal, 0)
+  const devSalesTotal = devEntries.reduce((sum, c) => sum + c.saleTotal, 0) // negativo
+  const ventasNetas = allSalesTotal + devSalesTotal
+  const comisionesBrutas = ventaEntries.reduce((sum, c) => sum + c.commissionAmount, 0)
+  const devolucionesTotal = devEntries.reduce((sum, c) => sum + c.commissionAmount, 0)
+  const comisionesFinales = comisionesBrutas + devolucionesTotal
   const filteredCommissions = commissions.filter(
     (c) =>
       inComRange(c) &&
@@ -1129,28 +1175,44 @@ export default function EmpleadosPage() {
               </div>
 
               {/* Stats */}
-              <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">
+              <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
                 <div className="rounded-xl p-4 bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800">
                   <p className="text-xs text-muted-foreground font-medium uppercase tracking-wide mb-1">Ventas Totales</p>
                   <p className="font-bold text-xl text-foreground">
                     {formatCurrency(allSalesTotal)}
                   </p>
+                  <p className="text-xs text-muted-foreground">Neto (− devol.): {formatCurrency(ventasNetas)}</p>
                 </div>
                 <div className="rounded-xl p-4 bg-emerald-50 dark:bg-emerald-900/20 border border-emerald-200 dark:border-emerald-800">
                   <p className="text-xs text-muted-foreground font-medium uppercase tracking-wide mb-1">Comisiones Totales</p>
                   <p className="font-bold text-xl text-emerald-600 dark:text-emerald-400">
-                    {formatCurrency(allCommissionsTotal)}
+                    {formatCurrency(comisionesBrutas)}
                   </p>
                 </div>
-                <div className="rounded-xl p-4 bg-rose-50 dark:bg-rose-900/20 border border-rose-200 dark:border-rose-800 col-span-2 sm:col-span-1">
-                  <p className="text-xs text-muted-foreground font-medium uppercase tracking-wide mb-1">Pendientes de Pago</p>
+                <div className="rounded-xl p-4 bg-rose-50 dark:bg-rose-900/20 border border-rose-200 dark:border-rose-800">
+                  <p className="text-xs text-muted-foreground font-medium uppercase tracking-wide mb-1">Devoluciones</p>
                   <p className="font-bold text-xl text-rose-600 dark:text-rose-400">
-                    {formatCurrency(pendingTotal)}
+                    {formatCurrency(Math.abs(devolucionesTotal))}
                   </p>
-                  <p className="text-xs text-muted-foreground">{pendingCommissions.length} comisiones</p>
+                  <p className="text-xs text-muted-foreground">{devEntries.length} {devEntries.length === 1 ? 'devolución' : 'devoluciones'}</p>
+                </div>
+                <div className="rounded-xl p-4 bg-teal-50 dark:bg-teal-900/20 border border-teal-200 dark:border-teal-800">
+                  <p className="text-xs text-muted-foreground font-medium uppercase tracking-wide mb-1">Comisiones Finales</p>
+                  <p className="font-bold text-xl text-teal-600 dark:text-teal-400">
+                    {formatCurrency(comisionesFinales)}
+                  </p>
+                  <p className="text-xs text-muted-foreground">Comisiones − devoluciones</p>
                 </div>
               </div>
 
+              <Tabs defaultValue="comisiones" className="w-full">
+                <TabsList className="grid w-full grid-cols-3">
+                  <TabsTrigger value="comisiones">Comisiones</TabsTrigger>
+                  <TabsTrigger value="pedidos">Pedidos activos</TabsTrigger>
+                  <TabsTrigger value="cobros">Cobros</TabsTrigger>
+                </TabsList>
+
+              <TabsContent value="pedidos" className="mt-4">
               {/* Pedidos activos del empleado */}
               <div>
                 <div className="flex items-center justify-between mb-3">
@@ -1272,63 +1334,135 @@ export default function EmpleadosPage() {
                   </div>
                 )}
               </div>
+              </TabsContent>
 
+              <TabsContent value="cobros" className="mt-4">
               {/* Historial de pagos realizados */}
-              {pagos.length > 0 && (
+              {pagos.length === 0 ? (
+                <div className="text-center py-8 text-muted-foreground border rounded-lg border-dashed">
+                  <Banknote className="h-8 w-8 mx-auto mb-2 opacity-50" />
+                  <p>No hay cobros registrados</p>
+                </div>
+              ) : (
                 <div>
                   <h4 className="font-semibold text-foreground mb-3">Historial de Pagos</h4>
-                  <div className="space-y-2 max-h-[200px] overflow-y-auto">
-                    {pagos.map((pago: any) => (
-                      <div key={pago.id} className="rounded-lg border p-3 bg-emerald-50/50 dark:bg-emerald-900/10 border-emerald-200 dark:border-emerald-800">
-                        <div className="flex items-center justify-between">
-                          <div className="flex items-center gap-2">
-                            <Banknote className="h-4 w-4 text-emerald-600" />
-                            <span className="font-semibold text-foreground">{formatCurrency(pago.monto)}</span>
+                  <div className="space-y-2 max-h-[400px] overflow-y-auto">
+                    {pagos.map((pago: any) => {
+                      const isOpen = expandedPagoId === pago.id
+                      const pagoItems = isOpen ? getPagoItems(pago) : []
+                      return (
+                      <div key={pago.id} className="rounded-lg border bg-emerald-50/50 dark:bg-emerald-900/10 border-emerald-200 dark:border-emerald-800 overflow-hidden">
+                        <div className="p-3">
+                          <div className="flex items-center justify-between gap-2">
+                            <div className="flex items-center gap-2 min-w-0">
+                              <Banknote className="h-4 w-4 text-emerald-600 shrink-0" />
+                              <span className="font-semibold text-foreground">{formatCurrency(pago.monto)}</span>
+                            </div>
+                            <span className="text-xs text-muted-foreground shrink-0">{formatDate(pago.createdAt)}</span>
                           </div>
-                          <span className="text-xs text-muted-foreground">{formatDate(pago.createdAt)}</span>
+                          <p className="text-xs text-muted-foreground mt-1">
+                            {pago.cantidadComisiones} comisiones pagadas
+                            {(pago.periodoDesde || pago.periodoHasta) && (
+                              <> · Período {pago.periodoDesde ? formatDate(pago.periodoDesde) : '—'} al {pago.periodoHasta ? formatDate(pago.periodoHasta) : '—'}</>
+                            )}
+                            {pago.nota && <> — {pago.nota}</>}
+                          </p>
+                          <div className="flex items-center gap-2 mt-2">
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              className="h-7 text-xs gap-1 bg-transparent"
+                              onClick={() => setExpandedPagoId(isOpen ? null : pago.id)}
+                            >
+                              <ChevronDown className={`h-3.5 w-3.5 transition-transform ${isOpen ? 'rotate-180' : ''}`} />
+                              {isOpen ? 'Ocultar' : 'Ver detalle'}
+                            </Button>
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              className="h-7 text-xs gap-1 bg-transparent"
+                              onClick={() => handlePagoPdf(pago)}
+                            >
+                              <Eye className="h-3.5 w-3.5" />
+                              PDF
+                            </Button>
+                          </div>
                         </div>
-                        <p className="text-xs text-muted-foreground mt-1">
-                          {pago.cantidadComisiones} comisiones pagadas
-                          {pago.nota && <> — {pago.nota}</>}
-                        </p>
+                        {isOpen && (
+                          <div className="border-t border-emerald-200 dark:border-emerald-800 bg-background/40 divide-y divide-border/60">
+                            {pagoItems.length === 0 ? (
+                              <p className="p-3 text-xs text-muted-foreground">No se encontraron las comisiones de este cobro.</p>
+                            ) : (
+                              pagoItems.map((c) => (
+                                <div key={c.id} className="flex items-center justify-between gap-2 px-3 py-2 text-sm">
+                                  <div className="min-w-0">
+                                    <p className="text-foreground truncate">
+                                      {c.saleNumber ? `Venta ${c.saleNumber}` : 'Venta'}{c.clientName ? ` · ${c.clientName}` : ''}
+                                    </p>
+                                    <p className="text-xs text-muted-foreground">
+                                      {formatDate(c.createdAt)} · {formatCurrency(c.saleTotal)} × {c.commissionRate}%
+                                    </p>
+                                  </div>
+                                  <span className={`font-semibold tabular-nums shrink-0 ${c.commissionAmount < 0 ? 'text-rose-600 dark:text-rose-400' : 'text-emerald-600 dark:text-emerald-400'}`}>
+                                    {formatCurrency(c.commissionAmount)}
+                                  </span>
+                                </div>
+                              ))
+                            )}
+                          </div>
+                        )}
                       </div>
-                    ))}
+                      )
+                    })}
                   </div>
                 </div>
               )}
+              </TabsContent>
 
+              <TabsContent value="comisiones" className="mt-4 space-y-6">
               {/* Commissions List con filtros por fecha/estado */}
               <div>
                 <div className="flex items-center justify-between mb-3 gap-2 flex-wrap">
                   <h4 className="font-semibold text-foreground">
                     {comEstado === 'pagado' ? 'Historial de Comisiones' : comEstado === 'todos' ? 'Comisiones' : 'Comisiones Pendientes'}
                   </h4>
-                  {comEstado !== 'pagado' && pendingInRange.length > 0 && (
-                    <div className="flex items-center gap-2">
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        onClick={handlePdfPreview}
-                        className="gap-2"
-                      >
-                        <Eye className="h-4 w-4" />
-                        PDF
-                      </Button>
-                      <Button
-                        size="sm"
-                        onClick={handlePagarPeriodo}
-                        disabled={paying}
-                        className="gap-2"
-                      >
-                        {paying ? (
-                          <Loader2 className="h-4 w-4 animate-spin" />
-                        ) : (
-                          <Banknote className="h-4 w-4" />
-                        )}
-                        Pagar ({formatCurrency(pendingInRangeTotal)})
-                      </Button>
-                    </div>
-                  )}
+                  <div className="flex items-center gap-2">
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() => setCalcModalOpen(true)}
+                      className="gap-2"
+                    >
+                      <Eye className="h-4 w-4" />
+                      Ver cálculo
+                    </Button>
+                    {comEstado !== 'pagado' && pendingInRange.length > 0 && (
+                      <>
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={handlePdfPreview}
+                          className="gap-2"
+                        >
+                          <Eye className="h-4 w-4" />
+                          PDF
+                        </Button>
+                        <Button
+                          size="sm"
+                          onClick={handlePagarPeriodo}
+                          disabled={paying}
+                          className="gap-2"
+                        >
+                          {paying ? (
+                            <Loader2 className="h-4 w-4 animate-spin" />
+                          ) : (
+                            <Banknote className="h-4 w-4" />
+                          )}
+                          Pagar ({formatCurrency(pendingInRangeTotal)})
+                        </Button>
+                      </>
+                    )}
+                  </div>
                 </div>
 
                 {/* Recordatorio: primer día a pagar */}
@@ -1460,6 +1594,8 @@ export default function EmpleadosPage() {
                   </div>
                 )}
               </div>
+              </TabsContent>
+              </Tabs>
 
               {/* Actions */}
               <div className="flex gap-2 pt-2">
@@ -1487,6 +1623,70 @@ export default function EmpleadosPage() {
           )}
         </div>
       )}
+
+      {/* Modal: Cómo se calcula la comisión */}
+      <Dialog open={calcModalOpen} onOpenChange={setCalcModalOpen}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Cómo se calcula lo que se le paga</DialogTitle>
+          </DialogHeader>
+          {selectedSeller && (
+            <>
+              <p className="text-xs text-muted-foreground -mt-2">
+                {comDesde || comHasta
+                  ? <>Desde {comDesde ? formatDate(new Date(`${comDesde}T00:00:00`)) : '—'} hasta {comHasta ? formatDate(new Date(`${comHasta}T00:00:00`)) : '—'}</>
+                  : 'De todo el tiempo'}
+              </p>
+              <div className="space-y-3 pt-2">
+                {/* Paso 1 */}
+                <div className="flex items-start gap-3">
+                  <span className="h-6 w-6 rounded-full bg-primary/10 text-primary font-bold text-sm flex items-center justify-center shrink-0">1</span>
+                  <div className="flex-1 flex items-baseline justify-between gap-2">
+                    <span className="text-foreground">Vendió</span>
+                    <span className="font-bold text-foreground tabular-nums">{formatCurrency(allSalesTotal)}</span>
+                  </div>
+                </div>
+                {/* Paso 2 */}
+                <div className="flex items-start gap-3">
+                  <span className="h-6 w-6 rounded-full bg-primary/10 text-primary font-bold text-sm flex items-center justify-center shrink-0">2</span>
+                  <div className="flex-1 flex items-baseline justify-between gap-2">
+                    <span className="text-foreground">Devoluciones</span>
+                    <span className="font-bold text-rose-600 dark:text-rose-400 tabular-nums">− {formatCurrency(Math.abs(devSalesTotal))}</span>
+                  </div>
+                </div>
+                {/* Resultado ventas netas */}
+                <div className="flex items-baseline justify-between gap-2 rounded-lg bg-muted/50 px-3 py-2 ml-9">
+                  <span className="text-foreground font-medium">Venta menos devolución</span>
+                  <span className="font-bold text-foreground tabular-nums">{formatCurrency(ventasNetas)}</span>
+                </div>
+                {/* Paso 3 */}
+                <div className="flex items-start gap-3">
+                  <span className="h-6 w-6 rounded-full bg-primary/10 text-primary font-bold text-sm flex items-center justify-center shrink-0">3</span>
+                  <div className="flex-1 flex items-baseline justify-between gap-2">
+                    <span className="text-foreground">Comisión <strong>{selectedSeller.commissionRate}%</strong></span>
+                    <span className="text-xs text-muted-foreground tabular-nums whitespace-nowrap">{selectedSeller.commissionRate}% × {formatCurrency(ventasNetas)}</span>
+                  </div>
+                </div>
+                {/* Resultado final */}
+                <div className="flex items-center justify-between gap-2 rounded-xl bg-teal-50 dark:bg-teal-900/20 border-2 border-teal-300 dark:border-teal-800 px-4 py-3">
+                  <span className="text-foreground font-bold text-lg">Se le paga</span>
+                  <span className="font-bold text-2xl text-teal-600 dark:text-teal-400 tabular-nums">{formatCurrency(comisionesFinales)}</span>
+                </div>
+                {/* Aún sin pagar */}
+                {pendingInRange.length > 0 && (
+                  <div className="flex items-center justify-between gap-2 rounded-lg bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 px-4 py-2">
+                    <span className="text-foreground">
+                      De eso, todavía <strong>no le pagaste</strong>
+                      <span className="block text-xs text-muted-foreground">{pendingInRange.length} {pendingInRange.length === 1 ? 'venta' : 'ventas'} sin pagar</span>
+                    </span>
+                    <span className="font-bold text-lg text-amber-600 dark:text-amber-400 tabular-nums">{formatCurrency(pendingInRangeTotal)}</span>
+                  </div>
+                )}
+              </div>
+            </>
+          )}
+        </DialogContent>
+      </Dialog>
 
       {/* Delete Confirmation */}
       <ConfirmDialog

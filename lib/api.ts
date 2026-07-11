@@ -133,6 +133,7 @@ import {
   getDevolucionesBySale,
   getDevolucionesBySeller,
   getDevolucionesByClient,
+  getDevolucionesTotalsBySales,
 } from '@/services/devoluciones-service'
 import type { Devolucion, DevolucionItem } from '@/services/devoluciones-service'
 import {
@@ -315,6 +316,7 @@ export const devolucionesApi = {
   getBySale: getDevolucionesBySale,
   getBySeller: getDevolucionesBySeller,
   getByClient: getDevolucionesByClient,
+  getTotalsBySales: getDevolucionesTotalsBySales,
 }
 
 export type { Devolucion, DevolucionItem }

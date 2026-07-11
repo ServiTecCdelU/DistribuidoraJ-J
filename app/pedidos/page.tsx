@@ -694,11 +694,16 @@ export default function PedidosPage() {
         const nombreDe = new Map(adjustments.map((a) => [a.productId, a.productName]));
         for (const mov of movsCobro) {
           const esReposicion = mov.cantidad > 0;
+          const labelMotivo = mov.motivo === "no_quiere"
+            ? "Devolución"
+            : mov.motivo === "faltante"
+              ? "Faltante"
+              : "Rotura";
           await registrarMovimiento({
             productoId: mov.productId,
             tipo: esReposicion ? "ajuste" : "rotura",
             cantidad: mov.cantidad,
-            referencia: `${esReposicion ? "Devolución/faltante" : "Rotura"} cobro pedido #${selectedOrder.id} — ${nombreDe.get(mov.productId) ?? ""}`.trim(),
+            referencia: `${labelMotivo} cobro pedido #${selectedOrder.id} — ${nombreDe.get(mov.productId) ?? ""}`.trim(),
           });
         }
       }
