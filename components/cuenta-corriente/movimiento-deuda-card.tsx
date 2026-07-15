@@ -162,6 +162,7 @@ export function MovimientoDeudaCard({
   const [regenerando, setRegenerando] = useState(false)
   const [regenerandoRecibo, setRegenerandoRecibo] = useState(false)
   const [descargandoDevol, setDescargandoDevol] = useState(false)
+  const [descargandoRechazo, setDescargandoRechazo] = useState(false)
   const [legacyItems, setLegacyItems] = useState<TableRow[] | null>(null)
   const [linkedRemitos, setLinkedRemitos] = useState<{ id: string; remitoNumber: string; remitoPdfBase64?: string }[] | null>(null)
 
@@ -337,6 +338,11 @@ export function MovimientoDeudaCard({
   const noEntregadosUnified: TableRow[] = [...noEntregadosSource, ...devolucionRows]
   const tieneNoEntregados = noEntregadosUnified.length > 0
 
+  // Ítems rechazados en el reparto ("no quiso"): permiten emitir un RECIBO DE DEVOLUCIÓN
+  // (mismo documento que la devolución del admin), sin tocar saldo ni comisión.
+  const rechazoItems = noEntregadosSource.filter((it) => it.motivo === 'no_quiso')
+  const tieneRechazo = rechazoItems.length > 0
+
   // Cálculos de totales
   const entregados: TableRow[] = (sale?.items ?? []).map((it) => ({
     name: it.name,
@@ -405,6 +411,39 @@ export function MovimientoDeudaCard({
       link.click()
     } finally {
       setDescargandoDevol(false)
+    }
+  }
+
+  // Emite el RECIBO DE DEVOLUCIÓN para los ítems rechazados en el reparto ("no quiso").
+  // Solo genera el documento (mismo formato que la devolución del admin); no altera saldo ni comisión.
+  const handleDescargarReciboRechazo = async (e: React.MouseEvent) => {
+    e.stopPropagation()
+    if (!sale || !tieneRechazo) return
+    setDescargandoRechazo(true)
+    try {
+      const items = rechazoItems.map((it) => ({
+        name: it.name,
+        quantity: it.quantity,
+        price: it.price * (1 - (it.itemDiscount ?? 0) / 100),
+        destino: 'stock' as const,
+      }))
+      const total = items.reduce((acc, it) => acc + it.price * it.quantity, 0)
+      const reciboNumero = `DEV-${sale.remitoNumber || sale.saleNumber || sale.id}`
+      const { generarReciboDevolucion } = await import('@/hooks/useGenerarPdf')
+      const base64 = await generarReciboDevolucion({
+        reciboNumero,
+        fecha: tx.date,
+        clientName: sale.clientName,
+        saleNumber: sale.saleNumber,
+        items,
+        total,
+      })
+      const link = document.createElement('a')
+      link.href = `data:application/pdf;base64,${base64}`
+      link.download = `recibo-devolucion-${reciboNumero}.pdf`
+      link.click()
+    } finally {
+      setDescargandoRechazo(false)
     }
   }
 
@@ -618,6 +657,23 @@ export function MovimientoDeudaCard({
               <span className="tabular-nums">{formatCurrencyDecimals(sale.total)}</span>
             </div>
           </div>
+
+          {/* Recibo de devolución por rechazo en reparto ("no quiso") */}
+          {tieneRechazo && (
+            <div>
+              <Button
+                variant="outline"
+                size="sm"
+                className="w-full gap-1.5 text-xs h-7 text-purple-600 border-purple-300 hover:bg-purple-50"
+                onClick={handleDescargarReciboRechazo}
+                disabled={descargandoRechazo}
+                title="Emitir el recibo de devolución de los productos que el cliente no quiso"
+              >
+                {descargandoRechazo ? <Loader2 className="h-3 w-3 animate-spin" /> : <RotateCcw className="h-3 w-3" />}
+                Recibo devolución
+              </Button>
+            </div>
+          )}
 
           {/* Botones */}
           <div className="flex gap-2 pt-1">
