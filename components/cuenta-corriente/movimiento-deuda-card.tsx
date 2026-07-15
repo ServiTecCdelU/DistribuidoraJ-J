@@ -271,6 +271,7 @@ export function MovimientoDeudaCard({
   const isPayment = tx.type === 'payment'
   const isDescuento = isPayment && (tx.description ?? '').startsWith('[DESCUENTO]')
   const isDevolucion = isPayment && (tx.description ?? '').startsWith('[DEVOLUCION]')
+  const isRechazo = isPayment && (tx.description ?? '').startsWith('[RECHAZO]')
   // Devolución vinculada a este movimiento (match por monto dentro de la venta)
   const devMatch = isDevolucion
     ? (devoluciones.find((d) => Math.abs(d.total - tx.amount) < 0.01) ?? devoluciones[0])
@@ -301,8 +302,10 @@ export function MovimientoDeudaCard({
   const pagada = saldo != null && saldo <= 0
 
   // Concepto y Descripción separados (igual que el PDF)
-  const concepto = isPayment ? 'Pago' : 'Venta'
+  const concepto = isRechazo ? 'Rechazo' : isPayment ? 'Pago' : 'Venta'
+  const rechazoRecibo = isRechazo ? ((tx.description ?? '').match(/\[RECHAZO\]\s*(\S+)/)?.[1] ?? '') : ''
   const descripcionMov = (() => {
+    if (isRechazo) return `Rechazo de productos${rechazoRecibo ? ` · ${rechazoRecibo}` : ''}`
     if (isPayment) {
       if (isDescuento) return `Descuento${sale?.saleNumber ? ` · Venta ${sale.saleNumber}` : ''}${descuento.motivo ? ` · ${descuento.motivo}` : ''}`
       const d = (tx.description || '').replace(/^Pago\s+(en\s+|por\s+)?/i, '')
@@ -494,7 +497,19 @@ export function MovimientoDeudaCard({
               <span className="whitespace-nowrap">{devMatch.reciboNumero || 'Recibo'}</span>
             </button>
           )}
-          {isPayment && !isDevolucion && (
+          {isRechazo && (
+            <button
+              type="button"
+              className="inline-flex items-center gap-0.5 text-xs text-purple-600 hover:underline shrink-0 disabled:opacity-50"
+              onClick={handleDescargarReciboRechazo}
+              disabled={descargandoRechazo || !tieneRechazo}
+              title="Descargar recibo de devolución"
+            >
+              {descargandoRechazo ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <RotateCcw className="h-3.5 w-3.5" />}
+              <span className="whitespace-nowrap">{rechazoRecibo || 'Recibo'}</span>
+            </button>
+          )}
+          {isPayment && !isDevolucion && !isRechazo && (
             tx.reciboPdfBase64 ? (
               <>
                 <button
@@ -537,7 +552,7 @@ export function MovimientoDeudaCard({
               </span>
             ) : null
           )}
-          {isPayment && !isDescuento && onEliminarPago && (
+          {isPayment && !isDescuento && !isRechazo && onEliminarPago && (
             <button
               type="button"
               className="inline-flex items-center text-xs text-red-500 hover:text-red-700 shrink-0"
@@ -657,23 +672,6 @@ export function MovimientoDeudaCard({
               <span className="tabular-nums">{formatCurrencyDecimals(sale.total)}</span>
             </div>
           </div>
-
-          {/* Recibo de devolución por rechazo en reparto ("no quiso") */}
-          {tieneRechazo && (
-            <div>
-              <Button
-                variant="outline"
-                size="sm"
-                className="w-full gap-1.5 text-xs h-7 text-purple-600 border-purple-300 hover:bg-purple-50"
-                onClick={handleDescargarReciboRechazo}
-                disabled={descargandoRechazo}
-                title="Emitir el recibo de devolución de los productos que el cliente no quiso"
-              >
-                {descargandoRechazo ? <Loader2 className="h-3 w-3 animate-spin" /> : <RotateCcw className="h-3 w-3" />}
-                Recibo devolución
-              </Button>
-            </div>
-          )}
 
           {/* Botones */}
           <div className="flex gap-2 pt-1">

@@ -874,14 +874,18 @@ export default function PedidosPage() {
       }
       if (noQuiereAdj.length > 0) {
         const productosNoQuiere = noQuiereAdj.map(r => `${r.productName} x${r.quantity}`).join(", ");
+        // Movimiento visible en la cuenta corriente del cliente: "Rechazo de productos".
+        // Monto 0 (ya se descontó al entregar, el ítem no entra en la venta) + recibo de devolución.
+        const reciboNumero = `DEV-${selectedOrder.remitoNumber || sale.saleNumber || sale.id}`;
         supabase.from("transacciones").insert({
           id: `no_quiere_${sale.id}_${Date.now()}`,
-          client_id: null,
+          client_id: resolvedClientId || null,
           type: "payment",
           amount: 0,
-          description: `[NO_QUIERE] #${sale.saleNumber} — ${productosNoQuiere}`,
+          description: `[RECHAZO] ${reciboNumero} — ${productosNoQuiere}`,
           sale_id: sale.id,
           date: new Date().toISOString(),
+          cuenta: "minorista",
         }).then(() => {}).catch(() => {});
       }
 
