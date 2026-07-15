@@ -67,6 +67,9 @@ export function ModalDetalleVenta({
   const [incidencias, setIncidencias] = useState<{ roturas: string[]; faltantes: string[]; noQuiere: string[] }>({ roturas: [], faltantes: [], noQuiere: [] });
   // Montos no entregados (para mostrar monto original del remito − pérdidas/faltantes = cobrado)
   const [noEntMontos, setNoEntMontos] = useState<{ rotura: number; faltante: number; noQuiso: number }>({ rotura: 0, faltante: 0, noQuiso: 0 });
+  // Ítems que el cliente rechazó ("no quiso"), para emitir el recibo de devolución.
+  const [rechazoItems, setRechazoItems] = useState<{ name: string; quantity: number; price: number; itemDiscount?: number }[]>([]);
+  const [descargandoRechazo, setDescargandoRechazo] = useState(false);
   const [verTodosIncidencias, setVerTodosIncidencias] = useState(false);
   const [modalDevAbierto, setModalDevAbierto] = useState(false);
   const [modalDescAbierto, setModalDescAbierto] = useState(false);
@@ -97,6 +100,7 @@ export function ModalDetalleVenta({
   useEffect(() => {
     if (!venta?.id || !abierto) return;
     setNoEntMontos({ rotura: 0, faltante: 0, noQuiso: 0 });
+    setRechazoItems([]);
     supabase
       .from("ventas")
       .select("items_no_entregados")
@@ -105,13 +109,15 @@ export function ModalDetalleVenta({
       .then(({ data }) => {
         const arr = (data as any)?.items_no_entregados ?? [];
         const acc = { rotura: 0, faltante: 0, noQuiso: 0 };
+        const rechazos: { name: string; quantity: number; price: number; itemDiscount?: number }[] = [];
         for (const it of arr) {
           const monto = (it.price || 0) * (1 - (it.itemDiscount || 0) / 100) * (it.quantity || 0);
           if (it.motivo === "rotura") acc.rotura += monto;
           else if (it.motivo === "faltante") acc.faltante += monto;
-          else acc.noQuiso += monto;
+          else { acc.noQuiso += monto; rechazos.push({ name: it.name, quantity: it.quantity, price: it.price, itemDiscount: it.itemDiscount }); }
         }
         setNoEntMontos(acc);
+        setRechazoItems(rechazos);
       });
   }, [venta?.id, abierto]);
 
@@ -122,7 +128,7 @@ export function ModalDetalleVenta({
       .from("transacciones")
       .select("description")
       .eq("sale_id", venta.id)
-      .or("description.like.[ROTURA]%,description.like.[FALTANTE]%,description.like.[NO_QUIERE]%")
+      .or("description.like.[ROTURA]%,description.like.[FALTANTE]%,description.like.[NO_QUIERE]%,description.like.[RECHAZO]%")
       .then(({ data }) => {
         const roturas: string[] = [];
         const faltantes: string[] = [];
@@ -135,6 +141,8 @@ export function ModalDetalleVenta({
             faltantes.push(desc.replace(/^\[FALTANTE\]\s*#[\w-]+\s*—\s*/, "").replace(/^\[FALTANTE\]\s*/, ""));
           } else if (desc.startsWith("[NO_QUIERE]")) {
             noQuiere.push(desc.replace(/^\[NO_QUIERE\]\s*#[\w-]+\s*—\s*/, "").replace(/^\[NO_QUIERE\]\s*/, ""));
+          } else if (desc.startsWith("[RECHAZO]")) {
+            noQuiere.push(desc.replace(/^\[RECHAZO\]\s*\S+\s*—\s*/, "").replace(/^\[RECHAZO\]\s*/, ""));
           }
         }
         setIncidencias({ roturas, faltantes, noQuiere });
@@ -234,6 +242,41 @@ export function ModalDetalleVenta({
       link.click();
     } catch {
       toast.error("No se pudo generar el recibo de devolución");
+    }
+  };
+
+  // Recibo de devolución por lo que el cliente rechazó en el reparto ("no quiso").
+  const descargarReciboRechazo = async () => {
+    if (!venta || rechazoItems.length === 0) return;
+    setDescargandoRechazo(true);
+    try {
+      const items = rechazoItems.map((it) => ({
+        name: it.name,
+        quantity: it.quantity,
+        price: it.price * (1 - (it.itemDiscount ?? 0) / 100),
+        destino: "stock" as const,
+      }));
+      const total = items.reduce((acc, it) => acc + it.price * it.quantity, 0);
+      const reciboNumero = `DEV-${venta.remitoNumber || venta.saleNumber || venta.id}`;
+      const { generarReciboDevolucion } = await import("@/hooks/useGenerarPdf");
+      const base64 = await generarReciboDevolucion({
+        reciboNumero,
+        fecha: venta.createdAt,
+        clientName: venta.clientName,
+        clientAddress: venta.clientAddress,
+        clientPhone: venta.clientPhone,
+        saleNumber: venta.saleNumber as any,
+        items,
+        total,
+      });
+      const link = document.createElement("a");
+      link.href = `data:application/pdf;base64,${base64}`;
+      link.download = `recibo-devolucion-${reciboNumero}.pdf`;
+      link.click();
+    } catch {
+      toast.error("No se pudo generar el recibo de devolución");
+    } finally {
+      setDescargandoRechazo(false);
     }
   };
 
@@ -762,6 +805,20 @@ export function ModalDetalleVenta({
                   >
                     {verTodosIncidencias ? "Mostrar menos" : `Ver todos (${rows.length})`}
                   </button>
+                )}
+                {rechazoItems.length > 0 && (
+                  <div className="px-4 py-2.5 border-t border-rose-100">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="w-full gap-1.5 text-xs text-purple-600 border-purple-300 hover:bg-purple-50"
+                      onClick={descargarReciboRechazo}
+                      disabled={descargandoRechazo}
+                    >
+                      {descargandoRechazo ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <RotateCcw className="h-3.5 w-3.5" />}
+                      Recibo de devolución (no quiso)
+                    </Button>
+                  </div>
                 )}
               </div>
             );
