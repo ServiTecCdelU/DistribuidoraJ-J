@@ -35,6 +35,9 @@ import {
   Filter,
   Tag,
   FileText,
+  TrendingUp,
+  TrendingDown,
+  RotateCcw,
 } from "lucide-react";
 import Link from "next/link";
 import type { ListaVentasProps } from "../types";
@@ -166,6 +169,29 @@ export function ListaVentas({
   }, [paymentFilter, invoiceFilter, remitoFilter, discountFilter, periodFilter, dateFrom, dateTo, sellerId, city, deliveryFilter, rejectedFilter]);
 
   const hayFiltrosActivos = !!(searchQuery || activeFilterCount > 0);
+
+  // ─── resumen (cards) ────────────────────────────────────────────────────────
+  // Suma sobre lo que está mostrado (ya filtrado por fecha/período y demás filtros).
+  const resumen = useMemo(() => {
+    let total = 0, count = 0, perdida = 0, faltante = 0, rechazo = 0, nc = 0;
+    for (const v of ventas as any[]) {
+      if (v.rechazado) continue; // pedido rechazado sin monto
+      total += Number(v.total) || 0;
+      count++;
+      const inc = incidenciasVenta(v.itemsNoEntregados);
+      perdida += inc.perdida;
+      faltante += inc.faltante;
+      rechazo += inc.rechazo;
+      nc += devolucionesPorVenta[v.id] || 0;
+    }
+    return { total, count, perdida, faltante, rechazo, nc };
+  }, [ventas, devolucionesPorVenta]);
+
+  const resumenLabel = useMemo(() => {
+    if (searchQuery) return "Resultados de búsqueda";
+    if (dateFrom || dateTo) return `${dateFrom || "inicio"} a ${dateTo || "hoy"}`;
+    return periodLabels[periodFilter] || "Todas";
+  }, [searchQuery, dateFrom, dateTo, periodFilter]);
 
   // ─── paginación ───────────────────────────────────────────────────────────
   const [pageSize, setPageSize] = useState(20);
@@ -333,6 +359,38 @@ export function ListaVentas({
             </Link>
           </Button>
         </div>
+      </div>
+
+      {/* ── CARDS RESUMEN ────────────────────────────────────────────────── */}
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 md:gap-4">
+        <ResumenCard
+          icon={<TrendingUp className="h-5 w-5" />}
+          label="Total de ventas"
+          value={fmt(resumen.total)}
+          sub={`${resumen.count} ${resumen.count === 1 ? "venta" : "ventas"} · ${resumenLabel}`}
+          accent="teal"
+        />
+        <ResumenCard
+          icon={<TrendingDown className="h-5 w-5" />}
+          label="Pérdidas"
+          value={`-${fmt(resumen.perdida + resumen.faltante)}`}
+          sub={`Rotura ${fmt(resumen.perdida)} · Faltante ${fmt(resumen.faltante)}`}
+          accent="rose"
+        />
+        <ResumenCard
+          icon={<RotateCcw className="h-5 w-5" />}
+          label="Rechazos"
+          value={`-${fmt(resumen.rechazo)}`}
+          sub="Cliente no quiso"
+          accent="amber"
+        />
+        <ResumenCard
+          icon={<FileText className="h-5 w-5" />}
+          label="Notas de crédito"
+          value={`-${fmt(resumen.nc)}`}
+          sub="Devoluciones"
+          accent="violet"
+        />
       </div>
 
       {/* ── BARRA DE FILTROS ─────────────────────────────────────────────── */}
@@ -841,6 +899,29 @@ export function ListaVentas({
 }
 
 // ─── helpers de UI ─────────────────────────────────────────────���──────────────
+
+const RESUMEN_ACCENTS: Record<string, { icon: string; value: string }> = {
+  teal: { icon: "bg-teal-100 text-teal-700 dark:bg-teal-900/30 dark:text-teal-400", value: "text-teal-700 dark:text-teal-400" },
+  rose: { icon: "bg-rose-100 text-rose-700 dark:bg-rose-900/30 dark:text-rose-400", value: "text-rose-600 dark:text-rose-400" },
+  amber: { icon: "bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400", value: "text-amber-600 dark:text-amber-400" },
+  violet: { icon: "bg-violet-100 text-violet-700 dark:bg-violet-900/30 dark:text-violet-400", value: "text-violet-600 dark:text-violet-400" },
+};
+
+function ResumenCard({ icon, label, value, sub, accent }: { icon: React.ReactNode; label: string; value: string; sub?: string; accent: keyof typeof RESUMEN_ACCENTS | string }) {
+  const a = RESUMEN_ACCENTS[accent] ?? RESUMEN_ACCENTS.teal;
+  return (
+    <Card className="border-border/60 shadow-sm rounded-2xl">
+      <CardContent className="p-3 md:p-4">
+        <div className="flex items-center gap-2 mb-2">
+          <div className={`h-8 w-8 rounded-xl flex items-center justify-center shrink-0 ${a.icon}`}>{icon}</div>
+          <p className="text-xs font-medium text-muted-foreground truncate">{label}</p>
+        </div>
+        <p className={`text-xl md:text-2xl font-bold tabular-nums ${a.value}`}>{value}</p>
+        {sub && <p className="text-[11px] text-muted-foreground truncate mt-0.5">{sub}</p>}
+      </CardContent>
+    </Card>
+  );
+}
 
 function FilterChip({ label, onRemove }: { label: string; onRemove: () => void }) {
   return (

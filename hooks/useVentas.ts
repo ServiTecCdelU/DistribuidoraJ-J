@@ -206,7 +206,7 @@ export function useVentas(filterBySellerId?: string, clientCityMap?: Record<stri
     remitoFilter: "all",
     discountFilter: "all",
     paymentFilter: "all",
-    periodFilter: "today",
+    periodFilter: "month",
     dateFrom: "",
     dateTo: "",
     clientId: "",
