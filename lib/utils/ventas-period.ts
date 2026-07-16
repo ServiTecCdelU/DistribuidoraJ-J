@@ -19,8 +19,9 @@ export function periodRange(
   } else if (period === "year") {
     from = new Date(now.getFullYear(), 0, 1).toISOString();
   } else if (period === "custom") {
-    if (dateFrom) { const f = new Date(dateFrom); f.setHours(0, 0, 0, 0); from = f.toISOString(); }
-    if (dateTo) { const t = new Date(dateTo); t.setHours(23, 59, 59, 999); to = t.toISOString(); }
+    // Parsear en hora local (no UTC) para que "Desde" y "Hasta" sean inclusive.
+    if (dateFrom) { from = new Date(`${dateFrom}T00:00:00`).toISOString(); }
+    if (dateTo) { to = new Date(`${dateTo}T23:59:59.999`).toISOString(); }
   }
 
   return { from, to };

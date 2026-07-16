@@ -145,6 +145,8 @@ export function ListaVentas({
   const fmtDate = formatDate;
   const fmtTime = formatTime;
 
+  const [incidenciaModal, setIncidenciaModal] = useState<"perdida" | "rechazo" | "nc" | null>(null);
+
 
   const uniqueCities = useMemo(() => {
     const cities = clients.map((c) => c.city).filter((c): c is string => !!c);
@@ -187,6 +189,42 @@ export function ListaVentas({
     return { total, count, perdida, faltante, rechazo, nc };
   }, [ventas, devolucionesPorVenta]);
 
+  // Lista de ventas para el modal de incidencias (pérdidas / rechazos / notas de crédito)
+  const incidenciaLista = useMemo(() => {
+    if (!incidenciaModal) return [];
+    const rows: { id: string; cliente: string; ref: string; fecha: any; monto: number; detalle?: string }[] = [];
+    for (const v of ventas as any[]) {
+      const inc = incidenciasVenta(v.itemsNoEntregados);
+      let monto = 0;
+      let detalle = "";
+      if (incidenciaModal === "perdida") {
+        monto = inc.perdida + inc.faltante;
+        detalle = `Rotura ${fmt(inc.perdida)} · Faltante ${fmt(inc.faltante)}`;
+      } else if (incidenciaModal === "rechazo") {
+        monto = inc.rechazo;
+      } else {
+        monto = devolucionesPorVenta[v.id] || 0;
+      }
+      if (monto > 0.005) {
+        rows.push({
+          id: v.id,
+          cliente: v.clientName || "Venta directa",
+          ref: v.saleNumber || v.remitoNumber || v.id,
+          fecha: v.createdAt,
+          monto,
+          detalle: detalle || undefined,
+        });
+      }
+    }
+    return rows.sort((a, b) => b.monto - a.monto);
+  }, [incidenciaModal, ventas, devolucionesPorVenta]);
+
+  const incidenciaMeta = {
+    perdida: { titulo: "Ventas con pérdidas", color: "text-rose-600" },
+    rechazo: { titulo: "Ventas con rechazos", color: "text-amber-600" },
+    nc: { titulo: "Ventas con notas de crédito", color: "text-violet-600" },
+  } as const;
+
   const resumenLabel = useMemo(() => {
     if (searchQuery) return "Resultados de búsqueda";
     if (dateFrom || dateTo) return `${dateFrom || "inicio"} a ${dateTo || "hoy"}`;
@@ -203,12 +241,25 @@ export function ListaVentas({
   }, [ventas, currentPage, pageSize]);
   useMemo(() => { setCurrentPage(1); }, [ventas.length]);
 
-  // ─── modal filtros mobile ─────────────────────────────────────────────────
-  const [filterModalOpen, setFilterModalOpen] = useState(false);
-  // estado temporal para el modal (se aplica al cerrar con "Aplicar")
-  const [tmpFiltros, setTmpFiltros] = useState<typeof filtros>(filtros);
-  const openFilterModal = () => { setTmpFiltros(filtros); setFilterModalOpen(true); };
-  const applyFilters = () => { onCambiarFiltros(tmpFiltros as any); setFilterModalOpen(false); };
+  // Panel de filtros oculto por defecto; se muestra con el botón "Filtros".
+  const [filtrosVisibles, setFiltrosVisibles] = useState(false);
+
+  // ─── período: modo del desplegable ────────────────────────────────────────
+  // Los modos "day", "specificMonth" y "custom" se traducen a periodFilter="custom"
+  // con dateFrom/dateTo; el resto son valores directos de periodFilter.
+  const [periodMode, setPeriodMode] = useState<string>(periodFilter === "custom" ? "custom" : periodFilter);
+  useEffect(() => {
+    if (periodFilter !== "custom") setPeriodMode(periodFilter);
+    else setPeriodMode((m) => (["day", "specificMonth", "custom"].includes(m) ? m : "custom"));
+  }, [periodFilter]);
+  const cambiarPeriodo = (mode: string) => {
+    setPeriodMode(mode);
+    if (["all", "today", "week", "month", "year"].includes(mode)) {
+      onCambiarFiltros({ periodFilter: mode as any, dateFrom: "", dateTo: "" });
+    } else {
+      onCambiarFiltros({ periodFilter: "custom", dateFrom: "", dateTo: "" });
+    }
+  };
 
   // Buscador: el texto se escribe en estado local y la búsqueda se dispara al presionar
   // Enter (o la lupa). Evita la consulta al servidor + re-render en cada tecla, que trababa
@@ -217,7 +268,6 @@ export function ListaVentas({
   useEffect(() => { setLocalSearch(searchQuery); }, [searchQuery]);
   const ejecutarBusqueda = () => onCambiarFiltros({ searchQuery: localSearch.trim() });
   const limpiarBusqueda = () => { setLocalSearch(""); onCambiarFiltros({ searchQuery: "" }); };
-  const clearTmpFilters = () => setTmpFiltros({ ...EMPTY_FILTROS } as any);
 
   // ─── export Excel ─────────────────────────────────────────────────────────
   const [exportOpen, setExportOpen] = useState(false);
@@ -369,6 +419,8 @@ export function ListaVentas({
           value={fmt(resumen.total)}
           sub={`${resumen.count} ${resumen.count === 1 ? "venta" : "ventas"} · ${resumenLabel}`}
           accent="teal"
+          netoLabel="Neto (con incidencias)"
+          netoValue={fmt(resumen.total - resumen.perdida - resumen.faltante - resumen.rechazo - resumen.nc)}
         />
         <ResumenCard
           icon={<TrendingDown className="h-5 w-5" />}
@@ -376,6 +428,7 @@ export function ListaVentas({
           value={`-${fmt(resumen.perdida + resumen.faltante)}`}
           sub={`Rotura ${fmt(resumen.perdida)} · Faltante ${fmt(resumen.faltante)}`}
           accent="rose"
+          onVer={() => setIncidenciaModal("perdida")}
         />
         <ResumenCard
           icon={<RotateCcw className="h-5 w-5" />}
@@ -383,6 +436,7 @@ export function ListaVentas({
           value={`-${fmt(resumen.rechazo)}`}
           sub="Cliente no quiso"
           accent="amber"
+          onVer={() => setIncidenciaModal("rechazo")}
         />
         <ResumenCard
           icon={<FileText className="h-5 w-5" />}
@@ -390,14 +444,15 @@ export function ListaVentas({
           value={`-${fmt(resumen.nc)}`}
           sub="Devoluciones"
           accent="violet"
+          onVer={() => setIncidenciaModal("nc")}
         />
       </div>
 
       {/* ── BARRA DE FILTROS ─────────────────────────────────────────────── */}
       <Card className="border-border/60 shadow-sm">
         <CardContent className="p-3 md:p-4">
+          {/* Búsqueda + botón Filtros — siempre visibles */}
           <div className="flex gap-2">
-            {/* Búsqueda — siempre visible */}
             <div className="relative flex-1 min-w-0">
               <button type="button" onClick={ejecutarBusqueda} title="Buscar" className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground">
                 <Search className="h-4 w-4" />
@@ -416,11 +471,10 @@ export function ListaVentas({
               )}
             </div>
 
-            {/* Botón Filtros — abre el modal con todos los filtros (deja el buscador ancho) */}
             <Button
-              variant="outline"
+              variant={filtrosVisibles ? "default" : "outline"}
               className="h-10 gap-2 shrink-0 relative"
-              onClick={openFilterModal}
+              onClick={() => setFiltrosVisibles((v) => !v)}
             >
               <Filter className="h-4 w-4" />
               Filtros
@@ -430,112 +484,157 @@ export function ListaVentas({
                 </span>
               )}
             </Button>
-
-            {/* Filtros inline desktop — movidos al modal de Filtros (oculto) */}
-            <div className="hidden">
-              <Select value={periodFilter} onValueChange={(v) => onCambiarFiltros({ periodFilter: v as any, ...(v !== "custom" ? { dateFrom: "", dateTo: "" } : {}) })}>
-                <SelectTrigger className="h-10 w-[140px]">
-                  <Calendar className="h-3.5 w-3.5 mr-2 text-muted-foreground" />
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">Todas</SelectItem>
-                  <SelectItem value="today">Hoy</SelectItem>
-                  <SelectItem value="week">Esta semana</SelectItem>
-                  <SelectItem value="month">Este mes</SelectItem>
-                  <SelectItem value="year">Este año</SelectItem>
-                  <SelectItem value="custom">Personalizado</SelectItem>
-                </SelectContent>
-              </Select>
-
-              <Select value={paymentFilter} onValueChange={(v) => onCambiarFiltros({ paymentFilter: v as any })}>
-                <SelectTrigger className="h-10 w-[150px]"><SelectValue placeholder="Método de pago" /></SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">Método de pago</SelectItem>
-                  <SelectItem value="efectivo">Efectivo</SelectItem>
-                  <SelectItem value="transferencia">Transferencia</SelectItem>
-                  <SelectItem value="credit">Cta. Corriente</SelectItem>
-                  <SelectItem value="mixed">Mixto</SelectItem>
-                </SelectContent>
-              </Select>
-
-              {/* Filtro boletas — deshabilitado temporalmente */}
-
-              <Select value={remitoFilter} onValueChange={(v) => onCambiarFiltros({ remitoFilter: v } as any)}>
-                <SelectTrigger className="h-10 w-[130px]"><SelectValue placeholder="Remitos" /></SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">Remitos</SelectItem>
-                  <SelectItem value="emitted">Emitidos</SelectItem>
-                  <SelectItem value="pending">Pendientes</SelectItem>
-                </SelectContent>
-              </Select>
-
-              <Select value={discountFilter} onValueChange={(v) => onCambiarFiltros({ discountFilter: v } as any)}>
-                <SelectTrigger className="h-10 w-[140px]">
-                  <Tag className="h-3.5 w-3.5 mr-2 text-muted-foreground" />
-                  <SelectValue placeholder="Descuento" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">Descuento</SelectItem>
-                  <SelectItem value="with">Con descuento</SelectItem>
-                  <SelectItem value="without">Sin descuento</SelectItem>
-                </SelectContent>
-              </Select>
-
-              <Select value={deliveryFilter} onValueChange={(v) => onCambiarFiltros({ deliveryFilter: v } as any)}>
-                <SelectTrigger className="h-10 w-[155px]"><SelectValue placeholder="Entrega" /></SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">Método entrega</SelectItem>
-                  <SelectItem value="delivery">A domicilio</SelectItem>
-                  <SelectItem value="pickup">Retira en local</SelectItem>
-                </SelectContent>
-              </Select>
-
-              <Select value={rejectedFilter} onValueChange={(v) => onCambiarFiltros({ rejectedFilter: v } as any)}>
-                <SelectTrigger className="h-10 w-[150px]"><SelectValue placeholder="Rechazados" /></SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">Rechazados</SelectItem>
-                  <SelectItem value="only">Solo rechazados</SelectItem>
-                  <SelectItem value="exclude">Ocultar rechazados</SelectItem>
-                </SelectContent>
-              </Select>
-
-              {isAdmin && sellers.length > 0 && (
-                <Select value={sellerId || "all-sellers"} onValueChange={(v) => onCambiarFiltros({ sellerId: v === "all-sellers" ? "" : v })}>
-                  <SelectTrigger className="h-10 w-[150px]">
-                    <Store className="h-3.5 w-3.5 mr-2 text-muted-foreground" />
-                    <SelectValue placeholder="Vendedor" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="all-sellers">Vendedor</SelectItem>
-                    {sellers.map((s) => <SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>)}
-                  </SelectContent>
-                </Select>
-              )}
-
-              {uniqueCities.length > 0 && (
-                <Select value={city || "all-cities"} onValueChange={(v) => onCambiarFiltros({ city: v === "all-cities" ? "" : v })}>
-                  <SelectTrigger className="h-10 w-[140px]">
-                    <MapPin className="h-3.5 w-3.5 mr-2 text-muted-foreground" />
-                    <SelectValue placeholder="Ciudad" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="all-cities">Ciudad</SelectItem>
-                    {uniqueCities.map((c) => <SelectItem key={c} value={c}>{c}</SelectItem>)}
-                  </SelectContent>
-                </Select>
-              )}
-            </div>
           </div>
 
-          {/* Rango personalizado — movido al modal de Filtros (oculto) */}
-          {false && periodFilter === "custom" && (
-            <div className="hidden">
-              <span className="text-xs font-medium text-muted-foreground">Desde</span>
-              <Input type="date" value={dateFrom} onChange={(e) => onCambiarFiltros({ dateFrom: e.target.value })} className="bg-background h-9 w-[160px]" />
-              <span className="text-xs font-medium text-muted-foreground">Hasta</span>
-              <Input type="date" value={dateTo} onChange={(e) => onCambiarFiltros({ dateTo: e.target.value })} className="bg-background h-9 w-[160px]" />
-            </div>
+          {/* Filtros inline — sin modal, todos desplegables hacia abajo */}
+          {filtrosVisibles && (
+          <div className="flex flex-wrap items-center gap-2 mt-3">
+            {/* Período — modo (todas/hoy/semana/mes/año/día/mes específico/rango) + input según modo */}
+            <Select value={periodMode} onValueChange={cambiarPeriodo}>
+              <SelectTrigger className="h-9 w-[160px]">
+                <Calendar className="h-3.5 w-3.5 mr-2 text-muted-foreground" />
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent position="popper" side="bottom" avoidCollisions={false}>
+                <SelectItem value="all">Todas</SelectItem>
+                <SelectItem value="today">Hoy</SelectItem>
+                <SelectItem value="week">Esta semana</SelectItem>
+                <SelectItem value="month">Este mes</SelectItem>
+                <SelectItem value="year">Este año</SelectItem>
+                <SelectItem value="day">Día específico</SelectItem>
+                <SelectItem value="specificMonth">Mes específico</SelectItem>
+                <SelectItem value="custom">Rango personalizado</SelectItem>
+              </SelectContent>
+            </Select>
+
+            {periodMode === "day" && (
+              <Input
+                type="date"
+                value={dateFrom}
+                onChange={(e) => { const v = e.target.value; onCambiarFiltros({ periodFilter: "custom", dateFrom: v, dateTo: v }); }}
+                className="h-9 w-[160px] bg-background"
+              />
+            )}
+
+            {periodMode === "specificMonth" && (
+              <Input
+                type="month"
+                value={dateFrom ? dateFrom.slice(0, 7) : ""}
+                onChange={(e) => {
+                  const ym = e.target.value;
+                  if (!ym) { onCambiarFiltros({ periodFilter: "custom", dateFrom: "", dateTo: "" }); return; }
+                  const [y, m] = ym.split("-").map(Number);
+                  const last = new Date(y, m, 0).getDate();
+                  onCambiarFiltros({ periodFilter: "custom", dateFrom: `${ym}-01`, dateTo: `${ym}-${String(last).padStart(2, "0")}` });
+                }}
+                className="h-9 w-[160px] bg-background"
+              />
+            )}
+
+            {periodMode === "custom" && (
+              <div className="flex items-center gap-2">
+                <span className="text-xs font-medium text-muted-foreground">Desde</span>
+                <Input type="date" value={dateFrom} onChange={(e) => onCambiarFiltros({ periodFilter: "custom", dateFrom: e.target.value })} className="h-9 w-[150px] bg-background" />
+                <span className="text-xs font-medium text-muted-foreground">Hasta</span>
+                <Input type="date" value={dateTo} onChange={(e) => onCambiarFiltros({ periodFilter: "custom", dateTo: e.target.value })} className="h-9 w-[150px] bg-background" />
+              </div>
+            )}
+
+            {/* Método de pago */}
+            <Select value={paymentFilter} onValueChange={(v) => onCambiarFiltros({ paymentFilter: v as any })}>
+              <SelectTrigger className="h-9 w-[160px]">
+                <Banknote className="h-3.5 w-3.5 mr-2 text-muted-foreground" />
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent position="popper" side="bottom" avoidCollisions={false}>
+                <SelectItem value="all">Método de pago</SelectItem>
+                <SelectItem value="efectivo">Efectivo</SelectItem>
+                <SelectItem value="transferencia">Transferencia</SelectItem>
+                <SelectItem value="credit">Cta. Corriente</SelectItem>
+                <SelectItem value="mixed">Mixto</SelectItem>
+              </SelectContent>
+            </Select>
+
+            {/* Remitos */}
+            <Select value={remitoFilter} onValueChange={(v) => onCambiarFiltros({ remitoFilter: v } as any)}>
+              <SelectTrigger className="h-9 w-[140px]">
+                <Truck className="h-3.5 w-3.5 mr-2 text-muted-foreground" />
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent position="popper" side="bottom" avoidCollisions={false}>
+                <SelectItem value="all">Remitos</SelectItem>
+                <SelectItem value="emitted">Emitidos</SelectItem>
+                <SelectItem value="pending">Pendientes</SelectItem>
+              </SelectContent>
+            </Select>
+
+            {/* Descuento */}
+            <Select value={discountFilter} onValueChange={(v) => onCambiarFiltros({ discountFilter: v } as any)}>
+              <SelectTrigger className="h-9 w-[150px]">
+                <Tag className="h-3.5 w-3.5 mr-2 text-muted-foreground" />
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent position="popper" side="bottom" avoidCollisions={false}>
+                <SelectItem value="all">Descuento</SelectItem>
+                <SelectItem value="with">Con descuento</SelectItem>
+                <SelectItem value="without">Sin descuento</SelectItem>
+              </SelectContent>
+            </Select>
+
+            {/* Método de entrega */}
+            <Select value={deliveryFilter} onValueChange={(v) => onCambiarFiltros({ deliveryFilter: v } as any)}>
+              <SelectTrigger className="h-9 w-[165px]">
+                <MapPin className="h-3.5 w-3.5 mr-2 text-muted-foreground" />
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent position="popper" side="bottom" avoidCollisions={false}>
+                <SelectItem value="all">Método de entrega</SelectItem>
+                <SelectItem value="delivery">A domicilio</SelectItem>
+                <SelectItem value="pickup">Retira en local</SelectItem>
+              </SelectContent>
+            </Select>
+
+            {/* Rechazados */}
+            <Select value={rejectedFilter} onValueChange={(v) => onCambiarFiltros({ rejectedFilter: v } as any)}>
+              <SelectTrigger className="h-9 w-[160px]">
+                <X className="h-3.5 w-3.5 mr-2 text-muted-foreground" />
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent position="popper" side="bottom" avoidCollisions={false}>
+                <SelectItem value="all">Rechazados</SelectItem>
+                <SelectItem value="only">Solo rechazados</SelectItem>
+                <SelectItem value="exclude">Ocultar rechazados</SelectItem>
+              </SelectContent>
+            </Select>
+
+            {/* Vendedor — solo admin */}
+            {isAdmin && sellers.length > 0 && (
+              <Select value={sellerId || "all-sellers"} onValueChange={(v) => onCambiarFiltros({ sellerId: v === "all-sellers" ? "" : v })}>
+                <SelectTrigger className="h-9 w-[160px]">
+                  <Store className="h-3.5 w-3.5 mr-2 text-muted-foreground" />
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent position="popper" side="bottom" avoidCollisions={false}>
+                  <SelectItem value="all-sellers">Vendedor</SelectItem>
+                  {sellers.map((s) => <SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>)}
+                </SelectContent>
+              </Select>
+            )}
+
+            {/* Ciudad */}
+            {uniqueCities.length > 0 && (
+              <Select value={city || "all-cities"} onValueChange={(v) => onCambiarFiltros({ city: v === "all-cities" ? "" : v })}>
+                <SelectTrigger className="h-9 w-[150px]">
+                  <MapPin className="h-3.5 w-3.5 mr-2 text-muted-foreground" />
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent position="popper" side="bottom" avoidCollisions={false}>
+                  <SelectItem value="all-cities">Ciudad</SelectItem>
+                  {uniqueCities.map((c) => <SelectItem key={c} value={c}>{c}</SelectItem>)}
+                </SelectContent>
+              </Select>
+            )}
+          </div>
           )}
 
           {/* Chips de filtros activos */}
@@ -563,7 +662,7 @@ export function ListaVentas({
       </Card>
 
       {/* ── LISTA DE VENTAS ──────────────────────────────────────────────── */}
-      <Card className="border-border/60 shadow-sm overflow-hidden">
+      <Card className="border-border/60 shadow-sm">
         {ventas.length === 0 ? (
           <div className="p-12 text-center">
             <div className="h-16 w-16 rounded-full bg-muted/50 flex items-center justify-center mx-auto mb-4">
@@ -575,7 +674,7 @@ export function ListaVentas({
         ) : (
           <div className="divide-y divide-border/50">
             {/* Header desktop */}
-            <div className="hidden md:grid grid-cols-12 gap-4 p-4 bg-muted/30 text-xs font-semibold text-muted-foreground uppercase tracking-wider">
+            <div className="hidden md:grid grid-cols-12 gap-4 p-4 bg-muted text-xs font-semibold text-muted-foreground uppercase tracking-wider sticky top-0 z-20 border-b border-border/50 rounded-t-xl">
               <div className="col-span-2">Venta</div>
               <div className="col-span-2">Cliente</div>
               <div className="col-span-1 text-right">Pérdida</div>
@@ -734,118 +833,39 @@ export function ListaVentas({
         </div>
       )}
 
-      {/* ── MODAL FILTROS MOBILE ─────────────────────────────────────────── */}
-      <Dialog open={filterModalOpen} onOpenChange={setFilterModalOpen}>
-        <DialogContent className="w-[calc(100vw-1rem)] max-w-sm max-h-[90vh] flex flex-col p-0 gap-0 overflow-hidden sm:max-w-md">
-          <DialogHeader className="px-5 py-4 border-b shrink-0">
-            <div className="flex items-center justify-between">
-              <DialogTitle className="text-base font-semibold flex items-center gap-2">
-                <Filter className="h-4 w-4 text-primary" />
-                Filtros
-              </DialogTitle>
-              <button onClick={() => setFilterModalOpen(false)} className="text-muted-foreground hover:text-foreground">
-                <X className="h-5 w-5" />
-              </button>
-            </div>
+      {/* ── MODAL INCIDENCIAS (pérdidas / rechazos / notas de crédito) ────── */}
+      <Dialog open={!!incidenciaModal} onOpenChange={(o) => { if (!o) setIncidenciaModal(null); }}>
+        <DialogContent className="sm:max-w-lg">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              {incidenciaModal && incidenciaMeta[incidenciaModal].titulo}
+              <span className="text-xs font-normal text-muted-foreground">({incidenciaLista.length})</span>
+            </DialogTitle>
           </DialogHeader>
-
-          <div className="flex-1 overflow-y-auto overscroll-contain px-5 py-4 space-y-5">
-            {/* Período */}
-            <FilterSection icon={<Calendar className="h-4 w-4" />} label="Período">
-              <div className="grid grid-cols-3 gap-2">
-                {["all","today","week","month","year","custom"].map(v => (
-                  <button key={v}
-                    className={`py-2 px-3 rounded-lg text-xs font-medium border transition-colors ${(tmpFiltros as any).periodFilter === v ? "bg-primary text-primary-foreground border-primary" : "bg-background border-border hover:border-primary/50"}`}
-                    onClick={() => setTmpFiltros(f => ({ ...f, periodFilter: v as any, ...(v !== "custom" ? { dateFrom: "", dateTo: "" } : {}) }))}
-                  >{periodLabels[v]}</button>
-                ))}
-              </div>
-              {(tmpFiltros as any).periodFilter === "custom" && (
-                <div className="grid grid-cols-2 gap-3 mt-3">
-                  <div className="space-y-1"><Label className="text-xs text-muted-foreground">Desde</Label><Input type="date" value={(tmpFiltros as any).dateFrom} onChange={e => setTmpFiltros(f => ({ ...f, dateFrom: e.target.value }))} className="h-9 text-sm" /></div>
-                  <div className="space-y-1"><Label className="text-xs text-muted-foreground">Hasta</Label><Input type="date" value={(tmpFiltros as any).dateTo} onChange={e => setTmpFiltros(f => ({ ...f, dateTo: e.target.value }))} className="h-9 text-sm" /></div>
+          <div className="max-h-[60vh] overflow-y-auto divide-y divide-border/50">
+            {incidenciaLista.length === 0 ? (
+              <p className="text-sm text-muted-foreground py-8 text-center">No hay ventas en este período.</p>
+            ) : incidenciaLista.map((r) => (
+              <button
+                key={r.id}
+                onClick={() => { const v = (ventas as any[]).find((x) => x.id === r.id); if (v) { setIncidenciaModal(null); onVerDetalle(v); } }}
+                className="w-full flex items-center justify-between gap-3 py-2.5 px-1 text-left hover:bg-muted/40 transition-colors"
+              >
+                <div className="min-w-0">
+                  <p className="text-sm font-medium text-foreground truncate">{r.cliente}</p>
+                  <p className="text-[11px] text-muted-foreground truncate">{r.ref} · {fmtDate(r.fecha)}</p>
+                  {r.detalle && <p className="text-[10px] text-muted-foreground truncate">{r.detalle}</p>}
                 </div>
-              )}
-            </FilterSection>
-
-            {/* Pago */}
-            <FilterSection icon={<Banknote className="h-4 w-4" />} label="Método de pago">
-              <div className="grid grid-cols-2 gap-2">
-                {[["all","Todos"],["efectivo","Efectivo"],["transferencia","Transferencia"],["credit","Cta. Corriente"],["mixed","Mixto"]].map(([v, l]) => (
-                  <OptionBtn key={v} active={(tmpFiltros as any).paymentFilter === v} onClick={() => setTmpFiltros(f => ({ ...f, paymentFilter: v as any }))}>{l}</OptionBtn>
-                ))}
-              </div>
-            </FilterSection>
-
-            {/* Boletas — deshabilitado temporalmente */}
-
-            {/* Remitos */}
-            <FilterSection icon={<Truck className="h-4 w-4" />} label="Remitos">
-              <div className="grid grid-cols-3 gap-2">
-                {[["all","Todos"],["emitted","Emitidos"],["pending","Pendientes"]].map(([v, l]) => (
-                  <OptionBtn key={v} active={(tmpFiltros as any).remitoFilter === v} onClick={() => setTmpFiltros(f => ({ ...f, remitoFilter: v as any }))}>{l}</OptionBtn>
-                ))}
-              </div>
-            </FilterSection>
-
-            {/* Descuento */}
-            <FilterSection icon={<Tag className="h-4 w-4" />} label="Descuento">
-              <div className="grid grid-cols-3 gap-2">
-                {[["all","Todos"],["with","Con descuento"],["without","Sin descuento"]].map(([v, l]) => (
-                  <OptionBtn key={v} active={(tmpFiltros as any).discountFilter === v} onClick={() => setTmpFiltros(f => ({ ...f, discountFilter: v as any }))}>{l}</OptionBtn>
-                ))}
-              </div>
-            </FilterSection>
-
-            {/* Entrega */}
-            <FilterSection icon={<MapPin className="h-4 w-4" />} label="Método de entrega">
-              <div className="grid grid-cols-3 gap-2">
-                {[["all","Todos"],["delivery","A domicilio"],["pickup","Retira en local"]].map(([v, l]) => (
-                  <OptionBtn key={v} active={(tmpFiltros as any).deliveryFilter === v} onClick={() => setTmpFiltros(f => ({ ...f, deliveryFilter: v as any }))}>{l}</OptionBtn>
-                ))}
-              </div>
-            </FilterSection>
-
-            {/* Rechazados */}
-            <FilterSection icon={<X className="h-4 w-4" />} label="Rechazados">
-              <div className="grid grid-cols-3 gap-2">
-                {[["all","Todos"],["only","Solo rechazados"],["exclude","Ocultar"]].map(([v, l]) => (
-                  <OptionBtn key={v} active={(tmpFiltros as any).rejectedFilter === v} onClick={() => setTmpFiltros(f => ({ ...f, rejectedFilter: v as any }))}>{l}</OptionBtn>
-                ))}
-              </div>
-            </FilterSection>
-
-            {/* Vendedor — solo admin */}
-            {isAdmin && sellers.length > 0 && (
-              <FilterSection icon={<Store className="h-4 w-4" />} label="Vendedor">
-                <Select value={(tmpFiltros as any).sellerId || "all-sellers"} onValueChange={v => setTmpFiltros(f => ({ ...f, sellerId: v === "all-sellers" ? "" : v }))}>
-                  <SelectTrigger className="h-10"><SelectValue placeholder="Todos los vendedores" /></SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="all-sellers">Todos los vendedores</SelectItem>
-                    {sellers.map(s => <SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>)}
-                  </SelectContent>
-                </Select>
-              </FilterSection>
-            )}
-
-            {/* Ciudad */}
-            {uniqueCities.length > 0 && (
-              <FilterSection icon={<MapPin className="h-4 w-4" />} label="Ciudad">
-                <Select value={(tmpFiltros as any).city || "all-cities"} onValueChange={v => setTmpFiltros(f => ({ ...f, city: v === "all-cities" ? "" : v }))}>
-                  <SelectTrigger className="h-10"><SelectValue placeholder="Todas las ciudades" /></SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="all-cities">Todas las ciudades</SelectItem>
-                    {uniqueCities.map(c => <SelectItem key={c} value={c}>{c}</SelectItem>)}
-                  </SelectContent>
-                </Select>
-              </FilterSection>
-            )}
+                <p className={`text-sm font-bold tabular-nums shrink-0 ${incidenciaModal ? incidenciaMeta[incidenciaModal].color : ""}`}>-{fmt(r.monto)}</p>
+              </button>
+            ))}
           </div>
-
-          <DialogFooter className="px-5 py-4 border-t shrink-0 flex-row gap-2">
-            <Button variant="outline" className="flex-1" onClick={clearTmpFilters}>Limpiar</Button>
-            <Button className="flex-1" onClick={applyFilters}>Aplicar filtros</Button>
-          </DialogFooter>
+          {incidenciaLista.length > 0 && (
+            <div className="flex items-center justify-between pt-2 border-t border-border/50 text-sm font-semibold">
+              <span>Total</span>
+              <span className={incidenciaModal ? incidenciaMeta[incidenciaModal].color : ""}>-{fmt(incidenciaLista.reduce((a, r) => a + r.monto, 0))}</span>
+            </div>
+          )}
         </DialogContent>
       </Dialog>
 
@@ -907,7 +927,7 @@ const RESUMEN_ACCENTS: Record<string, { icon: string; value: string }> = {
   violet: { icon: "bg-violet-100 text-violet-700 dark:bg-violet-900/30 dark:text-violet-400", value: "text-violet-600 dark:text-violet-400" },
 };
 
-function ResumenCard({ icon, label, value, sub, accent }: { icon: React.ReactNode; label: string; value: string; sub?: string; accent: keyof typeof RESUMEN_ACCENTS | string }) {
+function ResumenCard({ icon, label, value, sub, accent, netoLabel, netoValue, onVer }: { icon: React.ReactNode; label: string; value: string; sub?: string; accent: keyof typeof RESUMEN_ACCENTS | string; netoLabel?: string; netoValue?: string; onVer?: () => void }) {
   const a = RESUMEN_ACCENTS[accent] ?? RESUMEN_ACCENTS.teal;
   return (
     <Card className="border-border/60 shadow-sm rounded-2xl">
@@ -918,6 +938,17 @@ function ResumenCard({ icon, label, value, sub, accent }: { icon: React.ReactNod
         </div>
         <p className={`text-xl md:text-2xl font-bold tabular-nums ${a.value}`}>{value}</p>
         {sub && <p className="text-[11px] text-muted-foreground truncate mt-0.5">{sub}</p>}
+        {netoValue && (
+          <div className="mt-1.5 pt-1.5 border-t border-border/50">
+            <p className="text-[10px] text-emerald-600 font-medium leading-tight">{netoLabel}</p>
+            <p className="text-sm md:text-base font-bold tabular-nums text-emerald-600 leading-tight">{netoValue}</p>
+          </div>
+        )}
+        {onVer && (
+          <button onClick={onVer} className="mt-1.5 inline-flex items-center gap-1 text-[11px] font-medium text-primary hover:underline">
+            <Eye className="h-3 w-3" /> Ver
+          </button>
+        )}
       </CardContent>
     </Card>
   );

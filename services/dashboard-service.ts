@@ -1,6 +1,7 @@
 // services/dashboard-service.ts
 import { supabase } from '@/lib/supabase'
 import type { Client, Product, Sale } from '@/lib/types'
+import { incidenciasVenta } from '@/lib/utils/incidencias'
 
 export function invalidateDashboardCache(): void {
   // No-op con Supabase
@@ -17,12 +18,13 @@ async function fetchDashboardData() {
   const todayEnd = new Date(now)
   todayEnd.setHours(23, 59, 59, 999)
 
-  const [salesRes, productsRes, ordersRes, debtorsRes] = await Promise.all([
+  const [salesRes, productsRes, ordersRes, debtorsRes, devolucionesRes] = await Promise.all([
     // Solo las columnas que usa el dashboard: evita arrastrar PDFs base64 y datos AFIP (muy pesado)
     supabase
       .from('ventas')
-      .select('id, total, created_at, items, seller_name')
+      .select('id, total, created_at, items, seller_name, items_no_entregados')
       .gte('created_at', sixMonthsAgo.toISOString())
+      .not('remito_number', 'is', null) // igual que /ventas: solo ventas con remito
       .order('created_at', { ascending: false }),
     supabase
       .from('productos')
@@ -35,12 +37,17 @@ async function fetchDashboardData() {
       .from('clientes')
       .select('id, name, cuit, email, phone, address, tax_category, credit_limit, current_balance, notes, created_at')
       .gt('current_balance', 0),
+    supabase
+      .from('devoluciones')
+      .select('total, created_at, sale_id')
+      .gte('created_at', sixMonthsAgo.toISOString()),
   ])
 
   const sales: Sale[] = (salesRes.data ?? []).map((d) => ({
     id: d.id,
     ...d,
     items: d.items ?? [],
+    itemsNoEntregados: d.items_no_entregados ?? [],
     total: Number(d.total) || 0,
     createdAt: new Date(d.created_at),
   } as Sale))
@@ -113,13 +120,30 @@ async function fetchDashboardData() {
   const formatterM = new Intl.DateTimeFormat('es-AR', { month: 'short' })
   const salesLastMonths = Array.from({ length: 6 }, (_, i) => {
     const d = new Date(now.getFullYear(), now.getMonth() - (5 - i), 1)
-    return { date: d, total: 0 }
+    return { date: d, total: 0, count: 0, perdida: 0, faltante: 0, rechazo: 0, incidenciasCount: 0, nc: 0 }
   })
+  // Mapa saleId -> índice de mes, para imputar la NC al mes de la venta (igual que /ventas)
+  const saleMonthIdx = new Map<string, number>()
   sales.forEach((s) => {
     const sd = new Date(s.createdAt)
     const sm = new Date(sd.getFullYear(), sd.getMonth(), 1)
-    const bucket = salesLastMonths.find((b) => b.date.getTime() === sm.getTime())
-    if (bucket) bucket.total += s.total ?? 0
+    const idx = salesLastMonths.findIndex((b) => b.date.getTime() === sm.getTime())
+    if (idx < 0) return
+    const bucket = salesLastMonths[idx]
+    saleMonthIdx.set(s.id, idx)
+    bucket.total += s.total ?? 0
+    bucket.count += 1
+    const inc = incidenciasVenta((s as any).itemsNoEntregados)
+    bucket.perdida += inc.perdida
+    bucket.faltante += inc.faltante
+    bucket.rechazo += inc.rechazo
+    if (inc.perdida + inc.faltante + inc.rechazo > 0) bucket.incidenciasCount += 1
+  })
+  // Notas de crédito (devoluciones): se imputan al mes de la venta asociada.
+  ;(devolucionesRes.data ?? []).forEach((d: any) => {
+    const idx = d.sale_id != null ? saleMonthIdx.get(d.sale_id) : undefined
+    if (idx === undefined) return // NC sin venta en la ventana (o venta sin remito) → no se muestra
+    salesLastMonths[idx].nc += Number(d.total) || 0
   })
 
   const salesThisMonth = salesLastMonths[5]?.total ?? 0
@@ -228,7 +252,21 @@ async function fetchDashboardData() {
     charts: {
       salesLastDays: salesLastDays.map((b) => ({ day: formatter7.format(b.date), total: b.total })),
       salesByHourToday: hourBuckets.filter((b) => b.total > 0),
-      salesLastMonths: salesLastMonths.map((b) => ({ month: formatterM.format(b.date), total: b.total })),
+      salesLastMonths: salesLastMonths.map((b) => {
+        const incidencias = b.perdida + b.faltante + b.rechazo
+        return {
+          month: formatterM.format(b.date),
+          total: b.total,
+          neto: b.total - incidencias - b.nc,
+          count: b.count,
+          perdida: b.perdida,
+          faltante: b.faltante,
+          rechazo: b.rechazo,
+          incidencias,
+          incidenciasCount: b.incidenciasCount,
+          nc: b.nc,
+        }
+      }),
       productDistribution,
     },
     lists: {

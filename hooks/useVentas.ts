@@ -206,7 +206,7 @@ export function useVentas(filterBySellerId?: string, clientCityMap?: Record<stri
     remitoFilter: "all",
     discountFilter: "all",
     paymentFilter: "all",
-    periodFilter: "month",
+    periodFilter: "today",
     dateFrom: "",
     dateTo: "",
     clientId: "",
@@ -356,13 +356,15 @@ export function useVentas(filterBySellerId?: string, clientCityMap?: Record<stri
 
       if (!filtros.searchQuery && filtros.dateFrom) {
         const ventaDate = safeGetDate(venta.createdAt);
-        const fromDate = new Date(filtros.dateFrom); fromDate.setHours(0, 0, 0, 0);
+        // Parsear en hora local (no UTC) para que el día "Desde" sea inclusive.
+        const fromDate = new Date(`${filtros.dateFrom}T00:00:00`);
         if (!ventaDate || ventaDate < fromDate) return false;
       }
 
       if (!filtros.searchQuery && filtros.dateTo) {
         const ventaDate = safeGetDate(venta.createdAt);
-        const toDate = new Date(filtros.dateTo); toDate.setHours(23, 59, 59, 999);
+        // Parsear en hora local (no UTC) para que el día "Hasta" sea inclusive.
+        const toDate = new Date(`${filtros.dateTo}T23:59:59.999`);
         if (!ventaDate || ventaDate > toDate) return false;
       }
 

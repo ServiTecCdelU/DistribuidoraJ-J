@@ -44,6 +44,18 @@ import { formatCurrency } from '@/lib/utils/format'
 import { Label } from '@/components/ui/label'
 import { toast } from 'sonner'
 
+interface MonthData {
+  month: string
+  total: number
+  neto: number
+  count: number
+  perdida: number
+  faltante: number
+  rechazo: number
+  incidencias: number
+  incidenciasCount: number
+  nc: number
+}
 interface SellerRank { name: string; total: number; count: number }
 interface CategoryRank { name: string; units: number; revenue: number }
 interface DeudorAntiguedad {
@@ -69,6 +81,24 @@ const classMeta: Record<DeudorAntiguedad['classification'], { label: string; cls
   atrasado: { label: 'Atrasado', cls: 'bg-amber-50 text-amber-700 border-amber-200' },
   moroso: { label: 'Moroso', cls: 'bg-rose-50 text-rose-700 border-rose-200' },
   incobrable: { label: 'Incobrable', cls: 'bg-rose-100 text-rose-900 border-rose-300' },
+}
+
+function MonthTooltip({ active, payload }: any) {
+  if (!active || !payload?.length) return null
+  const d = payload[0].payload as MonthData
+  return (
+    <div className="rounded-xl border border-border/50 bg-white px-3 py-2 shadow-md text-xs">
+      <p className="font-semibold capitalize mb-1">{d.month}</p>
+      <p className="text-muted-foreground">Bruto: <span className="font-medium text-foreground">{formatCurrency(d.total)}</span></p>
+      {d.incidencias > 0 && (
+        <p className="text-rose-600">Incidencias: −{formatCurrency(d.incidencias)}</p>
+      )}
+      {d.nc > 0 && (
+        <p className="text-rose-600">Notas de crédito: −{formatCurrency(d.nc)}</p>
+      )}
+      <p className="text-teal-700 font-semibold mt-0.5">Neto: {formatCurrency(d.neto)}</p>
+    </div>
+  )
 }
 
 const podiumStyle = [
@@ -100,7 +130,8 @@ export default function DashboardPage() {
   const [lowStockProducts, setLowStockProducts] = useState<Product[]>([])
   const [pendingOrders, setPendingOrders] = useState<Order[]>([])
   const [salesLastDays, setSalesLastDays] = useState<{ day: string; total: number }[]>([])
-  const [monthlyComparison, setMonthlyComparison] = useState<{ month: string; total: number }[]>([])
+  const [monthlyComparison, setMonthlyComparison] = useState<MonthData[]>([])
+  const [mesDetalle, setMesDetalle] = useState<MonthData | null>(null)
   const [topProducts, setTopProducts] = useState<any[]>([])
   const [productDistribution, setProductDistribution] = useState<{ name: string; value: number; color: string }[]>([])
   const [sellerRanking, setSellerRanking] = useState<SellerRank[]>([])
@@ -385,7 +416,7 @@ export default function DashboardPage() {
               <CardHeader className="flex flex-row items-center justify-between p-3 sm:p-4 pb-1">
                 <div>
                   <CardTitle className="text-sm sm:text-base font-semibold">Ventas últimos 6 meses</CardTitle>
-                  <p className="text-xs text-muted-foreground mt-0.5">Facturación mensual</p>
+                  <p className="text-xs text-muted-foreground mt-0.5">Facturación mensual · clic en un mes para el detalle</p>
                 </div>
                 <Badge variant="secondary" className={`rounded-lg font-medium text-xs ${stats.monthDeltaPct >= 0 ? 'bg-emerald-50 text-emerald-700 border-emerald-200' : 'bg-rose-50 text-rose-700 border-rose-200'}`}>
                   {stats.monthDeltaPct >= 0 ? '+' : ''}{stats.monthDeltaPct.toFixed(1)}% mensual
@@ -402,8 +433,8 @@ export default function DashboardPage() {
                     </defs>
                     <CartesianGrid vertical={false} strokeDasharray="3 3" stroke="#f1f5f9" />
                     <XAxis dataKey="month" tickLine={false} axisLine={false} tick={{ fill: '#64748b', fontSize: 11 }} dy={8} />
-                    <ChartTooltip content={<ChartTooltipContent />} formatter={(value) => formatCurrency(Number(value))} />
-                    <Bar dataKey="total" fill="url(#barTeal)" radius={[6, 6, 0, 0]} />
+                    <ChartTooltip cursor={{ fill: 'rgba(13,148,136,0.06)' }} content={<MonthTooltip />} />
+                    <Bar dataKey="total" fill="url(#barTeal)" radius={[6, 6, 0, 0]} className="cursor-pointer" onClick={(d: any) => setMesDetalle(d?.payload ?? null)} />
                   </BarChart>
                 </ChartContainer>
               </CardContent>
@@ -432,6 +463,60 @@ export default function DashboardPage() {
               </CardContent>
             </Card>
           </div>
+
+          {/* Detalle del mes (clic en la barra) */}
+          <Dialog open={!!mesDetalle} onOpenChange={(o) => { if (!o) setMesDetalle(null) }}>
+            <DialogContent className="sm:max-w-md rounded-2xl">
+              <DialogHeader>
+                <DialogTitle className="capitalize">Detalle de {mesDetalle?.month}</DialogTitle>
+              </DialogHeader>
+              {mesDetalle && (
+                <div className="space-y-3 text-sm">
+                  <div className="flex items-center justify-between">
+                    <span className="text-muted-foreground">Cantidad de ventas</span>
+                    <span className="font-semibold">{mesDetalle.count}</span>
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <span className="text-muted-foreground">Facturación bruta</span>
+                    <span className="font-semibold">{formatCurrency(mesDetalle.total)}</span>
+                  </div>
+                  <div className="h-px bg-border/60" />
+                  <div className="flex items-center justify-between">
+                    <span className="text-muted-foreground">Ventas con incidencias</span>
+                    <span className="font-semibold">{mesDetalle.incidenciasCount}</span>
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <span className="text-muted-foreground">Pérdida (roturas)</span>
+                    <span className="text-rose-600">−{formatCurrency(mesDetalle.perdida)}</span>
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <span className="text-muted-foreground">Faltantes</span>
+                    <span className="text-rose-600">−{formatCurrency(mesDetalle.faltante)}</span>
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <span className="text-muted-foreground">Rechazos (devoluciones)</span>
+                    <span className="text-rose-600">−{formatCurrency(mesDetalle.rechazo)}</span>
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <span className="text-muted-foreground">Total incidencias</span>
+                    <span className="font-semibold text-rose-600">−{formatCurrency(mesDetalle.incidencias)}</span>
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <span className="text-muted-foreground">Notas de crédito</span>
+                    <span className="font-semibold text-rose-600">−{formatCurrency(mesDetalle.nc)}</span>
+                  </div>
+                  <div className="h-px bg-border/60" />
+                  <div className="flex items-center justify-between text-base">
+                    <span className="font-semibold">Monto final (neto)</span>
+                    <span className="font-bold text-teal-700">{formatCurrency(mesDetalle.neto)}</span>
+                  </div>
+                </div>
+              )}
+              <DialogFooter>
+                <Button variant="outline" className="rounded-xl" onClick={() => setMesDetalle(null)}>Cerrar</Button>
+              </DialogFooter>
+            </DialogContent>
+          </Dialog>
 
           {/* Vendedores + Rubros */}
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-3 sm:gap-4">
