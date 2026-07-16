@@ -247,17 +247,12 @@ export default function ProductosPage() {
 
   // --- PDF: Exportar lista de precios ---
   // El price guardado ya es el precio por unidad.
-  // descuentoPuntos: puntos de ganancia a descontar SOLO en el PDF (no toca la BD).
-  // Ej: ganancia 25% con descuento 3 => precio recalculado con 22% de ganancia.
+  // descuentoPuntos: % de descuento aplicado SOLO en el PDF (no toca la BD).
+  // Ej: descuento 3 => cada precio baja 3%.
   const precioMostrar = (p: Product, descuentoPuntos: number): number => {
     const base = p.price;
     if (!descuentoPuntos || descuentoPuntos <= 0) return base;
-    const g = p.gananciaGlobal;
-    if (g != null && g > descuentoPuntos) {
-      const costo = base / (1 + g / 100);
-      return costo * (1 + (g - descuentoPuntos) / 100);
-    }
-    // Sin ganancia conocida: se descuenta el % directo sobre el precio.
+    // Descuento directo sobre el precio: 3% => 3% menos.
     return base * (1 - descuentoPuntos / 100);
   };
 
@@ -342,7 +337,7 @@ tr.cat td{border:none}
 @media print{body{padding:0}thead{display:table-header-group}tr.cat{page-break-after:avoid}tr{page-break-inside:avoid}}
 </style></head><body>
 <div class="header"><div><h1>Distribuidora J&J</h1><div class="sub">Lista de Precios</div></div><div class="meta"><div>${fecha}</div><div>${lista.length} productos</div></div></div>
-<div class="legend">Precios de venta vigentes por unidad.${descuentoPuntos > 0 ? ` Descuento de ${descuentoPuntos}% de ganancia aplicado.` : ""}</div>
+<div class="legend">Precios de venta vigentes por unidad.${descuentoPuntos > 0 ? ` Descuento del ${descuentoPuntos}% aplicado.` : ""}</div>
 <table><thead><tr><th>Código</th><th>Producto</th><th class="right">Precio</th></tr></thead><tbody>${body}</tbody></table>
 <div class="footer">Generado el ${fecha} · Distribuidora J&J</div>
 </body></html>`;
@@ -1989,12 +1984,11 @@ tr.cat td{border:none}
           </DialogHeader>
           <div className="space-y-3">
             <p className="text-sm text-muted-foreground">
-              Podés descontar puntos de ganancia solo en el PDF. Ej: si tu ganancia
-              es 25% y ponés 3%, los precios se recalculan con 22% de ganancia. No
-              modifica tus productos ni los precios reales.
+              Podés aplicar un descuento solo en el PDF. Ej: si ponés 3%, cada precio
+              baja un 3%. No modifica tus productos ni los precios reales.
             </p>
             <div className="space-y-1.5">
-              <label className="text-sm font-medium">Descuento de ganancia (%)</label>
+              <label className="text-sm font-medium">Descuento (%)</label>
               <Input
                 type="number"
                 min={0}
