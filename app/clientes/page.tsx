@@ -58,6 +58,7 @@ import {
 } from 'lucide-react'
 import { toast } from 'sonner'
 import { getAuthToken } from '@/services/auth-service'
+import { clasificarDeuda } from '@/lib/utils/deuda'
 
 export default function ClientesPage() {
   const [clients, setClients] = useState<Client[]>([])
@@ -185,7 +186,8 @@ export default function ClientesPage() {
 
       // Estado por clasificación de deuda -> etiqueta + color de fondo/texto
       const estadoInfo = (c: Client): { label: string; bg: string; fg: string } => {
-        switch (c.debtClassification) {
+        const clasif = (c.currentBalance || 0) > 0 ? clasificarDeuda(c.debtSince) : 'normal'
+        switch (clasif) {
           case 'incobrable': return { label: 'Incobrable', bg: 'FEE2E2', fg: '991B1B' }
           case 'moroso': return { label: 'Moroso', bg: 'FFEDD5', fg: '9A3412' }
           case 'atrasado': return { label: 'Atrasado', bg: 'FEF9C3', fg: '854D0E' }
