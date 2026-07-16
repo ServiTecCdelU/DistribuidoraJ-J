@@ -183,9 +183,18 @@ export default function ClientesPage() {
       const MONEY_COLS = new Set([8])
       const CENTER_COLS = new Set([1, 3, 9, 10])
 
+      // Estado por clasificación de deuda -> etiqueta + color de fondo/texto
+      const estadoInfo = (c: Client): { label: string; bg: string; fg: string } => {
+        switch (c.debtClassification) {
+          case 'incobrable': return { label: 'Incobrable', bg: 'FEE2E2', fg: '991B1B' }
+          case 'moroso': return { label: 'Moroso', bg: 'FFEDD5', fg: '9A3412' }
+          case 'atrasado': return { label: 'Atrasado', bg: 'FEF9C3', fg: '854D0E' }
+          default: return { label: 'Al día', bg: 'DCFCE7', fg: '166534' }
+        }
+      }
+
       const dataRows = filteredClients.map((c) => {
         const balance = c.currentBalance || 0
-        const st = getAccountStatus(c)
         const vendedor = c.sellerId ? (sellerNameById.get(c.sellerId) || 'Vendedor') : 'Sin vendedor'
         return [
           c.name || '',
@@ -197,7 +206,7 @@ export default function ClientesPage() {
           formatTaxCategoryFull(c.taxCategory),
           vendedor,
           balance,
-          st.label,
+          estadoInfo(c).label,
           purchasesByClient.get(c.id) || 0,
           c.notes || '',
         ]
@@ -231,13 +240,19 @@ export default function ClientesPage() {
           if (isHeader) { cell.s = headerStyle; continue }
           const money = MONEY_COLS.has(C)
           if (money) cell.z = MONEY_FMT
-          cell.s = {
+          const style: any = {
             alignment: {
               horizontal: money ? 'right' : CENTER_COLS.has(C) ? 'center' : 'left',
               vertical: 'center',
               wrapText: C === 11,
             },
           }
+          if (C === 9) {
+            const est = estadoInfo(filteredClients[R - 1])
+            style.fill = { fgColor: { rgb: est.bg } }
+            style.font = { bold: true, color: { rgb: est.fg } }
+          }
+          cell.s = style
         }
       }
       ws['!rows'] = [{ hpt: 22 }]
