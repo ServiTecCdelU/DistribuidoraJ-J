@@ -19,7 +19,7 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
-import { clientsApi, sellersApi } from '@/lib/api'
+import { clientsApi, sellersApi, salesApi } from '@/lib/api'
 import {
   Select,
   SelectContent,
@@ -49,6 +49,7 @@ import {
   StickyNote,
   X,
   Loader2,
+  FileSpreadsheet,
   AlertTriangle,
   Ban,
   CheckCircle2,
@@ -138,6 +139,120 @@ export default function ClientesPage() {
     )
     return () => { mounted = false }
   }, [])
+
+  const [exporting, setExporting] = useState(false)
+
+  const formatTaxCategoryFull = (category: Client['taxCategory']) => {
+    switch (category) {
+      case 'responsable_inscripto': return 'Responsable Inscripto'
+      case 'monotributo': return 'Monotributo'
+      case 'consumidor_final': return 'Consumidor Final'
+      case 'exento': return 'Exento'
+      case 'no_responsable': return 'No Responsable'
+      default: return 'Consumidor Final'
+    }
+  }
+
+  const handleExportExcel = async () => {
+    if (exporting) return
+    if (filteredClients.length === 0) {
+      toast.error('No hay clientes para exportar')
+      return
+    }
+    setExporting(true)
+    try {
+      // Contar compras por cliente
+      const purchasesByClient = new Map<string, number>()
+      try {
+        const sales = await salesApi.getAll()
+        for (const s of sales) {
+          if (!s.clientId) continue
+          purchasesByClient.set(s.clientId, (purchasesByClient.get(s.clientId) || 0) + 1)
+        }
+      } catch {
+        toast.error('No se pudo contar las compras; se exporta sin ese dato')
+      }
+
+      const XLSX = (await import('xlsx-js-style')).default ?? (await import('xlsx-js-style'))
+
+      const headers = [
+        'Nombre', 'Código', 'Dirección', 'CUIT', 'Teléfono', 'Correo',
+        'Categoría Fiscal', 'Vendedor', 'Saldo C.C.', 'Estado', 'Compras', 'Notas',
+      ]
+      // Columnas (0-based): Saldo=8 (money), Compras=10 (centrado), Código=1 y CUIT=3 centrados
+      const MONEY_COLS = new Set([8])
+      const CENTER_COLS = new Set([1, 3, 9, 10])
+
+      const dataRows = filteredClients.map((c) => {
+        const balance = c.currentBalance || 0
+        const st = getAccountStatus(c)
+        const vendedor = c.sellerId ? (sellerNameById.get(c.sellerId) || 'Vendedor') : 'Sin vendedor'
+        return [
+          c.name || '',
+          c.codigo || '',
+          c.address || '',
+          c.cuit || '',
+          c.phone || '',
+          c.email || '',
+          formatTaxCategoryFull(c.taxCategory),
+          vendedor,
+          balance,
+          st.label,
+          purchasesByClient.get(c.id) || 0,
+          c.notes || '',
+        ]
+      })
+
+      const aoa = [headers, ...dataRows]
+      const ws = XLSX.utils.aoa_to_sheet(aoa)
+      const lastRow = aoa.length
+
+      ws['!cols'] = [
+        { wch: 30 }, { wch: 12 }, { wch: 34 }, { wch: 16 }, { wch: 16 }, { wch: 28 },
+        { wch: 20 }, { wch: 22 }, { wch: 16 }, { wch: 14 }, { wch: 10 }, { wch: 40 },
+      ]
+      ws['!autofilter'] = { ref: `A1:L${lastRow}` }
+      ws['!freeze'] = { xSplit: 0, ySplit: 1, topLeftCell: 'A2', activePane: 'bottomLeft', state: 'frozen' } as any
+
+      const MONEY_FMT = '"$ "#,##0.00'
+      const headerStyle = {
+        font: { bold: true, color: { rgb: 'FFFFFF' }, sz: 11 },
+        fill: { fgColor: { rgb: '0D9488' } },
+        alignment: { horizontal: 'center', vertical: 'center' },
+        border: { bottom: { style: 'thin', color: { rgb: '0B7C72' } } },
+      }
+      const range = XLSX.utils.decode_range(ws['!ref'] as string)
+      for (let R = range.s.r; R <= range.e.r; R++) {
+        const isHeader = R === 0
+        for (let C = range.s.c; C <= range.e.c; C++) {
+          const ref = XLSX.utils.encode_cell({ r: R, c: C })
+          const cell = ws[ref]
+          if (!cell) continue
+          if (isHeader) { cell.s = headerStyle; continue }
+          const money = MONEY_COLS.has(C)
+          if (money) cell.z = MONEY_FMT
+          cell.s = {
+            alignment: {
+              horizontal: money ? 'right' : CENTER_COLS.has(C) ? 'center' : 'left',
+              vertical: 'center',
+              wrapText: C === 11,
+            },
+          }
+        }
+      }
+      ws['!rows'] = [{ hpt: 22 }]
+
+      const wb = XLSX.utils.book_new()
+      XLSX.utils.book_append_sheet(wb, ws, 'Clientes')
+      const fileName = `clientes_${new Date().toISOString().slice(0, 10)}.xlsx`
+      XLSX.writeFile(wb, fileName)
+      toast.success(`${filteredClients.length} clientes exportados`)
+    } catch (e: any) {
+      toast.error('Error al exportar la lista')
+    } finally {
+      setExporting(false)
+    }
+  }
 
   const handleCreate = () => {
     setEditingClient(null)
@@ -380,6 +495,10 @@ export default function ClientesPage() {
             <Search className="h-4 w-4" />
             Consultar ARCA
           </Button> */}
+          <Button variant="outline" onClick={handleExportExcel} disabled={exporting} className="gap-2">
+            {exporting ? <Loader2 className="h-4 w-4 animate-spin" /> : <FileSpreadsheet className="h-4 w-4" />}
+            Descargar Lista de Clientes
+          </Button>
           <Button onClick={handleCreate} className="gap-2 shadow-sm">
             <Plus className="h-4 w-4" />
             Nuevo Cliente
@@ -423,6 +542,10 @@ export default function ClientesPage() {
             ))}
           </select>
         </div>
+        <Button variant="outline" onClick={handleExportExcel} disabled={exporting} className="gap-2 w-full">
+          {exporting ? <Loader2 className="h-4 w-4 animate-spin" /> : <FileSpreadsheet className="h-4 w-4" />}
+          Descargar Lista de Clientes
+        </Button>
       </div>
 
       {/* Loading State */}
