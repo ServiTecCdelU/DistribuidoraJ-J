@@ -1454,6 +1454,172 @@ export const generarReciboDevolucion = async (data: ReciboDevolucionData): Promi
   return btoa(binary);
 };
 
+// ===================== RECIBO DE INCIDENCIA =====================
+// Documento aparte (NO toca el remito ni el recibo de devolución). Agrupa las tres
+// incidencias del reparto: Pérdida, Faltante y Rechazo.
+export type IncidenciaTipo = "perdida" | "faltante" | "rechazo";
+export interface ReciboIncidenciaItem {
+  name: string;
+  quantity: number;
+  price: number;
+  tipo: IncidenciaTipo;
+}
+export interface ReciboIncidenciaData {
+  reciboNumero: string;
+  fecha: any;
+  clientName?: string;
+  clientAddress?: string;
+  clientPhone?: string;
+  saleNumber?: string;
+  remitoNumero?: string;
+  items: ReciboIncidenciaItem[];
+  totalOriginal: number;      // precio total sin incidencias (remito)
+  totalIncidencias: number;   // suma de las incidencias
+}
+
+const INCIDENCIA_LABEL: Record<IncidenciaTipo, string> = {
+  perdida: "Pérdida",
+  faltante: "Faltante",
+  rechazo: "Rechazo",
+};
+const INCIDENCIA_ORDEN: IncidenciaTipo[] = ["perdida", "faltante", "rechazo"];
+
+const incStyles = StyleSheet.create({
+  metaRow: { flexDirection: "row", alignItems: "center", flexWrap: "wrap", marginBottom: 8 },
+  metaNro: { fontSize: 9, fontWeight: "bold", marginRight: 8 },
+  metaFecha: { fontSize: 7.5, color: "#555", marginRight: 8 },
+  metaCopia: { fontSize: 7, fontWeight: "bold", color: "#fff", backgroundColor: "#0d9488", paddingVertical: 1.5, paddingHorizontal: 5, borderRadius: 3 },
+  grupoTitle: { fontSize: 7.5, fontWeight: "bold", color: "#b45309", marginTop: 4, marginBottom: 1 },
+  itemsHead: { flexDirection: "row", borderBottom: "0.75px solid #333", paddingBottom: 2, marginBottom: 2, marginTop: 2 },
+  itemRow: { flexDirection: "row", paddingVertical: 1.5, borderBottom: "0.5px solid #eee" },
+  colCant: { width: "12%", fontSize: 7.5 },
+  colDesc: { width: "58%", fontSize: 7.5 },
+  colSub: { width: "30%", fontSize: 7.5, textAlign: "right" },
+  headTxt: { fontSize: 6.5, color: "#777", fontWeight: "bold" },
+  totalesBox: { border: "1px solid black", borderRadius: 3, paddingVertical: 6, paddingHorizontal: 10, marginBottom: 6, marginTop: 4 },
+  totalRow: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", paddingVertical: 1.5 },
+  totalLabel: { fontSize: 8, color: "#555" },
+  totalValue: { fontSize: 9 },
+  totalFinalLabel: { fontSize: 9, fontWeight: "bold", marginTop: 2 },
+  totalFinalValue: { fontSize: 13, fontWeight: "bold", marginTop: 2 },
+});
+
+const ReciboIncidenciaCopia = ({ data, copia }: { data: ReciboIncidenciaData; copia: string }) => {
+  const clientName = data.clientName || "Consumidor Final";
+  const precioFinal = data.totalOriginal - data.totalIncidencias;
+  return (
+    <>
+      {/* Header */}
+      <View style={reciboStyles.header}>
+        <View>
+          <Text style={reciboStyles.brandName}>Distribuidora J&J</Text>
+          <Text style={reciboStyles.brandSub}>Comprobante de incidencia — no válido como factura</Text>
+        </View>
+        <View style={reciboStyles.headerRight}>
+          <Text style={reciboStyles.reciboTitle}>RECIBO DE INCIDENCIA</Text>
+        </View>
+      </View>
+
+      {/* N° + fecha + copia en una sola fila */}
+      <View style={incStyles.metaRow}>
+        <Text style={incStyles.metaNro}>N° {data.reciboNumero}</Text>
+        <Text style={incStyles.metaFecha}>{safeFormatDate(data.fecha)}  {safeFormatTime(data.fecha)}</Text>
+        <Text style={incStyles.metaCopia}>{copia}</Text>
+      </View>
+
+      {/* Cliente */}
+      <Text style={reciboStyles.recibiRow}>
+        <Text style={reciboStyles.bold}>Cliente: </Text>{clientName}
+        {data.saleNumber ? <Text style={reciboStyles.recibiMeta}>   ·   Venta #{data.saleNumber}</Text> : null}
+        {data.remitoNumero ? <Text style={reciboStyles.recibiMeta}>   ·   Remito {data.remitoNumero}</Text> : null}
+      </Text>
+      {(data.clientAddress || data.clientPhone) && (
+        <Text style={reciboStyles.recibiMeta}>
+          {[data.clientAddress, data.clientPhone].filter(Boolean).join("  ·  ")}
+        </Text>
+      )}
+
+      {/* Productos con incidencia, agrupados por tipo */}
+      <View style={incStyles.itemsHead}>
+        <Text style={[incStyles.colCant, incStyles.headTxt]}>Cant.</Text>
+        <Text style={[incStyles.colDesc, incStyles.headTxt]}>Producto</Text>
+        <Text style={[incStyles.colSub, incStyles.headTxt]}>Subtotal</Text>
+      </View>
+      {INCIDENCIA_ORDEN.map((tipo) => {
+        const grupo = data.items.filter((it) => it.tipo === tipo);
+        if (grupo.length === 0) return null;
+        return (
+          <View key={tipo}>
+            <Text style={incStyles.grupoTitle}>{INCIDENCIA_LABEL[tipo]}</Text>
+            {grupo.map((it, i) => (
+              <View key={i} style={incStyles.itemRow}>
+                <Text style={incStyles.colCant}>{it.quantity}</Text>
+                <Text style={incStyles.colDesc}>{it.name}</Text>
+                <Text style={incStyles.colSub}>{formatCurrency(it.price * it.quantity)}</Text>
+              </View>
+            ))}
+          </View>
+        );
+      })}
+
+      {/* Totales */}
+      <View style={incStyles.totalesBox}>
+        <View style={incStyles.totalRow}>
+          <Text style={incStyles.totalLabel}>Precio total (sin incidencias)</Text>
+          <Text style={incStyles.totalValue}>{formatCurrency(data.totalOriginal)}</Text>
+        </View>
+        <View style={incStyles.totalRow}>
+          <Text style={incStyles.totalLabel}>Precio total de las incidencias</Text>
+          <Text style={incStyles.totalValue}>-{formatCurrency(data.totalIncidencias)}</Text>
+        </View>
+        <View style={incStyles.totalRow}>
+          <Text style={incStyles.totalFinalLabel}>Precio final</Text>
+          <Text style={incStyles.totalFinalValue}>{formatCurrency(precioFinal)}</Text>
+        </View>
+      </View>
+
+      {/* Firma */}
+      <View style={reciboStyles.firma}>
+        <View style={reciboStyles.firmaBox}>
+          <Text style={reciboStyles.firmaLabel}>Firma y aclaración — Conforme incidencia</Text>
+        </View>
+      </View>
+
+      {/* Footer */}
+      <View style={reciboStyles.footer}>
+        <Text>{data.reciboNumero}</Text>
+        <Text>{copia}</Text>
+      </View>
+    </>
+  );
+};
+
+const ReciboIncidenciaPDF = ({ data }: { data: ReciboIncidenciaData }) => {
+  return (
+    <Document>
+      <Page size="A4" orientation="landscape" style={reciboStyles.page}>
+        <View style={reciboStyles.half}>
+          <ReciboIncidenciaCopia data={data} copia="ORIGINAL · Cliente" />
+        </View>
+        <View style={reciboStyles.cutLine} />
+        <View style={reciboStyles.half}>
+          <ReciboIncidenciaCopia data={data} copia="DUPLICADO · Comercio" />
+        </View>
+      </Page>
+    </Document>
+  );
+};
+
+/** Genera el PDF del recibo de incidencia (pérdida/faltante/rechazo). Retorna base64. */
+export const generarReciboIncidencia = async (data: ReciboIncidenciaData): Promise<string> => {
+  const pdfBlob = await pdf(<ReciboIncidenciaPDF data={data} />).toBlob();
+  const arrayBuffer = await pdfBlob.arrayBuffer();
+  const bytes = new Uint8Array(arrayBuffer);
+  let binary = "";
+  for (let i = 0; i < bytes.byteLength; i++) binary += String.fromCharCode(bytes[i]);
+  return btoa(binary);
+};
+
 // ===================== RECIBO DE DESCUENTO =====================
 export interface ReciboDescuentoItem {
   name: string;

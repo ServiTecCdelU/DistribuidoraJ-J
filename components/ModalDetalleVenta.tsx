@@ -69,6 +69,8 @@ export function ModalDetalleVenta({
   const [noEntMontos, setNoEntMontos] = useState<{ rotura: number; faltante: number; noQuiso: number }>({ rotura: 0, faltante: 0, noQuiso: 0 });
   // Ítems que el cliente rechazó ("no quiso"), para emitir el recibo de devolución.
   const [rechazoItems, setRechazoItems] = useState<{ name: string; quantity: number; price: number; itemDiscount?: number }[]>([]);
+  // Todos los ítems con incidencia (pérdida/faltante/rechazo), para el recibo de incidencia.
+  const [incidenciaItems, setIncidenciaItems] = useState<{ name: string; quantity: number; price: number; itemDiscount?: number; tipo: "perdida" | "faltante" | "rechazo" }[]>([]);
   const [descargandoRechazo, setDescargandoRechazo] = useState(false);
   const [verTodosIncidencias, setVerTodosIncidencias] = useState(false);
   const [modalDevAbierto, setModalDevAbierto] = useState(false);
@@ -101,6 +103,7 @@ export function ModalDetalleVenta({
     if (!venta?.id || !abierto) return;
     setNoEntMontos({ rotura: 0, faltante: 0, noQuiso: 0 });
     setRechazoItems([]);
+    setIncidenciaItems([]);
     supabase
       .from("ventas")
       .select("items_no_entregados")
@@ -110,14 +113,17 @@ export function ModalDetalleVenta({
         const arr = (data as any)?.items_no_entregados ?? [];
         const acc = { rotura: 0, faltante: 0, noQuiso: 0 };
         const rechazos: { name: string; quantity: number; price: number; itemDiscount?: number }[] = [];
+        const incidencias: { name: string; quantity: number; price: number; itemDiscount?: number; tipo: "perdida" | "faltante" | "rechazo" }[] = [];
         for (const it of arr) {
           const monto = (it.price || 0) * (1 - (it.itemDiscount || 0) / 100) * (it.quantity || 0);
-          if (it.motivo === "rotura") acc.rotura += monto;
-          else if (it.motivo === "faltante") acc.faltante += monto;
-          else { acc.noQuiso += monto; rechazos.push({ name: it.name, quantity: it.quantity, price: it.price, itemDiscount: it.itemDiscount }); }
+          const base = { name: it.name, quantity: it.quantity, price: it.price, itemDiscount: it.itemDiscount };
+          if (it.motivo === "rotura") { acc.rotura += monto; incidencias.push({ ...base, tipo: "perdida" }); }
+          else if (it.motivo === "faltante") { acc.faltante += monto; incidencias.push({ ...base, tipo: "faltante" }); }
+          else { acc.noQuiso += monto; rechazos.push(base); incidencias.push({ ...base, tipo: "rechazo" }); }
         }
         setNoEntMontos(acc);
         setRechazoItems(rechazos);
+        setIncidenciaItems(incidencias);
       });
   }, [venta?.id, abierto]);
 
@@ -245,36 +251,43 @@ export function ModalDetalleVenta({
     }
   };
 
-  // Recibo de devolución por lo que el cliente rechazó en el reparto ("no quiso").
+  // Recibo de incidencia: agrupa pérdida (rotura), faltante y rechazo ("no quiso").
   const descargarReciboRechazo = async () => {
-    if (!venta || rechazoItems.length === 0) return;
+    if (!venta || incidenciaItems.length === 0) return;
     setDescargandoRechazo(true);
     try {
-      const items = rechazoItems.map((it) => ({
+      const items = incidenciaItems.map((it) => ({
         name: it.name,
         quantity: it.quantity,
         price: it.price * (1 - (it.itemDiscount ?? 0) / 100),
-        destino: "stock" as const,
+        tipo: it.tipo,
       }));
-      const total = items.reduce((acc, it) => acc + it.price * it.quantity, 0);
+      const totalIncidencias = noEntMontos.rotura + noEntMontos.faltante + noEntMontos.noQuiso;
+      const totalCobrado = venta.items.reduce(
+        (acc, it: any) => acc + it.price * (1 - ((it.itemDiscount ?? 0) / 100)) * it.quantity,
+        0,
+      );
+      const totalOriginal = totalCobrado + totalIncidencias;
       const reciboNumero = `DEV-${venta.remitoNumber || venta.saleNumber || venta.id}`;
-      const { generarReciboDevolucion } = await import("@/hooks/useGenerarPdf");
-      const base64 = await generarReciboDevolucion({
+      const { generarReciboIncidencia } = await import("@/hooks/useGenerarPdf");
+      const base64 = await generarReciboIncidencia({
         reciboNumero,
         fecha: venta.createdAt,
         clientName: venta.clientName,
         clientAddress: venta.clientAddress,
         clientPhone: venta.clientPhone,
         saleNumber: venta.saleNumber as any,
+        remitoNumero: venta.remitoNumber as any,
         items,
-        total,
+        totalOriginal,
+        totalIncidencias,
       });
       const link = document.createElement("a");
       link.href = `data:application/pdf;base64,${base64}`;
-      link.download = `recibo-devolucion-${reciboNumero}.pdf`;
+      link.download = `recibo-incidencia-${reciboNumero}.pdf`;
       link.click();
     } catch {
-      toast.error("No se pudo generar el recibo de devolución");
+      toast.error("No se pudo generar el recibo de incidencia");
     } finally {
       setDescargandoRechazo(false);
     }
@@ -806,7 +819,7 @@ export function ModalDetalleVenta({
                     {verTodosIncidencias ? "Mostrar menos" : `Ver todos (${rows.length})`}
                   </button>
                 )}
-                {rechazoItems.length > 0 && (
+                {incidenciaItems.length > 0 && (
                   <div className="px-4 py-2.5 border-t border-rose-100">
                     <Button
                       variant="outline"
@@ -816,7 +829,7 @@ export function ModalDetalleVenta({
                       disabled={descargandoRechazo}
                     >
                       {descargandoRechazo ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <RotateCcw className="h-3.5 w-3.5" />}
-                      Recibo de devolución (no quiso)
+                      Recibo de incidencia
                     </Button>
                   </div>
                 )}
