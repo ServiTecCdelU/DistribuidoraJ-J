@@ -146,9 +146,11 @@ export function ModalDetalleVenta({
           } else if (desc.startsWith("[FALTANTE]")) {
             faltantes.push(desc.replace(/^\[FALTANTE\]\s*#[\w-]+\s*—\s*/, "").replace(/^\[FALTANTE\]\s*/, ""));
           } else if (desc.startsWith("[NO_QUIERE]")) {
-            noQuiere.push(desc.replace(/^\[NO_QUIERE\]\s*#[\w-]+\s*—\s*/, "").replace(/^\[NO_QUIERE\]\s*/, ""));
+            const texto = desc.replace(/^\[NO_QUIERE\]\s*#[\w-]+\s*—\s*/, "").replace(/^\[NO_QUIERE\]\s*/, "").trim();
+            if (!noQuiere.includes(texto)) noQuiere.push(texto);
           } else if (desc.startsWith("[RECHAZO]")) {
-            noQuiere.push(desc.replace(/^\[RECHAZO\]\s*\S+\s*—\s*/, "").replace(/^\[RECHAZO\]\s*/, ""));
+            const texto = desc.replace(/^\[RECHAZO\]\s*\S+\s*—\s*/, "").replace(/^\[RECHAZO\]\s*/, "").trim();
+            if (!noQuiere.includes(texto)) noQuiere.push(texto);
           }
         }
         setIncidencias({ roturas, faltantes, noQuiere });
