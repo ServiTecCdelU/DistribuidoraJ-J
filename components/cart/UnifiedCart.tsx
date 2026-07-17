@@ -218,11 +218,15 @@ export function UnifiedCart({ role, state, actions, onConfirmSale, allowDiscount
             <React.Fragment key={step.key}>
               <button
                 type="button"
-                onClick={() => step.key !== "checkout" || cartStep !== "products" ? setCartStep(step.key) : undefined}
+                onClick={() => {
+                  const checkoutLocked = step.key === "checkout" && (cartStep === "products" || clienteBloqueado);
+                  if (checkoutLocked) return;
+                  setCartStep(step.key);
+                }}
                 className={cn(
                   "text-xs font-medium px-2 py-1 rounded-md transition-colors",
                   cartStep === step.key ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:text-foreground",
-                  step.key === "checkout" && cartStep === "products" && "pointer-events-none opacity-50"
+                  step.key === "checkout" && (cartStep === "products" || clienteBloqueado) && "pointer-events-none opacity-50"
                 )}
               >
                 {i + 1}. {step.label}
