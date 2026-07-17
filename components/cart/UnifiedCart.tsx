@@ -17,6 +17,13 @@ import {
 } from "@/components/ui/select";
 import { ClientModal } from "@/components/clientes/client-modal";
 import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogFooter,
+} from "@/components/ui/dialog";
+import {
   ShoppingCart,
   Plus,
   Minus,
@@ -91,6 +98,23 @@ export function UnifiedCart({ role, state, actions, onConfirmSale, allowDiscount
   const [editClientModalOpen, setEditClientModalOpen] = useState(false);
   const [transferConfig, setTransferConfig] = useState<TransferConfig>({ alias: '', titular: '', banco: '' });
   const [cartStep, setCartStep] = useState<"products" | "client" | "checkout">("products");
+  const [deudaBloqueoOpen, setDeudaBloqueoOpen] = useState(false);
+
+  // Vendedor: bloquear pedido si el cliente está en mora o es incobrable.
+  const deudaClasificacion = useMemo(() => {
+    if (!selectedClientData) return "normal";
+    const live = clasificarDeuda(selectedClientData.debtSince);
+    return live !== "normal" ? live : (selectedClientData.debtClassification ?? "normal");
+  }, [selectedClientData]);
+  const clienteBloqueado = role === "seller" && (deudaClasificacion === "moroso" || deudaClasificacion === "incobrable");
+
+  const handleSubmit = () => {
+    if (clienteBloqueado) {
+      setDeudaBloqueoOpen(true);
+      return;
+    }
+    onConfirmSale();
+  };
 
   // Resetear step cuando el carrito se vacía (después de confirmar venta)
   useEffect(() => {
@@ -740,7 +764,7 @@ export function UnifiedCart({ role, state, actions, onConfirmSale, allowDiscount
         <Button
           className="w-full h-10 text-sm font-semibold shadow-md"
           disabled={!actions.canProcessSale()}
-          onClick={onConfirmSale}
+          onClick={handleSubmit}
         >
           {(role === null || deliveryMethod === "delivery") ? "Crear Pedido" : "Procesar Venta"}
         </Button>
@@ -770,6 +794,42 @@ export function UnifiedCart({ role, state, actions, onConfirmSale, allowDiscount
           onSave={handleUpdateClient}
         />
       )}
+
+      {/* Modal de bloqueo por deuda (vendedor) */}
+      <Dialog open={deudaBloqueoOpen} onOpenChange={setDeudaBloqueoOpen}>
+        <DialogContent className="sm:max-w-md rounded-2xl">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-rose-600 text-lg">
+              <AlertTriangle className="h-6 w-6 shrink-0" />
+              No se puede crear el pedido
+            </DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4 py-2">
+            <div className="rounded-2xl border border-rose-200 bg-rose-50 p-4 text-center">
+              <p className="text-xs font-medium text-rose-700 uppercase tracking-wide">
+                Cliente {deudaClasificacion === "incobrable" ? "INCOBRABLE" : "MOROSO"}
+              </p>
+              <p className="mt-1 text-sm font-semibold text-rose-900">
+                {selectedClientData?.name}
+              </p>
+            </div>
+            <div className="flex items-center justify-between rounded-2xl border border-border bg-muted/30 px-4 py-3">
+              <span className="text-sm text-muted-foreground">Deuda actual</span>
+              <span className="text-2xl font-bold text-rose-600">
+                {actions.formatCurrency(selectedClientData?.currentBalance ?? 0)}
+              </span>
+            </div>
+            <p className="text-sm text-muted-foreground text-center">
+              Este cliente debe <span className="font-semibold text-foreground">regularizar su deuda</span> antes de poder realizar un nuevo pedido.
+            </p>
+          </div>
+          <DialogFooter>
+            <Button className="w-full h-10" onClick={() => setDeudaBloqueoOpen(false)}>
+              Entendido
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
