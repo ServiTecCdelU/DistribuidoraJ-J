@@ -531,9 +531,30 @@ export function UnifiedCart({ role, state, actions, onConfirmSale, allowDiscount
                 Seleccioná un cliente para continuar
               </p>
             )}
+            {dniFound && clienteBloqueado && (
+              <div className="rounded-2xl border border-rose-300 bg-rose-50 p-3 space-y-2">
+                <div className="flex items-start gap-2 text-rose-700">
+                  <AlertTriangle className="h-5 w-5 shrink-0 mt-0.5" />
+                  <div className="text-xs">
+                    <p className="font-bold text-sm">
+                      Cliente {deudaClasificacion === "incobrable" ? "INCOBRABLE" : "MOROSO"}
+                    </p>
+                    <p className="mt-0.5">
+                      Debe regularizar su deuda antes de realizar un nuevo pedido.
+                    </p>
+                  </div>
+                </div>
+                <div className="flex items-center justify-between rounded-xl bg-white/60 border border-rose-200 px-3 py-2">
+                  <span className="text-xs font-medium text-rose-800">Deuda actual</span>
+                  <span className="text-lg font-bold text-rose-600">
+                    {actions.formatCurrency(selectedClientData?.currentBalance ?? 0)}
+                  </span>
+                </div>
+              </div>
+            )}
             <div className="flex gap-2">
               <Button variant="outline" className="flex-1 h-10 text-sm" onClick={() => setCartStep("products")}>← Productos</Button>
-              <Button className="flex-1 h-10 text-sm" disabled={!dniFound} onClick={() => setCartStep("checkout")}>Siguiente →</Button>
+              <Button className="flex-1 h-10 text-sm" disabled={!dniFound || clienteBloqueado} onClick={() => setCartStep("checkout")}>Siguiente →</Button>
             </div>
           </div>
         )}
