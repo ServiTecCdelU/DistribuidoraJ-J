@@ -1,6 +1,6 @@
 // lib/types.ts
 export type UserRole = "admin" | "seller" | "customer";
-export type EmployeeType = "vendedor" | "transportista" | "ambos";
+export type EmployeeType = "vendedor" | "transportista" | "ambos" | "cobrador";
 
 export interface User {
   id: string;

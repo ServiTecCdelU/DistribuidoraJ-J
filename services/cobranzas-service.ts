@@ -209,6 +209,61 @@ export const getComprobantesBySeller = async (sellerId: string): Promise<Comprob
   }
 }
 
+// Sube un comprobante ya asociado a un pago que el cobrador acaba de registrar
+// (el pago/transacción y el descuento de saldo ya se hicieron via registerCashPayment;
+// esto solo deja constancia del archivo, sin pasar por el flujo de aprobación pendiente).
+export const uploadComprobanteAprobado = async (data: {
+  clientId: string
+  sellerId: string
+  amount: number
+  notes?: string
+  file: File
+  transactionId: string
+  reviewedBy: string
+}): Promise<ComprobantePago> => {
+  const ext = data.file.name.split('.').pop() || 'jpg'
+  const path = `${data.sellerId}/${Date.now()}.${ext}`
+  const { error: uploadError } = await supabase.storage
+    .from('comprobantes')
+    .upload(path, data.file, { upsert: false })
+
+  if (uploadError) throw new Error(`Error subiendo archivo: ${uploadError.message}`)
+
+  const { data: urlData } = supabase.storage.from('comprobantes').getPublicUrl(path)
+  const fileUrl = urlData.publicUrl
+
+  const docId = await generateReadableId('comprobantes_pago', 'comp', `${data.clientId}`)
+  const reviewedAt = new Date()
+  await supabase.from('comprobantes_pago').insert({
+    id: docId,
+    client_id: data.clientId,
+    seller_id: data.sellerId,
+    amount: data.amount,
+    notes: data.notes || null,
+    file_url: fileUrl,
+    file_name: data.file.name,
+    status: 'approved',
+    reviewed_at: reviewedAt.toISOString(),
+    reviewed_by: data.reviewedBy,
+    transaction_id: data.transactionId,
+  })
+
+  return {
+    id: docId,
+    clientId: data.clientId,
+    sellerId: data.sellerId,
+    amount: data.amount,
+    notes: data.notes,
+    fileUrl,
+    fileName: data.file.name,
+    status: 'approved',
+    reviewedAt,
+    reviewedBy: data.reviewedBy,
+    transactionId: data.transactionId,
+    createdAt: reviewedAt,
+  }
+}
+
 // Admin aprueba comprobante → registra pago
 export const approveComprobante = async (id: string, reviewedBy: string): Promise<ComprobantePago> => {
   // Verificar que sigue pendiente

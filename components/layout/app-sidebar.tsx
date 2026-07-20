@@ -42,6 +42,7 @@ function getRoleLabel(user: { role: string; employeeType?: string }): string {
   if (user.role === "admin") return "Admin";
   if (user.employeeType === "transportista") return "Transportista";
   if (user.employeeType === "ambos") return "Vendedor / Transportista";
+  if (user.employeeType === "cobrador") return "Cobrador";
   return "Vendedor";
 }
 
@@ -54,6 +55,7 @@ export function AppSidebar() {
   const employeeType = user?.employeeType;
   const isVendedor = employeeType === "vendedor" || employeeType === "ambos";
   const isTransportista = employeeType === "transportista" || employeeType === "ambos";
+  const isCobrador = employeeType === "cobrador";
 
   const navGroups: NavGroup[] = [
     {
@@ -65,9 +67,14 @@ export function AppSidebar() {
         { href: "/ventas/nueva", label: "Nueva Venta", icon: ShoppingCart, roles: ["admin", ...(isVendedor ? ["seller"] : [])] },
         { href: "/pedidos", label: "Pedidos", icon: Truck, roles: ["admin", ...(isTransportista ? ["seller"] : [])] },
         { href: "/mis-pedidos", label: "Mis Pedidos", icon: Package, roles: [...(isVendedor ? ["seller"] : [])] },
-        { href: "/comisiones", label: "Mis Comisiones", icon: Banknote, roles: ["seller"] },
+        { href: "/comisiones", label: "Mis Comisiones", icon: Banknote, roles: [...(!isCobrador ? ["seller"] : [])] },
         // { href: "/cobranzas", label: "Cobranzas", icon: Receipt, roles: [...(isVendedor ? ["seller"] : [])] },
-        { href: "/cuenta-corriente", label: user?.role === "seller" ? "Mis Clientes" : "Cuenta Corriente", icon: Users, roles: ["admin", ...(isVendedor ? ["seller"] : [])] },
+        {
+          href: "/cuenta-corriente",
+          label: isCobrador ? "Cobranza" : user?.role === "seller" ? "Mis Clientes" : "Cuenta Corriente",
+          icon: Users,
+          roles: ["admin", ...(isVendedor || isCobrador ? ["seller"] : [])],
+        },
         { href: "/mayorista", label: "Mayorista", icon: Store, roles: ["admin"] },
       ],
     },

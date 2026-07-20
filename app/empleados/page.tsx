@@ -62,12 +62,14 @@ const EMPLOYEE_TYPE_LABELS: Record<EmployeeType, string> = {
   vendedor: 'Vendedor',
   transportista: 'Transportista',
   ambos: 'Vendedor + Transportista',
+  cobrador: 'Cobrador',
 }
 
 const EMPLOYEE_TYPE_BADGE: Record<EmployeeType, string> = {
   vendedor: 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400 border border-blue-200 dark:border-blue-800',
   transportista: 'bg-violet-100 text-violet-700 dark:bg-violet-900/30 dark:text-violet-400 border border-violet-200 dark:border-violet-800',
   ambos: 'bg-teal-100 text-teal-700 dark:bg-teal-900/30 dark:text-teal-400 border border-teal-200 dark:border-teal-800',
+  cobrador: 'bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400 border border-amber-200 dark:border-amber-800',
 }
 
 export default function EmpleadosPage() {
@@ -109,6 +111,7 @@ export default function EmpleadosPage() {
     codigoVendedor: '',
     isVendedor: true,
     isTransportista: false,
+    isCobrador: false,
     commissionRate: 10,
     transportistaCommissionRate: 10,
     maxDiscount: 6,
@@ -155,6 +158,7 @@ export default function EmpleadosPage() {
       codigoVendedor: '',
       isVendedor: true,
       isTransportista: false,
+      isCobrador: false,
       commissionRate: 10,
       transportistaCommissionRate: 10,
       maxDiscount: 6,
@@ -172,6 +176,7 @@ export default function EmpleadosPage() {
       codigoVendedor: seller.codigoVendedor ?? '',
       isVendedor: seller.employeeType === 'vendedor' || seller.employeeType === 'ambos',
       isTransportista: seller.employeeType === 'transportista' || seller.employeeType === 'ambos',
+      isCobrador: seller.employeeType === 'cobrador',
       commissionRate: seller.commissionRate,
       transportistaCommissionRate: seller.transportistaCommissionRate ?? 10,
       maxDiscount: seller.maxDiscount ?? 6,
@@ -244,13 +249,14 @@ export default function EmpleadosPage() {
 
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault()
-    if (!formData.isVendedor && !formData.isTransportista) {
-      toast.error('Seleccioná al menos un rol (Vendedor o Transportista)')
+    if (!formData.isVendedor && !formData.isTransportista && !formData.isCobrador) {
+      toast.error('Seleccioná al menos un rol (Vendedor, Transportista o Cobrador)')
       return
     }
     setSaving(true)
     const employeeType: EmployeeType =
-      formData.isVendedor && formData.isTransportista ? 'ambos'
+      formData.isCobrador ? 'cobrador'
+      : formData.isVendedor && formData.isTransportista ? 'ambos'
       : formData.isTransportista ? 'transportista'
       : 'vendedor'
     const payload: Record<string, any> = {
@@ -487,7 +493,8 @@ export default function EmpleadosPage() {
     const matchesType =
       typeFilter === 'all' ||
       (typeFilter === 'vendedor' && (seller.employeeType === 'vendedor' || seller.employeeType === 'ambos')) ||
-      (typeFilter === 'transportista' && (seller.employeeType === 'transportista' || seller.employeeType === 'ambos'))
+      (typeFilter === 'transportista' && (seller.employeeType === 'transportista' || seller.employeeType === 'ambos')) ||
+      (typeFilter === 'cobrador' && seller.employeeType === 'cobrador')
     return matchesSearch && matchesStatus && matchesType
   })
 
@@ -507,6 +514,7 @@ export default function EmpleadosPage() {
   const getEmployeeTypeIcon = (type: EmployeeType) => {
     if (type === 'vendedor') return <ShoppingCart className="h-3 w-3 mr-1" />
     if (type === 'transportista') return <Truck className="h-3 w-3 mr-1" />
+    if (type === 'cobrador') return <Banknote className="h-3 w-3 mr-1" />
     return <Users className="h-3 w-3 mr-1" />
   }
 
@@ -628,6 +636,7 @@ export default function EmpleadosPage() {
             <option value="all">Todos los tipos</option>
             <option value="vendedor">Vendedor</option>
             <option value="transportista">Transportista</option>
+            <option value="cobrador">Cobrador</option>
           </select>
           <select
             className="h-10 rounded-md border border-input bg-background px-3 text-sm text-foreground shadow-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
@@ -665,6 +674,7 @@ export default function EmpleadosPage() {
             <option value="all">Todos los tipos</option>
             <option value="vendedor">Vendedor</option>
             <option value="transportista">Transportista</option>
+            <option value="cobrador">Cobrador</option>
           </select>
           <select
             className="h-10 flex-1 rounded-md border border-input bg-background px-3 text-sm text-foreground shadow-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
@@ -1026,7 +1036,9 @@ export default function EmpleadosPage() {
                     <Checkbox
                       id="isVendedor"
                       checked={formData.isVendedor}
-                      onCheckedChange={(checked) => setFormData({ ...formData, isVendedor: !!checked })}
+                      onCheckedChange={(checked) =>
+                        setFormData({ ...formData, isVendedor: !!checked, isCobrador: checked ? false : formData.isCobrador })
+                      }
                     />
                     <label htmlFor="isVendedor" className="flex items-center gap-2 cursor-pointer flex-1">
                       <ShoppingCart className="h-4 w-4 text-blue-500" />
@@ -1052,14 +1064,41 @@ export default function EmpleadosPage() {
                     <Checkbox
                       id="isTransportista"
                       checked={formData.isTransportista}
-                      onCheckedChange={(checked) => setFormData({ ...formData, isTransportista: !!checked })}
+                      onCheckedChange={(checked) =>
+                        setFormData({ ...formData, isTransportista: !!checked, isCobrador: checked ? false : formData.isCobrador })
+                      }
                     />
                     <label htmlFor="isTransportista" className="flex items-center gap-2 cursor-pointer flex-1">
                       <Truck className="h-4 w-4 text-violet-500" />
                       <span className="text-sm font-medium">Transportista</span>
                     </label>
                   </div>
+                  <div className="flex items-center gap-3 p-3">
+                    <Checkbox
+                      id="isCobrador"
+                      checked={formData.isCobrador}
+                      onCheckedChange={(checked) =>
+                        setFormData({
+                          ...formData,
+                          isCobrador: !!checked,
+                          // Cobrador es un rol exclusivo: ve TODAS las cuentas corrientes,
+                          // no tiene sentido combinarlo con vendedor/transportista.
+                          isVendedor: checked ? false : formData.isVendedor,
+                          isTransportista: checked ? false : formData.isTransportista,
+                        })
+                      }
+                    />
+                    <label htmlFor="isCobrador" className="flex items-center gap-2 cursor-pointer flex-1">
+                      <Banknote className="h-4 w-4 text-amber-500" />
+                      <span className="text-sm font-medium">Cobrador</span>
+                    </label>
+                  </div>
                 </div>
+                {formData.isCobrador && (
+                  <p className="text-xs text-muted-foreground">
+                    Ve todas las cuentas corrientes y registra pagos (siempre con comprobante). No puede combinarse con Vendedor/Transportista.
+                  </p>
+                )}
               </div>
               {formData.isVendedor && (
                 <div className="grid gap-2">

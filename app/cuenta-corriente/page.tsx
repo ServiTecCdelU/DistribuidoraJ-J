@@ -64,9 +64,13 @@ const ESTADO_META: { key: DebtClassification; label: string; dot: string; text: 
 
 export default function CuentaCorrientePage() {
   const { user } = useAuth()
-  // Un vendedor solo ve la cuenta corriente de SUS clientes y en modo lectura.
-  const isSeller = user?.role === 'seller'
-  const canManage = !isSeller
+  // Cobrador: ve TODAS las cuentas corrientes (como admin) y puede registrar pagos,
+  // pero siempre con comprobante adjunto. No tiene acceso a aprobar/rechazar ni borrar.
+  const isCobrador = user?.employeeType === 'cobrador'
+  // Un vendedor (no cobrador) solo ve la cuenta corriente de SUS clientes y en modo lectura.
+  const isSeller = user?.role === 'seller' && !isCobrador
+  const canManage = !isSeller && !isCobrador
+  const canRegisterPayment = !isSeller
   const [activeTab, setActiveTab] = useState<'clientes' | 'mayorista'>('clientes')
   const [debtClients, setDebtClients] = useState<ClientWithSeller[]>([])
   const [comprobantes, setComprobantes] = useState<ComprobantePago[]>([])
@@ -115,6 +119,8 @@ export default function CuentaCorrientePage() {
   const [payNotes, setPayNotes] = useState('')
   // Imputación: id de la transacción de deuda (remito/venta) elegida, '' = FIFO
   const [payDebtId, setPayDebtId] = useState('')
+  // Comprobante obligatorio cuando el que registra es un cobrador (no admin)
+  const [payComprobante, setPayComprobante] = useState<File | null>(null)
 
   // Registrar pago manual (mayorista)
   const [payMayoristaDialog, setPayMayoristaDialog] = useState(false)
@@ -416,10 +422,14 @@ export default function CuentaCorrientePage() {
 
   // Registrar pago manual (efectivo, etc)
   const handleRegisterPayment = async () => {
-    if (!selectedClient || !payAmount || !user || !canManage) return
+    if (!selectedClient || !payAmount || !user || !canRegisterPayment) return
     const amount = parseFloat(payAmount)
     if (isNaN(amount) || amount <= 0) {
       toast.error('Ingresá un monto válido')
+      return
+    }
+    if (isCobrador && !payComprobante) {
+      toast.error('Adjuntá el comprobante de transferencia para registrar el pago')
       return
     }
     setProcessing(true)
@@ -449,6 +459,19 @@ export default function CuentaCorrientePage() {
       // Recibo numerado: generar PDF, guardarlo y descargarlo
       await emitirRecibo(txPago, selectedClient.currentBalance, methods[payMethod] || methods.otro)
 
+      // Cobrador: dejar constancia del comprobante adjunto, ya vinculado al pago recién registrado
+      if (isCobrador && payComprobante && user.sellerId) {
+        await cobranzasApi.uploadComprobanteAprobado({
+          clientId: selectedClient.id,
+          sellerId: user.sellerId,
+          amount,
+          notes: payNotes || undefined,
+          file: payComprobante,
+          transactionId: txPago.id,
+          reviewedBy: user.name,
+        })
+      }
+
       // Actualizar estado local (puede quedar negativo = saldo a favor)
       const newBalance = selectedClient.currentBalance - amount
       setSelectedClient((prev) => prev ? { ...prev, currentBalance: newBalance } : prev)
@@ -466,6 +489,7 @@ export default function CuentaCorrientePage() {
       setPayMethod('efectivo')
       setPayNotes('')
       setPayDebtId('')
+      setPayComprobante(null)
       toast.success(`Pago de ${formatCurrency(amount)} registrado`)
     } catch (err: any) {
       toast.error(err.message || 'Error al registrar pago')
@@ -1187,7 +1211,7 @@ ${renderTabla('Cuenta Mayorista', mayorista, balanceMay)}
               </div>
 
               <div className="flex flex-wrap gap-2">
-                {canManage && (
+                {canRegisterPayment && (
                 <Button
                   className="gap-2 rounded-xl"
                   onClick={() => setPayDialog(true)}
@@ -1350,7 +1374,7 @@ ${renderTabla('Cuenta Mayorista', mayorista, balanceMay)}
         </Dialog>
 
         {/* Dialog Registrar pago */}
-        <Dialog open={payDialog} onOpenChange={(open) => { if (!open) { setPayDialog(false); setPayAmount(''); setPayNotes(''); setPayDebtId(''); } }}>
+        <Dialog open={payDialog} onOpenChange={(open) => { if (!open) { setPayDialog(false); setPayAmount(''); setPayNotes(''); setPayDebtId(''); setPayComprobante(null); } }}>
           <DialogContent className="sm:max-w-sm">
             <DialogHeader>
               <DialogTitle>Registrar pago</DialogTitle>
@@ -1432,10 +1456,26 @@ ${renderTabla('Cuenta Mayorista', mayorista, balanceMay)}
                   rows={2}
                 />
               </div>
+              {isCobrador && (
+                <div className="space-y-2">
+                  <Label>Comprobante de transferencia (obligatorio)</Label>
+                  <Input
+                    type="file"
+                    accept="image/*,application/pdf"
+                    onChange={(e) => setPayComprobante(e.target.files?.[0] ?? null)}
+                  />
+                  {!payComprobante && (
+                    <p className="text-xs text-muted-foreground">Tenés que adjuntar el comprobante para registrar el pago.</p>
+                  )}
+                </div>
+              )}
             </div>
             <DialogFooter>
               <Button variant="outline" onClick={() => setPayDialog(false)}>Cancelar</Button>
-              <Button onClick={handleRegisterPayment} disabled={processing || !payAmount || parseFloat(payAmount) <= 0}>
+              <Button
+                onClick={handleRegisterPayment}
+                disabled={processing || !payAmount || parseFloat(payAmount) <= 0 || (isCobrador && !payComprobante)}
+              >
                 {processing && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
                 Registrar pago
               </Button>

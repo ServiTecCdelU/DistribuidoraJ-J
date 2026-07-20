@@ -21,6 +21,8 @@ export default function HomePage() {
     } else if (user.role === 'seller') {
       if (user.employeeType === 'transportista') {
         router.push('/pedidos')
+      } else if (user.employeeType === 'cobrador') {
+        router.push('/cuenta-corriente')
       } else {
         router.push('/comisiones')
       }
