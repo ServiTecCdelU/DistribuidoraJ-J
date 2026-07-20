@@ -30,9 +30,9 @@ interface MovimientoDeudaCardProps {
 }
 
 // Columnas compartidas entre el encabezado (en la page) y cada fila:
-// Fecha · Concepto · Descripción (con flecha de detalle) · Cobrador · Estado · Debe · Haber · Saldo
+// Fecha · Concepto · Descripción (con flecha de detalle) · Incidencias · Cobrador · Estado · Debe · Haber · Saldo
 export const MOVIMIENTO_GRID =
-  'grid grid-cols-[5rem_5rem_minmax(10rem,1fr)_6.5rem_4.5rem_6.5rem_6.5rem_6.5rem] items-center gap-x-2'
+  'grid grid-cols-[5rem_5.5rem_minmax(10rem,1fr)_5.5rem_6.5rem_4.5rem_6.5rem_6.5rem_6.5rem] items-center gap-x-3'
 
 const COLOR_DIA: Record<EstadoDiaPago, string> = {
   falta: 'text-green-600',
@@ -492,7 +492,7 @@ export function MovimientoDeudaCard({
         onClick={expandable ? () => setExpanded((v) => !v) : undefined}
       >
         {anuladoRow ? (
-          <span className="col-span-8 text-xs text-muted-foreground text-center tracking-widest select-none" title={`ANULADO${tx.anuladoMotivo ? ` — Motivo: ${tx.anuladoMotivo}` : ''}${tx.anuladoBy ? ` · Por: ${tx.anuladoBy}` : ''}`}>
+          <span className="col-span-9 text-xs text-muted-foreground text-center tracking-widest select-none" title={`ANULADO${tx.anuladoMotivo ? ` — Motivo: ${tx.anuladoMotivo}` : ''}${tx.anuladoBy ? ` · Por: ${tx.anuladoBy}` : ''}`}>
             {'— '.repeat(14)}ANULADO{' —'.repeat(14)}
           </span>
         ) : (
@@ -512,15 +512,15 @@ export function MovimientoDeudaCard({
             {/* Descripción */}
             <div className="flex items-center gap-1.5 min-w-0">
               <span className="text-sm truncate">{descripcionMov}</span>
-              {tieneNoEntregados && !expanded && (
-                <Badge variant="outline" className="text-[11px] px-1 py-0 h-4 text-amber-600 border-amber-300 shrink-0">
-                  {noEntregadosUnified.length} incidencia{noEntregadosUnified.length > 1 ? 's' : ''}
-                </Badge>
-              )}
               {expandable && (
                 <ChevronDown className={`h-4 w-4 text-muted-foreground shrink-0 transition-transform ${expanded ? 'rotate-180' : ''}`} />
               )}
             </div>
+
+            {/* Incidencias: cantidad de ítems no entregados/devueltos, 0 si no hay */}
+            <span className={`text-xs text-center tabular-nums font-medium ${tieneNoEntregados ? 'text-amber-600' : 'text-muted-foreground'}`}>
+              {noEntregadosUnified.length}
+            </span>
 
             {/* Cobrador */}
             <span className="text-xs text-muted-foreground truncate">{cobradorNombre}</span>

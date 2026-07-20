@@ -1350,6 +1350,7 @@ ${renderTabla('Cuenta Mayorista', mayorista, balanceMay)}
                       <span>Fecha</span>
                       <span>Concepto</span>
                       <span>Descripción</span>
+                      <span className="text-center">Incidencias</span>
                       <span>Cobrador</span>
                       <span className="text-center">Estado</span>
                       <span className="text-right">Debe</span>
@@ -1381,6 +1382,7 @@ ${renderTabla('Cuenta Mayorista', mayorista, balanceMay)}
                     {/* Totales abajo */}
                     <div className={`${MOVIMIENTO_GRID} px-3 py-2 bg-foreground text-background text-xs font-bold border-t`}>
                       <span className="uppercase tracking-wide">Totales</span>
+                      <span />
                       <span />
                       <span />
                       <span />
