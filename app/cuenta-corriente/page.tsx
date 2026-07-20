@@ -1172,11 +1172,12 @@ ${renderTabla('Cuenta Mayorista', mayorista, balanceMay)}
     const txMinoristaOrdenado = [...txMinorista].sort((a, b) => a.date.getTime() - b.date.getTime())
     let saldoCorrido = 0
     const movimientosConSaldo = txMinoristaOrdenado.map((tx) => {
-      saldoCorrido += tx.type === 'debt' ? tx.amount : -tx.amount
+      // Los pagos anulados no modifican el saldo (se conservan en el historial, no se restan/suman).
+      if (!tx.anulado) saldoCorrido += tx.type === 'debt' ? tx.amount : -tx.amount
       return { tx, saldoAcum: saldoCorrido }
     })
-    const totalDebe = txMinorista.filter((t) => t.type === 'debt').reduce((a, t) => a + t.amount, 0)
-    const totalHaber = txMinorista.filter((t) => t.type !== 'debt').reduce((a, t) => a + t.amount, 0)
+    const totalDebe = txMinorista.filter((t) => t.type === 'debt' && !t.anulado).reduce((a, t) => a + t.amount, 0)
+    const totalHaber = txMinorista.filter((t) => t.type !== 'debt' && !t.anulado).reduce((a, t) => a + t.amount, 0)
 
     // Deudas (remitos/ventas) con saldo pendiente, para imputar pagos
     const deudasPendientes = txMinorista
@@ -1349,9 +1350,8 @@ ${renderTabla('Cuenta Mayorista', mayorista, balanceMay)}
                       <span>Fecha</span>
                       <span>Concepto</span>
                       <span>Descripción</span>
-                      <span>Acciones</span>
+                      <span>Cobrador</span>
                       <span className="text-center">Estado</span>
-                      <span className="text-center">Comp.</span>
                       <span className="text-right">Debe</span>
                       <span className="text-right">Haber</span>
                       <span className="text-right">Saldo</span>
@@ -1381,7 +1381,6 @@ ${renderTabla('Cuenta Mayorista', mayorista, balanceMay)}
                     {/* Totales abajo */}
                     <div className={`${MOVIMIENTO_GRID} px-3 py-2 bg-foreground text-background text-xs font-bold border-t`}>
                       <span className="uppercase tracking-wide">Totales</span>
-                      <span />
                       <span />
                       <span />
                       <span />

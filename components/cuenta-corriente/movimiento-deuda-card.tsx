@@ -30,9 +30,9 @@ interface MovimientoDeudaCardProps {
 }
 
 // Columnas compartidas entre el encabezado (en la page) y cada fila:
-// Fecha · Concepto · Descripción · Acciones · Estado · Comprobante · Debe · Haber · Saldo
+// Fecha · Concepto · Descripción (con flecha de detalle) · Cobrador · Estado · Debe · Haber · Saldo
 export const MOVIMIENTO_GRID =
-  'grid grid-cols-[5rem_4.5rem_minmax(8rem,1fr)_10rem_4.5rem_2.5rem_6.5rem_6.5rem_6.5rem] items-center gap-x-2'
+  'grid grid-cols-[5rem_5rem_minmax(10rem,1fr)_6.5rem_4.5rem_6.5rem_6.5rem_6.5rem] items-center gap-x-2'
 
 const COLOR_DIA: Record<EstadoDiaPago, string> = {
   falta: 'text-green-600',
@@ -300,22 +300,36 @@ export function MovimientoDeudaCard({
   }, [isDescuento, tx.description, sale])
 
   const descuentoExpandable = isDescuento && !!sale && (descuento.rows.length > 0 || !!descuento.final)
-  const expandable = (!isPayment && !!sale) || descuentoExpandable
+  const devolucionExpandable = isDevolucion && !!devMatch && devMatch.items.length > 0
+  // Los pagos también son expandibles: ahí viven el recibo, el comprobante y anular.
+  const expandable = isPayment || (!!sale) || descuentoExpandable
   const tieneRemito = !!sale?.remitoNumber
   const saldo = !isPayment && tx.saldo != null ? tx.saldo : null
   const pagada = saldo != null && saldo <= 0
 
+  // Nombre de quien cobró, parseado de la descripción del pago (" — Cobrado por X" o "(Cobrado por X...)").
+  // Sin match = lo cobró un admin desde el sistema → "Patricia".
+  const cobradorNombre = (() => {
+    if (!isPayment) return ''
+    const m = (tx.description ?? '').match(/Cobrado por\s+([^()—]+)/i)
+    if (m) return m[1].replace(/\bDESHABILITADO\b/i, '').trim()
+    return comprobante?.sellerName || 'Patricia'
+  })()
+
   // Concepto y Descripción separados (igual que el PDF)
-  const concepto = isRechazo ? 'Rechazo' : isPayment ? 'Pago' : 'Venta'
+  const concepto = isRechazo ? 'Rechazo' : isDevolucion ? 'Devolución' : isPayment ? 'Pago' : 'Venta'
   const rechazoRecibo = isRechazo ? ((tx.description ?? '').match(/\[RECHAZO\]\s*(\S+)/)?.[1] ?? '') : ''
   const descripcionMov = (() => {
     if (isRechazo) return `Rechazo de productos${rechazoRecibo ? ` · ${rechazoRecibo}` : ''}`
+    if (isDevolucion) return 'Devolución'
     if (isPayment) {
       if (isDescuento) return `Descuento${sale?.saleNumber ? ` · Venta ${sale.saleNumber}` : ''}${descuento.motivo ? ` · ${descuento.motivo}` : ''}`
-      const d = (tx.description || '').replace(/^Pago\s+(en\s+|por\s+)?/i, '')
+      let d = (tx.description || '').replace(/^Pago\s+(en\s+|por\s+)?/i, '')
+      d = d.replace(/\s*\(Cobrado por[^)]*\)/i, '').replace(/\s*—\s*Cobrado por.*$/i, '').trim()
+      d = d.replace(/transferencia bancaria/i, 'Transferencia')
       return d ? d.charAt(0).toUpperCase() + d.slice(1) : 'Pago recibido'
     }
-    return sale?.remitoNumber ? `Remito N° ${sale.remitoNumber}` : (tx.description || 'Venta')
+    return sale?.remitoNumber ? sale.remitoNumber : (tx.description || 'Venta')
   })()
 
   // Construir lista unificada de no entregados
@@ -454,174 +468,179 @@ export function MovimientoDeudaCard({
     }
   }
 
+  // Fila anulada: se muestra como una línea de guiones (no cuenta en los totales).
+  const anuladoRow = !!tx.anulado
+
   return (
     <div>
       {/* Fila principal (tabla) */}
       <div
-        className={`${MOVIMIENTO_GRID} px-3 py-2 ${expandable ? 'cursor-pointer hover:bg-muted/30' : ''}`}
+        className={`${MOVIMIENTO_GRID} px-3 py-2 ${expandable ? 'cursor-pointer hover:bg-muted/30' : ''} ${anuladoRow ? 'opacity-60' : ''}`}
         onClick={expandable ? () => setExpanded((v) => !v) : undefined}
       >
-        {/* Fecha */}
-        <span className="text-xs text-muted-foreground tabular-nums">{formatDate(tx.date)}</span>
+        {anuladoRow ? (
+          <span className="col-span-8 text-xs text-muted-foreground text-center tracking-widest select-none" title={`ANULADO${tx.anuladoMotivo ? ` — Motivo: ${tx.anuladoMotivo}` : ''}${tx.anuladoBy ? ` · Por: ${tx.anuladoBy}` : ''}`}>
+            {'— '.repeat(14)}ANULADO{' —'.repeat(14)}
+          </span>
+        ) : (
+          <>
+            {/* Fecha */}
+            <span className="text-xs text-muted-foreground tabular-nums">{formatDate(tx.date)}</span>
 
-        {/* Concepto */}
-        <span className="flex items-center gap-1 text-sm font-medium">
-          {isPayment
-            ? <ArrowDownCircle className="h-4 w-4 text-green-600 shrink-0" />
-            : <ArrowUpCircle className="h-4 w-4 text-red-600 shrink-0" />
-          }
-          {concepto}
-        </span>
-
-        {/* Descripción */}
-        <div className="flex items-center gap-1.5 min-w-0">
-          <span className={`text-sm truncate ${tx.anulado ? 'line-through text-muted-foreground' : ''}`}>{descripcionMov}</span>
-          {tieneNoEntregados && !expanded && (
-            <Badge variant="outline" className="text-[11px] px-1 py-0 h-4 text-amber-600 border-amber-300 shrink-0">
-              {noEntregadosUnified.length} no entregado{noEntregadosUnified.length > 1 ? 's' : ''}
-            </Badge>
-          )}
-          {expandable && (
-            <ChevronDown className={`h-4 w-4 text-muted-foreground shrink-0 transition-transform ${expanded ? 'rotate-180' : ''}`} />
-          )}
-        </div>
-
-        {/* Acciones: recibo de pago y eliminar */}
-        <div className="flex items-center justify-start gap-1.5">
-          {/* Recibo de DEVOLUCIÓN (mismo de Ventas) — no recibo de pago */}
-          {isDevolucion && devMatch && (
-            <button
-              type="button"
-              className="inline-flex items-center gap-0.5 text-xs text-purple-600 hover:underline shrink-0 disabled:opacity-50"
-              onClick={handleDescargarReciboDevol}
-              disabled={descargandoDevol}
-              title="Descargar recibo de devolución"
-            >
-              {descargandoDevol ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <RotateCcw className="h-3.5 w-3.5" />}
-              <span className="whitespace-nowrap">{devMatch.reciboNumero || 'Recibo'}</span>
-            </button>
-          )}
-          {isRechazo && (
-            <button
-              type="button"
-              className="inline-flex items-center gap-0.5 text-xs text-purple-600 hover:underline shrink-0 disabled:opacity-50"
-              onClick={handleDescargarReciboRechazo}
-              disabled={descargandoRechazo || !tieneRechazo}
-              title="Descargar recibo de devolución"
-            >
-              {descargandoRechazo ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <RotateCcw className="h-3.5 w-3.5" />}
-              <span className="whitespace-nowrap">{rechazoRecibo || 'Recibo'}</span>
-            </button>
-          )}
-          {isPayment && !isDevolucion && !isRechazo && (
-            tx.reciboPdfBase64 ? (
-              <>
-                <button
-                  type="button"
-                  className="inline-flex items-center gap-0.5 text-xs text-teal-600 hover:underline shrink-0"
-                  onClick={(e) => {
-                    e.stopPropagation()
-                    descargarDocumento(tx.reciboPdfBase64!, 'recibo', tx.reciboNumero)
-                  }}
-                  title="Descargar recibo"
-                >
-                  <Receipt className="h-3.5 w-3.5" /><span className="whitespace-nowrap">{tx.reciboNumero || 'Recibo'}</span>
-                </button>
-                {onRegenerarRecibo && (
-                  <button
-                    type="button"
-                    className="inline-flex items-center text-xs text-muted-foreground hover:text-teal-600 shrink-0 disabled:opacity-50"
-                    onClick={handleRegenerarRecibo}
-                    disabled={regenerandoRecibo}
-                    title="Generar de nuevo el recibo"
-                  >
-                    {regenerandoRecibo ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <RefreshCw className="h-3.5 w-3.5" />}
-                  </button>
-                )}
-              </>
-            ) : onRegenerarRecibo ? (
-              <button
-                type="button"
-                className="inline-flex items-center gap-0.5 text-xs text-teal-600 hover:underline shrink-0 disabled:opacity-50"
-                onClick={handleRegenerarRecibo}
-                disabled={regenerandoRecibo}
-                title="Generar y descargar el recibo de este pago"
-              >
-                {regenerandoRecibo ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Receipt className="h-3.5 w-3.5" />}
-                Recibo
-              </button>
-            ) : tx.reciboNumero ? (
-              <span className="inline-flex items-center gap-0.5 text-xs text-teal-600 shrink-0">
-                <Receipt className="h-3.5 w-3.5" /><span className="whitespace-nowrap">{tx.reciboNumero}</span>
-              </span>
-            ) : null
-          )}
-          {isPayment && !isDescuento && !isRechazo && onAnularPago && !tx.anulado && (
-            <button
-              type="button"
-              className="inline-flex items-center text-xs text-red-500 hover:text-red-700 shrink-0"
-              onClick={(e) => { e.stopPropagation(); onAnularPago(tx) }}
-              title="Anular este pago"
-            >
-              <Ban className="h-3.5 w-3.5" />
-            </button>
-          )}
-        </div>
-
-        {/* Estado: anulado, o verificación del comprobante (cobros de cobrador) */}
-        <div className="flex justify-center">
-          {tx.anulado ? (
-            <Badge
-              variant="outline"
-              className="text-[10px] px-1 py-0 h-4 text-red-600 border-red-300"
-              title={`${tx.anuladoMotivo ? `Motivo: ${tx.anuladoMotivo}` : ''}${tx.anuladoBy ? ` · Por: ${tx.anuladoBy}` : ''}`}
-            >
-              ANULADO
-            </Badge>
-          ) : comprobante?.viaCobrador ? (
-            <span title={comprobante.autorizado ? 'Verificado' : 'Sin verificar'}>
-              {comprobante.autorizado
-                ? <CheckCircle2 className="h-4 w-4 text-green-600" />
-                : <AlertTriangle className="h-4 w-4 text-amber-500" />}
+            {/* Concepto */}
+            <span className="flex items-center gap-1 text-sm font-medium">
+              {isPayment
+                ? <ArrowDownCircle className="h-4 w-4 text-green-600 shrink-0" />
+                : <ArrowUpCircle className="h-4 w-4 text-red-600 shrink-0" />
+              }
+              {concepto}
             </span>
-          ) : null}
-        </div>
 
-        {/* Comprobante adjunto */}
-        <div className="flex justify-center">
-          {comprobante?.fileUrl && (
-            <button
-              type="button"
-              className="inline-flex items-center text-teal-600 hover:text-teal-700"
-              onClick={(e) => { e.stopPropagation(); onVerComprobante?.(comprobante.fileUrl) }}
-              title="Ver comprobante"
-            >
-              <ImageIcon className="h-4 w-4" />
-            </button>
+            {/* Descripción */}
+            <div className="flex items-center gap-1.5 min-w-0">
+              <span className="text-sm truncate">{descripcionMov}</span>
+              {tieneNoEntregados && !expanded && (
+                <Badge variant="outline" className="text-[11px] px-1 py-0 h-4 text-amber-600 border-amber-300 shrink-0">
+                  {noEntregadosUnified.length} no entregado{noEntregadosUnified.length > 1 ? 's' : ''}
+                </Badge>
+              )}
+              {expandable && (
+                <ChevronDown className={`h-4 w-4 text-muted-foreground shrink-0 transition-transform ${expanded ? 'rotate-180' : ''}`} />
+              )}
+            </div>
+
+            {/* Cobrador */}
+            <span className="text-xs text-muted-foreground truncate">{cobradorNombre}</span>
+
+            {/* Estado: verificación del comprobante (cobros de cobrador) */}
+            <div className="flex justify-center">
+              {comprobante?.viaCobrador ? (
+                <span title={comprobante.autorizado ? 'Verificado' : 'Sin verificar'}>
+                  {comprobante.autorizado
+                    ? <CheckCircle2 className="h-4 w-4 text-green-600" />
+                    : <AlertTriangle className="h-4 w-4 text-amber-500" />}
+                </span>
+              ) : null}
+            </div>
+
+            {/* Debe (ventas / deudas) */}
+            <span className="text-sm font-bold tabular-nums text-right text-red-600">
+              {!isPayment ? formatCurrencyDecimals(tx.amount) : '—'}
+            </span>
+            {/* Haber (pagos) */}
+            <span className="text-sm font-bold tabular-nums text-right text-green-600">
+              {isPayment ? formatCurrencyDecimals(tx.amount) : '—'}
+            </span>
+            {/* Saldo acumulado */}
+            <span className={`text-sm font-semibold tabular-nums text-right ${
+              saldoAcumulado == null ? 'text-muted-foreground'
+                : saldoAcumulado > 0 ? 'text-red-600'
+                : saldoAcumulado < 0 ? 'text-green-600' : 'text-muted-foreground'
+            }`}>
+              {saldoAcumulado == null
+                ? '—'
+                : saldoAcumulado < 0
+                  ? `A favor ${formatCurrencyDecimals(-saldoAcumulado)}`
+                  : formatCurrencyDecimals(saldoAcumulado)}
+            </span>
+          </>
+        )}
+      </div>
+
+      {/* Panel expandido — comprobante / recibo / anular (todos los pagos) */}
+      {isPayment && expanded && !isDescuento && (
+        <div className="border-t bg-muted/20 px-3 pb-3 pt-2 space-y-2">
+          <div className="flex flex-wrap items-center gap-2">
+            {/* Recibo de DEVOLUCIÓN (mismo de Ventas) — no recibo de pago */}
+            {isDevolucion && devMatch && (
+              <Button
+                variant="outline" size="sm" className="gap-1.5 text-xs h-7 text-purple-600 border-purple-300 hover:bg-purple-50"
+                onClick={handleDescargarReciboDevol}
+                disabled={descargandoDevol}
+              >
+                {descargandoDevol ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <RotateCcw className="h-3.5 w-3.5" />}
+                {devMatch.reciboNumero || 'Recibo devolución'}
+              </Button>
+            )}
+            {isRechazo && (
+              <Button
+                variant="outline" size="sm" className="gap-1.5 text-xs h-7 text-purple-600 border-purple-300 hover:bg-purple-50"
+                onClick={handleDescargarReciboRechazo}
+                disabled={descargandoRechazo || !tieneRechazo}
+              >
+                {descargandoRechazo ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <RotateCcw className="h-3.5 w-3.5" />}
+                {rechazoRecibo || 'Recibo devolución'}
+              </Button>
+            )}
+            {!isDevolucion && !isRechazo && (
+              tx.reciboPdfBase64 ? (
+                <>
+                  <Button
+                    variant="outline" size="sm" className="gap-1.5 text-xs h-7 text-teal-600 border-teal-300 hover:bg-teal-50"
+                    onClick={(e) => { e.stopPropagation(); descargarDocumento(tx.reciboPdfBase64!, 'recibo', tx.reciboNumero) }}
+                  >
+                    <Receipt className="h-3.5 w-3.5" />{tx.reciboNumero || 'Recibo'}
+                  </Button>
+                  {onRegenerarRecibo && (
+                    <Button
+                      variant="ghost" size="sm" className="gap-1.5 text-xs h-7 text-muted-foreground hover:text-teal-600"
+                      onClick={handleRegenerarRecibo}
+                      disabled={regenerandoRecibo}
+                      title="Generar de nuevo el recibo"
+                    >
+                      {regenerandoRecibo ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <RefreshCw className="h-3.5 w-3.5" />}
+                      Regenerar
+                    </Button>
+                  )}
+                </>
+              ) : onRegenerarRecibo ? (
+                <Button
+                  variant="outline" size="sm" className="gap-1.5 text-xs h-7 text-teal-600 border-teal-300 hover:bg-teal-50"
+                  onClick={handleRegenerarRecibo}
+                  disabled={regenerandoRecibo}
+                >
+                  {regenerandoRecibo ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Receipt className="h-3.5 w-3.5" />}
+                  Generar recibo
+                </Button>
+              ) : tx.reciboNumero ? (
+                <span className="inline-flex items-center gap-1.5 text-xs text-teal-600">
+                  <Receipt className="h-3.5 w-3.5" />{tx.reciboNumero}
+                </span>
+              ) : null
+            )}
+            {comprobante?.fileUrl && (
+              <Button
+                variant="outline" size="sm" className="gap-1.5 text-xs h-7 text-muted-foreground"
+                onClick={(e) => { e.stopPropagation(); onVerComprobante?.(comprobante.fileUrl) }}
+              >
+                <ImageIcon className="h-3.5 w-3.5" />
+                Ver comprobante
+              </Button>
+            )}
+            {!isDescuento && !isRechazo && onAnularPago && !tx.anulado && (
+              <Button
+                variant="outline" size="sm" className="gap-1.5 text-xs h-7 text-red-500 border-red-300 hover:bg-red-50 ml-auto"
+                onClick={(e) => { e.stopPropagation(); onAnularPago(tx) }}
+              >
+                <Ban className="h-3.5 w-3.5" />
+                Anular pago
+              </Button>
+            )}
+          </div>
+          {devolucionExpandable && devMatch && (
+            <div>
+              <div className="flex items-center gap-1 text-[11px] font-semibold text-purple-700 mb-1">
+                <RotateCcw className="h-3 w-3" />
+                Ítems devueltos
+              </div>
+              <ItemsTable
+                items={devMatch.items.map((it) => ({ name: it.name, quantity: it.quantity, price: it.price, priceIsNet: true, destino: it.destino }))}
+                showTotal
+              />
+            </div>
           )}
         </div>
-
-        {/* Debe (ventas / deudas) */}
-        <span className="text-sm font-bold tabular-nums text-right text-red-600">
-          {!isPayment ? formatCurrencyDecimals(tx.amount) : '—'}
-        </span>
-        {/* Haber (pagos) */}
-        <span className={`text-sm font-bold tabular-nums text-right ${tx.anulado ? 'line-through text-muted-foreground' : 'text-green-600'}`}>
-          {isPayment ? formatCurrencyDecimals(tx.amount) : '—'}
-        </span>
-        {/* Saldo acumulado */}
-        <span className={`text-sm font-semibold tabular-nums text-right ${
-          saldoAcumulado == null ? 'text-muted-foreground'
-            : saldoAcumulado > 0 ? 'text-red-600'
-            : saldoAcumulado < 0 ? 'text-green-600' : 'text-muted-foreground'
-        }`}>
-          {saldoAcumulado == null
-            ? '—'
-            : saldoAcumulado < 0
-              ? `A favor ${formatCurrencyDecimals(-saldoAcumulado)}`
-              : formatCurrencyDecimals(saldoAcumulado)}
-        </span>
-      </div>
+      )}
 
       {/* Panel expandido — descuento */}
       {descuentoExpandable && expanded && sale && (
