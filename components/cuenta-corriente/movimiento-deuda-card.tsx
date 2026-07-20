@@ -319,16 +319,29 @@ export function MovimientoDeudaCard({
   // Concepto y Descripción separados (igual que el PDF)
   const concepto = isRechazo ? 'Rechazo' : isDevolucion ? 'Devolución' : isPayment ? 'Pago' : 'Venta'
   const rechazoRecibo = isRechazo ? ((tx.description ?? '').match(/\[RECHAZO\]\s*(\S+)/)?.[1] ?? '') : ''
+  // Pago "simple" (efectivo/transferencia/otro registrado a mano) — a diferencia de
+  // descuento/devolución/rechazo que tienen su propio formato de descripción.
+  const isPagoSimple = isPayment && !isDescuento && !isDevolucion && !isRechazo
+
+  // Método y nota se parsean para separarlos: el método va en el desplegable,
+  // la nota (texto libre cargado al registrar el pago) también, nunca en la columna Descripción.
+  const { metodoPago, notaPago } = useMemo(() => {
+    if (!isPagoSimple) return { metodoPago: '', notaPago: '' }
+    let d = tx.description || ''
+    d = d.replace(/\(Cobrado por[^)]*\)/gi, '').replace(/—\s*Cobrado por.*$/i, '')
+    d = d.replace(/\([^)]*\)/g, '') // referencias entre paréntesis (remito imputado, etc.)
+    const segmentos = d.split('—').map((s) => s.trim()).filter(Boolean)
+    const primero = segmentos[0] || ''
+    const metodo = /transfer/i.test(primero) ? 'Transferencia' : /efectivo/i.test(primero) ? 'Efectivo' : (primero.replace(/^Pago\s+(en\s+|por\s+|con\s+)?/i, '').trim() || 'Pago')
+    const nota = segmentos.slice(1).join(' — ').trim()
+    return { metodoPago: metodo, notaPago: nota }
+  }, [isPagoSimple, tx.description])
+
   const descripcionMov = (() => {
     if (isRechazo) return `Rechazo de productos${rechazoRecibo ? ` · ${rechazoRecibo}` : ''}`
-    if (isDevolucion) return 'Devolución'
-    if (isPayment) {
-      if (isDescuento) return `Descuento${sale?.saleNumber ? ` · Venta ${sale.saleNumber}` : ''}${descuento.motivo ? ` · ${descuento.motivo}` : ''}`
-      let d = (tx.description || '').replace(/^Pago\s+(en\s+|por\s+)?/i, '')
-      d = d.replace(/\s*\(Cobrado por[^)]*\)/i, '').replace(/\s*—\s*Cobrado por.*$/i, '').trim()
-      d = d.replace(/transferencia bancaria/i, 'Transferencia')
-      return d ? d.charAt(0).toUpperCase() + d.slice(1) : 'Pago recibido'
-    }
+    if (isDevolucion) return devMatch?.reciboNumero || sale?.remitoNumber || ''
+    if (isDescuento) return `Descuento${sale?.saleNumber ? ` · Venta ${sale.saleNumber}` : ''}${descuento.motivo ? ` · ${descuento.motivo}` : ''}`
+    if (isPagoSimple) return tx.reciboNumero || metodoPago
     return sale?.remitoNumber ? sale.remitoNumber : (tx.description || 'Venta')
   })()
 
@@ -501,7 +514,7 @@ export function MovimientoDeudaCard({
               <span className="text-sm truncate">{descripcionMov}</span>
               {tieneNoEntregados && !expanded && (
                 <Badge variant="outline" className="text-[11px] px-1 py-0 h-4 text-amber-600 border-amber-300 shrink-0">
-                  {noEntregadosUnified.length} no entregado{noEntregadosUnified.length > 1 ? 's' : ''}
+                  {noEntregadosUnified.length} incidencia{noEntregadosUnified.length > 1 ? 's' : ''}
                 </Badge>
               )}
               {expandable && (
@@ -627,6 +640,12 @@ export function MovimientoDeudaCard({
               </Button>
             )}
           </div>
+          {isPagoSimple && (metodoPago || notaPago) && (
+            <div className="text-xs text-muted-foreground space-y-0.5">
+              {metodoPago && <div><span className="font-medium text-foreground">{metodoPago}</span></div>}
+              {notaPago && <div>{notaPago}</div>}
+            </div>
+          )}
           {devolucionExpandable && devMatch && (
             <div>
               <div className="flex items-center gap-1 text-[11px] font-semibold text-purple-700 mb-1">

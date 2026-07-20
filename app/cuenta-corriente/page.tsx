@@ -1357,7 +1357,7 @@ ${renderTabla('Cuenta Mayorista', mayorista, balanceMay)}
                       <span className="text-right">Saldo</span>
                     </div>
                     <div className="divide-y">
-                      {movimientosConSaldo.map(({ tx, saldoAcum }) => {
+                      {movimientosConSaldo.filter(({ tx }) => !tx.anulado).map(({ tx, saldoAcum }) => {
                         const sale = tx.saleId ? salesById.get(tx.saleId) : undefined
                         const devolsSale = sale
                           ? clientDevoluciones.filter((d) => d.saleId === sale.id)
@@ -1394,6 +1394,39 @@ ${renderTabla('Cuenta Mayorista', mayorista, balanceMay)}
               )}
             </div>
 
+            {/* ── PAGOS ANULADOS (no afectan saldo ni totales) ── */}
+            {movimientosConSaldo.some(({ tx }) => tx.anulado) && (
+              <div className="rounded-2xl border p-4 space-y-3">
+                <h3 className="text-sm font-semibold flex items-center gap-2 text-muted-foreground">
+                  <Ban className="h-4 w-4" />
+                  Pagos anulados
+                </h3>
+                <div className="overflow-x-auto">
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead className="text-xs">Fecha</TableHead>
+                        <TableHead className="text-xs">Descripción</TableHead>
+                        <TableHead className="text-xs text-right">Monto</TableHead>
+                        <TableHead className="text-xs">Motivo</TableHead>
+                        <TableHead className="text-xs">Anulado por</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {movimientosConSaldo.filter(({ tx }) => tx.anulado).map(({ tx }) => (
+                        <TableRow key={tx.id} className="text-muted-foreground">
+                          <TableCell className="text-xs tabular-nums whitespace-nowrap">{formatDate(tx.date)}</TableCell>
+                          <TableCell className="text-xs">{tx.description}</TableCell>
+                          <TableCell className="text-xs text-right tabular-nums">{formatCurrency(tx.amount)}</TableCell>
+                          <TableCell className="text-xs">{tx.anuladoMotivo || '—'}</TableCell>
+                          <TableCell className="text-xs">{tx.anuladoBy || '—'}</TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                </div>
+              </div>
+            )}
 
           </div>
         )}
