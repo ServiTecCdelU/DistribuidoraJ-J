@@ -247,6 +247,74 @@ export const deletePayment = async (txId: string): Promise<void> => {
   }
 }
 
+/**
+ * Anula un pago sin borrarlo: revierte sus efectos (igual que deletePayment) pero
+ * la transacción queda en el historial marcada como anulada (motivo, quién y cuándo).
+ * Solo se puede anular una vez.
+ */
+export const voidPayment = async (txId: string, motivo: string, adminName: string): Promise<void> => {
+  const { data: tx } = await supabase
+    .from('transacciones')
+    .select('id, client_id, type, amount, cuenta, anulado')
+    .eq('id', txId)
+    .single()
+  if (!tx) throw new Error('Pago no encontrado')
+  if (tx.type !== 'payment') throw new Error('Solo se pueden anular pagos')
+  if ((tx as any).anulado) throw new Error('Este pago ya fue anulado')
+
+  const cuenta: 'minorista' | 'mayorista' = (tx.cuenta as any) ?? 'minorista'
+  const clientId = tx.client_id
+  const amount = Number(tx.amount)
+  const balanceCol = cuenta === 'minorista' ? 'current_balance' : 'current_balance_mayorista'
+
+  await supabase
+    .from('transacciones')
+    .update({
+      anulado: true,
+      anulado_motivo: motivo,
+      anulado_by: adminName,
+      anulado_at: new Date().toISOString(),
+    })
+    .eq('id', txId)
+
+  // Devolver el monto al saldo del cliente
+  const { data: client } = await supabase
+    .from('clientes')
+    .select(balanceCol)
+    .eq('id', clientId)
+    .single()
+  const newBalance = (Number((client as any)?.[balanceCol]) || 0) + amount
+  await supabase.from('clientes').update({ [balanceCol]: newBalance }).eq('id', clientId)
+
+  // Recalcular saldos por remito, excluyendo el pago recién anulado
+  try {
+    const cuentaFilter = cuenta === 'minorista' ? 'cuenta.eq.minorista,cuenta.is.null' : 'cuenta.eq.mayorista'
+    const { data: debts } = await supabase
+      .from('transacciones')
+      .select('id, amount, saldo')
+      .eq('client_id', clientId)
+      .eq('type', 'debt')
+      .not('saldo', 'is', null)
+      .or(cuentaFilter)
+    for (const d of debts ?? []) {
+      await supabase.from('transacciones').update({ saldo: Number(d.amount) }).eq('id', d.id)
+    }
+    const { data: pagos } = await supabase
+      .from('transacciones')
+      .select('id, amount, debt_id')
+      .eq('client_id', clientId)
+      .eq('type', 'payment')
+      .eq('anulado', false)
+      .or(cuentaFilter)
+      .order('date', { ascending: true })
+    for (const p of pagos ?? []) {
+      await aplicarPagoADeudas(clientId, cuenta, Number(p.amount), (p as any).debt_id ?? undefined)
+    }
+  } catch {
+    // Si la columna saldo no existe, el balance del cliente ya quedó corregido
+  }
+}
+
 export const registerCashPayment = async (data: {
   clientId: string
   amount: number

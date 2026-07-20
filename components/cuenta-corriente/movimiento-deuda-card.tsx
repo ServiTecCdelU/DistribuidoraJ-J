@@ -5,7 +5,7 @@ import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import {
   ArrowDownCircle, ArrowUpCircle, ChevronDown, Download, Receipt, Truck,
-  AlertTriangle, RotateCcw, Tag, RefreshCw, Loader2, Trash2,
+  AlertTriangle, RotateCcw, Tag, RefreshCw, Loader2, Ban,
 } from 'lucide-react'
 import { formatCurrencyDecimals, formatDate } from '@/lib/utils/format'
 import { descargarDocumento } from '@/lib/utils/doc-actions'
@@ -22,7 +22,7 @@ interface MovimientoDeudaCardProps {
   saldoAcumulado?: number
   onRegenerarRemito?: (sale: Sale) => Promise<void>
   onRegenerarRecibo?: (tx: Transaction) => Promise<void>
-  onEliminarPago?: (tx: Transaction) => void
+  onAnularPago?: (tx: Transaction) => void
 }
 
 // Columnas compartidas entre el encabezado (en la page) y cada fila:
@@ -156,7 +156,7 @@ function ItemsTable({ items, showTotal = false }: { items: TableRow[]; showTotal
 }
 
 export function MovimientoDeudaCard({
-  tx, sale, devoluciones = [], saldoAcumulado, onRegenerarRemito, onRegenerarRecibo, onEliminarPago,
+  tx, sale, devoluciones = [], saldoAcumulado, onRegenerarRemito, onRegenerarRecibo, onAnularPago,
 }: MovimientoDeudaCardProps) {
   const [expanded, setExpanded] = useState(false)
   const [regenerando, setRegenerando] = useState(false)
@@ -471,7 +471,16 @@ export function MovimientoDeudaCard({
 
         {/* Descripción */}
         <div className="flex items-center gap-1.5 min-w-0">
-          <span className="text-sm truncate">{descripcionMov}</span>
+          <span className={`text-sm truncate ${tx.anulado ? 'line-through text-muted-foreground' : ''}`}>{descripcionMov}</span>
+          {tx.anulado && (
+            <Badge
+              variant="outline"
+              className="text-[10px] px-1 py-0 h-4 text-red-600 border-red-300 shrink-0"
+              title={`${tx.anuladoMotivo ? `Motivo: ${tx.anuladoMotivo}` : ''}${tx.anuladoBy ? ` · Por: ${tx.anuladoBy}` : ''}`}
+            >
+              ANULADO
+            </Badge>
+          )}
           {tieneNoEntregados && !expanded && (
             <Badge variant="outline" className="text-[11px] px-1 py-0 h-4 text-amber-600 border-amber-300 shrink-0">
               {noEntregadosUnified.length} no entregado{noEntregadosUnified.length > 1 ? 's' : ''}
@@ -552,14 +561,14 @@ export function MovimientoDeudaCard({
               </span>
             ) : null
           )}
-          {isPayment && !isDescuento && !isRechazo && onEliminarPago && (
+          {isPayment && !isDescuento && !isRechazo && onAnularPago && !tx.anulado && (
             <button
               type="button"
               className="inline-flex items-center text-xs text-red-500 hover:text-red-700 shrink-0"
-              onClick={(e) => { e.stopPropagation(); onEliminarPago(tx) }}
-              title="Eliminar este pago"
+              onClick={(e) => { e.stopPropagation(); onAnularPago(tx) }}
+              title="Anular este pago"
             >
-              <Trash2 className="h-3.5 w-3.5" />
+              <Ban className="h-3.5 w-3.5" />
             </button>
           )}
         </div>
@@ -569,7 +578,7 @@ export function MovimientoDeudaCard({
           {!isPayment ? formatCurrencyDecimals(tx.amount) : '—'}
         </span>
         {/* Haber (pagos) */}
-        <span className="text-sm font-bold tabular-nums text-right text-green-600">
+        <span className={`text-sm font-bold tabular-nums text-right ${tx.anulado ? 'line-through text-muted-foreground' : 'text-green-600'}`}>
           {isPayment ? formatCurrencyDecimals(tx.amount) : '—'}
         </span>
         {/* Saldo acumulado */}

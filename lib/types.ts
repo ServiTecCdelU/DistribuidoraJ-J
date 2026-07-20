@@ -92,6 +92,11 @@ export interface Transaction {
   reciboNumero?: string;
   /** Pagos: PDF del recibo (base64) */
   reciboPdfBase64?: string;
+  /** Pagos: si fue anulado por un admin (se conserva en el historial, no se borra) */
+  anulado?: boolean;
+  anuladoMotivo?: string;
+  anuladoBy?: string;
+  anuladoAt?: Date;
 }
 
 export interface CartItem {
@@ -332,4 +337,9 @@ export interface ComprobantePago {
   reviewedBy?: string;
   transactionId?: string;
   createdAt: Date;
+  /** true si lo registró un cobrador (pago ya aplicado, pendiente de autorización admin) */
+  viaCobrador?: boolean;
+  autorizado?: boolean;
+  autorizadoBy?: string;
+  autorizadoAt?: Date;
 }

@@ -38,7 +38,7 @@ import {
   updateSaleInvoice,
   updateSaleRemito,
 } from '@/services/sales-service'
-import { registerCashPayment, registerMayoristaPayment, saveReciboPdf, ensureReciboNumero, findReciboByNumero, deletePayment } from '@/services/payments-service'
+import { registerCashPayment, registerMayoristaPayment, saveReciboPdf, ensureReciboNumero, findReciboByNumero, deletePayment, voidPayment } from '@/services/payments-service'
 import {
   getTransaccionesMayorista,
   getBalanceMayorista,
@@ -120,6 +120,8 @@ import {
   getComprobantesBySeller,
   approveComprobante,
   rejectComprobante,
+  authorizeComprobanteCobrador,
+  voidComprobanteCobrador,
 } from '@/services/cobranzas-service'
 import {
   registrarFaltantes,
@@ -291,6 +293,9 @@ export const paymentsApi = {
   ensureReciboNumero,
   findReciboByNumero,
   deletePayment,
+  async voidPayment(txId: string, motivo: string, adminName: string) {
+    return voidPayment(txId, motivo, adminName)
+  },
 }
 
 export const mayoristaCuentaApi = {
@@ -548,6 +553,12 @@ export const cobranzasApi = {
   },
   async rejectComprobante(id: string, reason: string, reviewedBy: string) {
     return rejectComprobante(id, reason, reviewedBy)
+  },
+  async authorizeComprobanteCobrador(id: string, adminName: string) {
+    return authorizeComprobanteCobrador(id, adminName)
+  },
+  async voidComprobanteCobrador(id: string, adminName: string, motivo: string) {
+    return voidComprobanteCobrador(id, adminName, motivo)
   },
 }
 

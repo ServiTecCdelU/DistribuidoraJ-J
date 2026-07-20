@@ -445,9 +445,12 @@ export default function CuentaCorrientePage() {
       const refImputacion = deudaImputada
         ? ` (${saleImputada?.remitoNumber ? `Remito ${saleImputada.remitoNumber}` : deudaImputada.description})`
         : ''
+      const cobradorRef = isCobrador
+        ? ` (Cobrado por ${user.name}${selectedClient.sellerName ? ` — Vendedor: ${selectedClient.sellerName}` : ''})`
+        : ''
       const desc = `${payNotes
         ? `${methods[payMethod] || methods.otro} — ${payNotes}`
-        : methods[payMethod] || methods.otro}${refImputacion}`
+        : methods[payMethod] || methods.otro}${refImputacion}${cobradorRef}`
 
       const txPago = await paymentsApi.registerCashPayment({
         clientId: selectedClient.id,
@@ -461,7 +464,7 @@ export default function CuentaCorrientePage() {
 
       // Cobrador: dejar constancia del comprobante adjunto, ya vinculado al pago recién registrado
       if (isCobrador && payComprobante && user.sellerId) {
-        await cobranzasApi.uploadComprobanteAprobado({
+        const comp = await cobranzasApi.uploadComprobanteAprobado({
           clientId: selectedClient.id,
           sellerId: user.sellerId,
           amount,
@@ -470,6 +473,9 @@ export default function CuentaCorrientePage() {
           transactionId: txPago.id,
           reviewedBy: user.name,
         })
+        // Reflejar el comprobante recién subido sin esperar a recargar/reabrir el cliente
+        setComprobantes((prev) => [comp, ...prev])
+        setClientComprobantes((prev) => [comp, ...prev])
       }
 
       // Actualizar estado local (puede quedar negativo = saldo a favor)
@@ -963,20 +969,33 @@ ${renderTabla('Cuenta Mayorista', mayorista, balanceMay)}
     toast.success('Recibo generado')
   }
 
-  // Eliminar un pago minorista cargado por error: devuelve el monto a la deuda
-  // y recalcula los saldos por remito.
-  const [pagoToDelete, setPagoToDelete] = useState<Transaction | null>(null)
-  const [deletingPago, setDeletingPago] = useState(false)
-  const handleEliminarPago = async () => {
-    if (!pagoToDelete || !selectedClient || !canManage) return
-    setDeletingPago(true)
+  // Anular un pago cargado por error: revierte el monto a la deuda y recalcula los
+  // saldos por remito, pero la transacción queda en el historial marcada como anulada
+  // (no se borra — se conserva motivo, quién y cuándo).
+  const [pagoToAnular, setPagoToAnular] = useState<Transaction | null>(null)
+  const [anularMotivo, setAnularMotivo] = useState('')
+  const [anulandoPago, setAnulandoPago] = useState(false)
+
+  // Panel "Autorizar pago": cobros registrados por un cobrador, ya aplicados,
+  // pendientes de revisión del admin (autorizar = queda constancia; rechazar = anula el pago).
+  const [authPanelOpen, setAuthPanelOpen] = useState(false)
+  const [authProcessingId, setAuthProcessingId] = useState<string | null>(null)
+  const [rejectAuthTarget, setRejectAuthTarget] = useState<ComprobantePago | null>(null)
+  const [rejectAuthMotivo, setRejectAuthMotivo] = useState('')
+  const handleAnularPago = async () => {
+    if (!pagoToAnular || !selectedClient || !canManage || !user) return
+    if (!anularMotivo.trim()) {
+      toast.error('Ingresá el motivo de la anulación')
+      return
+    }
+    setAnulandoPago(true)
     try {
-      await paymentsApi.deletePayment(pagoToDelete.id)
-      const cuenta = pagoToDelete.cuenta ?? 'minorista'
+      await paymentsApi.voidPayment(pagoToAnular.id, anularMotivo.trim(), user.name)
+      const cuenta = pagoToAnular.cuenta ?? 'minorista'
       const newBalance =
         cuenta === 'mayorista'
-          ? (selectedClient.currentBalanceMayorista ?? 0) + pagoToDelete.amount
-          : selectedClient.currentBalance + pagoToDelete.amount
+          ? (selectedClient.currentBalanceMayorista ?? 0) + pagoToAnular.amount
+          : selectedClient.currentBalance + pagoToAnular.amount
       setSelectedClient((prev) =>
         prev
           ? cuenta === 'mayorista'
@@ -995,12 +1014,68 @@ ${renderTabla('Cuenta Mayorista', mayorista, balanceMay)}
       )
       const txs = await clientsApi.getTransactions(selectedClient.id)
       setClientTransactions(txs)
-      setPagoToDelete(null)
-      toast.success('Pago eliminado')
+      setPagoToAnular(null)
+      setAnularMotivo('')
+      toast.success('Pago anulado')
     } catch (err: any) {
-      toast.error(err.message || 'No se pudo eliminar el pago')
+      toast.error(err.message || 'No se pudo anular el pago')
     } finally {
-      setDeletingPago(false)
+      setAnulandoPago(false)
+    }
+  }
+
+  // Cobros de cobrador ya aplicados, pendientes de autorización del admin
+  const pendingAuth = useMemo(
+    () => comprobantes.filter((c) => c.viaCobrador && c.status === 'approved' && !c.autorizado),
+    [comprobantes]
+  )
+
+  const handleAuthorizePago = async (comp: ComprobantePago) => {
+    if (!user) return
+    setAuthProcessingId(comp.id)
+    try {
+      await cobranzasApi.authorizeComprobanteCobrador(comp.id, user.name)
+      setComprobantes((prev) =>
+        prev.map((c) => (c.id === comp.id ? { ...c, autorizado: true, autorizadoBy: user.name, autorizadoAt: new Date() } : c))
+      )
+      toast.success('Pago autorizado')
+    } catch (err: any) {
+      toast.error(err.message || 'No se pudo autorizar el pago')
+    } finally {
+      setAuthProcessingId(null)
+    }
+  }
+
+  const handleRejectAuthPago = async () => {
+    if (!rejectAuthTarget || !user) return
+    if (!rejectAuthMotivo.trim()) {
+      toast.error('Ingresá el motivo del rechazo')
+      return
+    }
+    setAuthProcessingId(rejectAuthTarget.id)
+    try {
+      await cobranzasApi.voidComprobanteCobrador(rejectAuthTarget.id, user.name, rejectAuthMotivo.trim())
+      setComprobantes((prev) =>
+        prev.map((c) =>
+          c.id === rejectAuthTarget.id
+            ? { ...c, status: 'rejected', rejectionReason: rejectAuthMotivo.trim(), reviewedBy: user.name, reviewedAt: new Date() }
+            : c
+        )
+      )
+      // Refrescar deudores (el saldo del cliente cambió al anularse el pago)
+      const clientsData = await cobranzasApi.getDebtClients()
+      setDebtClients(clientsData)
+      if (selectedClient?.id === rejectAuthTarget.clientId) {
+        const txs = await clientsApi.getTransactions(selectedClient.id)
+        setClientTransactions(txs)
+      }
+      setRejectAuthTarget(null)
+      setRejectAuthMotivo('')
+      toast.success('Pago anulado')
+    } catch (err: any) {
+      toast.error(err.message || 'No se pudo anular el pago')
+    } finally {
+      setAuthProcessingId(null)
     }
   }
 
@@ -1261,7 +1336,7 @@ ${renderTabla('Cuenta Mayorista', mayorista, balanceMay)}
                             saldoAcumulado={saldoAcum}
                             onRegenerarRemito={canManage ? handleRegenerarRemito : undefined}
                             onRegenerarRecibo={canManage ? handleRegenerarRecibo : undefined}
-                            onEliminarPago={canManage ? setPagoToDelete : undefined}
+                            onAnularPago={canManage ? setPagoToAnular : undefined}
                           />
                         )
                       })}
@@ -1483,29 +1558,132 @@ ${renderTabla('Cuenta Mayorista', mayorista, balanceMay)}
           </DialogContent>
         </Dialog>
 
-        {/* Dialog Eliminar pago */}
-        <Dialog open={!!pagoToDelete} onOpenChange={(open) => !open && setPagoToDelete(null)}>
+        {/* Dialog Anular pago */}
+        <Dialog open={!!pagoToAnular} onOpenChange={(open) => { if (!open) { setPagoToAnular(null); setAnularMotivo('') } }}>
           <DialogContent className="sm:max-w-sm">
             <DialogHeader>
-              <DialogTitle>Eliminar pago</DialogTitle>
+              <DialogTitle>Anular pago</DialogTitle>
               <DialogDescription>
-                Se borrará este pago y el monto volverá a la deuda del cliente. No se puede deshacer.
+                El monto vuelve a la deuda del cliente. El pago queda en el historial marcado como anulado (no se borra).
               </DialogDescription>
             </DialogHeader>
-            {pagoToDelete && (
-              <div className="space-y-1 text-sm">
-                <p><strong>Monto:</strong> {formatCurrency(pagoToDelete.amount)}</p>
-                <p className="text-muted-foreground">{pagoToDelete.description}</p>
-                {pagoToDelete.reciboNumero && (
-                  <p className="text-xs text-muted-foreground">Recibo {pagoToDelete.reciboNumero}</p>
-                )}
+            {pagoToAnular && (
+              <div className="space-y-3">
+                <div className="space-y-1 text-sm">
+                  <p><strong>Monto:</strong> {formatCurrency(pagoToAnular.amount)}</p>
+                  <p className="text-muted-foreground">{pagoToAnular.description}</p>
+                  {pagoToAnular.reciboNumero && (
+                    <p className="text-xs text-muted-foreground">Recibo {pagoToAnular.reciboNumero}</p>
+                  )}
+                </div>
+                <div className="space-y-2">
+                  <Label>Motivo de la anulación</Label>
+                  <Textarea
+                    placeholder="Ej: comprobante falso, monto cargado por error..."
+                    value={anularMotivo}
+                    onChange={(e) => setAnularMotivo(e.target.value)}
+                    rows={2}
+                  />
+                </div>
               </div>
             )}
             <DialogFooter>
-              <Button variant="outline" onClick={() => setPagoToDelete(null)}>Cancelar</Button>
-              <Button variant="destructive" onClick={handleEliminarPago} disabled={deletingPago}>
-                {deletingPago && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
-                Eliminar
+              <Button variant="outline" onClick={() => { setPagoToAnular(null); setAnularMotivo('') }}>Cancelar</Button>
+              <Button variant="destructive" onClick={handleAnularPago} disabled={anulandoPago || !anularMotivo.trim()}>
+                {anulandoPago && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
+                Anular pago
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+
+        {/* Panel: Autorizar pago (cobros de cobrador ya aplicados, pendientes de revisión) */}
+        <Dialog open={authPanelOpen} onOpenChange={setAuthPanelOpen}>
+          <DialogContent className="sm:max-w-lg max-h-[85vh] overflow-y-auto">
+            <DialogHeader>
+              <DialogTitle>Autorizar pago</DialogTitle>
+              <DialogDescription>
+                Cobros registrados por un cobrador. El pago ya está aplicado al saldo del cliente — acá solo dejás constancia de que lo revisaste, o lo anulás si algo no cierra.
+              </DialogDescription>
+            </DialogHeader>
+            {pendingAuth.length === 0 ? (
+              <p className="text-sm text-muted-foreground text-center py-6">No hay cobros pendientes de revisión.</p>
+            ) : (
+              <div className="space-y-2">
+                {pendingAuth.map((comp) => (
+                  <div key={comp.id} className="rounded-xl border p-3 space-y-2">
+                    <div className="flex items-start justify-between gap-2">
+                      <div>
+                        <p className="text-sm font-medium">{comp.clientName || 'Cliente'}</p>
+                        <p className="text-xs text-muted-foreground">{formatDate(comp.createdAt)} · Cobrado por {comp.reviewedBy || comp.sellerName || '—'}</p>
+                        {comp.notes && <p className="text-xs text-muted-foreground mt-0.5">{comp.notes}</p>}
+                      </div>
+                      <span className="text-sm font-bold text-green-600 shrink-0">{formatCurrency(comp.amount)}</span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <button
+                        type="button"
+                        className="inline-flex items-center gap-1 text-xs text-teal-600 hover:underline"
+                        onClick={() => setPreviewUrl(comp.fileUrl)}
+                      >
+                        <ImageIcon className="h-3.5 w-3.5" />Ver comprobante
+                      </button>
+                    </div>
+                    <div className="flex gap-2 pt-1">
+                      <Button
+                        size="sm"
+                        className="flex-1 gap-1.5 text-xs h-8 bg-green-600 hover:bg-green-700"
+                        onClick={() => handleAuthorizePago(comp)}
+                        disabled={authProcessingId === comp.id}
+                      >
+                        {authProcessingId === comp.id ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <CheckCircle2 className="h-3.5 w-3.5" />}
+                        Autorizar
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        className="flex-1 gap-1.5 text-xs h-8 text-red-600 border-red-300 hover:bg-red-50"
+                        onClick={() => setRejectAuthTarget(comp)}
+                        disabled={authProcessingId === comp.id}
+                      >
+                        <XCircle className="h-3.5 w-3.5" />
+                        Anular
+                      </Button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </DialogContent>
+        </Dialog>
+
+        {/* Dialog motivo de rechazo/anulación desde el panel de autorización */}
+        <Dialog open={!!rejectAuthTarget} onOpenChange={(open) => { if (!open) { setRejectAuthTarget(null); setRejectAuthMotivo('') } }}>
+          <DialogContent className="sm:max-w-sm">
+            <DialogHeader>
+              <DialogTitle>Anular cobro</DialogTitle>
+              <DialogDescription>
+                El monto vuelve a la deuda del cliente. Queda registrado en el historial como pago anulado.
+              </DialogDescription>
+            </DialogHeader>
+            <div className="space-y-2">
+              <Label>Motivo</Label>
+              <Textarea
+                placeholder="Ej: comprobante falso, monto incorrecto..."
+                value={rejectAuthMotivo}
+                onChange={(e) => setRejectAuthMotivo(e.target.value)}
+                rows={2}
+              />
+            </div>
+            <DialogFooter>
+              <Button variant="outline" onClick={() => { setRejectAuthTarget(null); setRejectAuthMotivo('') }}>Cancelar</Button>
+              <Button
+                variant="destructive"
+                onClick={handleRejectAuthPago}
+                disabled={!rejectAuthMotivo.trim() || authProcessingId === rejectAuthTarget?.id}
+              >
+                {authProcessingId === rejectAuthTarget?.id && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
+                Anular pago
               </Button>
             </DialogFooter>
           </DialogContent>
@@ -1768,15 +1946,18 @@ ${renderTabla('Cuenta Mayorista', mayorista, balanceMay)}
               </CardContent>
             </Card>
             {canManage && (
-            <Card className="col-span-2 md:col-span-1">
+            <Card
+              className="col-span-2 md:col-span-1 cursor-pointer hover:bg-muted/30 transition-colors"
+              onClick={() => setAuthPanelOpen(true)}
+            >
               {/* Mobile: tira fina horizontal. Desktop: bloque como las otras cards */}
               <CardContent className="p-3 flex items-center justify-between gap-2 md:block">
                 <div className="flex items-center gap-1.5 text-xs text-muted-foreground md:mb-1">
-                  <FileCheck className="h-3.5 w-3.5" />Vendedores activos
+                  <FileCheck className="h-3.5 w-3.5" />Autorizar pago
                 </div>
                 <div className="flex items-baseline gap-1.5 md:block">
-                  <span className="text-lg font-bold leading-tight">{sellers.length}</span>
-                  <p className="text-[11px] text-muted-foreground">con clientes asignados</p>
+                  <span className={`text-lg font-bold leading-tight ${pendingAuth.length > 0 ? 'text-amber-600' : ''}`}>{pendingAuth.length}</span>
+                  <p className="text-[11px] text-muted-foreground">cobros de cobrador sin revisar</p>
                 </div>
               </CardContent>
             </Card>

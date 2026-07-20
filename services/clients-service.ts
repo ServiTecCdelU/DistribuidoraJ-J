@@ -168,5 +168,9 @@ export const getClientTransactions = async (clientId: string): Promise<Transacti
     debtId: d.debt_id ?? undefined,
     reciboNumero: d.recibo_numero ?? undefined,
     reciboPdfBase64: d.recibo_pdf_base64 ?? undefined,
+    anulado: d.anulado ?? false,
+    anuladoMotivo: d.anulado_motivo ?? undefined,
+    anuladoBy: d.anulado_by ?? undefined,
+    anuladoAt: d.anulado_at ? new Date(d.anulado_at) : undefined,
   }))
 }

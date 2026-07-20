@@ -117,6 +117,10 @@ function mapComprobante(d: any): ComprobantePago {
     reviewedBy: d.reviewed_by ?? undefined,
     transactionId: d.transaction_id ?? undefined,
     createdAt: new Date(d.created_at),
+    viaCobrador: d.via_cobrador ?? false,
+    autorizado: d.autorizado ?? false,
+    autorizadoBy: d.autorizado_by ?? undefined,
+    autorizadoAt: d.autorizado_at ? new Date(d.autorizado_at) : undefined,
   }
 }
 
@@ -246,6 +250,7 @@ export const uploadComprobanteAprobado = async (data: {
     reviewed_at: reviewedAt.toISOString(),
     reviewed_by: data.reviewedBy,
     transaction_id: data.transactionId,
+    via_cobrador: true,
   })
 
   return {
@@ -261,7 +266,45 @@ export const uploadComprobanteAprobado = async (data: {
     reviewedBy: data.reviewedBy,
     transactionId: data.transactionId,
     createdAt: reviewedAt,
+    viaCobrador: true,
+    autorizado: false,
   }
+}
+
+/** Admin marca como revisado/autorizado un cobro registrado por un cobrador (el pago ya estaba aplicado). */
+export const authorizeComprobanteCobrador = async (id: string, adminName: string): Promise<void> => {
+  await supabase
+    .from('comprobantes_pago')
+    .update({
+      autorizado: true,
+      autorizado_by: adminName,
+      autorizado_at: new Date().toISOString(),
+    })
+    .eq('id', id)
+}
+
+/**
+ * Admin rechaza un cobro de cobrador: anula el pago (revierte saldo, no lo borra)
+ * y deja el comprobante marcado como rechazado con el motivo.
+ */
+export const voidComprobanteCobrador = async (id: string, adminName: string, motivo: string): Promise<void> => {
+  const { data: comp } = await supabase.from('comprobantes_pago').select('*').eq('id', id).single()
+  if (!comp) throw new Error('Comprobante no encontrado')
+
+  if (comp.transaction_id) {
+    const { voidPayment } = await import('@/services/payments-service')
+    await voidPayment(comp.transaction_id, motivo, adminName)
+  }
+
+  await supabase
+    .from('comprobantes_pago')
+    .update({
+      status: 'rejected',
+      rejection_reason: motivo,
+      reviewed_at: new Date().toISOString(),
+      reviewed_by: adminName,
+    })
+    .eq('id', id)
 }
 
 // Admin aprueba comprobante → registra pago
