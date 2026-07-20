@@ -32,7 +32,7 @@ interface MovimientoDeudaCardProps {
 // Columnas compartidas entre el encabezado (en la page) y cada fila:
 // Fecha · Concepto · Descripción (con flecha de detalle) · Incidencias · Cobrador · Estado · Debe · Haber · Saldo
 export const MOVIMIENTO_GRID =
-  'grid grid-cols-[5rem_5.5rem_minmax(10rem,1fr)_5.5rem_6.5rem_4.5rem_6.5rem_6.5rem_6.5rem] items-center gap-x-3'
+  'grid grid-cols-[5rem_5.5rem_minmax(10rem,1fr)_5.5rem_6.5rem_5.5rem_6.5rem_6.5rem_6.5rem] items-center gap-x-3'
 
 const COLOR_DIA: Record<EstadoDiaPago, string> = {
   falta: 'text-green-600',
@@ -528,11 +528,19 @@ export function MovimientoDeudaCard({
             {/* Estado: verificación del comprobante (cobros de cobrador) */}
             <div className="flex justify-center">
               {comprobante?.viaCobrador ? (
-                <span title={comprobante.autorizado ? 'Verificado' : 'Sin verificar'}>
-                  {comprobante.autorizado
-                    ? <CheckCircle2 className="h-4 w-4 text-green-600" />
-                    : <AlertTriangle className="h-4 w-4 text-amber-500" />}
-                </span>
+                comprobante.autorizado ? (
+                  <span title="Verificado">
+                    <CheckCircle2 className="h-4 w-4 text-green-600" />
+                  </span>
+                ) : (
+                  <Badge
+                    variant="outline"
+                    className="text-[10px] px-1 py-0 h-4 gap-0.5 text-amber-600 border-amber-300 whitespace-nowrap"
+                    title="Pago cargado por un cobrador, todavía sin confirmar ni anular"
+                  >
+                    <AlertTriangle className="h-3 w-3" />VERIFICAR
+                  </Badge>
+                )
               ) : null}
             </div>
 
