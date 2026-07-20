@@ -1858,24 +1858,31 @@ ${renderTabla('Cuenta Mayorista', mayorista, balanceMay)}
           {activeTab === 'clientes' && (
           <>
           {/* Cards resumen */}
-          <div className="grid grid-cols-2 md:grid-cols-3 gap-2 mb-4">
-            <Card>
-              <CardContent className="p-3">
-                <div className="flex items-center gap-1.5 text-xs text-muted-foreground mb-1">
-                  <Users className="h-3.5 w-3.5" />Deuda total
+          <div className="grid grid-cols-2 md:grid-cols-3 gap-3 mb-4">
+            <Card className="rounded-2xl gap-0 py-0 overflow-hidden">
+              <CardContent className="p-4 flex items-start gap-3">
+                <div className="h-9 w-9 rounded-full flex items-center justify-center shrink-0 bg-red-50 dark:bg-red-950/30">
+                  <Users className="h-4 w-4 text-red-600" />
                 </div>
-                <div className="text-lg font-bold text-red-600 truncate leading-tight">{formatCurrency(totalDeuda)}</div>
-                <p className="text-[11px] text-muted-foreground">{scopedDebtClients.length} clientes</p>
+                <div className="min-w-0">
+                  <p className="text-xs text-muted-foreground mb-0.5">Deuda total</p>
+                  <p className="text-xl font-bold text-red-600 tabular-nums leading-tight truncate">{formatCurrency(totalDeuda)}</p>
+                  <p className="text-[11px] text-muted-foreground">{scopedDebtClients.length} clientes</p>
+                </div>
               </CardContent>
             </Card>
-            <Card>
-              <CardContent className="p-3">
-                <div className="flex items-center gap-1.5 text-xs text-muted-foreground mb-1">
-                  <AlertTriangle className="h-3.5 w-3.5" />Estado
+
+            <Card className="rounded-2xl gap-0 py-0 overflow-hidden">
+              <CardContent className="p-4">
+                <div className="flex items-center gap-2 mb-2">
+                  <div className="h-9 w-9 rounded-full flex items-center justify-center shrink-0 bg-amber-50 dark:bg-amber-950/30">
+                    <AlertTriangle className="h-4 w-4 text-amber-600" />
+                  </div>
+                  <p className="text-xs font-semibold">Estado</p>
                 </div>
-                <div className="space-y-0.5">
+                <div className="divide-y">
                   {ESTADO_META.map((e) => (
-                    <div key={e.key} className="flex items-center justify-between text-xs">
+                    <div key={e.key} className="flex items-center justify-between text-xs py-1 first:pt-0 last:pb-0">
                       <span className="flex items-center gap-1.5"><span className={`h-2 w-2 rounded-full ${e.dot}`} />{e.label}</span>
                       <div className="flex items-center gap-1.5">
                         <span className={`font-bold tabular-nums ${e.text}`}>{estadoCounts[e.key]}</span>
@@ -1886,7 +1893,7 @@ ${renderTabla('Cuenta Mayorista', mayorista, balanceMay)}
                     </div>
                   ))}
                   {estadoCounts.diaPago > 0 && (
-                    <div className="flex items-center justify-between text-xs pt-1 mt-1 border-t">
+                    <div className="flex items-center justify-between text-xs py-1 pt-2 mt-1 border-t">
                       <span className="flex items-center gap-1.5 text-teal-700 font-medium">
                         <Clock className="h-3 w-3 text-teal-600" />Día de pago (hoy)
                       </span>
@@ -1899,27 +1906,28 @@ ${renderTabla('Cuenta Mayorista', mayorista, balanceMay)}
                 </div>
               </CardContent>
             </Card>
+
             {canManage && (
             <Card
-              className={`col-span-2 md:col-span-1 cursor-pointer transition-colors ${
+              className={`rounded-2xl gap-0 py-0 overflow-hidden col-span-2 md:col-span-1 cursor-pointer transition-colors ${
                 pendingAuth.length > 0
                   ? 'border-amber-300 bg-amber-50 hover:bg-amber-100 dark:bg-amber-950/20 dark:border-amber-800'
                   : 'hover:bg-muted/30'
               }`}
               onClick={openAuthPanel}
             >
-              <CardContent className="p-3 flex items-center gap-3 md:block">
-                <div className={`h-9 w-9 rounded-full flex items-center justify-center shrink-0 md:mb-2 ${
+              <CardContent className="p-4 flex items-center gap-3">
+                <div className={`h-9 w-9 rounded-full flex items-center justify-center shrink-0 ${
                   pendingAuth.length > 0 ? 'bg-amber-100 dark:bg-amber-900/40' : 'bg-muted'
                 }`}>
                   <FileCheck className={`h-4 w-4 ${pendingAuth.length > 0 ? 'text-amber-600' : 'text-muted-foreground'}`} />
                 </div>
-                <div className="flex-1 flex items-center justify-between gap-2 md:block">
-                  <div>
+                <div className="flex-1 flex items-center justify-between gap-2 min-w-0">
+                  <div className="min-w-0">
                     <p className="text-xs font-semibold">Verificar pago</p>
-                    <p className="text-[11px] text-muted-foreground">cobros de cobrador sin revisar</p>
+                    <p className="text-[11px] text-muted-foreground truncate">cobros de cobrador sin revisar</p>
                   </div>
-                  <div className="flex items-center gap-1">
+                  <div className="flex items-center gap-1 shrink-0">
                     <span className={`text-xl font-bold tabular-nums leading-none ${pendingAuth.length > 0 ? 'text-amber-600' : 'text-muted-foreground'}`}>
                       {pendingAuth.length}
                     </span>
