@@ -119,8 +119,10 @@ export default function CuentaCorrientePage() {
   const [payNotes, setPayNotes] = useState('')
   // Imputación: id de la transacción de deuda (remito/venta) elegida, '' = FIFO
   const [payDebtId, setPayDebtId] = useState('')
-  // Comprobante obligatorio cuando el que registra es un cobrador (no admin)
+  // Comprobante: obligatorio para el cobrador solo si el método no es efectivo (transferencia/otro)
   const [payComprobante, setPayComprobante] = useState<File | null>(null)
+  // Día en que el cliente pagó (puede diferir del día en que se carga el pago)
+  const [payFecha, setPayFecha] = useState(() => new Date().toISOString().slice(0, 10))
 
   // Registrar pago manual (mayorista)
   const [payMayoristaDialog, setPayMayoristaDialog] = useState(false)
@@ -428,7 +430,7 @@ export default function CuentaCorrientePage() {
       toast.error('Ingresá un monto válido')
       return
     }
-    if (isCobrador && !payComprobante) {
+    if (isCobrador && payMethod !== 'efectivo' && !payComprobante) {
       toast.error('Adjuntá el comprobante de transferencia para registrar el pago')
       return
     }
@@ -456,6 +458,7 @@ export default function CuentaCorrientePage() {
         amount,
         description: desc,
         debtTxId: payDebtId || undefined,
+        date: payFecha || undefined,
       })
 
       // Recibo numerado: generar PDF, guardarlo y descargarlo
@@ -495,6 +498,7 @@ export default function CuentaCorrientePage() {
       setPayNotes('')
       setPayDebtId('')
       setPayComprobante(null)
+      setPayFecha(new Date().toISOString().slice(0, 10))
       toast.success(`Pago de ${formatCurrency(amount)} registrado`)
     } catch (err: any) {
       toast.error(err.message || 'Error al registrar pago')
@@ -1408,20 +1412,20 @@ ${renderTabla('Cuenta Mayorista', mayorista, balanceMay)}
                     <TableHeader>
                       <TableRow>
                         <TableHead className="text-xs">Fecha</TableHead>
-                        <TableHead className="text-xs">Descripción</TableHead>
+                        <TableHead className="text-xs">Recibo</TableHead>
                         <TableHead className="text-xs text-right">Monto</TableHead>
                         <TableHead className="text-xs">Motivo</TableHead>
-                        <TableHead className="text-xs">Anulado por</TableHead>
                       </TableRow>
                     </TableHeader>
                     <TableBody>
                       {movimientosConSaldo.filter(({ tx }) => tx.anulado).map(({ tx }) => (
                         <TableRow key={tx.id} className="text-muted-foreground">
                           <TableCell className="text-xs tabular-nums whitespace-nowrap">{formatDate(tx.date)}</TableCell>
-                          <TableCell className="text-xs">{tx.description}</TableCell>
+                          <TableCell className="text-xs whitespace-nowrap">{tx.reciboNumero || '—'}</TableCell>
                           <TableCell className="text-xs text-right tabular-nums">{formatCurrency(tx.amount)}</TableCell>
-                          <TableCell className="text-xs">{tx.anuladoMotivo || '—'}</TableCell>
-                          <TableCell className="text-xs">{tx.anuladoBy || '—'}</TableCell>
+                          <TableCell className="text-xs truncate max-w-[24rem]">
+                            {tx.anuladoMotivo || '—'}{tx.anuladoBy ? ` — Por: ${tx.anuladoBy}` : ''}
+                          </TableCell>
                         </TableRow>
                       ))}
                     </TableBody>
@@ -1482,7 +1486,7 @@ ${renderTabla('Cuenta Mayorista', mayorista, balanceMay)}
         </Dialog>
 
         {/* Dialog Registrar pago */}
-        <Dialog open={payDialog} onOpenChange={(open) => { if (!open) { setPayDialog(false); setPayAmount(''); setPayNotes(''); setPayDebtId(''); setPayComprobante(null); } }}>
+        <Dialog open={payDialog} onOpenChange={(open) => { if (!open) { setPayDialog(false); setPayAmount(''); setPayNotes(''); setPayDebtId(''); setPayComprobante(null); setPayFecha(new Date().toISOString().slice(0, 10)); } }}>
           <DialogContent className="sm:max-w-sm">
             <DialogHeader>
               <DialogTitle>Registrar pago</DialogTitle>
@@ -1556,6 +1560,15 @@ ${renderTabla('Cuenta Mayorista', mayorista, balanceMay)}
                 </Button>
               </div>
               <div className="space-y-2">
+                <Label>Día que pagó</Label>
+                <Input
+                  type="date"
+                  value={payFecha}
+                  max={new Date().toISOString().slice(0, 10)}
+                  onChange={(e) => setPayFecha(e.target.value)}
+                />
+              </div>
+              <div className="space-y-2">
                 <Label>Notas (opcional)</Label>
                 <Textarea
                   placeholder="Ej: Pagó con billete de $10.000"
@@ -1566,14 +1579,14 @@ ${renderTabla('Cuenta Mayorista', mayorista, balanceMay)}
               </div>
               {isCobrador && (
                 <div className="space-y-2">
-                  <Label>Comprobante de transferencia (obligatorio)</Label>
+                  <Label>Comprobante{payMethod !== 'efectivo' ? ' (obligatorio)' : ' (opcional)'}</Label>
                   <Input
                     type="file"
                     accept="image/*,application/pdf"
                     onChange={(e) => setPayComprobante(e.target.files?.[0] ?? null)}
                   />
-                  {!payComprobante && (
-                    <p className="text-xs text-muted-foreground">Tenés que adjuntar el comprobante para registrar el pago.</p>
+                  {payMethod !== 'efectivo' && !payComprobante && (
+                    <p className="text-xs text-muted-foreground">Tenés que adjuntar el comprobante para registrar el pago por transferencia.</p>
                   )}
                 </div>
               )}
@@ -1582,7 +1595,7 @@ ${renderTabla('Cuenta Mayorista', mayorista, balanceMay)}
               <Button variant="outline" onClick={() => setPayDialog(false)}>Cancelar</Button>
               <Button
                 onClick={handleRegisterPayment}
-                disabled={processing || !payAmount || parseFloat(payAmount) <= 0 || (isCobrador && !payComprobante)}
+                disabled={processing || !payAmount || parseFloat(payAmount) <= 0 || (isCobrador && payMethod !== 'efectivo' && !payComprobante)}
               >
                 {processing && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
                 Registrar pago

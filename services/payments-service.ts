@@ -43,7 +43,7 @@ export const aplicarPagoADeudas = async (
 
 const registerPayment = async (
   cuenta: 'minorista' | 'mayorista',
-  data: { clientId: string; amount: number; description?: string; debtTxId?: string },
+  data: { clientId: string; amount: number; description?: string; debtTxId?: string; date?: string },
 ): Promise<Transaction> => {
   const balanceCol = cuenta === 'minorista' ? 'current_balance' : 'current_balance_mayorista'
   const { data: client } = await supabase
@@ -75,13 +75,15 @@ const registerPayment = async (
   const description = data.description || defaultDesc
   const clientName = (client as any)?.name || 'pago'
   const docId = await generateReadableId('transacciones', 'transaccion', clientName)
+  // Día en que el cliente pagó (elegido al registrar); si no se especifica, ahora mismo.
+  const fecha = data.date ? new Date(`${data.date}T12:00:00`) : new Date()
   const row: Record<string, unknown> = {
     id: docId,
     client_id: data.clientId,
     type: 'payment',
     amount: data.amount,
     description,
-    date: new Date().toISOString(),
+    date: fecha.toISOString(),
     cuenta,
     recibo_numero: reciboNumero,
   }
@@ -99,7 +101,7 @@ const registerPayment = async (
     type: 'payment',
     amount: data.amount,
     description,
-    date: new Date(),
+    date: fecha,
     cuenta,
     debtId: data.debtTxId,
     reciboNumero,
@@ -320,6 +322,7 @@ export const registerCashPayment = async (data: {
   amount: number
   description?: string
   debtTxId?: string
+  date?: string
 }): Promise<Transaction> => registerPayment('minorista', data)
 
 export const registerMayoristaPayment = async (data: {
@@ -327,4 +330,5 @@ export const registerMayoristaPayment = async (data: {
   amount: number
   description?: string
   debtTxId?: string
+  date?: string
 }): Promise<Transaction> => registerPayment('mayorista', data)

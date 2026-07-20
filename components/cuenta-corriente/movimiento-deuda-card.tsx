@@ -517,9 +517,9 @@ export function MovimientoDeudaCard({
               )}
             </div>
 
-            {/* Incidencias: cantidad de ítems no entregados/devueltos, 0 si no hay */}
+            {/* Incidencias: cantidad de ítems no entregados/devueltos (solo aplica a ventas) */}
             <span className={`text-xs text-center tabular-nums font-medium ${tieneNoEntregados ? 'text-amber-600' : 'text-muted-foreground'}`}>
-              {noEntregadosUnified.length}
+              {isPayment ? '' : noEntregadosUnified.length}
             </span>
 
             {/* Cobrador */}
@@ -630,9 +630,15 @@ export function MovimientoDeudaCard({
                 Ver comprobante
               </Button>
             )}
+            {isPagoSimple && metodoPago && (
+              <span className="text-xs text-foreground font-medium whitespace-nowrap">{metodoPago}</span>
+            )}
+            {isPagoSimple && notaPago && (
+              <span className="text-xs text-muted-foreground truncate" title={notaPago}>&ldquo;{notaPago}&rdquo;</span>
+            )}
             {!isDescuento && !isRechazo && onAnularPago && !tx.anulado && (
               <Button
-                variant="outline" size="sm" className="gap-1.5 text-xs h-7 text-red-500 border-red-300 hover:bg-red-50 ml-auto"
+                variant="outline" size="sm" className="gap-1.5 text-xs h-7 text-red-500 border-red-300 hover:bg-red-50 ml-auto shrink-0"
                 onClick={(e) => { e.stopPropagation(); onAnularPago(tx) }}
               >
                 <Ban className="h-3.5 w-3.5" />
@@ -640,12 +646,6 @@ export function MovimientoDeudaCard({
               </Button>
             )}
           </div>
-          {isPagoSimple && (metodoPago || notaPago) && (
-            <div className="text-xs text-muted-foreground space-y-0.5">
-              {metodoPago && <div><span className="font-medium text-foreground">{metodoPago}</span></div>}
-              {notaPago && <div>{notaPago}</div>}
-            </div>
-          )}
           {devolucionExpandable && devMatch && (
             <div>
               <div className="flex items-center gap-1 text-[11px] font-semibold text-purple-700 mb-1">

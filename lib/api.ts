@@ -278,6 +278,7 @@ export const paymentsApi = {
     amount: number
     description?: string
     debtTxId?: string
+    date?: string
   }): Promise<Transaction> {
     return registerCashPayment(data)
   },
@@ -286,6 +287,7 @@ export const paymentsApi = {
     amount: number
     description?: string
     debtTxId?: string
+    date?: string
   }): Promise<Transaction> {
     return registerMayoristaPayment(data)
   },
