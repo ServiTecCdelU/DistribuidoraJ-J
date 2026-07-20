@@ -1859,31 +1859,45 @@ ${renderTabla('Cuenta Mayorista', mayorista, balanceMay)}
           <>
           {/* Cards resumen */}
           <div className="grid grid-cols-2 md:grid-cols-3 gap-3 mb-4">
-            <Card className="rounded-2xl gap-0 py-0 overflow-hidden">
-              <CardContent className="p-4 flex items-start gap-3">
-                <div className="h-9 w-9 rounded-full flex items-center justify-center shrink-0 bg-red-50 dark:bg-red-950/30">
-                  <Users className="h-4 w-4 text-red-600" />
+            {/* Deuda total */}
+            <Card className="rounded-2xl gap-0 py-0 overflow-hidden border-0 shadow-sm ring-1 ring-black/5 dark:ring-white/10 bg-gradient-to-br from-red-50 via-white to-white dark:from-red-950/30 dark:via-background dark:to-background transition-shadow hover:shadow-md">
+              <div className="h-1 bg-gradient-to-r from-red-500 to-red-400" />
+              <CardContent className="p-4">
+                <div className="flex items-center gap-2 mb-2.5">
+                  <div className="h-8 w-8 rounded-xl flex items-center justify-center shrink-0 bg-red-100 dark:bg-red-900/40">
+                    <Users className="h-4 w-4 text-red-600" />
+                  </div>
+                  <p className="text-xs font-medium text-muted-foreground">Deuda total</p>
                 </div>
-                <div className="min-w-0">
-                  <p className="text-xs text-muted-foreground mb-0.5">Deuda total</p>
-                  <p className="text-xl font-bold text-red-600 tabular-nums leading-tight truncate">{formatCurrency(totalDeuda)}</p>
-                  <p className="text-[11px] text-muted-foreground">{scopedDebtClients.length} clientes</p>
-                </div>
+                <p className="text-2xl font-extrabold text-red-600 tabular-nums leading-none tracking-tight truncate">{formatCurrency(totalDeuda)}</p>
+                <p className="text-[11px] text-muted-foreground mt-1.5">{scopedDebtClients.length} clientes con saldo</p>
               </CardContent>
             </Card>
 
-            <Card className="rounded-2xl gap-0 py-0 overflow-hidden">
+            {/* Estado — barra segmentada + desglose */}
+            <Card className="rounded-2xl gap-0 py-0 overflow-hidden border-0 shadow-sm ring-1 ring-black/5 dark:ring-white/10 transition-shadow hover:shadow-md">
               <CardContent className="p-4">
-                <div className="flex items-center gap-2 mb-2">
-                  <div className="h-9 w-9 rounded-full flex items-center justify-center shrink-0 bg-amber-50 dark:bg-amber-950/30">
-                    <AlertTriangle className="h-4 w-4 text-amber-600" />
+                <div className="flex items-center gap-2 mb-2.5">
+                  <div className="h-8 w-8 rounded-xl flex items-center justify-center shrink-0 bg-muted">
+                    <AlertTriangle className="h-4 w-4 text-muted-foreground" />
                   </div>
-                  <p className="text-xs font-semibold">Estado</p>
+                  <p className="text-xs font-medium text-muted-foreground">Estado de cartera</p>
                 </div>
-                <div className="divide-y">
+                {/* Barra proporcional */}
+                {(() => {
+                  const total = ESTADO_META.reduce((a, e) => a + estadoCounts[e.key], 0)
+                  return total > 0 ? (
+                    <div className="flex h-1.5 w-full rounded-full overflow-hidden mb-2.5 bg-muted">
+                      {ESTADO_META.filter((e) => estadoCounts[e.key] > 0).map((e) => (
+                        <div key={e.key} className={e.dot} style={{ width: `${(estadoCounts[e.key] / total) * 100}%` }} />
+                      ))}
+                    </div>
+                  ) : null
+                })()}
+                <div className="space-y-1">
                   {ESTADO_META.map((e) => (
-                    <div key={e.key} className="flex items-center justify-between text-xs py-1 first:pt-0 last:pb-0">
-                      <span className="flex items-center gap-1.5"><span className={`h-2 w-2 rounded-full ${e.dot}`} />{e.label}</span>
+                    <div key={e.key} className="flex items-center justify-between text-xs">
+                      <span className="flex items-center gap-1.5 text-muted-foreground"><span className={`h-1.5 w-1.5 rounded-full ${e.dot}`} />{e.label}</span>
                       <div className="flex items-center gap-1.5">
                         <span className={`font-bold tabular-nums ${e.text}`}>{estadoCounts[e.key]}</span>
                         {estadoCounts[e.key] > 0 && (
@@ -1893,7 +1907,7 @@ ${renderTabla('Cuenta Mayorista', mayorista, balanceMay)}
                     </div>
                   ))}
                   {estadoCounts.diaPago > 0 && (
-                    <div className="flex items-center justify-between text-xs py-1 pt-2 mt-1 border-t">
+                    <div className="flex items-center justify-between text-xs pt-1.5 mt-1 border-t">
                       <span className="flex items-center gap-1.5 text-teal-700 font-medium">
                         <Clock className="h-3 w-3 text-teal-600" />Día de pago (hoy)
                       </span>
@@ -1907,28 +1921,33 @@ ${renderTabla('Cuenta Mayorista', mayorista, balanceMay)}
               </CardContent>
             </Card>
 
+            {/* Verificar pago */}
             {canManage && (
             <Card
-              className={`rounded-2xl gap-0 py-0 overflow-hidden col-span-2 md:col-span-1 cursor-pointer transition-colors ${
+              className={`rounded-2xl gap-0 py-0 overflow-hidden col-span-2 md:col-span-1 border-0 shadow-sm ring-1 cursor-pointer transition-all hover:shadow-md hover:-translate-y-0.5 ${
                 pendingAuth.length > 0
-                  ? 'border-amber-300 bg-amber-50 hover:bg-amber-100 dark:bg-amber-950/20 dark:border-amber-800'
-                  : 'hover:bg-muted/30'
+                  ? 'ring-amber-300 dark:ring-amber-800 bg-gradient-to-br from-amber-50 via-white to-white dark:from-amber-950/30 dark:via-background dark:to-background'
+                  : 'ring-black/5 dark:ring-white/10'
               }`}
               onClick={openAuthPanel}
             >
+              {pendingAuth.length > 0 && <div className="h-1 bg-gradient-to-r from-amber-500 to-amber-400" />}
               <CardContent className="p-4 flex items-center gap-3">
-                <div className={`h-9 w-9 rounded-full flex items-center justify-center shrink-0 ${
+                <div className={`relative h-8 w-8 rounded-xl flex items-center justify-center shrink-0 ${
                   pendingAuth.length > 0 ? 'bg-amber-100 dark:bg-amber-900/40' : 'bg-muted'
                 }`}>
                   <FileCheck className={`h-4 w-4 ${pendingAuth.length > 0 ? 'text-amber-600' : 'text-muted-foreground'}`} />
+                  {pendingAuth.length > 0 && (
+                    <span className="absolute -top-1 -right-1 h-2.5 w-2.5 rounded-full bg-amber-500 animate-pulse ring-2 ring-white dark:ring-background" />
+                  )}
                 </div>
                 <div className="flex-1 flex items-center justify-between gap-2 min-w-0">
                   <div className="min-w-0">
-                    <p className="text-xs font-semibold">Verificar pago</p>
+                    <p className="text-xs font-medium text-muted-foreground">Verificar pago</p>
                     <p className="text-[11px] text-muted-foreground truncate">cobros de cobrador sin revisar</p>
                   </div>
                   <div className="flex items-center gap-1 shrink-0">
-                    <span className={`text-xl font-bold tabular-nums leading-none ${pendingAuth.length > 0 ? 'text-amber-600' : 'text-muted-foreground'}`}>
+                    <span className={`text-2xl font-extrabold tabular-nums leading-none tracking-tight ${pendingAuth.length > 0 ? 'text-amber-600' : 'text-muted-foreground'}`}>
                       {pendingAuth.length}
                     </span>
                     {pendingAuth.length > 0 && <ChevronRight className="h-4 w-4 text-amber-500" />}
