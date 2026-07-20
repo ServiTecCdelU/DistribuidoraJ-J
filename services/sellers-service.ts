@@ -47,6 +47,31 @@ export const getSellers = async (): Promise<Seller[]> => {
   )
 }
 
+/**
+ * Devuelve los ids de vendedores que comparten el mismo codigo_vendedor que `sellerId`
+ * (incluye a `sellerId`). Permite que un vendedor nuevo con el mismo código vea la
+ * cartera de clientes del que se fue, sin tener que reasignar seller_id en la BD.
+ * Si el vendedor no tiene codigo_vendedor cargado, devuelve solo su propio id.
+ */
+export const getSellerIdsByCodigo = async (sellerId: string): Promise<string[]> => {
+  const { data: seller } = await supabase
+    .from('vendedores')
+    .select('codigo_vendedor')
+    .eq('id', sellerId)
+    .maybeSingle()
+
+  const codigo = seller?.codigo_vendedor
+  if (!codigo) return [sellerId]
+
+  const { data: related } = await supabase
+    .from('vendedores')
+    .select('id')
+    .eq('codigo_vendedor', codigo)
+
+  const ids = (related ?? []).map((r) => r.id)
+  return ids.length > 0 ? ids : [sellerId]
+}
+
 export const getSellerById = async (id: string): Promise<Seller | undefined> => {
   const { data } = await supabase
     .from('vendedores')

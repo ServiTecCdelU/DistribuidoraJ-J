@@ -1,13 +1,16 @@
 import { supabase } from '@/lib/supabase'
 import type { Client, ComprobantePago, Transaction } from '@/lib/types'
 import { generateReadableId } from '@/services/supabase-helpers'
+import { getSellerIdsByCodigo } from '@/services/sellers-service'
 
-// Clientes con deuda asignados a un vendedor
+// Clientes con deuda asignados a un vendedor (incluye clientes de vendedores anteriores
+// con el mismo codigo_vendedor, para cubrir reemplazos de personal)
 export const getClientsBySeller = async (sellerId: string): Promise<Client[]> => {
+  const sellerIds = await getSellerIdsByCodigo(sellerId)
   const { data } = await supabase
     .from('clientes')
     .select('*')
-    .eq('seller_id', sellerId)
+    .in('seller_id', sellerIds)
     .gt('current_balance', 0)
     .order('current_balance', { ascending: false })
 
@@ -37,7 +40,8 @@ export const getDebtClients = async (sellerId?: string): Promise<(Client & { sel
     .order('current_balance', { ascending: false })
 
   if (sellerId) {
-    query = query.eq('seller_id', sellerId)
+    const sellerIds = await getSellerIdsByCodigo(sellerId)
+    query = query.in('seller_id', sellerIds)
   }
 
   const { data } = await query
@@ -191,10 +195,11 @@ export const getComprobantes = async (filters?: {
 // Comprobantes de un vendedor
 export const getComprobantesBySeller = async (sellerId: string): Promise<ComprobantePago[]> => {
   try {
+    const sellerIds = await getSellerIdsByCodigo(sellerId)
     const { data, error } = await supabase
       .from('comprobantes_pago')
       .select('*, clientes(name), vendedores(name)')
-      .eq('seller_id', sellerId)
+      .in('seller_id', sellerIds)
       .order('created_at', { ascending: false })
 
     if (error) return []

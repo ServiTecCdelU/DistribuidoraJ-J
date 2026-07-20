@@ -71,6 +71,8 @@ export default function CuentaCorrientePage() {
   const [debtClients, setDebtClients] = useState<ClientWithSeller[]>([])
   const [comprobantes, setComprobantes] = useState<ComprobantePago[]>([])
   const [sellers, setSellers] = useState<Seller[]>([])
+  // Lista completa de vendedores (incluye inactivos) — usada para agrupar por codigo_vendedor
+  const [rawSellers, setRawSellers] = useState<Seller[]>([])
   const [loading, setLoading] = useState(true)
   const [filterSeller, setFilterSeller] = useState<string>('all')
   // Día de visita/cobro asignado al cliente ('all' = todos)
@@ -159,6 +161,7 @@ export default function CuentaCorrientePage() {
       ])
       setDebtClients(clientsData)
       setComprobantes(compData)
+      setRawSellers(sellersData)
       // Solo vendedores (incluye "ambos"); los transportistas no son vendedores
       setSellers(sellersData.filter((s) => s.isActive && s.employeeType !== 'transportista'))
     } catch { /* silenciado */ }
@@ -178,10 +181,20 @@ export default function CuentaCorrientePage() {
 
   useEffect(() => { loadData() }, [loadData])
 
-  // Vendedor: limitar a sus clientes. Admin: todos.
+  // Ids de vendedores con el mismo codigo_vendedor que el usuario logueado (incluye su propio id).
+  // Cubre el caso de un vendedor reemplazante con el mismo código: ve la cartera del anterior
+  // sin necesidad de reasignar seller_id en la BD.
+  const myRelatedSellerIds = useMemo(() => {
+    if (!user?.sellerId) return []
+    const mine = rawSellers.find((s) => s.id === user.sellerId)
+    if (!mine?.codigoVendedor) return [user.sellerId]
+    return rawSellers.filter((s) => s.codigoVendedor === mine.codigoVendedor).map((s) => s.id)
+  }, [rawSellers, user?.sellerId])
+
+  // Vendedor: limitar a sus clientes (y a los del mismo codigo_vendedor). Admin: todos.
   const scopedDebtClients = useMemo(
-    () => isSeller ? debtClients.filter((c) => c.sellerId === user?.sellerId) : debtClients,
-    [debtClients, isSeller, user?.sellerId]
+    () => isSeller ? debtClients.filter((c) => !!c.sellerId && myRelatedSellerIds.includes(c.sellerId)) : debtClients,
+    [debtClients, isSeller, myRelatedSellerIds]
   )
 
   const totalDeuda = scopedDebtClients.reduce((acc, c) => acc + c.currentBalance, 0)
@@ -197,9 +210,18 @@ export default function CuentaCorrientePage() {
     return counts
   }, [scopedDebtClients])
 
+  // Ids relacionados al vendedor elegido en el filtro (mismo codigo_vendedor)
+  const filterSellerIds = useMemo(() => {
+    if (filterSeller === 'all') return []
+    const chosen = rawSellers.find((s) => s.id === filterSeller)
+    return chosen?.codigoVendedor
+      ? rawSellers.filter((s) => s.codigoVendedor === chosen.codigoVendedor).map((s) => s.id)
+      : [filterSeller]
+  }, [rawSellers, filterSeller])
+
   const filteredClients = scopedDebtClients
     .filter((c) => {
-      const matchesSeller = filterSeller === 'all' || c.sellerId === filterSeller
+      const matchesSeller = filterSeller === 'all' || (!!c.sellerId && filterSellerIds.includes(c.sellerId))
       const matchesSearch = !searchQuery || c.name.toLowerCase().includes(searchQuery.toLowerCase())
       const matchesClassification = filterClassification === 'all' || clasificarDeuda(c.debtSince) === filterClassification
       const matchesDia = filterDiaCobro === 'all' || (c.diaCobro ?? '') === filterDiaCobro
@@ -589,8 +611,14 @@ export default function CuentaCorrientePage() {
   // targetSellerId: undefined/'all' = todas las cuentas; un id = solo ese vendedor.
   const handlePrintCobranza = async (targetSellerId?: string) => {
     const base = scopedDebtClients.filter((c) => c.currentBalance > 0)
+    // Al filtrar por un vendedor puntual, incluir tambien clientes de vendedores
+    // anteriores con el mismo codigo_vendedor (reemplazos de personal).
+    const targetMine = targetSellerId ? rawSellers.find((s) => s.id === targetSellerId) : undefined
+    const targetSellerIds = targetMine?.codigoVendedor
+      ? rawSellers.filter((s) => s.codigoVendedor === targetMine.codigoVendedor).map((s) => s.id)
+      : (targetSellerId ? [targetSellerId] : [])
     const conDeuda = (targetSellerId && targetSellerId !== 'all')
-      ? base.filter((c) => c.sellerId === targetSellerId)
+      ? base.filter((c) => c.sellerId && targetSellerIds.includes(c.sellerId))
       : base
     if (conDeuda.length === 0) {
       toast.error('No hay clientes con deuda para imprimir')
