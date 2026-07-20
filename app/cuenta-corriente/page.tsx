@@ -445,9 +445,8 @@ export default function CuentaCorrientePage() {
       const refImputacion = deudaImputada
         ? ` (${saleImputada?.remitoNumber ? `Remito ${saleImputada.remitoNumber}` : deudaImputada.description})`
         : ''
-      const cobradorRef = isCobrador
-        ? ` (Cobrado por ${user.name}${selectedClient.sellerName ? ` — Vendedor: ${selectedClient.sellerName}` : ''})`
-        : ''
+      const cobradorNombre = rawSellers.find((s) => s.id === user.sellerId)?.name || user.name
+      const cobradorRef = isCobrador ? ` — Cobrado por ${cobradorNombre}` : ''
       const desc = `${payNotes
         ? `${methods[payMethod] || methods.otro} — ${payNotes}`
         : methods[payMethod] || methods.otro}${refImputacion}${cobradorRef}`
@@ -1030,11 +1029,12 @@ ${renderTabla('Cuenta Mayorista', mayorista, balanceMay)}
     [comprobantes]
   )
 
-  // Comprobante de cobrador vinculado a cada transacción de pago del cliente seleccionado
+  // Comprobante vinculado a cada transacción de pago del cliente seleccionado
+  // (cobrador auto-aprobado, o vendedor subido y luego aprobado por admin)
   const compByTxId = useMemo(() => {
     const map = new Map<string, ComprobantePago>()
     for (const c of clientComprobantes) {
-      if (c.viaCobrador && c.transactionId) map.set(c.transactionId, c)
+      if (c.transactionId) map.set(c.transactionId, c)
     }
     return map
   }, [clientComprobantes])
@@ -1162,7 +1162,6 @@ ${renderTabla('Cuenta Mayorista', mayorista, balanceMay)}
   // Vista detalle de cliente
   if (selectedClient) {
     const clientPending = clientComprobantes.filter((c) => c.status === 'pending')
-    const clientHistory = clientComprobantes.filter((c) => c.status !== 'pending')
     const txMinorista = clientTransactions.filter((tx) => !tx.cuenta || tx.cuenta === 'minorista')
     const txMayorista = clientTransactions.filter((tx) => tx.cuenta === 'mayorista')
     const balanceMayorista = selectedClient.currentBalanceMayorista ?? 0
@@ -1344,14 +1343,15 @@ ${renderTabla('Cuenta Mayorista', mayorista, balanceMay)}
                 <p className="text-sm text-muted-foreground text-center py-2">Sin movimientos</p>
               ) : (
                 <div className="overflow-x-auto">
-                  <div className="min-w-[880px] rounded-lg border overflow-hidden">
+                  <div className="min-w-[940px] rounded-lg border overflow-hidden">
                     {/* Encabezado */}
                     <div className={`${MOVIMIENTO_GRID} px-3 py-2 bg-muted/50 border-b text-[11px] font-semibold uppercase tracking-wide text-muted-foreground`}>
                       <span>Fecha</span>
                       <span>Concepto</span>
                       <span>Descripción</span>
                       <span>Acciones</span>
-                      <span />
+                      <span className="text-center">Estado</span>
+                      <span className="text-center">Comp.</span>
                       <span className="text-right">Debe</span>
                       <span className="text-right">Haber</span>
                       <span className="text-right">Saldo</span>
@@ -1373,6 +1373,7 @@ ${renderTabla('Cuenta Mayorista', mayorista, balanceMay)}
                             onRegenerarRecibo={canManage ? handleRegenerarRecibo : undefined}
                             onAnularPago={canManage ? setPagoToAnular : undefined}
                             comprobante={compByTxId.get(tx.id)}
+                            onVerComprobante={setPreviewUrl}
                           />
                         )
                       })}
@@ -1380,6 +1381,7 @@ ${renderTabla('Cuenta Mayorista', mayorista, balanceMay)}
                     {/* Totales abajo */}
                     <div className={`${MOVIMIENTO_GRID} px-3 py-2 bg-foreground text-background text-xs font-bold border-t`}>
                       <span className="uppercase tracking-wide">Totales</span>
+                      <span />
                       <span />
                       <span />
                       <span />
@@ -1394,46 +1396,6 @@ ${renderTabla('Cuenta Mayorista', mayorista, balanceMay)}
             </div>
 
 
-            {/* Comprobantes procesados */}
-            {clientHistory.length > 0 && (
-              <div>
-                <h3 className="text-sm font-semibold mb-3 flex items-center gap-2">
-                  <FileCheck className="h-4 w-4 text-muted-foreground" />
-                  Comprobantes procesados ({clientHistory.length})
-                </h3>
-                <div className="flex flex-col gap-2">
-                  {clientHistory.map((c) => (
-                    <Card key={c.id}>
-                      <CardContent className="p-3 flex items-center gap-3">
-                        <div className={`h-8 w-8 rounded-full flex items-center justify-center shrink-0 ${
-                          c.status === 'approved' ? 'bg-green-100 dark:bg-green-900/30' : 'bg-red-100 dark:bg-red-900/30'
-                        }`}>
-                          {c.status === 'approved'
-                            ? <CheckCircle2 className="h-4 w-4 text-green-600" />
-                            : <XCircle className="h-4 w-4 text-red-600" />
-                          }
-                        </div>
-                        <div className="flex-1 min-w-0">
-                          <div className="flex items-center gap-2">
-                            <p className="text-sm font-medium">{formatCurrency(c.amount)}</p>
-                            {statusBadge(c.status)}
-                          </div>
-                          <p className="text-xs text-muted-foreground">
-                            {c.sellerName} · {formatDate(c.createdAt)}
-                            {c.rejectionReason && ` — ${c.rejectionReason}`}
-                          </p>
-                        </div>
-                        {c.fileUrl && (
-                          <Button variant="ghost" size="icon" className="h-8 w-8 shrink-0" onClick={() => setPreviewUrl(c.fileUrl)}>
-                            <ExternalLink className="h-3.5 w-3.5" />
-                          </Button>
-                        )}
-                      </CardContent>
-                    </Card>
-                  ))}
-                </div>
-              </div>
-            )}
           </div>
         )}
 

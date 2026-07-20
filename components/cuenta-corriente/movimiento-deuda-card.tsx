@@ -6,6 +6,7 @@ import { Button } from '@/components/ui/button'
 import {
   ArrowDownCircle, ArrowUpCircle, ChevronDown, Download, Receipt, Truck,
   AlertTriangle, RotateCcw, Tag, RefreshCw, Loader2, Ban, CheckCircle2,
+  Image as ImageIcon,
 } from 'lucide-react'
 import { formatCurrencyDecimals, formatDate } from '@/lib/utils/format'
 import { descargarDocumento } from '@/lib/utils/doc-actions'
@@ -23,14 +24,15 @@ interface MovimientoDeudaCardProps {
   onRegenerarRemito?: (sale: Sale) => Promise<void>
   onRegenerarRecibo?: (tx: Transaction) => Promise<void>
   onAnularPago?: (tx: Transaction) => void
-  /** Comprobante de cobrador vinculado a este movimiento, si corresponde */
+  /** Comprobante vinculado a este movimiento (cobrador o vendedor aprobado), si corresponde */
   comprobante?: ComprobantePago
+  onVerComprobante?: (fileUrl: string) => void
 }
 
 // Columnas compartidas entre el encabezado (en la page) y cada fila:
-// Fecha · Concepto · Descripción · Acciones · Verificado · Debe · Haber · Saldo
+// Fecha · Concepto · Descripción · Acciones · Estado · Comprobante · Debe · Haber · Saldo
 export const MOVIMIENTO_GRID =
-  'grid grid-cols-[5rem_4.5rem_minmax(8rem,1fr)_12rem_2.5rem_6.5rem_6.5rem_6.5rem] items-center gap-x-2'
+  'grid grid-cols-[5rem_4.5rem_minmax(8rem,1fr)_10rem_4.5rem_2.5rem_6.5rem_6.5rem_6.5rem] items-center gap-x-2'
 
 const COLOR_DIA: Record<EstadoDiaPago, string> = {
   falta: 'text-green-600',
@@ -158,7 +160,7 @@ function ItemsTable({ items, showTotal = false }: { items: TableRow[]; showTotal
 }
 
 export function MovimientoDeudaCard({
-  tx, sale, devoluciones = [], saldoAcumulado, onRegenerarRemito, onRegenerarRecibo, onAnularPago, comprobante,
+  tx, sale, devoluciones = [], saldoAcumulado, onRegenerarRemito, onRegenerarRecibo, onAnularPago, comprobante, onVerComprobante,
 }: MovimientoDeudaCardProps) {
   const [expanded, setExpanded] = useState(false)
   const [regenerando, setRegenerando] = useState(false)
@@ -474,15 +476,6 @@ export function MovimientoDeudaCard({
         {/* Descripción */}
         <div className="flex items-center gap-1.5 min-w-0">
           <span className={`text-sm truncate ${tx.anulado ? 'line-through text-muted-foreground' : ''}`}>{descripcionMov}</span>
-          {tx.anulado && (
-            <Badge
-              variant="outline"
-              className="text-[10px] px-1 py-0 h-4 text-red-600 border-red-300 shrink-0"
-              title={`${tx.anuladoMotivo ? `Motivo: ${tx.anuladoMotivo}` : ''}${tx.anuladoBy ? ` · Por: ${tx.anuladoBy}` : ''}`}
-            >
-              ANULADO
-            </Badge>
-          )}
           {tieneNoEntregados && !expanded && (
             <Badge variant="outline" className="text-[11px] px-1 py-0 h-4 text-amber-600 border-amber-300 shrink-0">
               {noEntregadosUnified.length} no entregado{noEntregadosUnified.length > 1 ? 's' : ''}
@@ -575,12 +568,36 @@ export function MovimientoDeudaCard({
           )}
         </div>
 
-        {/* Verificado (cobros de cobrador) */}
-        <div className="flex justify-center" title={comprobante && !comprobante.autorizado ? 'Sin verificar' : comprobante?.autorizado ? 'Verificado' : undefined}>
-          {comprobante && (
-            comprobante.autorizado
-              ? <CheckCircle2 className="h-4 w-4 text-green-600" />
-              : <AlertTriangle className="h-4 w-4 text-amber-500" />
+        {/* Estado: anulado, o verificación del comprobante (cobros de cobrador) */}
+        <div className="flex justify-center">
+          {tx.anulado ? (
+            <Badge
+              variant="outline"
+              className="text-[10px] px-1 py-0 h-4 text-red-600 border-red-300"
+              title={`${tx.anuladoMotivo ? `Motivo: ${tx.anuladoMotivo}` : ''}${tx.anuladoBy ? ` · Por: ${tx.anuladoBy}` : ''}`}
+            >
+              ANULADO
+            </Badge>
+          ) : comprobante?.viaCobrador ? (
+            <span title={comprobante.autorizado ? 'Verificado' : 'Sin verificar'}>
+              {comprobante.autorizado
+                ? <CheckCircle2 className="h-4 w-4 text-green-600" />
+                : <AlertTriangle className="h-4 w-4 text-amber-500" />}
+            </span>
+          ) : null}
+        </div>
+
+        {/* Comprobante adjunto */}
+        <div className="flex justify-center">
+          {comprobante?.fileUrl && (
+            <button
+              type="button"
+              className="inline-flex items-center text-teal-600 hover:text-teal-700"
+              onClick={(e) => { e.stopPropagation(); onVerComprobante?.(comprobante.fileUrl) }}
+              title="Ver comprobante"
+            >
+              <ImageIcon className="h-4 w-4" />
+            </button>
           )}
         </div>
 
