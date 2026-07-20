@@ -43,6 +43,7 @@ function getRoleLabel(user: { role: string; employeeType?: string }): string {
   if (user.employeeType === "transportista") return "Transportista";
   if (user.employeeType === "ambos") return "Vendedor / Transportista";
   if (user.employeeType === "cobrador") return "Cobrador";
+  if (user.employeeType === "vendedor_cobrador") return "Vendedor / Cobrador";
   return "Vendedor";
 }
 
@@ -53,9 +54,9 @@ export function AppSidebar() {
   const { user } = useAuth();
 
   const employeeType = user?.employeeType;
-  const isVendedor = employeeType === "vendedor" || employeeType === "ambos";
+  const isVendedor = employeeType === "vendedor" || employeeType === "ambos" || employeeType === "vendedor_cobrador";
   const isTransportista = employeeType === "transportista" || employeeType === "ambos";
-  const isCobrador = employeeType === "cobrador";
+  const isCobrador = employeeType === "cobrador" || employeeType === "vendedor_cobrador";
 
   const navGroups: NavGroup[] = [
     {
@@ -67,7 +68,7 @@ export function AppSidebar() {
         { href: "/ventas/nueva", label: "Nueva Venta", icon: ShoppingCart, roles: ["admin", ...(isVendedor ? ["seller"] : [])] },
         { href: "/pedidos", label: "Pedidos", icon: Truck, roles: ["admin", ...(isTransportista ? ["seller"] : [])] },
         { href: "/mis-pedidos", label: "Mis Pedidos", icon: Package, roles: [...(isVendedor ? ["seller"] : [])] },
-        { href: "/comisiones", label: "Mis Comisiones", icon: Banknote, roles: [...(!isCobrador ? ["seller"] : [])] },
+        { href: "/comisiones", label: "Mis Comisiones", icon: Banknote, roles: [...(isVendedor || isTransportista ? ["seller"] : [])] },
         // { href: "/cobranzas", label: "Cobranzas", icon: Receipt, roles: [...(isVendedor ? ["seller"] : [])] },
         {
           href: "/cuenta-corriente",

@@ -63,6 +63,7 @@ const EMPLOYEE_TYPE_LABELS: Record<EmployeeType, string> = {
   transportista: 'Transportista',
   ambos: 'Vendedor + Transportista',
   cobrador: 'Cobrador',
+  vendedor_cobrador: 'Vendedor + Cobrador',
 }
 
 const EMPLOYEE_TYPE_BADGE: Record<EmployeeType, string> = {
@@ -70,6 +71,7 @@ const EMPLOYEE_TYPE_BADGE: Record<EmployeeType, string> = {
   transportista: 'bg-violet-100 text-violet-700 dark:bg-violet-900/30 dark:text-violet-400 border border-violet-200 dark:border-violet-800',
   ambos: 'bg-teal-100 text-teal-700 dark:bg-teal-900/30 dark:text-teal-400 border border-teal-200 dark:border-teal-800',
   cobrador: 'bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400 border border-amber-200 dark:border-amber-800',
+  vendedor_cobrador: 'bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400 border border-amber-200 dark:border-amber-800',
 }
 
 export default function EmpleadosPage() {
@@ -174,9 +176,9 @@ export default function EmpleadosPage() {
       email: seller.email,
       phone: seller.phone,
       codigoVendedor: seller.codigoVendedor ?? '',
-      isVendedor: seller.employeeType === 'vendedor' || seller.employeeType === 'ambos',
+      isVendedor: seller.employeeType === 'vendedor' || seller.employeeType === 'ambos' || seller.employeeType === 'vendedor_cobrador',
       isTransportista: seller.employeeType === 'transportista' || seller.employeeType === 'ambos',
-      isCobrador: seller.employeeType === 'cobrador',
+      isCobrador: seller.employeeType === 'cobrador' || seller.employeeType === 'vendedor_cobrador',
       commissionRate: seller.commissionRate,
       transportistaCommissionRate: seller.transportistaCommissionRate ?? 10,
       maxDiscount: seller.maxDiscount ?? 6,
@@ -214,7 +216,7 @@ export default function EmpleadosPage() {
       setLoadingCommissions(false)
     }
     try {
-      const esVendedor = seller.employeeType === 'vendedor' || seller.employeeType === 'ambos'
+      const esVendedor = seller.employeeType === 'vendedor' || seller.employeeType === 'ambos' || seller.employeeType === 'vendedor_cobrador'
       const esTransportista = seller.employeeType === 'transportista' || seller.employeeType === 'ambos'
       const [porVendedor, porTransportista] = await Promise.all([
         esVendedor ? ordersApi.getBySeller(seller.id) : Promise.resolve([] as Order[]),
@@ -255,7 +257,8 @@ export default function EmpleadosPage() {
     }
     setSaving(true)
     const employeeType: EmployeeType =
-      formData.isCobrador ? 'cobrador'
+      formData.isCobrador && formData.isVendedor ? 'vendedor_cobrador'
+      : formData.isCobrador ? 'cobrador'
       : formData.isVendedor && formData.isTransportista ? 'ambos'
       : formData.isTransportista ? 'transportista'
       : 'vendedor'
@@ -492,9 +495,9 @@ export default function EmpleadosPage() {
       (statusFilter === 'inactive' && !seller.isActive)
     const matchesType =
       typeFilter === 'all' ||
-      (typeFilter === 'vendedor' && (seller.employeeType === 'vendedor' || seller.employeeType === 'ambos')) ||
+      (typeFilter === 'vendedor' && (seller.employeeType === 'vendedor' || seller.employeeType === 'ambos' || seller.employeeType === 'vendedor_cobrador')) ||
       (typeFilter === 'transportista' && (seller.employeeType === 'transportista' || seller.employeeType === 'ambos')) ||
-      (typeFilter === 'cobrador' && seller.employeeType === 'cobrador')
+      (typeFilter === 'cobrador' && (seller.employeeType === 'cobrador' || seller.employeeType === 'vendedor_cobrador'))
     return matchesSearch && matchesStatus && matchesType
   })
 
@@ -514,7 +517,7 @@ export default function EmpleadosPage() {
   const getEmployeeTypeIcon = (type: EmployeeType) => {
     if (type === 'vendedor') return <ShoppingCart className="h-3 w-3 mr-1" />
     if (type === 'transportista') return <Truck className="h-3 w-3 mr-1" />
-    if (type === 'cobrador') return <Banknote className="h-3 w-3 mr-1" />
+    if (type === 'cobrador' || type === 'vendedor_cobrador') return <Banknote className="h-3 w-3 mr-1" />
     return <Users className="h-3 w-3 mr-1" />
   }
 
@@ -792,7 +795,7 @@ export default function EmpleadosPage() {
                           </td>
                           <td className="p-4 text-center">
                             <div className="flex flex-col items-center gap-1">
-                              {(seller.employeeType === 'vendedor' || seller.employeeType === 'ambos') ? (
+                              {(seller.employeeType === 'vendedor' || seller.employeeType === 'ambos' || seller.employeeType === 'vendedor_cobrador') ? (
                                 <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${getCommissionColor(seller.commissionRate)}`}>
                                   <ShoppingCart className="h-2.5 w-2.5 mr-1" />{seller.commissionRate}%
                                 </span>
@@ -906,7 +909,7 @@ export default function EmpleadosPage() {
                           <span className={`inline-flex items-center px-1.5 py-0.5 rounded-full text-[10px] font-medium ${getStatusBadge(seller.isActive)}`}>
                             {seller.isActive ? 'Activo' : 'Inactivo'}
                           </span>
-                          {(seller.employeeType === 'vendedor' || seller.employeeType === 'ambos') && (
+                          {(seller.employeeType === 'vendedor' || seller.employeeType === 'ambos' || seller.employeeType === 'vendedor_cobrador') && (
                             <span className={`inline-flex items-center px-1.5 py-0.5 rounded-full text-[10px] font-medium ${getCommissionColor(seller.commissionRate)}`}>
                               <ShoppingCart className="h-2.5 w-2.5 mr-0.5" />{seller.commissionRate}%
                             </span>
@@ -1036,9 +1039,7 @@ export default function EmpleadosPage() {
                     <Checkbox
                       id="isVendedor"
                       checked={formData.isVendedor}
-                      onCheckedChange={(checked) =>
-                        setFormData({ ...formData, isVendedor: !!checked, isCobrador: checked ? false : formData.isCobrador })
-                      }
+                      onCheckedChange={(checked) => setFormData({ ...formData, isVendedor: !!checked })}
                     />
                     <label htmlFor="isVendedor" className="flex items-center gap-2 cursor-pointer flex-1">
                       <ShoppingCart className="h-4 w-4 text-blue-500" />
@@ -1081,9 +1082,8 @@ export default function EmpleadosPage() {
                         setFormData({
                           ...formData,
                           isCobrador: !!checked,
-                          // Cobrador es un rol exclusivo: ve TODAS las cuentas corrientes,
-                          // no tiene sentido combinarlo con vendedor/transportista.
-                          isVendedor: checked ? false : formData.isVendedor,
+                          // Cobrador puede combinarse con Vendedor, pero no con Transportista
+                          // (el transportista ya tiene su propio flujo de reparto/pedidos).
                           isTransportista: checked ? false : formData.isTransportista,
                         })
                       }
@@ -1096,7 +1096,7 @@ export default function EmpleadosPage() {
                 </div>
                 {formData.isCobrador && (
                   <p className="text-xs text-muted-foreground">
-                    Ve todas las cuentas corrientes y registra pagos (siempre con comprobante). No puede combinarse con Vendedor/Transportista.
+                    Ve todas las cuentas corrientes y registra pagos (siempre con comprobante). Puede combinarse con Vendedor, pero no con Transportista.
                   </p>
                 )}
               </div>
@@ -1194,13 +1194,13 @@ export default function EmpleadosPage() {
                 <span className={`inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium ${getStatusBadge(selectedSeller.isActive)}`}>
                   {selectedSeller.isActive ? 'Activo' : 'Inactivo'}
                 </span>
-                {(selectedSeller.employeeType === 'vendedor' || selectedSeller.employeeType === 'ambos') && (
+                {(selectedSeller.employeeType === 'vendedor' || selectedSeller.employeeType === 'ambos' || selectedSeller.employeeType === 'vendedor_cobrador') && (
                   <span className={`inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium ${getCommissionColor(selectedSeller.commissionRate)}`}>
                     <ShoppingCart className="h-3 w-3 mr-1" />
                     {selectedSeller.commissionRate}% vendedor
                   </span>
                 )}
-                {(selectedSeller.employeeType === 'vendedor' || selectedSeller.employeeType === 'ambos') && (
+                {(selectedSeller.employeeType === 'vendedor' || selectedSeller.employeeType === 'ambos' || selectedSeller.employeeType === 'vendedor_cobrador') && (
                   <span className="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium bg-amber-100 text-amber-700">
                     Desc. máx {selectedSeller.maxDiscount ?? 6}%
                   </span>

@@ -66,7 +66,7 @@ export default function CuentaCorrientePage() {
   const { user } = useAuth()
   // Cobrador: ve TODAS las cuentas corrientes (como admin) y puede registrar pagos,
   // pero siempre con comprobante adjunto. No tiene acceso a aprobar/rechazar ni borrar.
-  const isCobrador = user?.employeeType === 'cobrador'
+  const isCobrador = user?.employeeType === 'cobrador' || user?.employeeType === 'vendedor_cobrador'
   // Un vendedor (no cobrador) solo ve la cuenta corriente de SUS clientes y en modo lectura.
   const isSeller = user?.role === 'seller' && !isCobrador
   const canManage = !isSeller && !isCobrador
