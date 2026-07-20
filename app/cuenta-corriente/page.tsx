@@ -46,7 +46,7 @@ import { formatCurrency, formatDate } from '@/lib/utils/format'
 import { clasificarDeuda, diasDesde, esDiaDePago, diaDePagoInfo } from '@/lib/utils/deuda'
 import {
   Users, FileCheck, CheckCircle2, XCircle, Clock, Loader2, ExternalLink,
-  ChevronLeft, DollarSign, ArrowDownCircle, ArrowUpCircle, Search, X,
+  ChevronLeft, ChevronRight, DollarSign, ArrowDownCircle, ArrowUpCircle, Search, X,
   Banknote, CreditCard, Image as ImageIcon, AlertTriangle, Ban, Printer,
   History, RotateCcw, Tag, Receipt, Download, SlidersHorizontal, Trash2, FileDown,
 } from 'lucide-react'
@@ -1596,100 +1596,6 @@ ${renderTabla('Cuenta Mayorista', mayorista, balanceMay)}
           </DialogContent>
         </Dialog>
 
-        {/* Panel: Verificar pago (cobros de cobrador ya aplicados, pendientes de revisión) */}
-        <Dialog open={authPanelOpen} onOpenChange={setAuthPanelOpen}>
-          <DialogContent className="sm:max-w-lg max-h-[85vh] overflow-y-auto">
-            <DialogHeader>
-              <DialogTitle>Verificar pago</DialogTitle>
-              <DialogDescription>
-                Cobros registrados por un cobrador. El pago ya está aplicado al saldo del cliente — acá solo dejás constancia de que lo revisaste, o lo anulás si algo no cierra.
-              </DialogDescription>
-            </DialogHeader>
-            {loadingAuthPanel ? (
-              <div className="flex justify-center py-6"><Loader2 className="h-5 w-5 animate-spin text-muted-foreground" /></div>
-            ) : pendingAuth.length === 0 ? (
-              <p className="text-sm text-muted-foreground text-center py-6">No hay cobros pendientes de revisión.</p>
-            ) : (
-              <div className="space-y-2">
-                {pendingAuth.map((comp) => (
-                  <div key={comp.id} className="rounded-xl border p-3 space-y-2">
-                    <div className="flex items-start justify-between gap-2">
-                      <div>
-                        <p className="text-sm font-medium">{comp.clientName || 'Cliente'}</p>
-                        <p className="text-xs text-muted-foreground">{formatDate(comp.createdAt)} · Cobrado por {comp.reviewedBy || comp.sellerName || '—'}</p>
-                        {comp.notes && <p className="text-xs text-muted-foreground mt-0.5">{comp.notes}</p>}
-                      </div>
-                      <span className="text-sm font-bold text-green-600 shrink-0">{formatCurrency(comp.amount)}</span>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <button
-                        type="button"
-                        className="inline-flex items-center gap-1 text-xs text-teal-600 hover:underline"
-                        onClick={() => setPreviewUrl(comp.fileUrl)}
-                      >
-                        <ImageIcon className="h-3.5 w-3.5" />Ver comprobante
-                      </button>
-                    </div>
-                    <div className="flex gap-2 pt-1">
-                      <Button
-                        size="sm"
-                        className="flex-1 gap-1.5 text-xs h-8 bg-green-600 hover:bg-green-700"
-                        onClick={() => handleAuthorizePago(comp)}
-                        disabled={authProcessingId === comp.id}
-                      >
-                        {authProcessingId === comp.id ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <CheckCircle2 className="h-3.5 w-3.5" />}
-                        Verificar
-                      </Button>
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        className="flex-1 gap-1.5 text-xs h-8 text-red-600 border-red-300 hover:bg-red-50"
-                        onClick={() => setRejectAuthTarget(comp)}
-                        disabled={authProcessingId === comp.id}
-                      >
-                        <XCircle className="h-3.5 w-3.5" />
-                        Anular
-                      </Button>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            )}
-          </DialogContent>
-        </Dialog>
-
-        {/* Dialog motivo de rechazo/anulación desde el panel de autorización */}
-        <Dialog open={!!rejectAuthTarget} onOpenChange={(open) => { if (!open) { setRejectAuthTarget(null); setRejectAuthMotivo('') } }}>
-          <DialogContent className="sm:max-w-sm">
-            <DialogHeader>
-              <DialogTitle>Anular cobro</DialogTitle>
-              <DialogDescription>
-                El monto vuelve a la deuda del cliente. Queda registrado en el historial como pago anulado.
-              </DialogDescription>
-            </DialogHeader>
-            <div className="space-y-2">
-              <Label>Motivo</Label>
-              <Textarea
-                placeholder="Ej: comprobante falso, monto incorrecto..."
-                value={rejectAuthMotivo}
-                onChange={(e) => setRejectAuthMotivo(e.target.value)}
-                rows={2}
-              />
-            </div>
-            <DialogFooter>
-              <Button variant="outline" onClick={() => { setRejectAuthTarget(null); setRejectAuthMotivo('') }}>Cancelar</Button>
-              <Button
-                variant="destructive"
-                onClick={handleRejectAuthPago}
-                disabled={!rejectAuthMotivo.trim() || authProcessingId === rejectAuthTarget?.id}
-              >
-                {authProcessingId === rejectAuthTarget?.id && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
-                Anular pago
-              </Button>
-            </DialogFooter>
-          </DialogContent>
-        </Dialog>
-
         {/* Dialog Registrar pago mayorista */}
         <Dialog open={payMayoristaDialog} onOpenChange={(open) => { if (!open) { setPayMayoristaDialog(false); setPayMayoristaAmount(''); setPayMayoristaNotes(''); } }}>
           <DialogContent className="sm:max-w-sm">
@@ -1948,26 +1854,30 @@ ${renderTabla('Cuenta Mayorista', mayorista, balanceMay)}
             </Card>
             {canManage && (
             <Card
-              className="col-span-2 md:col-span-1 cursor-pointer hover:bg-muted/30 transition-colors"
+              className={`col-span-2 md:col-span-1 cursor-pointer transition-colors ${
+                pendingAuth.length > 0
+                  ? 'border-amber-300 bg-amber-50 hover:bg-amber-100 dark:bg-amber-950/20 dark:border-amber-800'
+                  : 'hover:bg-muted/30'
+              }`}
               onClick={openAuthPanel}
             >
-              {/* Mobile: tira fina horizontal. Desktop: bloque como las otras cards */}
-              <CardContent className="p-3 flex items-center justify-between gap-2 md:block">
-                <div className="flex items-center gap-1.5 text-xs text-muted-foreground md:mb-1">
-                  <FileCheck className="h-3.5 w-3.5" />Verificar pago
+              <CardContent className="p-3 flex items-center gap-3 md:block">
+                <div className={`h-9 w-9 rounded-full flex items-center justify-center shrink-0 md:mb-2 ${
+                  pendingAuth.length > 0 ? 'bg-amber-100 dark:bg-amber-900/40' : 'bg-muted'
+                }`}>
+                  <FileCheck className={`h-4 w-4 ${pendingAuth.length > 0 ? 'text-amber-600' : 'text-muted-foreground'}`} />
                 </div>
-                <div className="flex items-baseline gap-1.5 md:block">
-                  <span className={`text-lg font-bold leading-tight ${pendingAuth.length > 0 ? 'text-amber-600' : ''}`}>{pendingAuth.length}</span>
-                  {pendingAuth.length > 0 && (
-                    <button
-                      type="button"
-                      onClick={(e) => { e.stopPropagation(); openAuthPanel() }}
-                      className="text-[11px] text-primary hover:underline"
-                    >
-                      Ver
-                    </button>
-                  )}
-                  <p className="text-[11px] text-muted-foreground">cobros de cobrador sin revisar</p>
+                <div className="flex-1 flex items-center justify-between gap-2 md:block">
+                  <div>
+                    <p className="text-xs font-semibold">Verificar pago</p>
+                    <p className="text-[11px] text-muted-foreground">cobros de cobrador sin revisar</p>
+                  </div>
+                  <div className="flex items-center gap-1">
+                    <span className={`text-xl font-bold tabular-nums leading-none ${pendingAuth.length > 0 ? 'text-amber-600' : 'text-muted-foreground'}`}>
+                      {pendingAuth.length}
+                    </span>
+                    {pendingAuth.length > 0 && <ChevronRight className="h-4 w-4 text-amber-500" />}
+                  </div>
                 </div>
               </CardContent>
             </Card>
@@ -2663,6 +2573,103 @@ ${renderTabla('Cuenta Mayorista', mayorista, balanceMay)}
                   </div>
                 )
               })()}
+            </DialogContent>
+          </Dialog>
+
+          {/* Panel: Verificar pago (cobros de cobrador ya aplicados, pendientes de revisión) */}
+          <Dialog open={authPanelOpen} onOpenChange={setAuthPanelOpen}>
+            <DialogContent className="sm:max-w-lg max-h-[85vh] overflow-y-auto">
+              <DialogHeader>
+                <DialogTitle className="flex items-center gap-2">
+                  <FileCheck className="h-4.5 w-4.5 text-amber-600" />
+                  Verificar pago
+                </DialogTitle>
+                <DialogDescription>
+                  Cobros registrados por un cobrador. El pago ya está aplicado al saldo del cliente — acá solo dejás constancia de que lo revisaste, o lo anulás si algo no cierra.
+                </DialogDescription>
+              </DialogHeader>
+              {loadingAuthPanel ? (
+                <div className="flex justify-center py-6"><Loader2 className="h-5 w-5 animate-spin text-muted-foreground" /></div>
+              ) : pendingAuth.length === 0 ? (
+                <p className="text-sm text-muted-foreground text-center py-6">No hay cobros pendientes de revisión.</p>
+              ) : (
+                <div className="space-y-2">
+                  {pendingAuth.map((comp) => (
+                    <div key={comp.id} className="rounded-xl border p-3 space-y-2 bg-muted/20">
+                      <div className="flex items-start justify-between gap-2">
+                        <div>
+                          <p className="text-sm font-semibold">{comp.clientName || 'Cliente'}</p>
+                          <p className="text-xs text-muted-foreground">{formatDate(comp.createdAt)} · Cobrado por {comp.reviewedBy || comp.sellerName || '—'}</p>
+                          {comp.notes && <p className="text-xs text-muted-foreground mt-0.5">{comp.notes}</p>}
+                        </div>
+                        <span className="text-sm font-bold text-green-600 shrink-0">{formatCurrency(comp.amount)}</span>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <button
+                          type="button"
+                          className="inline-flex items-center gap-1 text-xs text-teal-600 hover:underline"
+                          onClick={() => setPreviewUrl(comp.fileUrl)}
+                        >
+                          <ImageIcon className="h-3.5 w-3.5" />Ver comprobante
+                        </button>
+                      </div>
+                      <div className="flex gap-2 pt-1">
+                        <Button
+                          size="sm"
+                          className="flex-1 gap-1.5 text-xs h-8 bg-green-600 hover:bg-green-700"
+                          onClick={() => handleAuthorizePago(comp)}
+                          disabled={authProcessingId === comp.id}
+                        >
+                          {authProcessingId === comp.id ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <CheckCircle2 className="h-3.5 w-3.5" />}
+                          Verificar
+                        </Button>
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          className="flex-1 gap-1.5 text-xs h-8 text-red-600 border-red-300 hover:bg-red-50"
+                          onClick={() => setRejectAuthTarget(comp)}
+                          disabled={authProcessingId === comp.id}
+                        >
+                          <XCircle className="h-3.5 w-3.5" />
+                          Anular
+                        </Button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </DialogContent>
+          </Dialog>
+
+          {/* Dialog motivo de rechazo/anulación desde el panel de verificación */}
+          <Dialog open={!!rejectAuthTarget} onOpenChange={(open) => { if (!open) { setRejectAuthTarget(null); setRejectAuthMotivo('') } }}>
+            <DialogContent className="sm:max-w-sm">
+              <DialogHeader>
+                <DialogTitle>Anular cobro</DialogTitle>
+                <DialogDescription>
+                  El monto vuelve a la deuda del cliente. Queda registrado en el historial como pago anulado.
+                </DialogDescription>
+              </DialogHeader>
+              <div className="space-y-2">
+                <Label>Motivo</Label>
+                <Textarea
+                  placeholder="Ej: comprobante falso, monto incorrecto..."
+                  value={rejectAuthMotivo}
+                  onChange={(e) => setRejectAuthMotivo(e.target.value)}
+                  rows={2}
+                />
+              </div>
+              <DialogFooter>
+                <Button variant="outline" onClick={() => { setRejectAuthTarget(null); setRejectAuthMotivo('') }}>Cancelar</Button>
+                <Button
+                  variant="destructive"
+                  onClick={handleRejectAuthPago}
+                  disabled={!rejectAuthMotivo.trim() || authProcessingId === rejectAuthTarget?.id}
+                >
+                  {authProcessingId === rejectAuthTarget?.id && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
+                  Anular pago
+                </Button>
+              </DialogFooter>
             </DialogContent>
           </Dialog>
         </>
