@@ -2578,7 +2578,7 @@ ${renderTabla('Cuenta Mayorista', mayorista, balanceMay)}
 
           {/* Panel: Verificar pago (cobros de cobrador ya aplicados, pendientes de revisión) */}
           <Dialog open={authPanelOpen} onOpenChange={setAuthPanelOpen}>
-            <DialogContent className="sm:max-w-lg max-h-[85vh] overflow-y-auto">
+            <DialogContent className="sm:max-w-3xl max-h-[85vh] overflow-y-auto">
               <DialogHeader>
                 <DialogTitle className="flex items-center gap-2">
                   <FileCheck className="h-4.5 w-4.5 text-amber-600" />
@@ -2593,49 +2593,65 @@ ${renderTabla('Cuenta Mayorista', mayorista, balanceMay)}
               ) : pendingAuth.length === 0 ? (
                 <p className="text-sm text-muted-foreground text-center py-6">No hay cobros pendientes de revisión.</p>
               ) : (
-                <div className="space-y-2">
-                  {pendingAuth.map((comp) => (
-                    <div key={comp.id} className="rounded-xl border p-3 space-y-2 bg-muted/20">
-                      <div className="flex items-start justify-between gap-2">
-                        <div>
-                          <p className="text-sm font-semibold">{comp.clientName || 'Cliente'}</p>
-                          <p className="text-xs text-muted-foreground">{formatDate(comp.createdAt)} · Cobrado por {comp.reviewedBy || comp.sellerName || '—'}</p>
-                          {comp.notes && <p className="text-xs text-muted-foreground mt-0.5">{comp.notes}</p>}
-                        </div>
-                        <span className="text-sm font-bold text-green-600 shrink-0">{formatCurrency(comp.amount)}</span>
-                      </div>
-                      <div className="flex items-center gap-2">
-                        <button
-                          type="button"
-                          className="inline-flex items-center gap-1 text-xs text-teal-600 hover:underline"
-                          onClick={() => setPreviewUrl(comp.fileUrl)}
-                        >
-                          <ImageIcon className="h-3.5 w-3.5" />Ver comprobante
-                        </button>
-                      </div>
-                      <div className="flex gap-2 pt-1">
-                        <Button
-                          size="sm"
-                          className="flex-1 gap-1.5 text-xs h-8 bg-green-600 hover:bg-green-700"
-                          onClick={() => handleAuthorizePago(comp)}
-                          disabled={authProcessingId === comp.id}
-                        >
-                          {authProcessingId === comp.id ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <CheckCircle2 className="h-3.5 w-3.5" />}
-                          Verificar
-                        </Button>
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          className="flex-1 gap-1.5 text-xs h-8 text-red-600 border-red-300 hover:bg-red-50"
-                          onClick={() => setRejectAuthTarget(comp)}
-                          disabled={authProcessingId === comp.id}
-                        >
-                          <XCircle className="h-3.5 w-3.5" />
-                          Anular
-                        </Button>
-                      </div>
-                    </div>
-                  ))}
+                <div className="overflow-x-auto -mx-6 px-6">
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>Cliente</TableHead>
+                        <TableHead>Fecha</TableHead>
+                        <TableHead>Cobrado por</TableHead>
+                        <TableHead className="text-right">Monto</TableHead>
+                        <TableHead className="text-center">Comp.</TableHead>
+                        <TableHead className="text-right">Acciones</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {pendingAuth.map((comp) => (
+                        <TableRow key={comp.id}>
+                          <TableCell className="font-medium max-w-[10rem] truncate" title={comp.notes ? `${comp.clientName} — ${comp.notes}` : comp.clientName}>
+                            {comp.clientName || 'Cliente'}
+                          </TableCell>
+                          <TableCell className="text-xs text-muted-foreground whitespace-nowrap">{formatDate(comp.createdAt)}</TableCell>
+                          <TableCell className="text-xs text-muted-foreground">{comp.reviewedBy || comp.sellerName || '—'}</TableCell>
+                          <TableCell className="text-right font-semibold text-green-600 whitespace-nowrap">{formatCurrency(comp.amount)}</TableCell>
+                          <TableCell className="text-center">
+                            <button
+                              type="button"
+                              className="inline-flex items-center text-teal-600 hover:text-teal-700"
+                              onClick={() => setPreviewUrl(comp.fileUrl)}
+                              title="Ver comprobante"
+                            >
+                              <ImageIcon className="h-4 w-4" />
+                            </button>
+                          </TableCell>
+                          <TableCell>
+                            <div className="flex justify-end gap-1">
+                              <Button
+                                size="icon"
+                                variant="ghost"
+                                className="h-7 w-7 text-green-600 hover:text-green-700 hover:bg-green-50"
+                                onClick={() => handleAuthorizePago(comp)}
+                                disabled={authProcessingId === comp.id}
+                                title="Verificar"
+                              >
+                                {authProcessingId === comp.id ? <Loader2 className="h-4 w-4 animate-spin" /> : <CheckCircle2 className="h-4 w-4" />}
+                              </Button>
+                              <Button
+                                size="icon"
+                                variant="ghost"
+                                className="h-7 w-7 text-red-600 hover:text-red-700 hover:bg-red-50"
+                                onClick={() => setRejectAuthTarget(comp)}
+                                disabled={authProcessingId === comp.id}
+                                title="Anular"
+                              >
+                                <XCircle className="h-4 w-4" />
+                              </Button>
+                            </div>
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
                 </div>
               )}
             </DialogContent>
