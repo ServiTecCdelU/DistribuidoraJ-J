@@ -660,7 +660,13 @@ tr.cat td{border:none}
 
   const handleRemitoConfirm = async (
     updates: { productId: string; newStock: number; cantidad: number; productName: string; precioLista: number }[],
+    remitoInfo: { nro: string; distribucion: 1 | 2 },
   ) => {
+    const proveedorLabel = `JYJDISTRIBUCIONES${remitoInfo.distribucion}`;
+    const referencia = remitoInfo.nro
+      ? `Ingreso por boleta de proveedor ${remitoInfo.nro} (${proveedorLabel})`
+      : `Ingreso por remito proveedor (${proveedorLabel})`;
+
     for (const update of updates) {
       const product = products.find((p) => p.id === update.productId);
       const cantidad = update.cantidad ?? (update.newStock - (product?.stock ?? 0));
@@ -673,7 +679,7 @@ tr.cat td{border:none}
         productoId: mpId,
         tipo: "apertura_bulto",
         cantidad,
-        referencia: "Ingreso por remito proveedor",
+        referencia,
       });
 
       logStockMovement({
@@ -683,8 +689,8 @@ tr.cat td{border:none}
         previousStock: product?.stock ?? 0,
         newStock: update.newStock,
         change: cantidad,
-        reason: "Importación de remito proveedor",
-        details: `Ingreso por remito: +${cantidad}`,
+        reason: referencia,
+        details: `${referencia}: +${cantidad}`,
       });
     }
 

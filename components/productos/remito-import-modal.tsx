@@ -52,7 +52,10 @@ interface RemitoImportModalProps {
   open: boolean;
   onClose: () => void;
   products: Product[];
-  onConfirm: (updates: { productId: string; newStock: number; cantidad: number; productName: string; precioLista: number }[]) => Promise<void>;
+  onConfirm: (
+    updates: { productId: string; newStock: number; cantidad: number; productName: string; precioLista: number }[],
+    remitoInfo: { nro: string; distribucion: 1 | 2 },
+  ) => Promise<void>;
 }
 
 // Parsea el texto del remito/factura del proveedor y extrae items
@@ -533,7 +536,10 @@ export function RemitoImportModal({
         });
       }
 
-      await onConfirm(updates);
+      // Detectar la distribución (1 o 2) del destinatario del remito; default 1
+      const distribucion: 1 | 2 = /DISTRIBUC\w*\s*2/i.test(remitoSenor ?? "") ? 2 : 1;
+
+      await onConfirm(updates, { nro: remitoNro, distribucion });
 
       if (habilitados > 0) {
         toast.success(`${habilitados} producto(s) habilitado(s) para vendedores y tienda`);
@@ -547,8 +553,6 @@ export function RemitoImportModal({
             remitoSenor || null,
           ].filter(Boolean);
           const desc = parts.length > 0 ? parts.join(" — ") : `Remito ${fileName}`;
-          // Detectar la distribución (1 o 2) del destinatario del remito; default 1
-          const distribucion: 1 | 2 = /DISTRIBUC\w*\s*2/i.test(`${remitoSenor ?? ""} ${desc}`) ? 2 : 1;
           await mayoristaCuentaApi.addDeuda({ amount: remitoTotal, description: desc, distribucion });
           toast.success(`Deuda de ${formatCurrency(remitoTotal)} cargada en cuenta mayorista`);
         } catch {
