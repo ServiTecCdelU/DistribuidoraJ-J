@@ -5,13 +5,13 @@ import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import {
   ArrowDownCircle, ArrowUpCircle, ChevronDown, Download, Receipt, Truck,
-  AlertTriangle, RotateCcw, Tag, RefreshCw, Loader2, Ban,
+  AlertTriangle, RotateCcw, Tag, RefreshCw, Loader2, Ban, CheckCircle2,
 } from 'lucide-react'
 import { formatCurrencyDecimals, formatDate } from '@/lib/utils/format'
 import { descargarDocumento } from '@/lib/utils/doc-actions'
 import { diaDePagoInfo, type EstadoDiaPago } from '@/lib/utils/deuda'
 import { parseDescuentoDescripcion } from '@/lib/utils/ajuste-venta'
-import type { Sale, Transaction } from '@/lib/types'
+import type { ComprobantePago, Sale, Transaction } from '@/lib/types'
 import type { Devolucion } from '@/services/devoluciones-service'
 import { supabase } from '@/lib/supabase'
 
@@ -23,12 +23,14 @@ interface MovimientoDeudaCardProps {
   onRegenerarRemito?: (sale: Sale) => Promise<void>
   onRegenerarRecibo?: (tx: Transaction) => Promise<void>
   onAnularPago?: (tx: Transaction) => void
+  /** Comprobante de cobrador vinculado a este movimiento, si corresponde */
+  comprobante?: ComprobantePago
 }
 
 // Columnas compartidas entre el encabezado (en la page) y cada fila:
-// Fecha · Concepto · Descripción · Acciones · Debe · Haber · Saldo
+// Fecha · Concepto · Descripción · Acciones · Verificado · Debe · Haber · Saldo
 export const MOVIMIENTO_GRID =
-  'grid grid-cols-[5rem_4.5rem_minmax(8rem,1fr)_12rem_6.5rem_6.5rem_6.5rem] items-center gap-x-2'
+  'grid grid-cols-[5rem_4.5rem_minmax(8rem,1fr)_12rem_2.5rem_6.5rem_6.5rem_6.5rem] items-center gap-x-2'
 
 const COLOR_DIA: Record<EstadoDiaPago, string> = {
   falta: 'text-green-600',
@@ -156,7 +158,7 @@ function ItemsTable({ items, showTotal = false }: { items: TableRow[]; showTotal
 }
 
 export function MovimientoDeudaCard({
-  tx, sale, devoluciones = [], saldoAcumulado, onRegenerarRemito, onRegenerarRecibo, onAnularPago,
+  tx, sale, devoluciones = [], saldoAcumulado, onRegenerarRemito, onRegenerarRecibo, onAnularPago, comprobante,
 }: MovimientoDeudaCardProps) {
   const [expanded, setExpanded] = useState(false)
   const [regenerando, setRegenerando] = useState(false)
@@ -570,6 +572,15 @@ export function MovimientoDeudaCard({
             >
               <Ban className="h-3.5 w-3.5" />
             </button>
+          )}
+        </div>
+
+        {/* Verificado (cobros de cobrador) */}
+        <div className="flex justify-center" title={comprobante && !comprobante.autorizado ? 'Sin verificar' : comprobante?.autorizado ? 'Verificado' : undefined}>
+          {comprobante && (
+            comprobante.autorizado
+              ? <CheckCircle2 className="h-4 w-4 text-green-600" />
+              : <AlertTriangle className="h-4 w-4 text-amber-500" />
           )}
         </div>
 

@@ -1024,11 +1024,45 @@ ${renderTabla('Cuenta Mayorista', mayorista, balanceMay)}
     }
   }
 
-  // Cobros de cobrador ya aplicados, pendientes de autorización del admin
+  // Cobros de cobrador ya aplicados, pendientes de verificación del admin
   const pendingAuth = useMemo(
     () => comprobantes.filter((c) => c.viaCobrador && c.status === 'approved' && !c.autorizado),
     [comprobantes]
   )
+
+  // Comprobante de cobrador vinculado a cada transacción de pago del cliente seleccionado
+  const compByTxId = useMemo(() => {
+    const map = new Map<string, ComprobantePago>()
+    for (const c of clientComprobantes) {
+      if (c.viaCobrador && c.transactionId) map.set(c.transactionId, c)
+    }
+    return map
+  }, [clientComprobantes])
+
+  // Estado de verificación por cliente (para la columna "Verificado" en la lista de deudores)
+  const cobradorStatusByClient = useMemo(() => {
+    const map = new Map<string, 'pending' | 'verified'>()
+    for (const c of comprobantes) {
+      if (!c.viaCobrador || c.status !== 'approved') continue
+      if (!c.autorizado) map.set(c.clientId, 'pending')
+      else if (map.get(c.clientId) !== 'pending') map.set(c.clientId, 'verified')
+    }
+    return map
+  }, [comprobantes])
+
+  const [loadingAuthPanel, setLoadingAuthPanel] = useState(false)
+  const openAuthPanel = async () => {
+    setAuthPanelOpen(true)
+    setLoadingAuthPanel(true)
+    try {
+      const fresh = await cobranzasApi.getComprobantes()
+      setComprobantes(fresh)
+    } catch {
+      // si falla, se muestra lo que ya había en memoria
+    } finally {
+      setLoadingAuthPanel(false)
+    }
+  }
 
   const handleAuthorizePago = async (comp: ComprobantePago) => {
     if (!user) return
@@ -1317,6 +1351,7 @@ ${renderTabla('Cuenta Mayorista', mayorista, balanceMay)}
                       <span>Concepto</span>
                       <span>Descripción</span>
                       <span>Acciones</span>
+                      <span />
                       <span className="text-right">Debe</span>
                       <span className="text-right">Haber</span>
                       <span className="text-right">Saldo</span>
@@ -1337,6 +1372,7 @@ ${renderTabla('Cuenta Mayorista', mayorista, balanceMay)}
                             onRegenerarRemito={canManage ? handleRegenerarRemito : undefined}
                             onRegenerarRecibo={canManage ? handleRegenerarRecibo : undefined}
                             onAnularPago={canManage ? setPagoToAnular : undefined}
+                            comprobante={compByTxId.get(tx.id)}
                           />
                         )
                       })}
@@ -1344,6 +1380,7 @@ ${renderTabla('Cuenta Mayorista', mayorista, balanceMay)}
                     {/* Totales abajo */}
                     <div className={`${MOVIMIENTO_GRID} px-3 py-2 bg-foreground text-background text-xs font-bold border-t`}>
                       <span className="uppercase tracking-wide">Totales</span>
+                      <span />
                       <span />
                       <span />
                       <span />
@@ -1597,16 +1634,18 @@ ${renderTabla('Cuenta Mayorista', mayorista, balanceMay)}
           </DialogContent>
         </Dialog>
 
-        {/* Panel: Autorizar pago (cobros de cobrador ya aplicados, pendientes de revisión) */}
+        {/* Panel: Verificar pago (cobros de cobrador ya aplicados, pendientes de revisión) */}
         <Dialog open={authPanelOpen} onOpenChange={setAuthPanelOpen}>
           <DialogContent className="sm:max-w-lg max-h-[85vh] overflow-y-auto">
             <DialogHeader>
-              <DialogTitle>Autorizar pago</DialogTitle>
+              <DialogTitle>Verificar pago</DialogTitle>
               <DialogDescription>
                 Cobros registrados por un cobrador. El pago ya está aplicado al saldo del cliente — acá solo dejás constancia de que lo revisaste, o lo anulás si algo no cierra.
               </DialogDescription>
             </DialogHeader>
-            {pendingAuth.length === 0 ? (
+            {loadingAuthPanel ? (
+              <div className="flex justify-center py-6"><Loader2 className="h-5 w-5 animate-spin text-muted-foreground" /></div>
+            ) : pendingAuth.length === 0 ? (
               <p className="text-sm text-muted-foreground text-center py-6">No hay cobros pendientes de revisión.</p>
             ) : (
               <div className="space-y-2">
@@ -1637,7 +1676,7 @@ ${renderTabla('Cuenta Mayorista', mayorista, balanceMay)}
                         disabled={authProcessingId === comp.id}
                       >
                         {authProcessingId === comp.id ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <CheckCircle2 className="h-3.5 w-3.5" />}
-                        Autorizar
+                        Verificar
                       </Button>
                       <Button
                         size="sm"
@@ -1948,12 +1987,12 @@ ${renderTabla('Cuenta Mayorista', mayorista, balanceMay)}
             {canManage && (
             <Card
               className="col-span-2 md:col-span-1 cursor-pointer hover:bg-muted/30 transition-colors"
-              onClick={() => setAuthPanelOpen(true)}
+              onClick={openAuthPanel}
             >
               {/* Mobile: tira fina horizontal. Desktop: bloque como las otras cards */}
               <CardContent className="p-3 flex items-center justify-between gap-2 md:block">
                 <div className="flex items-center gap-1.5 text-xs text-muted-foreground md:mb-1">
-                  <FileCheck className="h-3.5 w-3.5" />Autorizar pago
+                  <FileCheck className="h-3.5 w-3.5" />Verificar pago
                 </div>
                 <div className="flex items-baseline gap-1.5 md:block">
                   <span className={`text-lg font-bold leading-tight ${pendingAuth.length > 0 ? 'text-amber-600' : ''}`}>{pendingAuth.length}</span>
@@ -2122,21 +2161,23 @@ ${renderTabla('Cuenta Mayorista', mayorista, balanceMay)}
               {/* Mobile tabla (filas compactas con encabezado) */}
               <div className="md:hidden rounded-xl border divide-y overflow-hidden" style={{ fontSize: '12px' }}>
                 {/* Encabezado de columnas */}
-                <div className="grid grid-cols-[minmax(0,1fr)_4.5rem_7rem] gap-x-2 px-2.5 py-1.5 bg-muted/50 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
+                <div className="grid grid-cols-[minmax(0,1fr)_1.1rem_4.5rem_7rem] gap-x-2 px-2.5 py-1.5 bg-muted/50 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
                   <span>Cliente</span>
+                  <span />
                   <span className="text-center">Estado</span>
                   <span className="text-right">Deuda</span>
                 </div>
                 {paginatedClients.map((c) => {
                   const clientPending = comprobantes.filter((comp) => comp.clientId === c.id && comp.status === 'pending')
                   const dias = c.debtSince ? diasDesde(c.debtSince) : null
+                  const cobradorStatus = cobradorStatusByClient.get(c.id)
                   return (
                     <div
                       key={c.id}
                       className="cursor-pointer hover:bg-muted/40 transition-colors p-2.5"
                       onClick={() => handleSelectClient(c)}
                     >
-                      <div className="grid grid-cols-[minmax(0,1fr)_4.5rem_7rem] gap-x-2 items-center leading-tight">
+                      <div className="grid grid-cols-[minmax(0,1fr)_1.1rem_4.5rem_7rem] gap-x-2 items-center leading-tight">
                         {/* Col 1: cliente / vendedor */}
                         <div className="min-w-0">
                           <p className="font-semibold text-xs truncate">{c.name}</p>
@@ -2144,6 +2185,15 @@ ${renderTabla('Cuenta Mayorista', mayorista, balanceMay)}
                             {c.sellerName || 'Sin vendedor'}
                             {c.diaCobro && <span className="capitalize text-teal-600"> · {c.diaCobro}</span>}
                           </p>
+                        </div>
+                        {/* Col 1.5: verificado (cobros de cobrador) */}
+                        <div className="flex justify-center">
+                          {cobradorStatus === 'pending' && (
+                            <AlertTriangle className="h-3.5 w-3.5 text-amber-500" />
+                          )}
+                          {cobradorStatus === 'verified' && (
+                            <CheckCircle2 className="h-3.5 w-3.5 text-green-600" />
+                          )}
                         </div>
                         {/* Col 2: estado / días */}
                         <div className="text-center">
@@ -2181,10 +2231,12 @@ ${renderTabla('Cuenta Mayorista', mayorista, balanceMay)}
 
                         <TableHead className="text-center">Estado</TableHead>
                         <TableHead className="text-center">Día de pago</TableHead>
+                        <TableHead className="text-center w-8"></TableHead>
                       </TableRow>
                     </TableHeader>
                     <TableBody>
                       {paginatedClients.map((c) => {
+                        const cobradorStatus = cobradorStatusByClient.get(c.id)
                         return (
                           <TableRow
                             key={c.id}
@@ -2208,6 +2260,10 @@ ${renderTabla('Cuenta Mayorista', mayorista, balanceMay)}
                             </TableCell>
                             <TableCell className="text-center">
                               {c.currentBalance > 0 ? diaDePagoCell(c.debtSince) : <span className="text-xs text-muted-foreground">—</span>}
+                            </TableCell>
+                            <TableCell className="text-center" title={cobradorStatus === 'pending' ? 'Sin verificar' : cobradorStatus === 'verified' ? 'Verificado' : undefined}>
+                              {cobradorStatus === 'pending' && <AlertTriangle className="h-4 w-4 text-amber-500 mx-auto" />}
+                              {cobradorStatus === 'verified' && <CheckCircle2 className="h-4 w-4 text-green-600 mx-auto" />}
                             </TableCell>
                           </TableRow>
                         )
