@@ -1996,6 +1996,15 @@ ${renderTabla('Cuenta Mayorista', mayorista, balanceMay)}
                 </div>
                 <div className="flex items-baseline gap-1.5 md:block">
                   <span className={`text-lg font-bold leading-tight ${pendingAuth.length > 0 ? 'text-amber-600' : ''}`}>{pendingAuth.length}</span>
+                  {pendingAuth.length > 0 && (
+                    <button
+                      type="button"
+                      onClick={(e) => { e.stopPropagation(); openAuthPanel() }}
+                      className="text-[11px] text-primary hover:underline"
+                    >
+                      Ver
+                    </button>
+                  )}
                   <p className="text-[11px] text-muted-foreground">cobros de cobrador sin revisar</p>
                 </div>
               </CardContent>
