@@ -60,6 +60,7 @@ import {
   User,
   Wallet,
   CalendarDays,
+  Printer,
 } from 'lucide-react'
 import { toast } from 'sonner'
 import { getAuthToken } from '@/services/auth-service'
@@ -173,6 +174,123 @@ export default function ClientesPage() {
     setVisibleCols((prev) => ({ ...prev, [key]: !prev[key] }))
 
   const [exporting, setExporting] = useState(false)
+
+  // Impresión PDF de clientes
+  const [printDialogOpen, setPrintDialogOpen] = useState(false)
+  const [printCodigo, setPrintCodigo] = useState<string>('all')
+  const [printOrder, setPrintOrder] = useState<'nombre' | 'diaCobro' | 'saldo' | 'codigo'>('nombre')
+  const [printCols, setPrintCols] = useState({
+    cuit: false,
+    categoria: false,
+    telefono: true,
+    direccion: true,
+    codigoVendedor: true,
+    diaCobro: true,
+    saldo: true,
+  })
+  const togglePrintCol = (key: keyof typeof printCols) =>
+    setPrintCols((prev) => ({ ...prev, [key]: !prev[key] }))
+
+  const printHtml = (html: string) => {
+    const iframe = document.createElement('iframe')
+    iframe.style.cssText = 'position:fixed;top:0;left:0;width:0;height:0;border:0;opacity:0;'
+    document.body.appendChild(iframe)
+    const doc = iframe.contentWindow?.document
+    if (!doc) { document.body.removeChild(iframe); return }
+    doc.open(); doc.write(html); doc.close()
+    iframe.onload = () => {
+      iframe.contentWindow?.print()
+      setTimeout(() => document.body.removeChild(iframe), 1000)
+    }
+  }
+
+  const handlePrintClientes = () => {
+    const esc = (s: any) => String(s ?? '').replace(/[&<>]/g, (m) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' }[m] as string))
+    // Filtrar por código de vendedor
+    let list = clients.filter((c) => {
+      if (printCodigo === 'all') return true
+      if (printCodigo === 'none') return !c.sellerId || !sellerCodigoById.get(c.sellerId)
+      return c.sellerId ? sellerCodigoById.get(c.sellerId) === printCodigo : false
+    })
+    if (list.length === 0) { toast.error('No hay clientes para imprimir'); return }
+
+    const diaLabel = (d?: string) => d ? d.charAt(0).toUpperCase() + d.slice(1) : '—'
+    // Ordenar
+    list = [...list].sort((a, b) => {
+      switch (printOrder) {
+        case 'saldo': return (b.currentBalance || 0) - (a.currentBalance || 0)
+        case 'codigo': {
+          const ca = a.sellerId ? (sellerCodigoById.get(a.sellerId) || '') : ''
+          const cb = b.sellerId ? (sellerCodigoById.get(b.sellerId) || '') : ''
+          return ca.localeCompare(cb, undefined, { numeric: true }) || a.name.localeCompare(b.name)
+        }
+        case 'diaCobro': {
+          const orden = ['lunes', 'martes', 'miercoles', 'jueves', 'viernes', 'sabado', 'domingo']
+          const ia = a.diaCobro ? orden.indexOf(a.diaCobro) : 99
+          const ib = b.diaCobro ? orden.indexOf(b.diaCobro) : 99
+          return ia - ib || a.name.localeCompare(b.name)
+        }
+        default: return a.name.localeCompare(b.name)
+      }
+    })
+
+    const cols: { key: string; label: string; align?: string }[] = [{ key: 'nombre', label: 'Cliente' }]
+    if (printCols.codigoVendedor) cols.push({ key: 'codigoVendedor', label: 'Cód. Vend.' })
+    if (printCols.cuit) cols.push({ key: 'cuit', label: 'CUIT' })
+    if (printCols.categoria) cols.push({ key: 'categoria', label: 'Categoría' })
+    if (printCols.telefono) cols.push({ key: 'telefono', label: 'Teléfono' })
+    if (printCols.direccion) cols.push({ key: 'direccion', label: 'Dirección' })
+    if (printCols.diaCobro) cols.push({ key: 'diaCobro', label: 'Día de pago', align: 'center' })
+    if (printCols.saldo) cols.push({ key: 'saldo', label: 'Saldo', align: 'right' })
+
+    const cellValue = (c: Client, key: string): string => {
+      switch (key) {
+        case 'nombre': return esc(c.name) + (c.activo === false ? ' <span style="color:#b91c1c;font-weight:600">(Desactivado)</span>' : '')
+        case 'codigoVendedor': return esc(c.sellerId ? (sellerCodigoById.get(c.sellerId) || '—') : '—')
+        case 'cuit': return esc(c.cuit || '—')
+        case 'categoria': return esc(formatTaxCategory(c.taxCategory))
+        case 'telefono': return esc(c.phone || '—')
+        case 'direccion': return esc(c.address || '—')
+        case 'diaCobro': return esc(diaLabel(c.diaCobro))
+        case 'saldo': return esc(formatCurrency(c.currentBalance || 0))
+        default: return ''
+      }
+    }
+
+    const codigoTitulo = printCodigo === 'all'
+      ? 'Todos los vendedores'
+      : printCodigo === 'none'
+      ? 'Sin código'
+      : `Código ${printCodigo}${(() => { const o = codigoOptions.find((x) => x.codigo === printCodigo); return o ? ' — ' + o.names.join(', ') : '' })()}`
+    const fecha = new Intl.DateTimeFormat('es-AR', { day: '2-digit', month: 'long', year: 'numeric' }).format(new Date())
+
+    const thead = cols.map((c) => `<th style="text-align:${c.align || 'left'}">${c.label}</th>`).join('')
+    const tbody = list.map((c) =>
+      `<tr>${cols.map((col) => `<td style="text-align:${col.align || 'left'}">${cellValue(c, col.key)}</td>`).join('')}</tr>`
+    ).join('')
+
+    const html = `<!doctype html><html><head><meta charset="utf-8"><title>Listado de Clientes</title>
+      <style>
+        * { box-sizing: border-box; }
+        body { font-family: Arial, Helvetica, sans-serif; color: #111; margin: 24px; }
+        h1 { font-size: 18px; margin: 0 0 2px; }
+        .meta { font-size: 12px; color: #555; margin-bottom: 14px; }
+        table { width: 100%; border-collapse: collapse; font-size: 11px; }
+        th { background: #0d9488; color: #fff; padding: 6px 8px; text-align: left; }
+        td { padding: 5px 8px; border-bottom: 1px solid #e5e7eb; }
+        tr:nth-child(even) td { background: #f8fafc; }
+        .count { font-size: 12px; color: #555; margin-top: 12px; }
+        @page { margin: 14mm; }
+      </style></head><body>
+      <h1>Listado de Clientes</h1>
+      <div class="meta">${esc(codigoTitulo)} · ${fecha}</div>
+      <table><thead><tr>${thead}</tr></thead><tbody>${tbody}</tbody></table>
+      <div class="count">Total: ${list.length} cliente(s)</div>
+      </body></html>`
+
+    printHtml(html)
+    setPrintDialogOpen(false)
+  }
 
   const formatTaxCategoryFull = (category: Client['taxCategory']) => {
     switch (category) {
@@ -618,9 +736,13 @@ export default function ClientesPage() {
               </DropdownMenuCheckboxItem>
             </DropdownMenuContent>
           </DropdownMenu>
+          <Button variant="outline" onClick={() => setPrintDialogOpen(true)} className="gap-2">
+            <Printer className="h-4 w-4" />
+            Imprimir clientes
+          </Button>
           <Button variant="outline" onClick={handleExportExcel} disabled={exporting} className="gap-2">
             {exporting ? <Loader2 className="h-4 w-4 animate-spin" /> : <FileSpreadsheet className="h-4 w-4" />}
-            Descargar Lista de Clientes
+            Excel de Clientes
           </Button>
           <Button onClick={handleCreate} className="gap-2 shadow-sm">
             <Plus className="h-4 w-4" />
@@ -667,10 +789,16 @@ export default function ClientesPage() {
             ))}
           </select>
         </div>
-        <Button variant="outline" onClick={handleExportExcel} disabled={exporting} className="gap-2 w-full">
-          {exporting ? <Loader2 className="h-4 w-4 animate-spin" /> : <FileSpreadsheet className="h-4 w-4" />}
-          Descargar Lista de Clientes
-        </Button>
+        <div className="flex gap-2">
+          <Button variant="outline" onClick={() => setPrintDialogOpen(true)} className="gap-2 flex-1">
+            <Printer className="h-4 w-4" />
+            Imprimir clientes
+          </Button>
+          <Button variant="outline" onClick={handleExportExcel} disabled={exporting} className="gap-2 flex-1">
+            {exporting ? <Loader2 className="h-4 w-4 animate-spin" /> : <FileSpreadsheet className="h-4 w-4" />}
+            Excel de Clientes
+          </Button>
+        </div>
       </div>
 
       {/* Loading State */}
@@ -1169,6 +1297,80 @@ export default function ClientesPage() {
         defaultValues={arcaDefaults ?? undefined}
         sellers={sellers}
       />
+
+      {/* Dialog Imprimir Clientes */}
+      <Dialog open={printDialogOpen} onOpenChange={setPrintDialogOpen}>
+        <DialogContent className="max-w-[calc(100vw-2rem)] sm:max-w-md max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Printer className="h-4 w-4 text-primary" />
+              Imprimir clientes
+            </DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4 pt-2">
+            {/* Vendedor / código */}
+            <div className="space-y-2">
+              <label className="text-sm font-medium text-foreground">Vendedor</label>
+              <select
+                className="h-10 w-full rounded-md border border-input bg-background px-3 text-sm"
+                value={printCodigo}
+                onChange={(e) => setPrintCodigo(e.target.value)}
+              >
+                <option value="all">Todos los vendedores</option>
+                <option value="none">Sin código</option>
+                {codigoOptions.map((c) => (
+                  <option key={c.codigo} value={c.codigo}>Cód. {c.codigo} — {c.names.join(', ')}</option>
+                ))}
+              </select>
+            </div>
+
+            {/* Columnas a mostrar */}
+            <div className="space-y-2">
+              <label className="text-sm font-medium text-foreground">Qué mostrar</label>
+              <div className="grid grid-cols-2 gap-2">
+                {([
+                  ['codigoVendedor', 'Cód. vendedor'],
+                  ['cuit', 'CUIT'],
+                  ['categoria', 'Categoría'],
+                  ['telefono', 'Teléfono'],
+                  ['direccion', 'Dirección'],
+                  ['diaCobro', 'Día de pago'],
+                  ['saldo', 'Saldo'],
+                ] as [keyof typeof printCols, string][]).map(([key, label]) => (
+                  <label key={key} className="flex items-center gap-2 text-sm p-2 rounded-lg border border-border cursor-pointer hover:bg-muted/40">
+                    <input type="checkbox" checked={printCols[key]} onChange={() => togglePrintCol(key)} className="accent-primary h-4 w-4" />
+                    {label}
+                  </label>
+                ))}
+              </div>
+              <p className="text-xs text-muted-foreground">El nombre del cliente se muestra siempre.</p>
+            </div>
+
+            {/* Orden */}
+            <div className="space-y-2">
+              <label className="text-sm font-medium text-foreground">Ordenar por</label>
+              <select
+                className="h-10 w-full rounded-md border border-input bg-background px-3 text-sm"
+                value={printOrder}
+                onChange={(e) => setPrintOrder(e.target.value as typeof printOrder)}
+              >
+                <option value="nombre">Nombre (A-Z)</option>
+                <option value="diaCobro">Día de pago</option>
+                <option value="saldo">Saldo (mayor a menor)</option>
+                <option value="codigo">Código de vendedor</option>
+              </select>
+            </div>
+
+            <div className="flex gap-2 justify-end pt-2">
+              <Button variant="outline" onClick={() => setPrintDialogOpen(false)}>Cancelar</Button>
+              <Button onClick={handlePrintClientes} className="gap-2">
+                <Printer className="h-4 w-4" />
+                Imprimir
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
 
       {/* Dialog Consultar ARCA */}
       <Dialog open={arcaDialogOpen} onOpenChange={(open) => { setArcaDialogOpen(open); if (!open) setArcaCuit('') }}>
