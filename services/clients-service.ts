@@ -1,6 +1,7 @@
 import { supabase } from '@/lib/supabase'
 import type { Client, Transaction } from '@/lib/types'
 import { generateReadableId } from '@/services/supabase-helpers'
+import { SALDO_EPSILON } from '@/lib/utils/saldo-imputacion'
 
 function mapClient(d: Record<string, any>): Client {
   return {
@@ -49,7 +50,7 @@ export const getClients = async (): Promise<Client[]> => {
     const debtSinceMap: Record<string, Date> = {}
     for (const t of debts ?? []) {
       const saldo = t.saldo != null ? Number(t.saldo) : Number(t.amount)
-      if (saldo <= 0) continue
+      if (saldo <= SALDO_EPSILON) continue
       if (!debtSinceMap[t.client_id]) debtSinceMap[t.client_id] = new Date(t.date)
     }
     for (const c of clients) {

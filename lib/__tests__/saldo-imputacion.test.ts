@@ -13,6 +13,12 @@ describe("imputarADeuda", () => {
   it("cancela exacto a 0", () => {
     expect(imputarADeuda(1000, 1000)).toBe(0);
   });
+
+  it("limpia residuo de coma flotante a 0", () => {
+    // 46451.01 - 46451.01 puede dejar un residuo ínfimo (ej. 7.27e-12)
+    expect(imputarADeuda(46451.01, 46451.01)).toBe(0);
+    expect(imputarADeuda(0.1 + 0.2, 0.3)).toBe(0);
+  });
 });
 
 describe("imputarFIFO", () => {
@@ -46,6 +52,14 @@ describe("imputarFIFO", () => {
       { id: "d2", saldo: 300 },
     ];
     expect(imputarFIFO(deudas, 100)).toEqual([{ id: "d2", nuevoSaldo: 200 }]);
+  });
+
+  it("limpia residuo de coma flotante al cancelar la primera deuda", () => {
+    const deudas = [
+      { id: "d1", saldo: 46451.01 },
+      { id: "d2", saldo: 100 },
+    ];
+    expect(imputarFIFO(deudas, 46451.01)).toEqual([{ id: "d1", nuevoSaldo: 0 }]);
   });
 
   it("no toca deudas si el monto es 0", () => {

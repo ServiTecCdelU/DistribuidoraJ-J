@@ -2,6 +2,7 @@
 import { supabase } from '@/lib/supabase'
 import type { Client, Product, Sale } from '@/lib/types'
 import { incidenciasVenta } from '@/lib/utils/incidencias'
+import { SALDO_EPSILON } from '@/lib/utils/saldo-imputacion'
 
 export function invalidateDashboardCache(): void {
   // No-op con Supabase
@@ -377,7 +378,7 @@ export const getDeudoresAntiguedad = async (): Promise<DeudorAntiguedad[]> => {
       .limit(20000)
     for (const t of debts ?? []) {
       const saldo = (t as any).saldo != null ? Number((t as any).saldo) : Number((t as any).amount)
-      if (saldo <= 0) continue
+      if (saldo <= SALDO_EPSILON) continue
       const cid = (t as any).client_id as string
       if (!debtSinceMap[cid]) debtSinceMap[cid] = new Date((t as any).date)
     }

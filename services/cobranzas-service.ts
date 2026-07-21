@@ -2,6 +2,7 @@ import { supabase } from '@/lib/supabase'
 import type { Client, ComprobantePago, Transaction } from '@/lib/types'
 import { generateReadableId } from '@/services/supabase-helpers'
 import { getSellerIdsByCodigo } from '@/services/sellers-service'
+import { SALDO_EPSILON } from '@/lib/utils/saldo-imputacion'
 
 // Clientes con deuda asignados a un vendedor (incluye clientes de vendedores anteriores
 // con el mismo codigo_vendedor, para cubrir reemplazos de personal)
@@ -59,7 +60,7 @@ export const getDebtClients = async (sellerId?: string): Promise<(Client & { sel
       .limit(20000)
     for (const t of debts ?? []) {
       const saldo = t.saldo != null ? Number(t.saldo) : Number(t.amount)
-      if (saldo <= 0) continue
+      if (saldo <= SALDO_EPSILON) continue
       // Orden ascendente: la primera deuda pendiente encontrada es la más antigua
       if (!debtSinceMap[t.client_id]) debtSinceMap[t.client_id] = new Date(t.date)
     }

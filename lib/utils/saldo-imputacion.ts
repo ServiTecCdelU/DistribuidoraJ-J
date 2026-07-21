@@ -12,9 +12,19 @@ export type ImputacionUpdate = {
   nuevoSaldo: number;
 };
 
+// Tolerancia para residuos de coma flotante: un saldo por debajo de este umbral
+// se considera cancelado (0). Evita que restas como 46451.01 - 46451.01 dejen
+// residuos ínfimos (ej. 7.27e-12) que hacen figurar una deuda como pendiente.
+export const SALDO_EPSILON = 0.01;
+
+// Redondea a 0 los residuos de coma flotante por debajo de SALDO_EPSILON.
+function limpiarResiduo(saldo: number): number {
+  return saldo < SALDO_EPSILON ? 0 : saldo;
+}
+
 // Imputa `monto` a una deuda puntual. Devuelve el nuevo saldo (nunca < 0).
 export function imputarADeuda(saldoActual: number, monto: number): number {
-  return Math.max(0, saldoActual - monto);
+  return limpiarResiduo(Math.max(0, saldoActual - monto));
 }
 
 // Imputa `monto` a una lista de deudas en orden FIFO (la lista debe venir ya
@@ -31,7 +41,7 @@ export function imputarFIFO(
     const saldo = Number(d.saldo) || 0;
     if (saldo <= 0) continue;
     const aplicado = Math.min(saldo, restante);
-    updates.push({ id: d.id, nuevoSaldo: saldo - aplicado });
+    updates.push({ id: d.id, nuevoSaldo: limpiarResiduo(saldo - aplicado) });
     restante -= aplicado;
   }
   return updates;
