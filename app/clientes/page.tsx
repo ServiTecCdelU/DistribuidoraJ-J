@@ -59,6 +59,7 @@ import {
   CheckCircle2,
   User,
   Wallet,
+  CalendarDays,
 } from 'lucide-react'
 import { toast } from 'sonner'
 import { getAuthToken } from '@/services/auth-service'
@@ -345,6 +346,19 @@ export default function ClientesPage() {
       toast.success(codigo ? `Asignado a código ${codigo}` : 'Código quitado')
     } catch {
       toast.error('Error al asignar el código')
+    }
+  }
+
+  // Cambia el día de visita/cobro del cliente desde el detalle
+  const handleAssignDiaCobro = async (dia: string) => {
+    if (!selectedClient) return
+    try {
+      const updated = await clientsApi.update(selectedClient.id, { diaCobro: dia || undefined })
+      setClients((prev) => prev.map((c) => (c.id === updated.id ? updated : c)))
+      setSelectedClient(updated)
+      toast.success(dia ? 'Día de pago actualizado' : 'Día de pago quitado')
+    } catch {
+      toast.error('Error al cambiar el día de pago')
     }
   }
 
@@ -1046,6 +1060,26 @@ export default function ClientesPage() {
                       Cód. {c.codigo} — {c.names.join(', ')}
                     </option>
                   ))}
+                </select>
+              </div>
+
+              {/* Día de pago (editable) */}
+              <div className="flex items-center gap-3 text-sm p-2 rounded-lg bg-muted/40">
+                <CalendarDays className="h-4 w-4 text-muted-foreground shrink-0" />
+                <span className="text-muted-foreground shrink-0">Día de pago:</span>
+                <select
+                  className="flex h-9 w-full rounded-2xl border border-input bg-background px-3 text-sm"
+                  value={selectedClient.diaCobro || ''}
+                  onChange={(e) => handleAssignDiaCobro(e.target.value)}
+                >
+                  <option value="">Sin asignar</option>
+                  <option value="lunes">Lunes</option>
+                  <option value="martes">Martes</option>
+                  <option value="miercoles">Miércoles</option>
+                  <option value="jueves">Jueves</option>
+                  <option value="viernes">Viernes</option>
+                  <option value="sabado">Sábado</option>
+                  <option value="domingo">Domingo</option>
                 </select>
               </div>
 
