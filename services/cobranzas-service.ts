@@ -32,13 +32,21 @@ export const getClientsBySeller = async (sellerId: string): Promise<Client[]> =>
   }))
 }
 
-// Todos los clientes con cuenta corriente (deuda actual o cancelada), filtrado por vendedor opcionalmente
-export const getDebtClients = async (sellerId?: string): Promise<(Client & { sellerName?: string })[]> => {
+// Clientes con cuenta corriente (deuda actual o cancelada), filtrado por vendedor opcionalmente.
+// Con `includeAll = true` devuelve TODOS los clientes del alcance (sin filtrar por saldo/límite),
+// para que un vendedor vea toda la cartera de su código, no solo los que tienen deuda.
+export const getDebtClients = async (
+  sellerId?: string,
+  includeAll = false,
+): Promise<(Client & { sellerName?: string })[]> => {
   let query = supabase
     .from('clientes')
     .select('*')
-    .or('current_balance.gt.0,credit_limit.gt.0')
-    .order('current_balance', { ascending: false })
+
+  if (!includeAll) {
+    query = query.or('current_balance.gt.0,credit_limit.gt.0')
+  }
+  query = query.order('current_balance', { ascending: false })
 
   if (sellerId) {
     const sellerIds = await getSellerIdsByCodigo(sellerId)

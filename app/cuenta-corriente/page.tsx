@@ -160,10 +160,17 @@ export default function CuentaCorrientePage() {
   // Detalle de estado: muestra la lista de clientes de una clasificación
   const [estadoDetalle, setEstadoDetalle] = useState<DebtClassification | 'dia_pago' | null>(null)
 
+  // Vendedor/cobrador: toda su cartera por código (con o sin deuda). Admin: solo cuentas corrientes.
+  const scopeClientsFetch = useCallback(() => {
+    return isSeller && user?.sellerId
+      ? cobranzasApi.getAllClientsBySeller(user.sellerId)
+      : cobranzasApi.getDebtClients()
+  }, [isSeller, user?.sellerId])
+
   const loadData = useCallback(async () => {
     try {
       const [clientsData, compData, sellersData] = await Promise.all([
-        cobranzasApi.getDebtClients(),
+        scopeClientsFetch(),
         cobranzasApi.getComprobantes(),
         sellersApi.getAll(),
       ])
@@ -185,7 +192,7 @@ export default function CuentaCorrientePage() {
     }
 
     setLoading(false)
-  }, [])
+  }, [scopeClientsFetch])
 
   useEffect(() => { loadData() }, [loadData])
 
@@ -1115,7 +1122,7 @@ ${renderTabla('Cuenta Mayorista', mayorista, balanceMay)}
         )
       )
       // Refrescar deudores (el saldo del cliente cambió al anularse el pago)
-      const clientsData = await cobranzasApi.getDebtClients()
+      const clientsData = await scopeClientsFetch()
       setDebtClients(clientsData)
       if (selectedClient?.id === rejectAuthTarget.clientId) {
         const txs = await clientsApi.getTransactions(selectedClient.id)

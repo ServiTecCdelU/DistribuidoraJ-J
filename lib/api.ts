@@ -525,6 +525,10 @@ export const cobranzasApi = {
   async getDebtClients(sellerId?: string) {
     return getDebtClients(sellerId)
   },
+  // Toda la cartera de un vendedor por su código (con o sin deuda)
+  async getAllClientsBySeller(sellerId: string) {
+    return getDebtClients(sellerId, true)
+  },
   async uploadComprobante(data: {
     clientId: string
     sellerId: string
