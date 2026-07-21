@@ -2,7 +2,7 @@
 
 import React from "react"
 
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useMemo } from 'react'
 import {
   Dialog,
   DialogContent,
@@ -29,7 +29,7 @@ interface ClientModalProps {
     name: string; dni: string; cuit: string; email: string;
     phone: string; address: string; taxCategory: string; creditLimit: number; notes: string;
   }>
-  sellers?: { id: string; name: string }[]
+  sellers?: { id: string; name: string; codigoVendedor?: string }[]
 }
 
 export function ClientModal({ open, onOpenChange, client, onSave, showCreditLimit = true, showNotes = true, defaultValues, sellers }: ClientModalProps) {
@@ -84,6 +84,33 @@ export function ClientModal({ open, onOpenChange, client, onSave, showCreditLimi
     }
     setErrors({})
   }, [client, open])
+
+  // Agrupación de vendedores por código (mismo listado que el filtro de Clientes)
+  const codigoOptions = useMemo(() => {
+    const map = new Map<string, string[]>()
+    for (const s of sellers ?? []) {
+      const cod = (s.codigoVendedor || '').trim()
+      if (!cod) continue
+      const arr = map.get(cod) ?? []
+      arr.push(s.name)
+      map.set(cod, arr)
+    }
+    return Array.from(map.entries())
+      .map(([codigo, names]) => ({ codigo, names }))
+      .sort((a, b) => a.codigo.localeCompare(b.codigo, undefined, { numeric: true }))
+  }, [sellers])
+
+  const selectedCodigo = useMemo(() => {
+    const s = sellers?.find((x) => x.id === formData.sellerId)
+    return (s?.codigoVendedor || '').trim()
+  }, [sellers, formData.sellerId])
+
+  // Al elegir un código, se asocia al primer vendedor con ese código (representante)
+  const handleCodigoChange = (codigo: string) => {
+    if (!codigo) { setFormData((f) => ({ ...f, sellerId: '' })); return }
+    const rep = (sellers ?? []).find((x) => (x.codigoVendedor || '').trim() === codigo)
+    setFormData((f) => ({ ...f, sellerId: rep?.id || '' }))
+  }
 
   const validateForm = () => {
     const newErrors: Record<string, string> = {}
@@ -201,18 +228,20 @@ export function ClientModal({ open, onOpenChange, client, onSave, showCreditLimi
                   placeholder="Ej: 106"
                 />
               </div>
-              {sellers && sellers.length > 0 && (
+              {codigoOptions.length > 0 && (
                 <div className="grid gap-2">
-                  <Label htmlFor="sellerId" className="text-foreground">Vendedor</Label>
+                  <Label htmlFor="codigoVendedor" className="text-foreground">Código de vendedor</Label>
                   <select
-                    id="sellerId"
+                    id="codigoVendedor"
                     className="flex h-10 w-full rounded-2xl border border-input bg-background px-3 py-2 text-sm"
-                    value={formData.sellerId}
-                    onChange={(e) => setFormData({ ...formData, sellerId: e.target.value })}
+                    value={selectedCodigo}
+                    onChange={(e) => handleCodigoChange(e.target.value)}
                   >
                     <option value="">Sin asignar</option>
-                    {sellers.map((s) => (
-                      <option key={s.id} value={s.id}>{s.name}</option>
+                    {codigoOptions.map((c) => (
+                      <option key={c.codigo} value={c.codigo}>
+                        Cód. {c.codigo} — {c.names.join(', ')}
+                      </option>
                     ))}
                   </select>
                 </div>

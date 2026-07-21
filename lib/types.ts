@@ -69,6 +69,8 @@ export interface Client {
   diaCobro?: string;
   /** Fecha de la deuda pendiente más antigua (entró a cuenta corriente). Define la clasificación automática. */
   debtSince?: Date;
+  /** Cliente activo. Si es false, los vendedores no lo ven y al venderle (solo admin) se avisa. */
+  activo?: boolean;
   notes?: string;
   createdAt: Date;
 }

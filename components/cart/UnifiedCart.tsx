@@ -39,6 +39,7 @@ import {
   Pencil,
   X,
   AlertTriangle,
+  Ban,
 } from "lucide-react";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
@@ -463,6 +464,14 @@ export function UnifiedCart({ role, state, actions, onConfirmSale, allowDiscount
           <div className="flex justify-between items-center p-2 rounded-lg bg-muted/30 text-sm">
             <span className="text-muted-foreground truncate">{clientName || selectedClientData?.name || "Sin cliente"}</span>
             <span className="font-bold">{actions.formatCurrency(finalTotal)}</span>
+          </div>
+        )}
+
+        {/* Aviso de cliente desactivado (solo admin puede venderle) */}
+        {role === "admin" && selectedClientData?.activo === false && (
+          <div className="flex items-center gap-2 p-2.5 rounded-lg bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 text-red-700 dark:text-red-400 text-sm font-semibold">
+            <Ban className="h-4 w-4 shrink-0" />
+            CLIENTE DESACTIVADO
           </div>
         )}
 

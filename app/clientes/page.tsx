@@ -329,6 +329,23 @@ export default function ClientesPage() {
     }
   }
 
+  const [togglingActivo, setTogglingActivo] = useState(false)
+  const handleToggleActivo = async (client: Client) => {
+    if (togglingActivo) return
+    const nuevoActivo = client.activo === false
+    setTogglingActivo(true)
+    try {
+      const updated = await clientsApi.update(client.id, { activo: nuevoActivo })
+      setClients((prev) => prev.map((c) => (c.id === updated.id ? updated : c)))
+      setSelectedClient((prev) => (prev && prev.id === updated.id ? updated : prev))
+      toast.success(nuevoActivo ? 'Cliente activado' : 'Cliente desactivado')
+    } catch {
+      toast.error('Error al cambiar el estado del cliente')
+    } finally {
+      setTogglingActivo(false)
+    }
+  }
+
   const handleSave = async (clientData: Omit<Client, 'id' | 'createdAt' | 'currentBalance'>) => {
     try {
       if (editingClient) {
@@ -717,6 +734,12 @@ export default function ClientesPage() {
                                     {client.codigo && (
                                       <span className="text-xs font-mono text-muted-foreground shrink-0">{client.codigo}</span>
                                     )}
+                                    {client.activo === false && (
+                                      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400 border border-red-200 dark:border-red-800 shrink-0">
+                                        <Ban className="h-3 w-3" />
+                                        Desactivado
+                                      </span>
+                                    )}
                                     {client.notes && (
                                       <StickyNote className="h-3.5 w-3.5 text-amber-500" />
                                     )}
@@ -844,6 +867,7 @@ export default function ClientesPage() {
                         <div className="min-w-0">
                           <div className="flex items-center gap-1">
                             <p className="font-semibold text-xs text-foreground truncate">{client.name}</p>
+                            {client.activo === false && <Ban className="h-3 w-3 text-red-500 shrink-0" />}
                             {client.notes && <StickyNote className="h-3 w-3 text-amber-500 shrink-0" />}
                           </div>
                           <p className="text-[11px] text-muted-foreground truncate">{vendedor}</p>
@@ -926,6 +950,12 @@ export default function ClientesPage() {
             <div className="space-y-4 pt-2">
               {/* Badges: categoría, estado de cuenta y cuenta corriente */}
               <div className="flex flex-wrap gap-2">
+                {selectedClient.activo === false && (
+                  <span className="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-semibold bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400 border border-red-200 dark:border-red-800">
+                    <Ban className="h-3 w-3 mr-1" />
+                    Cliente desactivado
+                  </span>
+                )}
                 <span className={`inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium ${getCategoryColor(selectedClient.taxCategory)}`}>
                   <Building2 className="h-3 w-3 mr-1" />
                   {formatTaxCategory(selectedClient.taxCategory)}
@@ -1068,8 +1098,8 @@ export default function ClientesPage() {
 
               {/* Actions */}
               <div className="flex gap-2 pt-2">
-                <Button 
-                  variant="outline" 
+                <Button
+                  variant="outline"
                   className="flex-1 bg-transparent"
                   onClick={() => {
                     setDetailModalOpen(false)
@@ -1088,6 +1118,28 @@ export default function ClientesPage() {
                   Cerrar
                 </Button>
               </div>
+              {/* Activar / Desactivar */}
+              {selectedClient.activo === false ? (
+                <Button
+                  variant="outline"
+                  className="w-full border-emerald-300 text-emerald-700 hover:bg-emerald-50 dark:border-emerald-800 dark:text-emerald-400 dark:hover:bg-emerald-900/20"
+                  disabled={togglingActivo}
+                  onClick={() => handleToggleActivo(selectedClient)}
+                >
+                  {togglingActivo ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <CheckCircle2 className="h-4 w-4 mr-2" />}
+                  Activar cliente
+                </Button>
+              ) : (
+                <Button
+                  variant="outline"
+                  className="w-full border-red-300 text-red-700 hover:bg-red-50 dark:border-red-800 dark:text-red-400 dark:hover:bg-red-900/20"
+                  disabled={togglingActivo}
+                  onClick={() => handleToggleActivo(selectedClient)}
+                >
+                  {togglingActivo ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Ban className="h-4 w-4 mr-2" />}
+                  Desactivar cliente
+                </Button>
+              )}
             </div>
           )}
         </DialogContent>

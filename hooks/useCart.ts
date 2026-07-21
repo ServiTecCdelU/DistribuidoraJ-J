@@ -324,7 +324,7 @@ export function useCart(role: UserRole, userEmail?: string, externalProducts?: P
           clientsApi.getAll(),
           sellersApi.getAll(),
         ]);
-        setClients(clientsData);
+        setClients(role === "seller" ? clientsData.filter((c) => c.activo !== false) : clientsData);
         setSellers(sellersData.filter((s) => s.isActive));
       } else {
         // Admin/seller: cargar desde mayorista_productos (legacy)
@@ -355,7 +355,7 @@ export function useCart(role: UserRole, userEmail?: string, externalProducts?: P
           };
         });
         setProducts(productsData);
-        setClients(clientsData);
+        setClients(role === "seller" ? clientsData.filter((c) => c.activo !== false) : clientsData);
         setSellers(sellersData.filter((s) => s.isActive));
       }
     } catch (error) {

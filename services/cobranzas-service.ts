@@ -12,6 +12,7 @@ export const getClientsBySeller = async (sellerId: string): Promise<Client[]> =>
     .from('clientes')
     .select('*')
     .in('seller_id', sellerIds)
+    .eq('activo', true)
     .gt('current_balance', 0)
     .order('current_balance', { ascending: false })
 
@@ -38,6 +39,7 @@ export const getClientsBySeller = async (sellerId: string): Promise<Client[]> =>
 export const getDebtClients = async (
   sellerId?: string,
   includeAll = false,
+  onlyActive = false,
 ): Promise<(Client & { sellerName?: string })[]> => {
   let query = supabase
     .from('clientes')
@@ -45,6 +47,9 @@ export const getDebtClients = async (
 
   if (!includeAll) {
     query = query.or('current_balance.gt.0,credit_limit.gt.0')
+  }
+  if (onlyActive) {
+    query = query.eq('activo', true)
   }
   query = query.order('current_balance', { ascending: false })
 
@@ -104,6 +109,7 @@ export const getDebtClients = async (
     debtClassification: d.debt_classification ?? 'normal',
     diaCobro: d.dia_cobro ?? undefined,
     debtSince: debtSinceMap[d.id] ?? undefined,
+    activo: d.activo ?? true,
     notes: d.notes ?? '',
     createdAt: new Date(d.created_at),
   }))
