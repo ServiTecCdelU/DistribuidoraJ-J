@@ -347,7 +347,22 @@ export default function ClientesPage() {
   }
 
   const sellerNameById = useMemo(() => new Map(sellers.map((s) => [s.id, s.name])), [sellers])
-  const sellerCodigoById = useMemo(() => new Map(sellers.map((s) => [s.id, s.codigoVendedor || ''])), [sellers])
+  const sellerCodigoById = useMemo(() => new Map(sellers.map((s) => [s.id, (s.codigoVendedor || '').trim()])), [sellers])
+
+  // Opciones de filtro por código de vendedor (un código puede compartirse entre varios vendedores)
+  const codigoOptions = useMemo(() => {
+    const map = new Map<string, string[]>()
+    for (const s of sellers) {
+      const cod = (s.codigoVendedor || '').trim()
+      if (!cod) continue
+      const arr = map.get(cod) ?? []
+      arr.push(s.name)
+      map.set(cod, arr)
+    }
+    return Array.from(map.entries())
+      .map(([codigo, names]) => ({ codigo, names }))
+      .sort((a, b) => a.codigo.localeCompare(b.codigo, undefined, { numeric: true }))
+  }, [sellers])
 
   const filteredClients = clients.filter(client => {
     const query = debouncedSearch.toLowerCase()
@@ -360,9 +375,10 @@ export default function ClientesPage() {
       client.name.toLowerCase().includes(query) ||
       (queryDigits.length > 0 && (cuitDigits.includes(queryDigits) || dniDigits.includes(queryDigits)))
     const matchesCategory = categoryFilter === 'all' || client.taxCategory === categoryFilter
+    const clientCodigo = client.sellerId ? (sellerCodigoById.get(client.sellerId) || '') : ''
     const matchesSeller =
       sellerFilter === 'all' ||
-      (sellerFilter === 'none' ? !client.sellerId : client.sellerId === sellerFilter)
+      (sellerFilter === 'none' ? !clientCodigo : clientCodigo === sellerFilter)
     return matchesSearch && matchesCategory && matchesSeller
   })
 
@@ -533,10 +549,12 @@ export default function ClientesPage() {
             value={sellerFilter}
             onChange={(e) => setSellerFilter(e.target.value)}
           >
-            <option value="all">Todos los vendedores</option>
-            <option value="none">Sin vendedor</option>
-            {sellers.map((s) => (
-              <option key={s.id} value={s.id}>{s.name}</option>
+            <option value="all">Todos los códigos</option>
+            <option value="none">Sin código</option>
+            {codigoOptions.map((c) => (
+              <option key={c.codigo} value={c.codigo}>
+                Cód. {c.codigo} — {c.names.join(', ')}
+              </option>
             ))}
           </select>
           {/* <Button variant="outline" onClick={() => setArcaDialogOpen(true)} className="gap-2">
@@ -607,10 +625,12 @@ export default function ClientesPage() {
             value={sellerFilter}
             onChange={(e) => setSellerFilter(e.target.value)}
           >
-            <option value="all">Todos los vendedores</option>
-            <option value="none">Sin vendedor</option>
-            {sellers.map((s) => (
-              <option key={s.id} value={s.id}>{s.name}</option>
+            <option value="all">Todos los códigos</option>
+            <option value="none">Sin código</option>
+            {codigoOptions.map((c) => (
+              <option key={c.codigo} value={c.codigo}>
+                Cód. {c.codigo} — {c.names.join(', ')}
+              </option>
             ))}
           </select>
         </div>
