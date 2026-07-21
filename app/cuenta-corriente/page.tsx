@@ -2154,7 +2154,7 @@ ${renderTabla('Cuenta Mayorista', mayorista, balanceMay)}
                   <span className="text-center">Estado</span>
                   <span className="text-right">Deuda</span>
                 </div>
-                {paginatedClients.map((c) => {
+                {paginatedClients.map((c, i) => {
                   const clientPending = comprobantes.filter((comp) => comp.clientId === c.id && comp.status === 'pending')
                   const dias = c.debtSince ? diasDesde(c.debtSince) : null
                   const cobradorStatus = cobradorStatusByClient.get(c.id)
@@ -2167,7 +2167,10 @@ ${renderTabla('Cuenta Mayorista', mayorista, balanceMay)}
                       <div className="grid grid-cols-[minmax(0,1fr)_1.1rem_4.5rem_7rem] gap-x-2 items-center leading-tight">
                         {/* Col 1: cliente / vendedor */}
                         <div className="min-w-0">
-                          <p className="font-semibold text-xs truncate">{c.name}</p>
+                          <p className="font-semibold text-xs truncate">
+                            <span className="text-muted-foreground tabular-nums mr-1">{(currentPage - 1) * PAGE_SIZE + i + 1}.</span>
+                            {c.name}
+                          </p>
                           <p className="text-xs text-muted-foreground truncate">
                             {c.sellerName || 'Sin vendedor'}
                             {c.diaCobro && <span className="capitalize text-teal-600"> · {c.diaCobro}</span>}
@@ -2212,6 +2215,7 @@ ${renderTabla('Cuenta Mayorista', mayorista, balanceMay)}
                   <Table>
                     <TableHeader>
                       <TableRow>
+                        <TableHead className="w-10 text-center">#</TableHead>
                         <TableHead>Cliente</TableHead>
                         <TableHead>Vendedor</TableHead>
                         <TableHead className="text-right">Deuda</TableHead>
@@ -2222,7 +2226,7 @@ ${renderTabla('Cuenta Mayorista', mayorista, balanceMay)}
                       </TableRow>
                     </TableHeader>
                     <TableBody>
-                      {paginatedClients.map((c) => {
+                      {paginatedClients.map((c, i) => {
                         const cobradorStatus = cobradorStatusByClient.get(c.id)
                         return (
                           <TableRow
@@ -2230,6 +2234,9 @@ ${renderTabla('Cuenta Mayorista', mayorista, balanceMay)}
                             className="cursor-pointer hover:bg-muted/50"
                             onClick={() => handleSelectClient(c)}
                           >
+                            <TableCell className="text-center text-sm font-semibold text-muted-foreground tabular-nums">
+                              {(currentPage - 1) * PAGE_SIZE + i + 1}
+                            </TableCell>
                             <TableCell className="font-medium">{c.name}</TableCell>
                             <TableCell className="text-sm text-muted-foreground">
                               {c.sellerName || 'Sin asignar'}

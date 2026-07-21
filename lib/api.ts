@@ -523,7 +523,9 @@ export const cobranzasApi = {
     return getClientsBySeller(sellerId)
   },
   async getDebtClients(sellerId?: string) {
-    return getDebtClients(sellerId)
+    // includeAll: mostrar TODOS los clientes (con o sin deuda). Los que tuvieron
+    // cuenta corriente y quedaron en 0 deben seguir apareciendo.
+    return getDebtClients(sellerId, true)
   },
   // Toda la cartera de un vendedor por su código (con o sin deuda), solo clientes activos
   async getAllClientsBySeller(sellerId: string) {
