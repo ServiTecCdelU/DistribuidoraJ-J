@@ -65,6 +65,7 @@ import {
 import { toast } from 'sonner'
 import { getAuthToken } from '@/services/auth-service'
 import { clasificarDeuda } from '@/lib/utils/deuda'
+import { downloadBase64Pdf } from '@/services/pdf-service'
 
 export default function ClientesPage() {
   const [clients, setClients] = useState<Client[]>([])
@@ -191,20 +192,9 @@ export default function ClientesPage() {
   const togglePrintCol = (key: keyof typeof printCols) =>
     setPrintCols((prev) => ({ ...prev, [key]: !prev[key] }))
 
-  const printHtml = (html: string) => {
-    const iframe = document.createElement('iframe')
-    iframe.style.cssText = 'position:fixed;top:0;left:0;width:0;height:0;border:0;opacity:0;'
-    document.body.appendChild(iframe)
-    const doc = iframe.contentWindow?.document
-    if (!doc) { document.body.removeChild(iframe); return }
-    doc.open(); doc.write(html); doc.close()
-    iframe.onload = () => {
-      iframe.contentWindow?.print()
-      setTimeout(() => document.body.removeChild(iframe), 1000)
-    }
-  }
-
-  const handlePrintClientes = () => {
+  const [printing, setPrinting] = useState(false)
+  const handlePrintClientes = async () => {
+    if (printing) return
     const esc = (s: any) => String(s ?? '').replace(/[&<>]/g, (m) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' }[m] as string))
     // Filtrar por código de vendedor
     let list = clients.filter((c) => {
@@ -261,7 +251,7 @@ export default function ClientesPage() {
       ? 'Todos los vendedores'
       : printCodigo === 'none'
       ? 'Sin código'
-      : `Código ${printCodigo}${(() => { const o = codigoOptions.find((x) => x.codigo === printCodigo); return o ? ' — ' + o.names.join(', ') : '' })()}`
+      : `Código ${printCodigo}`
     const fecha = new Intl.DateTimeFormat('es-AR', { day: '2-digit', month: 'long', year: 'numeric' }).format(new Date())
 
     const thead = cols.map((c) => `<th style="text-align:${c.align || 'left'}">${c.label}</th>`).join('')
@@ -269,27 +259,40 @@ export default function ClientesPage() {
       `<tr>${cols.map((col) => `<td style="text-align:${col.align || 'left'}">${cellValue(c, col.key)}</td>`).join('')}</tr>`
     ).join('')
 
-    const html = `<!doctype html><html><head><meta charset="utf-8"><title>Listado de Clientes</title>
+    const html = `<!doctype html><html><head><meta charset="utf-8">
       <style>
         * { box-sizing: border-box; }
-        body { font-family: Arial, Helvetica, sans-serif; color: #111; margin: 24px; }
-        h1 { font-size: 18px; margin: 0 0 2px; }
-        .meta { font-size: 12px; color: #555; margin-bottom: 14px; }
+        body { font-family: Arial, Helvetica, sans-serif; color: #111; margin: 0; padding: 14mm; }
+        h1 { font-size: 15px; margin: 0 0 14px; font-weight: 700; }
         table { width: 100%; border-collapse: collapse; font-size: 11px; }
         th { background: #0d9488; color: #fff; padding: 6px 8px; text-align: left; }
         td { padding: 5px 8px; border-bottom: 1px solid #e5e7eb; }
         tr:nth-child(even) td { background: #f8fafc; }
         .count { font-size: 12px; color: #555; margin-top: 12px; }
-        @page { margin: 14mm; }
       </style></head><body>
-      <h1>Listado de Clientes</h1>
-      <div class="meta">${esc(codigoTitulo)} · ${fecha}</div>
+      <h1>Listado de Clientes · ${esc(codigoTitulo)} · ${fecha}</h1>
       <table><thead><tr>${thead}</tr></thead><tbody>${tbody}</tbody></table>
       <div class="count">Total: ${list.length} cliente(s)</div>
       </body></html>`
 
-    printHtml(html)
-    setPrintDialogOpen(false)
+    setPrinting(true)
+    const toastId = toast.loading('Generando PDF...')
+    try {
+      const res = await fetch('/api/generate-pdf', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ html, filename: 'clientes.pdf', pageNumbers: true }),
+      })
+      const data = await res.json()
+      if (!res.ok || !data?.pdf) throw new Error(data?.error || 'Error generando PDF')
+      downloadBase64Pdf(data.pdf, `clientes_${new Date().toISOString().slice(0, 10)}.pdf`)
+      toast.success(`${list.length} clientes impresos`, { id: toastId })
+      setPrintDialogOpen(false)
+    } catch {
+      toast.error('Error al generar el PDF', { id: toastId })
+    } finally {
+      setPrinting(false)
+    }
   }
 
   const formatTaxCategoryFull = (category: Client['taxCategory']) => {
@@ -1366,9 +1369,9 @@ export default function ClientesPage() {
             </div>
 
             <div className="flex gap-2 justify-end pt-2">
-              <Button variant="outline" onClick={() => setPrintDialogOpen(false)}>Cancelar</Button>
-              <Button onClick={handlePrintClientes} className="gap-2">
-                <Printer className="h-4 w-4" />
+              <Button variant="outline" onClick={() => setPrintDialogOpen(false)} disabled={printing}>Cancelar</Button>
+              <Button onClick={handlePrintClientes} disabled={printing} className="gap-2">
+                {printing ? <Loader2 className="h-4 w-4 animate-spin" /> : <Printer className="h-4 w-4" />}
                 Imprimir
               </Button>
             </div>

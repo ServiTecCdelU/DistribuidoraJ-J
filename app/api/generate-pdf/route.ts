@@ -8,7 +8,7 @@ export async function POST(request: NextRequest) {
 
   try {
     const body = await request.json();
-    const { html, filename } = body;
+    const { html, filename, pageNumbers } = body;
 
     if (!html) {
       return NextResponse.json(
@@ -60,8 +60,15 @@ export async function POST(request: NextRequest) {
     const pdfBuffer = await page.pdf({
       format: "A4",
       printBackground: true,
-      margin: { top: 0, right: 0, bottom: 0, left: 0 },
-      preferCSSPageSize: true,
+      margin: pageNumbers
+        ? { top: 0, right: 0, bottom: "16mm", left: 0 }
+        : { top: 0, right: 0, bottom: 0, left: 0 },
+      preferCSSPageSize: !pageNumbers,
+      displayHeaderFooter: !!pageNumbers,
+      headerTemplate: "<div></div>",
+      footerTemplate: pageNumbers
+        ? '<div style="width:100%;font-size:9px;color:#666;text-align:center;padding-top:4px;font-family:Arial,sans-serif;"><span class="pageNumber"></span>/<span class="totalPages"></span></div>'
+        : "<div></div>",
     });
 
     const pdfBase64 = Buffer.from(pdfBuffer).toString("base64");
