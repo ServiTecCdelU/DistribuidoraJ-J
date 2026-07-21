@@ -17,6 +17,9 @@ import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuCheckboxItem,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
 import { clientsApi, sellersApi, salesApi } from '@/lib/api'
@@ -49,6 +52,7 @@ import {
   StickyNote,
   X,
   Loader2,
+  Columns3,
   FileSpreadsheet,
   AlertTriangle,
   Ban,
@@ -62,7 +66,7 @@ import { clasificarDeuda } from '@/lib/utils/deuda'
 
 export default function ClientesPage() {
   const [clients, setClients] = useState<Client[]>([])
-  const [sellers, setSellers] = useState<{ id: string; name: string }[]>([])
+  const [sellers, setSellers] = useState<{ id: string; name: string; codigoVendedor?: string }[]>([])
   const [loading, setLoading] = useState(true)
   const [searchQuery, setSearchQuery] = useState('')
   const debouncedSearch = useDebounce(searchQuery, 300)
@@ -136,10 +140,36 @@ export default function ClientesPage() {
     let mounted = true
     loadClients(() => mounted)
     sellersApi.getAll().then((data) =>
-      setSellers(data.filter((s) => s.isActive).map((s) => ({ id: s.id, name: s.name })))
+      setSellers(data.filter((s) => s.isActive).map((s) => ({ id: s.id, name: s.name, codigoVendedor: s.codigoVendedor })))
     )
     return () => { mounted = false }
   }, [])
+
+  // Visibilidad de columnas (persistida en localStorage)
+  const COLS_KEY = 'clientes_columnas_visibles'
+  const [visibleCols, setVisibleCols] = useState({
+    cuit: true,
+    categoria: true,
+    saldo: true,
+    codigoVendedor: false,
+  })
+  const [colsLoaded, setColsLoaded] = useState(false)
+
+  useEffect(() => {
+    try {
+      const raw = localStorage.getItem(COLS_KEY)
+      if (raw) setVisibleCols((prev) => ({ ...prev, ...JSON.parse(raw) }))
+    } catch {}
+    setColsLoaded(true)
+  }, [])
+
+  useEffect(() => {
+    if (!colsLoaded) return
+    try { localStorage.setItem(COLS_KEY, JSON.stringify(visibleCols)) } catch {}
+  }, [visibleCols, colsLoaded])
+
+  const toggleCol = (key: keyof typeof visibleCols) =>
+    setVisibleCols((prev) => ({ ...prev, [key]: !prev[key] }))
 
   const [exporting, setExporting] = useState(false)
 
@@ -317,6 +347,7 @@ export default function ClientesPage() {
   }
 
   const sellerNameById = useMemo(() => new Map(sellers.map((s) => [s.id, s.name])), [sellers])
+  const sellerCodigoById = useMemo(() => new Map(sellers.map((s) => [s.id, s.codigoVendedor || ''])), [sellers])
 
   const filteredClients = clients.filter(client => {
     const query = debouncedSearch.toLowerCase()
@@ -512,6 +543,30 @@ export default function ClientesPage() {
             <Search className="h-4 w-4" />
             Consultar ARCA
           </Button> */}
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button variant="outline" className="gap-2">
+                <Columns3 className="h-4 w-4" />
+                Columnas
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" className="w-52">
+              <DropdownMenuLabel>Mostrar columnas</DropdownMenuLabel>
+              <DropdownMenuSeparator />
+              <DropdownMenuCheckboxItem checked={visibleCols.cuit} onCheckedChange={() => toggleCol('cuit')} onSelect={(e) => e.preventDefault()}>
+                CUIT
+              </DropdownMenuCheckboxItem>
+              <DropdownMenuCheckboxItem checked={visibleCols.categoria} onCheckedChange={() => toggleCol('categoria')} onSelect={(e) => e.preventDefault()}>
+                Categoría
+              </DropdownMenuCheckboxItem>
+              <DropdownMenuCheckboxItem checked={visibleCols.saldo} onCheckedChange={() => toggleCol('saldo')} onSelect={(e) => e.preventDefault()}>
+                Saldo
+              </DropdownMenuCheckboxItem>
+              <DropdownMenuCheckboxItem checked={visibleCols.codigoVendedor} onCheckedChange={() => toggleCol('codigoVendedor')} onSelect={(e) => e.preventDefault()}>
+                Código de vendedor
+              </DropdownMenuCheckboxItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
           <Button variant="outline" onClick={handleExportExcel} disabled={exporting} className="gap-2">
             {exporting ? <Loader2 className="h-4 w-4 animate-spin" /> : <FileSpreadsheet className="h-4 w-4" />}
             Descargar Lista de Clientes
@@ -615,11 +670,11 @@ export default function ClientesPage() {
                     <thead>
                       <tr className="border-b border-border bg-muted/50">
                         <th className="text-left p-4 font-semibold text-muted-foreground text-xs uppercase tracking-wider">Cliente</th>
-                        <th className="text-left p-4 font-semibold text-muted-foreground text-xs uppercase tracking-wider">CUIT</th>
-                        <th className="text-left p-4 font-semibold text-muted-foreground text-xs uppercase tracking-wider">Categoria</th>
+                        {visibleCols.cuit && <th className="text-left p-4 font-semibold text-muted-foreground text-xs uppercase tracking-wider">CUIT</th>}
+                        {visibleCols.categoria && <th className="text-left p-4 font-semibold text-muted-foreground text-xs uppercase tracking-wider">Categoria</th>}
+                        {visibleCols.codigoVendedor && <th className="text-left p-4 font-semibold text-muted-foreground text-xs uppercase tracking-wider">Cód. Vendedor</th>}
                         <th className="text-left p-4 font-semibold text-muted-foreground text-xs uppercase tracking-wider">Contacto</th>
-                        <th className="text-right p-4 font-semibold text-muted-foreground text-xs uppercase tracking-wider">Limite</th>
-                        <th className="text-right p-4 font-semibold text-muted-foreground text-xs uppercase tracking-wider">Saldo</th>
+                        {visibleCols.saldo && <th className="text-right p-4 font-semibold text-muted-foreground text-xs uppercase tracking-wider">Saldo</th>}
                         <th className="text-center p-4 font-semibold text-muted-foreground text-xs uppercase tracking-wider">Acciones</th>
                       </tr>
                     </thead>
@@ -655,16 +710,27 @@ export default function ClientesPage() {
                                 </div>
                               </div>
                             </td>
-                            <td className="p-4">
-                              <span className="font-mono text-sm text-foreground bg-muted px-2 py-1 rounded">
-                                {client.cuit || '-'}
-                              </span>
-                            </td>
-                            <td className="p-4">
-                              <span className={`inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium ${getCategoryColor(client.taxCategory)}`}>
-                                {formatTaxCategory(client.taxCategory)}
-                              </span>
-                            </td>
+                            {visibleCols.cuit && (
+                              <td className="p-4">
+                                <span className="font-mono text-sm text-foreground bg-muted px-2 py-1 rounded">
+                                  {client.cuit || '-'}
+                                </span>
+                              </td>
+                            )}
+                            {visibleCols.categoria && (
+                              <td className="p-4">
+                                <span className={`inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium ${getCategoryColor(client.taxCategory)}`}>
+                                  {formatTaxCategory(client.taxCategory)}
+                                </span>
+                              </td>
+                            )}
+                            {visibleCols.codigoVendedor && (
+                              <td className="p-4">
+                                <span className="font-mono text-sm text-foreground">
+                                  {(client.sellerId && sellerCodigoById.get(client.sellerId)) || '-'}
+                                </span>
+                              </td>
+                            )}
                             <td className="p-4">
                               <div className="space-y-1">
                                 {client.email && (
@@ -684,31 +750,28 @@ export default function ClientesPage() {
                                 )}
                               </div>
                             </td>
-                            <td className="p-4 text-right">
-                              <span className="font-medium text-foreground">
-                                {formatCurrency(client.creditLimit || 0)}
-                              </span>
-                            </td>
-                            <td className="p-4 text-right">
-                              <div className="flex flex-col items-end gap-1">
-                                <div className={`flex items-center gap-1.5 font-semibold ${debt.color}`}>
-                                  <DebtIcon className="h-4 w-4" />
-                                  {formatCurrency(client.currentBalance || 0)}
-                                </div>
-                                {(client.currentBalance || 0) > 0 && (client.creditLimit || 0) > 0 && (
-                                  <div className="w-20 h-1.5 bg-muted rounded-full overflow-hidden">
-                                    <div 
-                                      className={`h-full rounded-full transition-all ${
-                                        ((client.currentBalance || 0) / (client.creditLimit || 1)) < 0.5 
-                                          ? 'bg-amber-500' 
-                                          : 'bg-red-500'
-                                      }`}
-                                      style={{ width: `${Math.min(((client.currentBalance || 0) / (client.creditLimit || 1)) * 100, 100)}%` }}
-                                    />
+                            {visibleCols.saldo && (
+                              <td className="p-4 text-right">
+                                <div className="flex flex-col items-end gap-1">
+                                  <div className={`flex items-center gap-1.5 font-semibold ${debt.color}`}>
+                                    <DebtIcon className="h-4 w-4" />
+                                    {formatCurrency(client.currentBalance || 0)}
                                   </div>
-                                )}
-                              </div>
-                            </td>
+                                  {(client.currentBalance || 0) > 0 && (client.creditLimit || 0) > 0 && (
+                                    <div className="w-20 h-1.5 bg-muted rounded-full overflow-hidden">
+                                      <div
+                                        className={`h-full rounded-full transition-all ${
+                                          ((client.currentBalance || 0) / (client.creditLimit || 1)) < 0.5
+                                            ? 'bg-amber-500'
+                                            : 'bg-red-500'
+                                        }`}
+                                        style={{ width: `${Math.min(((client.currentBalance || 0) / (client.creditLimit || 1)) * 100, 100)}%` }}
+                                      />
+                                    </div>
+                                  )}
+                                </div>
+                              </td>
+                            )}
                             <td className="p-4">
                               <div className="flex justify-center gap-1">
                                 <Button 
