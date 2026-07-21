@@ -16,7 +16,7 @@ import { Label } from '@/components/ui/label'
 import type { Client } from '@/lib/types'
 import { formatCurrency, formatCuit, normalizeCuit } from '@/lib/utils/format'
 import { Textarea } from '@/components/ui/textarea'
-import { Loader2, User, FileText, Phone, Mail, MapPin, CreditCard, Building, StickyNote } from 'lucide-react'
+import { Loader2, User, FileText, Phone, Mail, MapPin, CreditCard, Building, StickyNote, Ban, CheckCircle2 } from 'lucide-react'
 
 interface ClientModalProps {
   open: boolean
@@ -48,6 +48,7 @@ export function ClientModal({ open, onOpenChange, client, onSave, showCreditLimi
     codigoExterno: '',
     sellerId: '',
     diaCobro: '',
+    activo: true,
   })
 
   useEffect(() => {
@@ -65,6 +66,7 @@ export function ClientModal({ open, onOpenChange, client, onSave, showCreditLimi
         codigoExterno: client.codigoExterno || '',
         sellerId: client.sellerId || '',
         diaCobro: client.diaCobro || '',
+        activo: client.activo !== false,
       })
     } else {
       setFormData({
@@ -80,6 +82,7 @@ export function ClientModal({ open, onOpenChange, client, onSave, showCreditLimi
         codigoExterno: '',
         sellerId: '',
         diaCobro: '',
+        activo: true,
       })
     }
     setErrors({})
@@ -149,6 +152,7 @@ export function ClientModal({ open, onOpenChange, client, onSave, showCreditLimi
         sellerId: formData.sellerId || undefined,
         codigoExterno: formData.codigoExterno.trim() || undefined,
         diaCobro: formData.diaCobro || undefined,
+        activo: formData.activo,
       })
     } finally {
       setLoading(false)
@@ -173,6 +177,34 @@ export function ClientModal({ open, onOpenChange, client, onSave, showCreditLimi
         </DialogHeader>
         
         <form onSubmit={handleSubmit} className="space-y-5 pt-2">
+          {/* Estado del cliente (solo al editar) */}
+          {client && (
+            <div className={`flex items-center justify-between gap-3 p-3 rounded-2xl border ${
+              formData.activo
+                ? 'bg-muted/40 border-border'
+                : 'bg-red-50 dark:bg-red-900/20 border-red-200 dark:border-red-800'
+            }`}>
+              <div className="flex items-center gap-2 text-sm font-medium">
+                {formData.activo ? (
+                  <><CheckCircle2 className="h-4 w-4 text-emerald-600" /> Cliente activo</>
+                ) : (
+                  <><Ban className="h-4 w-4 text-red-600" /> <span className="text-red-700 dark:text-red-400">Cliente desactivado</span></>
+                )}
+              </div>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                className={formData.activo
+                  ? 'border-red-300 text-red-700 hover:bg-red-50 dark:border-red-800 dark:text-red-400 dark:hover:bg-red-900/20'
+                  : 'border-emerald-300 text-emerald-700 hover:bg-emerald-50 dark:border-emerald-800 dark:text-emerald-400 dark:hover:bg-emerald-900/20'}
+                onClick={() => setFormData((f) => ({ ...f, activo: !f.activo }))}
+              >
+                {formData.activo ? <><Ban className="h-4 w-4 mr-1" /> Desactivar cliente</> : <><CheckCircle2 className="h-4 w-4 mr-1" /> Activar cliente</>}
+              </Button>
+            </div>
+          )}
+
           {/* Datos Principales */}
           <div className="space-y-4">
             <h3 className="text-sm font-medium text-muted-foreground flex items-center gap-2">
@@ -339,46 +371,21 @@ export function ClientModal({ open, onOpenChange, client, onSave, showCreditLimi
             </div>
           </div>
 
-          {/* Datos de Crédito - solo admin */}
-          {showCreditLimit && (
+          {/* Saldo actual - solo al editar */}
+          {showCreditLimit && client && (
             <div className="space-y-4 pt-2 border-t border-border">
               <h3 className="text-sm font-medium text-muted-foreground flex items-center gap-2 pt-2">
                 <CreditCard className="h-4 w-4" />
-                Configuracion de Credito
+                Cuenta corriente
               </h3>
-
-              <div className="space-y-2">
-                <Label htmlFor="creditLimit" className="text-foreground">
-                  Limite de Credito
-                </Label>
-                <div className="relative">
-                  <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground text-sm">$</span>
-                  <Input
-                    id="creditLimit"
-                    type="number"
-                    min="0"
-                    step="1000"
-                    value={formData.creditLimit ?? 0}
-                    onChange={(e) => setFormData({ ...formData, creditLimit: Number(e.target.value) || 0 })}
-                    className={`pl-7 ${errors.creditLimit ? 'border-destructive' : ''}`}
-                  />
+              <div className="rounded-lg bg-muted/50 p-3">
+                <div className="flex items-center justify-between">
+                  <span className="text-sm text-muted-foreground">Saldo actual</span>
+                  <span className={`font-semibold ${client.currentBalance > 0 ? 'text-destructive' : 'text-success'}`}>
+                    {formatCurrency(client.currentBalance)}
+                  </span>
                 </div>
-                {errors.creditLimit && <p className="text-xs text-destructive">{errors.creditLimit}</p>}
-                <p className="text-xs text-muted-foreground">
-                  Monto maximo que el cliente puede deber: {formatCurrency(formData.creditLimit)}
-                </p>
               </div>
-
-              {client && (
-                <div className="rounded-lg bg-muted/50 p-3">
-                  <div className="flex items-center justify-between">
-                    <span className="text-sm text-muted-foreground">Saldo actual</span>
-                    <span className={`font-semibold ${client.currentBalance > 0 ? 'text-destructive' : 'text-success'}`}>
-                      {formatCurrency(client.currentBalance)}
-                    </span>
-                  </div>
-                </div>
-              )}
             </div>
           )}
 
