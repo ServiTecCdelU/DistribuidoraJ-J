@@ -672,17 +672,25 @@ export default function ClientesPage() {
       </div>
 
       {/* Header Actions - Desktop */}
-      <div className="hidden md:flex flex-row gap-4 justify-between mb-6">
-        <div className="relative flex-1 max-w-md">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-          <Input
-            placeholder="Buscar por nombre, DNI o CUIT..."
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            className="pl-10 bg-background"
-          />
+      <div className="hidden md:flex flex-col gap-3 mb-6">
+        {/* Fila 1: buscador grande + Nuevo Cliente */}
+        <div className="flex flex-row gap-4 items-center">
+          <div className="relative flex-1">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-muted-foreground" />
+            <Input
+              placeholder="Buscar por nombre, DNI o CUIT..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              className="pl-11 h-12 text-base bg-background"
+            />
+          </div>
+          <Button onClick={handleCreate} className="gap-2 shadow-sm h-12 shrink-0">
+            <Plus className="h-4 w-4" />
+            Nuevo Cliente
+          </Button>
         </div>
-        <div className="flex flex-row gap-3">
+        {/* Fila 2: filtros y acciones */}
+        <div className="flex flex-row gap-3 flex-wrap">
           <select
             className="h-10 rounded-md border border-input bg-background px-3 text-sm text-foreground shadow-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
             value={categoryFilter}
@@ -743,10 +751,6 @@ export default function ClientesPage() {
           <Button variant="outline" onClick={handleExportExcel} disabled={exporting} className="gap-2">
             {exporting ? <Loader2 className="h-4 w-4 animate-spin" /> : <FileSpreadsheet className="h-4 w-4" />}
             Excel de Clientes
-          </Button>
-          <Button onClick={handleCreate} className="gap-2 shadow-sm">
-            <Plus className="h-4 w-4" />
-            Nuevo Cliente
           </Button>
         </div>
       </div>
