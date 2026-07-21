@@ -325,7 +325,8 @@ export interface ComprobantePago {
   id: string;
   clientId: string;
   clientName?: string;
-  sellerId: string;
+  /** Vacío cuando el comprobante lo adjunta un admin (no un cobrador) */
+  sellerId?: string;
   sellerName?: string;
   amount: number;
   notes?: string;

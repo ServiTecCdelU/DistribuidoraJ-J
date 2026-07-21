@@ -480,6 +480,20 @@ export default function CuentaCorrientePage() {
         setClientComprobantes((prev) => [comp, ...prev])
       }
 
+      // Admin: comprobante opcional (transferencia) — constancia adjunta, sin verificación
+      if (canManage && payComprobante) {
+        const comp = await cobranzasApi.uploadComprobantePagoAdmin({
+          clientId: selectedClient.id,
+          amount,
+          notes: payNotes || undefined,
+          file: payComprobante,
+          transactionId: txPago.id,
+          reviewedBy: user.name,
+        })
+        setComprobantes((prev) => [comp, ...prev])
+        setClientComprobantes((prev) => [comp, ...prev])
+      }
+
       // Actualizar estado local (puede quedar negativo = saldo a favor)
       const newBalance = selectedClient.currentBalance - amount
       setSelectedClient((prev) => prev ? { ...prev, currentBalance: newBalance } : prev)
@@ -1522,7 +1536,7 @@ ${renderTabla('Cuenta Mayorista', mayorista, balanceMay)}
               )}
               <div className="space-y-2">
                 <Label>Forma de pago</Label>
-                <Select value={payMethod} onValueChange={setPayMethod}>
+                <Select value={payMethod} onValueChange={(v) => { setPayMethod(v); if (canManage && v !== 'transferencia') setPayComprobante(null) }}>
                   <SelectTrigger>
                     <SelectValue />
                   </SelectTrigger>
@@ -1588,6 +1602,17 @@ ${renderTabla('Cuenta Mayorista', mayorista, balanceMay)}
                   {payMethod !== 'efectivo' && !payComprobante && (
                     <p className="text-xs text-muted-foreground">Tenés que adjuntar el comprobante para registrar el pago por transferencia.</p>
                   )}
+                </div>
+              )}
+              {canManage && payMethod === 'transferencia' && (
+                <div className="space-y-2">
+                  <Label>Comprobante (opcional)</Label>
+                  <Input
+                    type="file"
+                    accept="image/*,application/pdf"
+                    onChange={(e) => setPayComprobante(e.target.files?.[0] ?? null)}
+                  />
+                  <p className="text-xs text-muted-foreground">Podés adjuntar el comprobante de la transferencia. No es obligatorio.</p>
                 </div>
               )}
             </div>

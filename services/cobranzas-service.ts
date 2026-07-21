@@ -214,6 +214,64 @@ export const getComprobantesBySeller = async (sellerId: string): Promise<Comprob
   }
 }
 
+// Sube un comprobante asociado a un pago que un admin acaba de registrar
+// (transferencia). No es un cobro de cobrador: queda como constancia adjunta,
+// sin flujo de verificación (via_cobrador = false, ya autorizado).
+export const uploadComprobantePagoAdmin = async (data: {
+  clientId: string
+  amount: number
+  notes?: string
+  file: File
+  transactionId: string
+  reviewedBy: string
+}): Promise<ComprobantePago> => {
+  const ext = data.file.name.split('.').pop() || 'jpg'
+  const path = `admin/${Date.now()}.${ext}`
+  const { error: uploadError } = await supabase.storage
+    .from('comprobantes')
+    .upload(path, data.file, { upsert: false })
+
+  if (uploadError) throw new Error(`Error subiendo archivo: ${uploadError.message}`)
+
+  const { data: urlData } = supabase.storage.from('comprobantes').getPublicUrl(path)
+  const fileUrl = urlData.publicUrl
+
+  const docId = await generateReadableId('comprobantes_pago', 'comp', `${data.clientId}`)
+  const reviewedAt = new Date()
+  await supabase.from('comprobantes_pago').insert({
+    id: docId,
+    client_id: data.clientId,
+    seller_id: null,
+    amount: data.amount,
+    notes: data.notes || null,
+    file_url: fileUrl,
+    file_name: data.file.name,
+    status: 'approved',
+    reviewed_at: reviewedAt.toISOString(),
+    reviewed_by: data.reviewedBy,
+    transaction_id: data.transactionId,
+    via_cobrador: false,
+    autorizado: true,
+  })
+
+  return {
+    id: docId,
+    clientId: data.clientId,
+    sellerId: undefined,
+    amount: data.amount,
+    notes: data.notes,
+    fileUrl,
+    fileName: data.file.name,
+    status: 'approved',
+    reviewedAt,
+    reviewedBy: data.reviewedBy,
+    transactionId: data.transactionId,
+    createdAt: reviewedAt,
+    viaCobrador: false,
+    autorizado: true,
+  }
+}
+
 // Sube un comprobante ya asociado a un pago que el cobrador acaba de registrar
 // (el pago/transacción y el descuento de saldo ya se hicieron via registerCashPayment;
 // esto solo deja constancia del archivo, sin pasar por el flujo de aprobación pendiente).

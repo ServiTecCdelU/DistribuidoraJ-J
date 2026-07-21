@@ -11,6 +11,7 @@ import {
 import { formatCurrencyDecimals, formatDate } from '@/lib/utils/format'
 import { descargarDocumento } from '@/lib/utils/doc-actions'
 import { diaDePagoInfo, type EstadoDiaPago } from '@/lib/utils/deuda'
+import { SALDO_EPSILON } from '@/lib/utils/saldo-imputacion'
 import { parseDescuentoDescripcion } from '@/lib/utils/ajuste-venta'
 import type { ComprobantePago, Sale, Transaction } from '@/lib/types'
 import type { Devolucion } from '@/services/devoluciones-service'
@@ -305,7 +306,16 @@ export function MovimientoDeudaCard({
   const expandable = isPayment || (!!sale) || descuentoExpandable
   const tieneRemito = !!sale?.remitoNumber
   const saldo = !isPayment && tx.saldo != null ? tx.saldo : null
-  const pagada = saldo != null && saldo <= 0
+  // Estado de cobro de la boleta (solo ventas con saldo trackeado):
+  // pagada = saldo ~0 · parcial = se pagó algo pero queda saldo · pendiente = nada pagado
+  const estadoCobro: 'pagada' | 'parcial' | 'pendiente' | null =
+    saldo == null
+      ? null
+      : saldo <= SALDO_EPSILON
+        ? 'pagada'
+        : saldo < tx.amount - SALDO_EPSILON
+          ? 'parcial'
+          : 'pendiente'
 
   // Nombre de quien cobró, parseado de la descripción del pago (" — Cobrado por X" o "(Cobrado por X...)").
   // Sin match = lo cobró un admin desde el sistema → "Patricia".
@@ -525,22 +535,49 @@ export function MovimientoDeudaCard({
             {/* Cobrador */}
             <span className="text-xs text-muted-foreground truncate">{cobradorNombre}</span>
 
-            {/* Estado: verificación del comprobante (cobros de cobrador) */}
+            {/* Estado: en pagos = verificación del comprobante (cobros de cobrador);
+                en ventas = estado de cobro de la boleta (pagada/parcial/pendiente) */}
             <div className="flex justify-center">
-              {comprobante?.viaCobrador ? (
-                comprobante.autorizado ? (
-                  <span title="Verificado">
-                    <CheckCircle2 className="h-4 w-4 text-green-600" />
-                  </span>
-                ) : (
-                  <Badge
-                    variant="outline"
-                    className="text-[10px] px-1 py-0 h-4 gap-0.5 text-amber-600 border-amber-300 whitespace-nowrap"
-                    title="Pago cargado por un cobrador, todavía sin confirmar ni anular"
-                  >
-                    <AlertTriangle className="h-3 w-3" />VERIFICAR
-                  </Badge>
-                )
+              {isPayment ? (
+                comprobante?.viaCobrador ? (
+                  comprobante.autorizado ? (
+                    <span title="Verificado">
+                      <CheckCircle2 className="h-4 w-4 text-green-600" />
+                    </span>
+                  ) : (
+                    <Badge
+                      variant="outline"
+                      className="text-[10px] px-1 py-0 h-4 gap-0.5 text-amber-600 border-amber-300 whitespace-nowrap"
+                      title="Pago cargado por un cobrador, todavía sin confirmar ni anular"
+                    >
+                      <AlertTriangle className="h-3 w-3" />VERIFICAR
+                    </Badge>
+                  )
+                ) : null
+              ) : estadoCobro === 'pagada' ? (
+                <Badge
+                  variant="outline"
+                  className="text-[10px] px-1 py-0 h-4 gap-0.5 text-green-600 border-green-300 whitespace-nowrap"
+                  title="Boleta cobrada por completo"
+                >
+                  <CheckCircle2 className="h-3 w-3" />PAGADA
+                </Badge>
+              ) : estadoCobro === 'parcial' ? (
+                <Badge
+                  variant="outline"
+                  className="text-[10px] px-1 py-0 h-4 gap-0.5 text-amber-600 border-amber-300 whitespace-nowrap"
+                  title={`Cobrada en parte · resta ${formatCurrencyDecimals(saldo ?? 0)}`}
+                >
+                  PARCIAL
+                </Badge>
+              ) : estadoCobro === 'pendiente' ? (
+                <Badge
+                  variant="outline"
+                  className="text-[10px] px-1 py-0 h-4 gap-0.5 text-red-600 border-red-300 whitespace-nowrap"
+                  title="Boleta sin cobrar"
+                >
+                  PENDIENTE
+                </Badge>
               ) : null}
             </div>
 

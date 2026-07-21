@@ -116,6 +116,7 @@ import {
   getDebtClients,
   uploadComprobante,
   uploadComprobanteAprobado,
+  uploadComprobantePagoAdmin,
   getComprobantes,
   getComprobantesBySeller,
   approveComprobante,
@@ -543,6 +544,16 @@ export const cobranzasApi = {
     reviewedBy: string
   }) {
     return uploadComprobanteAprobado(data)
+  },
+  async uploadComprobantePagoAdmin(data: {
+    clientId: string
+    amount: number
+    notes?: string
+    file: File
+    transactionId: string
+    reviewedBy: string
+  }) {
+    return uploadComprobantePagoAdmin(data)
   },
   async getComprobantes(filters?: { status?: string; sellerId?: string }) {
     return getComprobantes(filters)
