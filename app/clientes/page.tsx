@@ -73,7 +73,7 @@ export default function ClientesPage() {
   const [loading, setLoading] = useState(true)
   const [searchQuery, setSearchQuery] = useState('')
   const debouncedSearch = useDebounce(searchQuery, 300)
-  const [categoryFilter, setCategoryFilter] = useState<string>('all')
+  const [activoFilter, setActivoFilter] = useState<'all' | 'active' | 'inactive'>('all')
   const [sellerFilter, setSellerFilter] = useState<string>('all')
   const [modalOpen, setModalOpen] = useState(false)
   const [editingClient, setEditingClient] = useState<Client | null>(null)
@@ -180,6 +180,7 @@ export default function ClientesPage() {
   const [printDialogOpen, setPrintDialogOpen] = useState(false)
   const [printCodigo, setPrintCodigo] = useState<string>('all')
   const [printOrder, setPrintOrder] = useState<'nombre' | 'diaCobro' | 'saldo' | 'codigo'>('nombre')
+  const PRINT_COLS_KEY = 'clientes_print_columnas'
   const [printCols, setPrintCols] = useState({
     cuit: false,
     categoria: false,
@@ -189,8 +190,18 @@ export default function ClientesPage() {
     diaCobro: true,
     saldo: true,
   })
+  useEffect(() => {
+    try {
+      const raw = localStorage.getItem(PRINT_COLS_KEY)
+      if (raw) setPrintCols((prev) => ({ ...prev, ...JSON.parse(raw) }))
+    } catch {}
+  }, [])
   const togglePrintCol = (key: keyof typeof printCols) =>
-    setPrintCols((prev) => ({ ...prev, [key]: !prev[key] }))
+    setPrintCols((prev) => {
+      const next = { ...prev, [key]: !prev[key] }
+      try { localStorage.setItem(PRINT_COLS_KEY, JSON.stringify(next)) } catch {}
+      return next
+    })
 
   const [printing, setPrinting] = useState(false)
   const handlePrintClientes = async () => {
@@ -250,8 +261,8 @@ export default function ClientesPage() {
     const codigoTitulo = printCodigo === 'all'
       ? 'Todos los vendedores'
       : printCodigo === 'none'
-      ? 'Sin código'
-      : `Código ${printCodigo}`
+      ? 'Sin vendedor asignado'
+      : (codigoOptions.find((c) => c.codigo === printCodigo)?.names.join(', ') || printCodigo)
     const fecha = new Intl.DateTimeFormat('es-AR', { day: '2-digit', month: 'long', year: 'numeric' }).format(new Date())
 
     const thead = cols.map((c) => `<th style="text-align:${c.align || 'left'}">${c.label}</th>`).join('')
@@ -528,16 +539,18 @@ export default function ClientesPage() {
       (client.cuit?.toLowerCase().includes(query) ?? false) ||
       client.name.toLowerCase().includes(query) ||
       (queryDigits.length > 0 && (cuitDigits.includes(queryDigits) || dniDigits.includes(queryDigits)))
-    const matchesCategory = categoryFilter === 'all' || client.taxCategory === categoryFilter
+    const matchesActivo =
+      activoFilter === 'all' ||
+      (activoFilter === 'active' ? client.activo !== false : client.activo === false)
     const clientCodigo = client.sellerId ? (sellerCodigoById.get(client.sellerId) || '') : ''
     const matchesSeller =
       sellerFilter === 'all' ||
       (sellerFilter === 'none' ? !clientCodigo : clientCodigo === sellerFilter)
-    return matchesSearch && matchesCategory && matchesSeller
+    return matchesSearch && matchesActivo && matchesSeller
   })
 
   // Reset to page 1 when filters change
-  useEffect(() => { setCurrentPage(1) }, [debouncedSearch, categoryFilter, sellerFilter])
+  useEffect(() => { setCurrentPage(1) }, [debouncedSearch, activoFilter, sellerFilter])
 
   const pagedClients = useMemo(
     () => filteredClients.slice((currentPage - 1) * pageSize, currentPage * pageSize),
@@ -696,15 +709,12 @@ export default function ClientesPage() {
         <div className="flex flex-row gap-3 flex-wrap">
           <select
             className="h-10 rounded-md border border-input bg-background px-3 text-sm text-foreground shadow-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
-            value={categoryFilter}
-            onChange={(e) => setCategoryFilter(e.target.value)}
+            value={activoFilter}
+            onChange={(e) => setActivoFilter(e.target.value as typeof activoFilter)}
           >
-            <option value="all">Todas las categorias</option>
-            <option value="responsable_inscripto">Responsable Inscripto</option>
-            <option value="monotributo">Monotributo</option>
-            <option value="consumidor_final">Consumidor Final</option>
-            <option value="exento">Exento</option>
-            <option value="no_responsable">No Responsable</option>
+            <option value="all">Todos los clientes</option>
+            <option value="active">Clientes activados</option>
+            <option value="inactive">Clientes desactivados</option>
           </select>
           <select
             className="h-10 rounded-md border border-input bg-background px-3 text-sm text-foreground shadow-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
@@ -772,15 +782,12 @@ export default function ClientesPage() {
         <div className="flex gap-2">
           <select
             className="h-10 flex-1 min-w-0 rounded-md border border-input bg-background px-3 text-sm text-foreground shadow-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
-            value={categoryFilter}
-            onChange={(e) => setCategoryFilter(e.target.value)}
+            value={activoFilter}
+            onChange={(e) => setActivoFilter(e.target.value as typeof activoFilter)}
           >
-            <option value="all">Todas las categorias</option>
-            <option value="responsable_inscripto">Responsable Inscripto</option>
-            <option value="monotributo">Monotributo</option>
-            <option value="consumidor_final">Consumidor Final</option>
-            <option value="exento">Exento</option>
-            <option value="no_responsable">No Responsable</option>
+            <option value="all">Todos los clientes</option>
+            <option value="active">Activados</option>
+            <option value="inactive">Desactivados</option>
           </select>
           <select
             className="h-10 flex-1 min-w-0 rounded-md border border-input bg-background px-3 text-sm text-foreground shadow-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
@@ -837,11 +844,11 @@ export default function ClientesPage() {
                 </div>
                 <h3 className="text-lg font-semibold text-foreground mb-1">No se encontraron clientes</h3>
                 <p className="text-muted-foreground text-sm text-center mb-6 max-w-sm">
-                  {searchQuery || categoryFilter !== 'all'
+                  {searchQuery || activoFilter !== 'all'
                     ? 'Intenta ajustar los filtros de busqueda para encontrar lo que buscas'
                     : 'Comienza agregando tu primer cliente para gestionar sus cuentas corrientes'}
                 </p>
-                {!searchQuery && categoryFilter === 'all' && (
+                {!searchQuery && activoFilter === 'all' && (
                   <Button onClick={handleCreate} className="gap-2" size="lg">
                     <Plus className="h-5 w-5" />
                     Agregar Primer Cliente
@@ -857,6 +864,7 @@ export default function ClientesPage() {
                   <table className="w-full">
                     <thead>
                       <tr className="border-b border-border bg-muted/50">
+                        <th className="text-left p-4 font-semibold text-muted-foreground text-xs uppercase tracking-wider w-12">#</th>
                         <th className="text-left p-4 font-semibold text-muted-foreground text-xs uppercase tracking-wider">Cliente</th>
                         {visibleCols.cuit && <th className="text-left p-4 font-semibold text-muted-foreground text-xs uppercase tracking-wider">CUIT</th>}
                         {visibleCols.categoria && <th className="text-left p-4 font-semibold text-muted-foreground text-xs uppercase tracking-wider">Categoria</th>}
@@ -867,18 +875,16 @@ export default function ClientesPage() {
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-border">
-                      {pagedClients.map((client) => {
+                      {pagedClients.map((client, idx) => {
                         const debt = getDebtIndicator(client.currentBalance || 0, client.creditLimit || 0)
                         const DebtIcon = debt.icon
                         return (
                           <tr key={client.id} className="hover:bg-muted/40 transition-colors group">
+                            <td className="p-4 text-sm text-muted-foreground">
+                              {(currentPage - 1) * pageSize + idx + 1}
+                            </td>
                             <td className="p-4">
                               <div className="flex items-center gap-3">
-                                <div className="h-10 w-10 rounded-full bg-primary/10 flex items-center justify-center shrink-0">
-                                  <span className="text-sm font-semibold text-primary">
-                                    {client.name.charAt(0).toUpperCase()}
-                                  </span>
-                                </div>
                                 <div className="min-w-0">
                                   <div className="flex items-center gap-2">
                                     <p className="font-medium text-foreground truncate">{client.name}</p>
@@ -999,12 +1005,13 @@ export default function ClientesPage() {
               {/* Mobile List (tabla 2 filas) */}
               <div className="md:hidden border border-border rounded-2xl overflow-hidden bg-card shadow-sm divide-y divide-border" style={{ fontSize: '12px' }}>
                 {/* Encabezado de columnas */}
-                <div className="grid grid-cols-[minmax(0,1fr)_5rem_6rem] gap-x-2 px-3 py-1.5 bg-muted/50 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
+                <div className="grid grid-cols-[1.5rem_minmax(0,1fr)_5rem_6rem] gap-x-2 px-3 py-1.5 bg-muted/50 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
+                  <span>#</span>
                   <span>Cliente</span>
                   <span className="text-center">Código</span>
                   <span className="text-right">C.C.</span>
                 </div>
-                {pagedClients.map((client) => {
+                {pagedClients.map((client, idx) => {
                   const debt = getDebtIndicator(client.currentBalance || 0, client.creditLimit || 0)
                   const vendedor = client.sellerId ? (sellerNameById.get(client.sellerId) || 'Vendedor') : 'Sin vendedor'
                   return (
@@ -1013,7 +1020,9 @@ export default function ClientesPage() {
                       className="px-3 py-2 active:bg-muted/50 transition-colors"
                       onClick={() => handleViewDetail(client)}
                     >
-                      <div className="grid grid-cols-[minmax(0,1fr)_5rem_6rem] gap-x-2 items-start leading-tight">
+                      <div className="grid grid-cols-[1.5rem_minmax(0,1fr)_5rem_6rem] gap-x-2 items-start leading-tight">
+                        {/* Col número */}
+                        <span className="text-[11px] text-muted-foreground pt-0.5">{(currentPage - 1) * pageSize + idx + 1}</span>
                         {/* Col 1: cliente / vendedor */}
                         <div className="min-w-0">
                           <div className="flex items-center gap-1">
@@ -1080,11 +1089,6 @@ export default function ClientesPage() {
             <DialogTitle className="flex items-center gap-3">
               {selectedClient && (
                 <>
-                  <div className="h-10 w-10 rounded-full bg-primary/10 flex items-center justify-center">
-                    <span className="text-lg font-semibold text-primary">
-                      {selectedClient.name.charAt(0).toUpperCase()}
-                    </span>
-                  </div>
                   <div>
                     <p className="font-semibold">
                       {selectedClient.name}
