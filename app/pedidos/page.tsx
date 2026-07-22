@@ -554,11 +554,13 @@ export default function PedidosPage() {
     return () => { supabase.removeChannel(channel); };
   }, []);
 
-  // El transportista entra directo a la solapa de reparto
+  // Transportista (solo o combinado con vendedor/cobrador) solo ve "En reparto"
+  const isTransportistaRole = user?.employeeType === "transportista" || user?.employeeType === "ambos";
+
   const [appliedTransportistaTab, setAppliedTransportistaTab] = useState(false);
   useEffect(() => {
     if (appliedTransportistaTab || !user) return;
-    if (user.employeeType === "transportista") {
+    if (isTransportistaRole) {
       setFilterStatus("delivery");
     }
     setAppliedTransportistaTab(true);
@@ -1789,7 +1791,7 @@ tbody tr:nth-child(even){background:#fafafa}
         clients={clients}
         sellers={uniqueSellers}
         transportistas={transportistas}
-        visibleStatuses={user?.employeeType === "transportista" ? ["delivery"] : undefined}
+        visibleStatuses={isTransportistaRole ? ["delivery"] : undefined}
         orders={activeOrders}
       >
         {hasActiveFilters && (
@@ -1827,7 +1829,7 @@ tbody tr:nth-child(even){background:#fafafa}
             <span className="hidden sm:inline">Descargar Pedido</span>
           </Button>
         )}
-        {selectedOrderIds.size > 0 && selBack && (
+        {!isTransportistaRole && selectedOrderIds.size > 0 && selBack && (
           <Button
             variant="outline"
             size="sm"
@@ -1839,7 +1841,7 @@ tbody tr:nth-child(even){background:#fafafa}
             <span>Volver {selectedOrderIds.size} a {selBack.label}</span>
           </Button>
         )}
-        {selectedOrderIds.size > 0 && filterStatus !== "delivery" && (
+        {!isTransportistaRole && selectedOrderIds.size > 0 && filterStatus !== "delivery" && (
           <Button
             size="sm"
             onClick={() => handleMoveSelected(selMove.from, selMove.to)}
@@ -1850,7 +1852,7 @@ tbody tr:nth-child(even){background:#fafafa}
             <span>Pasar {selectedOrderIds.size} a {selMove.label}</span>
           </Button>
         )}
-        {filterStatus === "pending" && filteredOrders.length > 0 && selectedOrderIds.size === 0 && (
+        {!isTransportistaRole && filterStatus === "pending" && filteredOrders.length > 0 && selectedOrderIds.size === 0 && (
           <Button
             variant="outline"
             size="sm"
@@ -1862,7 +1864,7 @@ tbody tr:nth-child(even){background:#fafafa}
             <span className="hidden sm:inline">Todos a preparación</span>
           </Button>
         )}
-        {filterStatus === "preparation" && filteredOrders.length > 0 && selectedOrderIds.size === 0 && (
+        {!isTransportistaRole && filterStatus === "preparation" && filteredOrders.length > 0 && selectedOrderIds.size === 0 && (
           <Button
             variant="outline"
             size="sm"
@@ -1874,7 +1876,7 @@ tbody tr:nth-child(even){background:#fafafa}
             <span className="hidden sm:inline">Todos a reparto</span>
           </Button>
         )}
-        {selBack && filteredOrders.length > 0 && selectedOrderIds.size === 0 && (
+        {!isTransportistaRole && selBack && filteredOrders.length > 0 && selectedOrderIds.size === 0 && (
           <Button
             variant="outline"
             size="sm"
