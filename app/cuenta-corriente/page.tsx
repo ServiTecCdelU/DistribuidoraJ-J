@@ -2759,7 +2759,7 @@ ${renderTabla('Cuenta Mayorista', mayorista, balanceMay)}
                               <button
                                 type="button"
                                 className="inline-flex items-center text-teal-600 hover:text-teal-700"
-                                onClick={() => setPreviewUrl(comp.fileUrl)}
+                                onClick={() => window.open(comp.fileUrl, '_blank', 'noopener,noreferrer')}
                                 title="Ver comprobante"
                               >
                                 <ImageIcon className="h-4 w-4" />
