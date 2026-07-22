@@ -1789,6 +1789,7 @@ tbody tr:nth-child(even){background:#fafafa}
         clients={clients}
         sellers={uniqueSellers}
         transportistas={transportistas}
+        visibleStatuses={user?.employeeType === "transportista" ? ["delivery"] : undefined}
         orders={activeOrders}
       >
         {hasActiveFilters && (

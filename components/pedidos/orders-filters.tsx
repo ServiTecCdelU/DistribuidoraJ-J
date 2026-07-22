@@ -41,6 +41,7 @@ interface OrdersFiltersProps {
   transportistas?: { id: string; name: string }[];
   orders: Order[];
   children?: React.ReactNode;
+  visibleStatuses?: string[];
 }
 
 export function OrdersFilters({
@@ -61,8 +62,12 @@ export function OrdersFilters({
   transportistas,
   orders,
   children,
+  visibleStatuses,
 }: OrdersFiltersProps) {
   const [filtersOpen, setFiltersOpen] = useState(false);
+  const tabStatuses = statusFlow.filter(
+    (s) => s !== "completed" && (!visibleStatuses || visibleStatuses.includes(s))
+  );
 
   const statusCounts = useMemo(() => {
     const counts: Record<string, number> = { all: orders.length };
@@ -101,7 +106,7 @@ export function OrdersFilters({
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
-              {statusFlow.filter((s) => s !== "completed").map((status) => {
+              {tabStatuses.map((status) => {
                 const config = statusConfig[status];
                 return (
                   <SelectItem key={status} value={status}>
@@ -115,7 +120,7 @@ export function OrdersFilters({
 
         {/* Desktop: tabs de estado */}
         <div className="hidden sm:flex gap-2 overflow-x-auto pb-1 scrollbar-hide flex-1">
-          {statusFlow.filter((s) => s !== "completed").map((status) => {
+          {tabStatuses.map((status) => {
             const count = getStatusCount(status);
             const config = statusConfig[status];
             const isActive = filterStatus === status;
