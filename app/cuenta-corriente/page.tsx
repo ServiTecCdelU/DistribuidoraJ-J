@@ -1003,6 +1003,7 @@ ${renderTabla('Cuenta Mayorista', mayorista, balanceMay)}
   // Panel "Autorizar pago": cobros registrados por un cobrador, ya aplicados,
   // pendientes de revisión del admin (autorizar = queda constancia; rechazar = anula el pago).
   const [authPanelOpen, setAuthPanelOpen] = useState(false)
+  const [authHistorialOpen, setAuthHistorialOpen] = useState(false)
   const [authProcessingId, setAuthProcessingId] = useState<string | null>(null)
   const [rejectAuthTarget, setRejectAuthTarget] = useState<ComprobantePago | null>(null)
   const [rejectAuthMotivo, setRejectAuthMotivo] = useState('')
@@ -1053,6 +1054,21 @@ ${renderTabla('Cuenta Mayorista', mayorista, balanceMay)}
     () => comprobantes.filter((c) => c.viaCobrador && c.status === 'approved' && !c.autorizado),
     [comprobantes]
   )
+
+  // Historial de cobros de cobrador ya revisados (confirmados o anulados)
+  const authHistory = useMemo(
+    () =>
+      comprobantes
+        .filter((c) => c.viaCobrador && (c.autorizado || c.status === 'rejected'))
+        .sort((a, b) => {
+          const da = a.autorizadoAt || a.reviewedAt || a.createdAt
+          const db = b.autorizadoAt || b.reviewedAt || b.createdAt
+          return db.getTime() - da.getTime()
+        }),
+    [comprobantes]
+  )
+  const authHistoryConfirmed = useMemo(() => authHistory.filter((c) => c.autorizado).length, [authHistory])
+  const authHistoryAnulados = useMemo(() => authHistory.filter((c) => c.status === 'rejected').length, [authHistory])
 
   // Comprobante vinculado a cada transacción de pago del cliente seleccionado
   // (cobrador auto-aprobado, o vendedor subido y luego aprobado por admin)
@@ -2693,10 +2709,21 @@ ${renderTabla('Cuenta Mayorista', mayorista, balanceMay)}
           <Dialog open={authPanelOpen} onOpenChange={setAuthPanelOpen}>
             <DialogContent className="sm:max-w-3xl max-h-[85vh] overflow-y-auto">
               <DialogHeader>
-                <DialogTitle className="flex items-center gap-2">
-                  <FileCheck className="h-4.5 w-4.5 text-amber-600" />
-                  Verificar pago
-                </DialogTitle>
+                <div className="flex items-center justify-between gap-2 pr-6">
+                  <DialogTitle className="flex items-center gap-2">
+                    <FileCheck className="h-4.5 w-4.5 text-amber-600" />
+                    Verificar pago
+                  </DialogTitle>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    className="h-7 gap-1.5 text-xs"
+                    onClick={() => setAuthHistorialOpen(true)}
+                  >
+                    <History className="h-3.5 w-3.5" />
+                    Historial
+                  </Button>
+                </div>
                 <DialogDescription>
                   Cobros registrados por un cobrador. El pago ya está aplicado al saldo del cliente — acá solo dejás constancia de que lo revisaste, o lo anulás si algo no cierra.
                 </DialogDescription>
@@ -2728,14 +2755,18 @@ ${renderTabla('Cuenta Mayorista', mayorista, balanceMay)}
                           <TableCell className="text-xs text-muted-foreground">{comp.reviewedBy || comp.sellerName || '—'}</TableCell>
                           <TableCell className="text-right font-semibold text-green-600 whitespace-nowrap">{formatCurrency(comp.amount)}</TableCell>
                           <TableCell className="text-center">
-                            <button
-                              type="button"
-                              className="inline-flex items-center text-teal-600 hover:text-teal-700"
-                              onClick={() => setPreviewUrl(comp.fileUrl)}
-                              title="Ver comprobante"
-                            >
-                              <ImageIcon className="h-4 w-4" />
-                            </button>
+                            {comp.fileUrl ? (
+                              <button
+                                type="button"
+                                className="inline-flex items-center text-teal-600 hover:text-teal-700"
+                                onClick={() => setPreviewUrl(comp.fileUrl)}
+                                title="Ver comprobante"
+                              >
+                                <ImageIcon className="h-4 w-4" />
+                              </button>
+                            ) : (
+                              <span className="text-muted-foreground">—</span>
+                            )}
                           </TableCell>
                           <TableCell>
                             <div className="flex justify-end gap-1">
@@ -2760,6 +2791,73 @@ ${renderTabla('Cuenta Mayorista', mayorista, balanceMay)}
                                 <XCircle className="h-4 w-4" />
                               </Button>
                             </div>
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                </div>
+              )}
+            </DialogContent>
+          </Dialog>
+
+          {/* Historial de cobros de cobrador ya revisados (confirmados o anulados) */}
+          <Dialog open={authHistorialOpen} onOpenChange={setAuthHistorialOpen}>
+            <DialogContent className="sm:max-w-3xl max-h-[85vh] overflow-y-auto">
+              <DialogHeader>
+                <DialogTitle className="flex items-center gap-2">
+                  <History className="h-4.5 w-4.5 text-muted-foreground" />
+                  Historial de verificación
+                </DialogTitle>
+                <DialogDescription>
+                  Cobros de cobrador ya revisados por un admin: confirmados o anulados.
+                </DialogDescription>
+              </DialogHeader>
+              <div className="flex items-center gap-3 text-sm">
+                <span className="inline-flex items-center gap-1.5 rounded-lg bg-green-50 dark:bg-green-950/30 px-2.5 py-1.5">
+                  <CheckCircle2 className="h-3.5 w-3.5 text-green-600" />
+                  <span className="font-semibold text-green-700 dark:text-green-500">{authHistoryConfirmed}</span>
+                  <span className="text-muted-foreground">confirmados</span>
+                </span>
+                <span className="inline-flex items-center gap-1.5 rounded-lg bg-red-50 dark:bg-red-950/30 px-2.5 py-1.5">
+                  <XCircle className="h-3.5 w-3.5 text-red-600" />
+                  <span className="font-semibold text-red-700 dark:text-red-500">{authHistoryAnulados}</span>
+                  <span className="text-muted-foreground">anulados</span>
+                </span>
+              </div>
+              {authHistory.length === 0 ? (
+                <p className="text-sm text-muted-foreground text-center py-6">Todavía no hay cobros revisados.</p>
+              ) : (
+                <div className="overflow-x-auto -mx-6 px-6">
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>Cliente</TableHead>
+                        <TableHead>Fecha</TableHead>
+                        <TableHead>Cobrado por</TableHead>
+                        <TableHead className="text-right">Monto</TableHead>
+                        <TableHead>Estado</TableHead>
+                        <TableHead>Revisado por</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {authHistory.map((comp) => (
+                        <TableRow key={comp.id}>
+                          <TableCell className="font-medium max-w-[10rem] truncate" title={comp.clientName}>
+                            {comp.clientName || 'Cliente'}
+                          </TableCell>
+                          <TableCell className="text-xs text-muted-foreground whitespace-nowrap">{formatDate(comp.createdAt)}</TableCell>
+                          <TableCell className="text-xs text-muted-foreground">{comp.sellerName || '—'}</TableCell>
+                          <TableCell className="text-right font-semibold whitespace-nowrap">{formatCurrency(comp.amount)}</TableCell>
+                          <TableCell>
+                            {comp.autorizado ? (
+                              <Badge className="bg-green-100 text-green-700 hover:bg-green-100">Confirmado</Badge>
+                            ) : (
+                              <Badge className="bg-red-100 text-red-700 hover:bg-red-100" title={comp.rejectionReason}>Anulado</Badge>
+                            )}
+                          </TableCell>
+                          <TableCell className="text-xs text-muted-foreground whitespace-nowrap">
+                            {comp.autorizado ? comp.autorizadoBy : comp.reviewedBy}
                           </TableCell>
                         </TableRow>
                       ))}
