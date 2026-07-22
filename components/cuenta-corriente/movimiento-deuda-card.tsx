@@ -6,7 +6,7 @@ import { Button } from '@/components/ui/button'
 import {
   ArrowDownCircle, ArrowUpCircle, ChevronDown, Download, Receipt, Truck,
   AlertTriangle, RotateCcw, Tag, RefreshCw, Loader2, Ban, CheckCircle2,
-  Image as ImageIcon,
+  Image as ImageIcon, Trash2,
 } from 'lucide-react'
 import { formatCurrencyDecimals, formatDate } from '@/lib/utils/format'
 import { descargarDocumento } from '@/lib/utils/doc-actions'
@@ -25,6 +25,8 @@ interface MovimientoDeudaCardProps {
   onRegenerarRemito?: (sale: Sale) => Promise<void>
   onRegenerarRecibo?: (tx: Transaction) => Promise<void>
   onAnularPago?: (tx: Transaction) => void
+  /** Solo se pasa en localhost — borra el pago sin dejar rastro (para pruebas). */
+  onEliminarPago?: (tx: Transaction) => void
   /** Comprobante vinculado a este movimiento (cobrador o vendedor aprobado), si corresponde */
   comprobante?: ComprobantePago
   onVerComprobante?: (fileUrl: string) => void
@@ -161,7 +163,7 @@ function ItemsTable({ items, showTotal = false }: { items: TableRow[]; showTotal
 }
 
 export function MovimientoDeudaCard({
-  tx, sale, devoluciones = [], saldoAcumulado, onRegenerarRemito, onRegenerarRecibo, onAnularPago, comprobante, onVerComprobante,
+  tx, sale, devoluciones = [], saldoAcumulado, onRegenerarRemito, onRegenerarRecibo, onAnularPago, onEliminarPago, comprobante, onVerComprobante,
 }: MovimientoDeudaCardProps) {
   const [expanded, setExpanded] = useState(false)
   const [regenerando, setRegenerando] = useState(false)
@@ -688,6 +690,16 @@ export function MovimientoDeudaCard({
               >
                 <Ban className="h-3.5 w-3.5" />
                 Anular pago
+              </Button>
+            )}
+            {!isDescuento && !isRechazo && onEliminarPago && !tx.anulado && (
+              <Button
+                variant="outline" size="sm" className={`gap-1.5 text-xs h-7 text-red-700 border-red-400 hover:bg-red-100 shrink-0 ${onAnularPago ? '' : 'ml-auto'}`}
+                onClick={(e) => { e.stopPropagation(); onEliminarPago(tx) }}
+                title="Solo en localhost — borra el pago de prueba sin dejar rastro"
+              >
+                <Trash2 className="h-3.5 w-3.5" />
+                Eliminar (local)
               </Button>
             )}
           </div>

@@ -71,6 +71,9 @@ export default function CuentaCorrientePage() {
   const isSeller = user?.role === 'seller' && !isCobrador
   const canManage = !isSeller && !isCobrador
   const canRegisterPayment = !isSeller
+  // Solo en localhost: permite borrar pagos de prueba sin dejar rastro (no disponible en producción).
+  const [isLocalhost, setIsLocalhost] = useState(false)
+  useEffect(() => { setIsLocalhost(window.location.hostname === 'localhost') }, [])
   const [activeTab, setActiveTab] = useState<'clientes' | 'mayorista'>('clientes')
   const [debtClients, setDebtClients] = useState<ClientWithSeller[]>([])
   const [comprobantes, setComprobantes] = useState<ComprobantePago[]>([])
@@ -1000,10 +1003,54 @@ ${renderTabla('Cuenta Mayorista', mayorista, balanceMay)}
   const [anularMotivo, setAnularMotivo] = useState('')
   const [anulandoPago, setAnulandoPago] = useState(false)
 
+  // Solo en localhost: borrar un pago de prueba sin dejar rastro (a diferencia de Anular,
+  // esto no queda en el historial — es únicamente para limpiar pruebas propias).
+  const [pagoToDelete, setPagoToDelete] = useState<Transaction | null>(null)
+  const [eliminandoPago, setEliminandoPago] = useState(false)
+  const handleEliminarPago = async () => {
+    if (!pagoToDelete || !selectedClient || !canManage || !isLocalhost) return
+    setEliminandoPago(true)
+    try {
+      await paymentsApi.deletePayment(pagoToDelete.id)
+      const cuenta = pagoToDelete.cuenta ?? 'minorista'
+      const newBalance =
+        cuenta === 'mayorista'
+          ? (selectedClient.currentBalanceMayorista ?? 0) + pagoToDelete.amount
+          : selectedClient.currentBalance + pagoToDelete.amount
+      setSelectedClient((prev) =>
+        prev
+          ? cuenta === 'mayorista'
+            ? { ...prev, currentBalanceMayorista: newBalance }
+            : { ...prev, currentBalance: newBalance }
+          : prev
+      )
+      setDebtClients((prev) =>
+        prev.map((c) =>
+          c.id === selectedClient.id
+            ? cuenta === 'mayorista'
+              ? { ...c, currentBalanceMayorista: newBalance }
+              : { ...c, currentBalance: newBalance }
+            : c
+        )
+      )
+      const txs = await clientsApi.getTransactions(selectedClient.id)
+      setClientTransactions(txs)
+      setPagoToDelete(null)
+      toast.success('Pago eliminado')
+    } catch (err: any) {
+      toast.error(err.message || 'No se pudo eliminar el pago')
+    } finally {
+      setEliminandoPago(false)
+    }
+  }
+
   // Panel "Autorizar pago": cobros registrados por un cobrador, ya aplicados,
   // pendientes de revisión del admin (autorizar = queda constancia; rechazar = anula el pago).
   const [authPanelOpen, setAuthPanelOpen] = useState(false)
   const [authHistorialOpen, setAuthHistorialOpen] = useState(false)
+  // Preview de comprobante dentro del panel "Verificar pago": se muestra inline
+  // (no como Dialog anidado, que Radix no apila bien arriba de un Dialog ya abierto).
+  const [authPreviewUrl, setAuthPreviewUrl] = useState<string | null>(null)
   const [authProcessingId, setAuthProcessingId] = useState<string | null>(null)
   const [rejectAuthTarget, setRejectAuthTarget] = useState<ComprobantePago | null>(null)
   const [rejectAuthMotivo, setRejectAuthMotivo] = useState('')
@@ -1414,6 +1461,7 @@ ${renderTabla('Cuenta Mayorista', mayorista, balanceMay)}
                             onRegenerarRemito={canManage ? handleRegenerarRemito : undefined}
                             onRegenerarRecibo={canManage ? handleRegenerarRecibo : undefined}
                             onAnularPago={canManage ? setPagoToAnular : undefined}
+                            onEliminarPago={canManage && isLocalhost ? setPagoToDelete : undefined}
                             comprobante={compByTxId.get(tx.id)}
                             onVerComprobante={setPreviewUrl}
                           />
@@ -1686,6 +1734,34 @@ ${renderTabla('Cuenta Mayorista', mayorista, balanceMay)}
               <Button variant="destructive" onClick={handleAnularPago} disabled={anulandoPago || !anularMotivo.trim()}>
                 {anulandoPago && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
                 Anular pago
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+
+        {/* Dialog Eliminar pago — solo localhost, para borrar pruebas propias sin dejar rastro */}
+        <Dialog open={!!pagoToDelete} onOpenChange={(open) => { if (!open) setPagoToDelete(null) }}>
+          <DialogContent className="sm:max-w-sm">
+            <DialogHeader>
+              <DialogTitle>Eliminar pago</DialogTitle>
+              <DialogDescription>
+                Esto borra el pago por completo y devuelve el monto a la deuda. No queda registro en el historial. Solo disponible en localhost.
+              </DialogDescription>
+            </DialogHeader>
+            {pagoToDelete && (
+              <div className="space-y-1 text-sm">
+                <p><strong>Monto:</strong> {formatCurrency(pagoToDelete.amount)}</p>
+                <p className="text-muted-foreground">{pagoToDelete.description}</p>
+                {pagoToDelete.reciboNumero && (
+                  <p className="text-xs text-muted-foreground">Recibo {pagoToDelete.reciboNumero}</p>
+                )}
+              </div>
+            )}
+            <DialogFooter>
+              <Button variant="outline" onClick={() => setPagoToDelete(null)}>Cancelar</Button>
+              <Button variant="destructive" onClick={handleEliminarPago} disabled={eliminandoPago}>
+                {eliminandoPago && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
+                Eliminar definitivamente
               </Button>
             </DialogFooter>
           </DialogContent>
@@ -2706,7 +2782,7 @@ ${renderTabla('Cuenta Mayorista', mayorista, balanceMay)}
           </Dialog>
 
           {/* Panel: Verificar pago (cobros de cobrador ya aplicados, pendientes de revisión) */}
-          <Dialog open={authPanelOpen} onOpenChange={setAuthPanelOpen}>
+          <Dialog open={authPanelOpen} onOpenChange={(open) => { setAuthPanelOpen(open); if (!open) setAuthPreviewUrl(null) }}>
             <DialogContent className="sm:max-w-3xl max-h-[85vh] overflow-y-auto">
               <DialogHeader>
                 <div className="flex items-center justify-between gap-2 pr-6">
@@ -2730,6 +2806,20 @@ ${renderTabla('Cuenta Mayorista', mayorista, balanceMay)}
               </DialogHeader>
               {loadingAuthPanel ? (
                 <div className="flex justify-center py-6"><Loader2 className="h-5 w-5 animate-spin text-muted-foreground" /></div>
+              ) : authPreviewUrl ? (
+                <div className="flex flex-col items-center gap-3 py-2">
+                  <button
+                    type="button"
+                    onClick={() => setAuthPreviewUrl(null)}
+                    className="self-start text-sm text-muted-foreground hover:text-foreground inline-flex items-center gap-1"
+                  >
+                    <ChevronLeft className="h-4 w-4" /> Volver
+                  </button>
+                  <img src={authPreviewUrl} alt="Comprobante" className="max-h-[60vh] w-auto rounded-lg object-contain" />
+                  <a href={authPreviewUrl} target="_blank" rel="noopener noreferrer" className="text-sm text-teal-600 hover:underline inline-flex items-center gap-1">
+                    Abrir en nueva pestaña <ExternalLink className="h-3 w-3" />
+                  </a>
+                </div>
               ) : pendingAuth.length === 0 ? (
                 <p className="text-sm text-muted-foreground text-center py-6">No hay cobros pendientes de revisión.</p>
               ) : (
@@ -2759,7 +2849,7 @@ ${renderTabla('Cuenta Mayorista', mayorista, balanceMay)}
                               <button
                                 type="button"
                                 className="inline-flex items-center text-teal-600 hover:text-teal-700"
-                                onClick={() => window.open(comp.fileUrl, '_blank', 'noopener,noreferrer')}
+                                onClick={() => setAuthPreviewUrl(comp.fileUrl)}
                                 title="Ver comprobante"
                               >
                                 <ImageIcon className="h-4 w-4" />
