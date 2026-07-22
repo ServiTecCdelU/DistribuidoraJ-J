@@ -207,8 +207,13 @@ export const deletePayment = async (txId: string): Promise<void> => {
   const amount = Number(tx.amount)
   const balanceCol = cuenta === 'minorista' ? 'current_balance' : 'current_balance_mayorista'
 
-  // Borrar el pago primero
-  await supabase.from('transacciones').delete().eq('id', txId)
+  // Borrar primero cualquier comprobante vinculado (FK hacia esta transacción), si no,
+  // el delete de abajo falla por violar la constraint y el pago queda sin borrarse.
+  await supabase.from('comprobantes_pago').delete().eq('transaction_id', txId)
+
+  // Borrar el pago
+  const { error: deleteError } = await supabase.from('transacciones').delete().eq('id', txId)
+  if (deleteError) throw new Error(`No se pudo eliminar el pago: ${deleteError.message}`)
 
   // Devolver el monto al saldo del cliente
   const { data: client } = await supabase
