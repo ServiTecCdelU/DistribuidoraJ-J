@@ -545,7 +545,7 @@ export const cobranzasApi = {
     sellerId: string
     amount: number
     notes?: string
-    file: File
+    file?: File
     transactionId: string
     reviewedBy: string
   }) {

@@ -286,45 +286,52 @@ export const uploadComprobantePagoAdmin = async (data: {
   }
 }
 
-// Sube un comprobante ya asociado a un pago que el cobrador acaba de registrar
-// (el pago/transacción y el descuento de saldo ya se hicieron via registerCashPayment;
-// esto solo deja constancia del archivo, sin pasar por el flujo de aprobación pendiente).
+// Deja constancia de un pago que el cobrador acaba de registrar (el pago/transacción
+// y el descuento de saldo ya se hicieron via registerCashPayment). Queda pendiente de
+// autorización del admin ("Verificar pago"), tenga o no comprobante adjunto (ej: efectivo).
 export const uploadComprobanteAprobado = async (data: {
   clientId: string
   sellerId: string
   amount: number
   notes?: string
-  file: File
+  file?: File
   transactionId: string
   reviewedBy: string
 }): Promise<ComprobantePago> => {
-  const ext = data.file.name.split('.').pop() || 'jpg'
-  const path = `${data.sellerId}/${Date.now()}.${ext}`
-  const { error: uploadError } = await supabase.storage
-    .from('comprobantes')
-    .upload(path, data.file, { upsert: false })
+  let fileUrl = ''
+  let fileName: string | undefined
 
-  if (uploadError) throw new Error(`Error subiendo archivo: ${uploadError.message}`)
+  if (data.file) {
+    const ext = data.file.name.split('.').pop() || 'jpg'
+    const path = `${data.sellerId}/${Date.now()}.${ext}`
+    const { error: uploadError } = await supabase.storage
+      .from('comprobantes')
+      .upload(path, data.file, { upsert: false })
 
-  const { data: urlData } = supabase.storage.from('comprobantes').getPublicUrl(path)
-  const fileUrl = urlData.publicUrl
+    if (uploadError) throw new Error(`Error subiendo archivo: ${uploadError.message}`)
+
+    const { data: urlData } = supabase.storage.from('comprobantes').getPublicUrl(path)
+    fileUrl = urlData.publicUrl
+    fileName = data.file.name
+  }
 
   const docId = await generateReadableId('comprobantes_pago', 'comp', `${data.clientId}`)
   const reviewedAt = new Date()
-  await supabase.from('comprobantes_pago').insert({
+  const { error: insertError } = await supabase.from('comprobantes_pago').insert({
     id: docId,
     client_id: data.clientId,
     seller_id: data.sellerId,
     amount: data.amount,
     notes: data.notes || null,
     file_url: fileUrl,
-    file_name: data.file.name,
+    file_name: fileName || null,
     status: 'approved',
     reviewed_at: reviewedAt.toISOString(),
     reviewed_by: data.reviewedBy,
     transaction_id: data.transactionId,
     via_cobrador: true,
   })
+  if (insertError) throw new Error(`Error registrando cobro pendiente de verificación: ${insertError.message}`)
 
   return {
     id: docId,
@@ -333,7 +340,7 @@ export const uploadComprobanteAprobado = async (data: {
     amount: data.amount,
     notes: data.notes,
     fileUrl,
-    fileName: data.file.name,
+    fileName,
     status: 'approved',
     reviewedAt,
     reviewedBy: data.reviewedBy,

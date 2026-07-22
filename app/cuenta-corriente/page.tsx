@@ -471,14 +471,14 @@ export default function CuentaCorrientePage() {
       // Recibo numerado: generar PDF, guardarlo y descargarlo
       await emitirRecibo(txPago, selectedClient.currentBalance, methods[payMethod] || methods.otro)
 
-      // Cobrador: dejar constancia del comprobante adjunto, ya vinculado al pago recién registrado
-      if (isCobrador && payComprobante && user.sellerId) {
+      // Cobrador: dejar el cobro pendiente de verificación del admin (con o sin comprobante adjunto)
+      if (isCobrador && user.sellerId) {
         const comp = await cobranzasApi.uploadComprobanteAprobado({
           clientId: selectedClient.id,
           sellerId: user.sellerId,
           amount,
           notes: payNotes || undefined,
-          file: payComprobante,
+          file: payComprobante || undefined,
           transactionId: txPago.id,
           reviewedBy: user.name,
         })
