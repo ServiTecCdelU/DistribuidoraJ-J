@@ -120,24 +120,35 @@ export function OrderDetailModal({
   const [downloading, setDownloading] = useState<"invoice" | "remito" | null>(null);
   const [deletingRemito, setDeletingRemito] = useState(false);
   const [showProducts, setShowProducts] = useState(false);
-  // Descuentos por producto editables (solo admin con el pedido en pendiente).
+  // Descuentos y cantidades por producto editables (solo admin con el pedido en pendiente).
   const [descItems, setDescItems] = useState<Record<number, number>>({});
+  const [qtyItems, setQtyItems] = useState<Record<number, number>>({});
   const [guardandoDesc, setGuardandoDesc] = useState(false);
 
   const puedeEditarDesc = userRole === "admin" && order?.status === "pending" && !!onUpdateItems;
 
   useEffect(() => { setShowProducts(false); }, [order?.id]);
   useEffect(() => {
-    const init: Record<number, number> = {};
-    (order?.items ?? []).forEach((it, i) => { init[i] = it.itemDiscount ?? 0; });
-    setDescItems(init);
+    const initDesc: Record<number, number> = {};
+    const initQty: Record<number, number> = {};
+    (order?.items ?? []).forEach((it, i) => {
+      initDesc[i] = it.itemDiscount ?? 0;
+      initQty[i] = it.quantity;
+    });
+    setDescItems(initDesc);
+    setQtyItems(initQty);
   }, [order?.id]);
 
-  const descSucio = !!order && hayCambiosDescuento(order.items as any[], descItems);
+  const qtySucio = !!order && order.items.some((it, i) => (qtyItems[i] ?? it.quantity) !== it.quantity);
+  const descSucio = (!!order && hayCambiosDescuento(order.items as any[], descItems)) || qtySucio;
 
   const guardarDescuentos = async () => {
     if (!order || !onUpdateItems) return;
-    const nuevosItems = aplicarDescuentosItems(order.items as any[], descItems);
+    const conDescuento = aplicarDescuentosItems(order.items as any[], descItems);
+    const nuevosItems = conDescuento.map((it, i) => ({
+      ...it,
+      quantity: Math.max(1, Math.round(qtyItems[i] ?? it.quantity)),
+    }));
     setGuardandoDesc(true);
     try {
       await onUpdateItems(order.id, nuevosItems as Order["items"]);
@@ -346,12 +357,28 @@ export function OrderDetailModal({
                   <tbody>
                     {order.items.map((item, index) => {
                       const dto = puedeEditarDesc ? (descItems[index] ?? 0) : (item.itemDiscount ?? 0);
+                      const qty = puedeEditarDesc ? (qtyItems[index] ?? item.quantity) : item.quantity;
                       const precioConDto = item.price * (1 - dto / 100);
-                      const subtotal = precioConDto * item.quantity;
+                      const subtotal = precioConDto * qty;
                       return (
                         <tr key={index} className="border-b border-gray-100 last:border-0 hover:bg-gray-50/50 transition-colors align-middle">
                           <td className="px-2 py-2 font-medium text-gray-900 truncate">{item.name}</td>
-                          <td className="px-1.5 py-2 text-center text-gray-700 font-mono">{item.quantity}</td>
+                          <td className="px-1.5 py-2 text-center text-gray-700 font-mono">
+                            {puedeEditarDesc ? (
+                              <input
+                                type="number"
+                                min={1}
+                                value={qtyItems[index] ?? item.quantity}
+                                onChange={(e) => {
+                                  const v = Math.max(1, Number(e.target.value) || 1);
+                                  setQtyItems((prev) => ({ ...prev, [index]: v }));
+                                }}
+                                className="w-12 text-center text-xs border border-gray-300 rounded-md px-1 py-1 focus:border-emerald-400 focus:ring-1 focus:ring-emerald-200 outline-none"
+                              />
+                            ) : (
+                              item.quantity
+                            )}
+                          </td>
                           <td className="px-1.5 py-2 text-right text-gray-700 whitespace-nowrap">
                             {dto > 0
                               ? <span className="flex flex-col items-end leading-tight"><s className="text-[10px] text-gray-400">{formatPrice(item.price)}</s><span className="font-medium">{formatPrice(precioConDto)}</span></span>
@@ -386,9 +413,13 @@ export function OrderDetailModal({
                   </tbody>
                   <tfoot>
                     {(() => {
-                      const subtotalBruto = order.items.reduce((acc, i) => acc + i.price * i.quantity, 0);
+                      const subtotalBruto = order.items.reduce((acc, i, idx) => {
+                        const qty = puedeEditarDesc ? (qtyItems[idx] ?? i.quantity) : i.quantity;
+                        return acc + i.price * qty;
+                      }, 0);
                       const subtotalConItemDtos = order.items.reduce((acc, i, idx) => {
-                        const base = i.price * i.quantity;
+                        const qty = puedeEditarDesc ? (qtyItems[idx] ?? i.quantity) : i.quantity;
+                        const base = i.price * qty;
                         const dtoPct = puedeEditarDesc ? (descItems[idx] ?? 0) : (i.itemDiscount ?? 0);
                         const dto = dtoPct ? (base * dtoPct) / 100 : 0;
                         return acc + base - dto;
@@ -440,8 +471,8 @@ export function OrderDetailModal({
             <div className="flex items-center justify-between gap-2 rounded-xl border border-emerald-200 bg-emerald-50/50 px-3 py-2.5">
               <p className="text-[11px] text-emerald-700">
                 {showProducts
-                  ? "Editá el % de descuento de cada producto y guardá."
-                  : "Abrí «Ver productos» para editar el descuento de cada uno."}
+                  ? "Editá la cantidad o el % de descuento de cada producto y guardá."
+                  : "Abrí «Ver productos» para editar la cantidad o el descuento de cada uno."}
               </p>
               <Button onClick={guardarDescuentos} disabled={guardandoDesc || !descSucio} className="h-9 shrink-0">
                 {guardandoDesc ? <Loader2 className="h-4 w-4 animate-spin" /> : "Guardar descuentos"}
