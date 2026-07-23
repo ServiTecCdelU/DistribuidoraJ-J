@@ -89,6 +89,7 @@ export interface ProductSearchParams {
   search?: string
   category?: string
   stockFilter?: 'all' | 'available' | 'low' | 'out'
+  origenFilter?: 'all' | 'manual' | 'mayorista'
   page?: number
   pageSize?: number
 }
@@ -102,7 +103,7 @@ export interface ProductSearchResult {
 }
 
 export const searchProducts = async (params: ProductSearchParams): Promise<ProductSearchResult> => {
-  const { search, category, stockFilter, page = 1, pageSize = 10 } = params
+  const { search, category, stockFilter, origenFilter, page = 1, pageSize = 10 } = params
   const from = (page - 1) * pageSize
   const to = from + pageSize - 1
 
@@ -121,6 +122,11 @@ export const searchProducts = async (params: ProductSearchParams): Promise<Produ
     if (stockFilter === 'available') query = query.gt('stock', 0)
     else if (stockFilter === 'low') query = query.gt('stock', 0).lt('stock', 10)
     else if (stockFilter === 'out') query = query.eq('stock', 0)
+  }
+  if (origenFilter === 'mayorista') {
+    query = query.like('id', 'prod\\_%')
+  } else if (origenFilter === 'manual') {
+    query = query.not('id', 'like', 'prod\\_%')
   }
 
   query = query.range(from, to)

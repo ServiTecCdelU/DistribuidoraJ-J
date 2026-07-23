@@ -220,6 +220,7 @@ export default function ProductosPage() {
         search: search || undefined,
         category: category !== 'all' ? category : undefined,
         stockFilter: stock as any,
+        origenFilter: origenFilter !== 'all' ? origenFilter : undefined,
         page,
         pageSize,
       });
@@ -233,12 +234,12 @@ export default function ProductosPage() {
     } finally {
       setLoading(false);
     }
-  }, [pageSize]);
+  }, [pageSize, origenFilter]);
 
   useEffect(() => {
     fetchProducts(currentPage, searchQuery, categoryFilter, stockFilter);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [currentPage, searchQuery, categoryFilter, stockFilter, pageSize]);
+  }, [currentPage, searchQuery, categoryFilter, stockFilter, origenFilter, pageSize]);
 
   useEffect(() => {
     loadStockHistory();
@@ -1049,13 +1050,9 @@ tr.cat td{border:none}
           matchesPrice = product.price > 20000;
           break;
       }
-      const isMayorista = product.id.startsWith("prod_");
-      const matchesOrigen =
-        origenFilter === "all" ||
-        (origenFilter === "mayorista" ? isMayorista : !isMayorista);
-      return matchesPrice && matchesOrigen;
+      return matchesPrice;
     });
-  }, [products, priceFilter, origenFilter]);
+  }, [products, priceFilter]);
 
   const [stats, setStats] = useState({
     totalProducts: 0,
@@ -1102,7 +1099,7 @@ tr.cat td{border:none}
   // Reset page when filters change
   useEffect(() => {
     setCurrentPage(1);
-  }, [searchQuery, categoryFilter, priceFilter, stockFilter]);
+  }, [searchQuery, categoryFilter, priceFilter, stockFilter, origenFilter]);
 
   const paginatedProducts = filteredProducts;
 
