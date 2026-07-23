@@ -83,6 +83,7 @@ import { toast } from "sonner";
 type PriceFilter = "all" | "0-5000" | "5001-10000" | "10001-20000" | "20001+";
 type StockFilter = "all" | "available" | "low" | "out";
 type OrigenFilter = "all" | "manual" | "mayorista";
+type EstadoFilter = "all" | "activos" | "desactivados";
 type CategoryFilter = string;
 interface RankingItem {
   id: string;
@@ -159,6 +160,7 @@ export default function ProductosPage() {
   const [priceFilter, setPriceFilter] = useState<PriceFilter>("all");
   const [stockFilter, setStockFilter] = useState<StockFilter>("all");
   const [origenFilter, setOrigenFilter] = useState<OrigenFilter>("all");
+  const [estadoFilter, setEstadoFilter] = useState<EstadoFilter>("all");
   const [habilitadosIds, setHabilitadosIds] = useState<Set<string>>(new Set());
   const [selectedProducts, setSelectedProducts] = useState<string[]>([]);
   const [showFilters, setShowFilters] = useState(false);
@@ -222,6 +224,7 @@ export default function ProductosPage() {
         stockFilter: stock as any,
         origenFilter: origenFilter !== 'all' ? origenFilter : undefined,
         priceFilter: priceFilter !== 'all' ? priceFilter : undefined,
+        estadoFilter: estadoFilter !== 'all' ? estadoFilter : undefined,
         page,
         pageSize,
       });
@@ -235,12 +238,12 @@ export default function ProductosPage() {
     } finally {
       setLoading(false);
     }
-  }, [pageSize, origenFilter, priceFilter]);
+  }, [pageSize, origenFilter, priceFilter, estadoFilter]);
 
   useEffect(() => {
     fetchProducts(currentPage, searchQuery, categoryFilter, stockFilter);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [currentPage, searchQuery, categoryFilter, stockFilter, origenFilter, priceFilter, pageSize]);
+  }, [currentPage, searchQuery, categoryFilter, stockFilter, origenFilter, priceFilter, estadoFilter, pageSize]);
 
   useEffect(() => {
     loadStockHistory();
@@ -1081,7 +1084,7 @@ tr.cat td{border:none}
   // Reset page when filters change
   useEffect(() => {
     setCurrentPage(1);
-  }, [searchQuery, categoryFilter, priceFilter, stockFilter, origenFilter]);
+  }, [searchQuery, categoryFilter, priceFilter, stockFilter, origenFilter, estadoFilter]);
 
   const paginatedProducts = filteredProducts;
 
@@ -1113,6 +1116,7 @@ tr.cat td{border:none}
     priceFilter !== "all",
     stockFilter !== "all",
     origenFilter !== "all",
+    estadoFilter !== "all",
   ].filter(Boolean).length;
 
   const clearFilters = () => {
@@ -1120,6 +1124,7 @@ tr.cat td{border:none}
     setPriceFilter("all");
     setStockFilter("all");
     setOrigenFilter("all");
+    setEstadoFilter("all");
     setSearchInput("");
     setSearchQuery("");
   };
@@ -1469,6 +1474,26 @@ tr.cat td{border:none}
                   <SelectItem value="all">Todos</SelectItem>
                   <SelectItem value="manual">Creados manualmente</SelectItem>
                   <SelectItem value="mayorista">De mayorista</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+
+            {/* Estado */}
+            <div className="space-y-1">
+              <label className="text-xs font-medium text-muted-foreground">
+                Estado
+              </label>
+              <Select
+                value={estadoFilter}
+                onValueChange={(v) => setEstadoFilter(v as EstadoFilter)}
+              >
+                <SelectTrigger className="h-9 text-xs">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">Todos</SelectItem>
+                  <SelectItem value="activos">Activados</SelectItem>
+                  <SelectItem value="desactivados">Desactivados</SelectItem>
                 </SelectContent>
               </Select>
             </div>
