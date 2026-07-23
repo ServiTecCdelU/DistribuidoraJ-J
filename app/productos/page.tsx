@@ -221,6 +221,7 @@ export default function ProductosPage() {
         category: category !== 'all' ? category : undefined,
         stockFilter: stock as any,
         origenFilter: origenFilter !== 'all' ? origenFilter : undefined,
+        priceFilter: priceFilter !== 'all' ? priceFilter : undefined,
         page,
         pageSize,
       });
@@ -234,12 +235,12 @@ export default function ProductosPage() {
     } finally {
       setLoading(false);
     }
-  }, [pageSize, origenFilter]);
+  }, [pageSize, origenFilter, priceFilter]);
 
   useEffect(() => {
     fetchProducts(currentPage, searchQuery, categoryFilter, stockFilter);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [currentPage, searchQuery, categoryFilter, stockFilter, origenFilter, pageSize]);
+  }, [currentPage, searchQuery, categoryFilter, stockFilter, origenFilter, priceFilter, pageSize]);
 
   useEffect(() => {
     loadStockHistory();
@@ -1032,27 +1033,8 @@ tr.cat td{border:none}
     setShowStockHistory(true);
   };
 
-  // Filtros client-side que no están en server (precio)
-  const filteredProducts = useMemo(() => {
-    return products.filter((product) => {
-      let matchesPrice = true;
-      switch (priceFilter) {
-        case "0-5000":
-          matchesPrice = product.price <= 5000;
-          break;
-        case "5001-10000":
-          matchesPrice = product.price > 5000 && product.price <= 10000;
-          break;
-        case "10001-20000":
-          matchesPrice = product.price > 10000 && product.price <= 20000;
-          break;
-        case "20001+":
-          matchesPrice = product.price > 20000;
-          break;
-      }
-      return matchesPrice;
-    });
-  }, [products, priceFilter]);
+  // Todos los filtros (categoría, stock, origen, precio) ya se aplican en el servidor
+  const filteredProducts = products;
 
   const [stats, setStats] = useState({
     totalProducts: 0,

@@ -90,6 +90,7 @@ export interface ProductSearchParams {
   category?: string
   stockFilter?: 'all' | 'available' | 'low' | 'out'
   origenFilter?: 'all' | 'manual' | 'mayorista'
+  priceFilter?: 'all' | '0-5000' | '5001-10000' | '10001-20000' | '20001+'
   page?: number
   pageSize?: number
 }
@@ -103,7 +104,7 @@ export interface ProductSearchResult {
 }
 
 export const searchProducts = async (params: ProductSearchParams): Promise<ProductSearchResult> => {
-  const { search, category, stockFilter, origenFilter, page = 1, pageSize = 10 } = params
+  const { search, category, stockFilter, origenFilter, priceFilter, page = 1, pageSize = 10 } = params
   const from = (page - 1) * pageSize
   const to = from + pageSize - 1
 
@@ -127,6 +128,12 @@ export const searchProducts = async (params: ProductSearchParams): Promise<Produ
     query = query.like('id', 'prod\\_%')
   } else if (origenFilter === 'manual') {
     query = query.not('id', 'like', 'prod\\_%')
+  }
+  if (priceFilter && priceFilter !== 'all') {
+    if (priceFilter === '0-5000') query = query.lte('price', 5000)
+    else if (priceFilter === '5001-10000') query = query.gt('price', 5000).lte('price', 10000)
+    else if (priceFilter === '10001-20000') query = query.gt('price', 10000).lte('price', 20000)
+    else if (priceFilter === '20001+') query = query.gt('price', 20000)
   }
 
   query = query.range(from, to)
