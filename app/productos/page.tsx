@@ -83,8 +83,6 @@ import { toast } from "sonner";
 type PriceFilter = "all" | "0-5000" | "5001-10000" | "10001-20000" | "20001+";
 type StockFilter = "all" | "available" | "low" | "out";
 type CategoryFilter = string;
-type MarcaFilter = string;
-
 interface RankingItem {
   id: string;
   name: string;
@@ -159,7 +157,6 @@ export default function ProductosPage() {
   const [categoryFilter, setCategoryFilter] = useState<CategoryFilter>("all");
   const [priceFilter, setPriceFilter] = useState<PriceFilter>("all");
   const [stockFilter, setStockFilter] = useState<StockFilter>("all");
-  const [marcaFilter, setMarcaFilter] = useState<MarcaFilter>("all");
   const [habilitadosIds, setHabilitadosIds] = useState<Set<string>>(new Set());
   const [selectedProducts, setSelectedProducts] = useState<string[]>([]);
   const [showFilters, setShowFilters] = useState(false);
@@ -1046,10 +1043,9 @@ tr.cat td{border:none}
           matchesPrice = product.price > 20000;
           break;
       }
-      const matchesMarca = marcaFilter === "all" || (product as any).marca === marcaFilter;
-      return matchesPrice && matchesMarca;
+      return matchesPrice;
     });
-  }, [products, priceFilter, marcaFilter]);
+  }, [products, priceFilter]);
 
   const [stats, setStats] = useState({
     totalProducts: 0,
@@ -1073,7 +1069,17 @@ tr.cat td{border:none}
 
   useEffect(() => {
     loadGananciaDistinta();
+    loadRanking();
   }, []);
+
+  const stockPct = useMemo(() => {
+    const total = stats.totalProducts || 0;
+    if (total === 0) return { disponible: 0, bajo: 0, sin: 0 };
+    const bajo = Math.round((stats.lowStockCount / total) * 100);
+    const sin = Math.round((stats.outOfStockCount / total) * 100);
+    const disponible = Math.max(0, 100 - bajo - sin);
+    return { disponible, bajo, sin };
+  }, [stats.totalProducts, stats.lowStockCount, stats.outOfStockCount]);
 
   // Un % individual que coincide con el % normalizado vigente (global o medicamentos) no cuenta como "distinto"
   const esGananciaDistinta = (product: Product) => {
@@ -1117,22 +1123,15 @@ tr.cat td{border:none}
     categoryFilter !== "all",
     priceFilter !== "all",
     stockFilter !== "all",
-    marcaFilter !== "all",
   ].filter(Boolean).length;
 
   const clearFilters = () => {
     setCategoryFilter("all");
     setPriceFilter("all");
     setStockFilter("all");
-    setMarcaFilter("all");
     setSearchInput("");
     setSearchQuery("");
   };
-
-  const availableMarcasFilter = useMemo(
-    () => [...new Set(products.map((p) => (p as any).marca).filter(Boolean))].sort(),
-    [products],
-  );
 
   const toggleProductSelection = (productId: string) => {
     setSelectedProducts((prev) =>
@@ -1462,27 +1461,6 @@ tr.cat td{border:none}
                 </SelectContent>
               </Select>
             </div>
-
-            {/* Marca */}
-            <div className="space-y-1">
-              <label className="text-xs font-medium text-muted-foreground">
-                Marca
-              </label>
-              <Select
-                value={marcaFilter}
-                onValueChange={(v) => setMarcaFilter(v)}
-              >
-                <SelectTrigger className="h-9 text-xs">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">Todas</SelectItem>
-                  {availableMarcasFilter.map((m) => (
-                    <SelectItem key={m} value={m}>{m}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
           </div>
 
           <div className="mt-3 pt-3 border-t border-border">
@@ -1506,14 +1484,14 @@ tr.cat td{border:none}
 
       {/* Estadísticas - Responsive */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-2 sm:gap-3 mb-4 sm:mb-6">
-        {/* Total + valor de inventario combinados */}
+        {/* Total + valor de inventario, con composición de stock */}
         <button
           type="button"
           onClick={clearFilters}
-          className="text-left rounded-xl bg-primary/5 border border-primary/20 dark:bg-primary/10 dark:border-primary/30 p-3 sm:p-4 hover:bg-primary/10 transition-colors"
+          className="group text-left rounded-2xl bg-primary/5 border border-primary/20 dark:bg-primary/10 dark:border-primary/30 p-3.5 sm:p-4 shadow-sm hover:shadow-lg hover:-translate-y-0.5 hover:bg-primary/10 transition-all duration-200 flex flex-col justify-between"
         >
           <div className="flex items-center gap-2 sm:gap-3">
-            <div className="h-8 w-8 sm:h-10 sm:w-10 rounded-lg bg-primary/10 dark:bg-primary/20 flex items-center justify-center flex-shrink-0">
+            <div className="h-9 w-9 sm:h-11 sm:w-11 rounded-xl bg-primary/15 dark:bg-primary/25 flex items-center justify-center flex-shrink-0 transition-transform duration-200 group-hover:scale-110">
               <Package className="h-4 w-4 sm:h-5 sm:w-5 text-primary" />
             </div>
             <div className="min-w-0">
@@ -1522,10 +1500,29 @@ tr.cat td{border:none}
               </p>
               <p className="text-lg sm:text-2xl font-bold text-foreground truncate">
                 {stats.totalProducts}
-                <span className="text-xs sm:text-sm font-medium text-muted-foreground ml-1.5">
-                  · {formatCompactNumber(stats.totalInventoryValue)}
-                </span>
               </p>
+            </div>
+          </div>
+          <div className="mt-2.5">
+            <p className="text-[11px] sm:text-xs text-muted-foreground mb-1">
+              Valor de inventario: <span className="font-semibold text-foreground">{formatCompactNumber(stats.totalInventoryValue)}</span>
+            </p>
+            <div className="h-1.5 w-full rounded-full bg-muted overflow-hidden flex">
+              <div
+                className="h-full bg-success"
+                style={{ width: `${stockPct.disponible}%` }}
+                title={`Disponible: ${stockPct.disponible}%`}
+              />
+              <div
+                className="h-full bg-warning"
+                style={{ width: `${stockPct.bajo}%` }}
+                title={`Bajo stock: ${stockPct.bajo}%`}
+              />
+              <div
+                className="h-full bg-destructive"
+                style={{ width: `${stockPct.sin}%` }}
+                title={`Sin stock: ${stockPct.sin}%`}
+              />
             </div>
           </div>
         </button>
@@ -1534,10 +1531,10 @@ tr.cat td{border:none}
         <button
           type="button"
           onClick={() => { setShowFilters(true); setStockFilter("low"); }}
-          className="text-left rounded-xl bg-warning/5 border border-warning/20 dark:bg-warning/10 dark:border-warning/30 p-3 sm:p-4 hover:bg-warning/10 transition-colors"
+          className="group text-left rounded-2xl bg-warning/5 border border-warning/20 dark:bg-warning/10 dark:border-warning/30 p-3.5 sm:p-4 shadow-sm hover:shadow-lg hover:-translate-y-0.5 hover:bg-warning/10 transition-all duration-200 flex flex-col justify-between"
         >
           <div className="flex items-center gap-2 sm:gap-3">
-            <div className="h-8 w-8 sm:h-10 sm:w-10 rounded-lg bg-warning/10 dark:bg-warning/20 flex items-center justify-center flex-shrink-0">
+            <div className="h-9 w-9 sm:h-11 sm:w-11 rounded-xl bg-warning/15 dark:bg-warning/25 flex items-center justify-center flex-shrink-0 transition-transform duration-200 group-hover:scale-110">
               <AlertCircle className="h-4 w-4 sm:h-5 sm:w-5 text-warning" />
             </div>
             <div>
@@ -1549,16 +1546,24 @@ tr.cat td{border:none}
               </p>
             </div>
           </div>
+          <div className="mt-2.5">
+            <p className="text-[11px] sm:text-xs text-muted-foreground mb-1">
+              {stockPct.bajo}% del catálogo
+            </p>
+            <div className="h-1.5 w-full rounded-full bg-muted overflow-hidden">
+              <div className="h-full bg-warning rounded-full" style={{ width: `${stockPct.bajo}%` }} />
+            </div>
+          </div>
         </button>
 
         {/* Sin stock — filtra la lista */}
         <button
           type="button"
           onClick={() => { setShowFilters(true); setStockFilter("out"); }}
-          className="text-left rounded-xl bg-destructive/5 border border-destructive/20 dark:bg-destructive/10 dark:border-destructive/30 p-3 sm:p-4 hover:bg-destructive/10 transition-colors"
+          className="group text-left rounded-2xl bg-destructive/5 border border-destructive/20 dark:bg-destructive/10 dark:border-destructive/30 p-3.5 sm:p-4 shadow-sm hover:shadow-lg hover:-translate-y-0.5 hover:bg-destructive/10 transition-all duration-200 flex flex-col justify-between"
         >
           <div className="flex items-center gap-2 sm:gap-3">
-            <div className="h-8 w-8 sm:h-10 sm:w-10 rounded-lg bg-destructive/10 dark:bg-destructive/20 flex items-center justify-center flex-shrink-0">
+            <div className="h-9 w-9 sm:h-11 sm:w-11 rounded-xl bg-destructive/15 dark:bg-destructive/25 flex items-center justify-center flex-shrink-0 transition-transform duration-200 group-hover:scale-110">
               <X className="h-4 w-4 sm:h-5 sm:w-5 text-destructive" />
             </div>
             <div>
@@ -1570,26 +1575,55 @@ tr.cat td{border:none}
               </p>
             </div>
           </div>
+          <div className="mt-2.5">
+            <p className="text-[11px] sm:text-xs text-muted-foreground mb-1">
+              {stockPct.sin}% del catálogo
+            </p>
+            <div className="h-1.5 w-full rounded-full bg-muted overflow-hidden">
+              <div className="h-full bg-destructive rounded-full" style={{ width: `${stockPct.sin}%` }} />
+            </div>
+          </div>
         </button>
 
-        {/* Más / menos vendidos — abre ranking */}
+        {/* Más vendidos — mini ranking + abre modal completo */}
         <button
           type="button"
           onClick={() => { setRankingOpen(true); setRankingTab("mas"); loadRanking(); }}
-          className="text-left rounded-xl bg-success/5 border border-success/20 dark:bg-success/10 dark:border-success/30 p-3 sm:p-4 hover:bg-success/10 transition-colors"
+          className="group text-left rounded-2xl bg-success/5 border border-success/20 dark:bg-success/10 dark:border-success/30 p-3.5 sm:p-4 shadow-sm hover:shadow-lg hover:-translate-y-0.5 hover:bg-success/10 transition-all duration-200 flex flex-col justify-between"
         >
           <div className="flex items-center gap-2 sm:gap-3">
-            <div className="h-8 w-8 sm:h-10 sm:w-10 rounded-lg bg-success/10 dark:bg-success/20 flex items-center justify-center flex-shrink-0">
+            <div className="h-9 w-9 sm:h-11 sm:w-11 rounded-xl bg-success/15 dark:bg-success/25 flex items-center justify-center flex-shrink-0 transition-transform duration-200 group-hover:scale-110">
               <TrendingUp className="h-4 w-4 sm:h-5 sm:w-5 text-success" />
             </div>
             <div className="min-w-0">
               <p className="text-[10px] sm:text-sm text-muted-foreground">
-                Ranking de ventas
+                Más vendido
               </p>
               <p className="text-sm sm:text-lg font-bold text-foreground truncate">
-                Más / menos vendidos
+                {rankingMasVendidos[0]?.name ?? "Ver ranking"}
               </p>
             </div>
+          </div>
+          <div className="mt-2.5 space-y-1">
+            {rankingMasVendidos.length > 0 ? (
+              rankingMasVendidos.slice(0, 3).map((item, idx) => {
+                const max = rankingMasVendidos[0].soldCount || 1;
+                return (
+                  <div key={item.id} className="flex items-center gap-1.5">
+                    <span className="text-[10px] text-muted-foreground w-3 flex-shrink-0">{idx + 1}</span>
+                    <div className="h-1.5 flex-1 rounded-full bg-muted overflow-hidden">
+                      <div
+                        className="h-full bg-success rounded-full"
+                        style={{ width: `${Math.max(6, Math.round((item.soldCount / max) * 100))}%` }}
+                      />
+                    </div>
+                    <span className="text-[10px] text-muted-foreground flex-shrink-0 tabular-nums">{item.soldCount}</span>
+                  </div>
+                );
+              })
+            ) : (
+              <p className="text-[11px] text-muted-foreground">Tocá para ver más y menos vendidos</p>
+            )}
           </div>
         </button>
       </div>
