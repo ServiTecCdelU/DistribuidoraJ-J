@@ -1135,9 +1135,9 @@ export function ProductModal({
             </Button>
           </div>
 
-          {/* Mobile: habilitar/deshabilitar abajo de todo */}
+          {/* Habilitar/deshabilitar producto */}
           {isEditing && onToggleDisabled && (
-            <div className="md:hidden pt-2">
+            <div className="pt-2">
               <Button
                 type="button"
                 variant="outline"
