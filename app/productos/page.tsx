@@ -82,6 +82,7 @@ import { toast } from "sonner";
 // Tipos para los filtros
 type PriceFilter = "all" | "0-5000" | "5001-10000" | "10001-20000" | "20001+";
 type StockFilter = "all" | "available" | "low" | "out";
+type OrigenFilter = "all" | "manual" | "mayorista";
 type CategoryFilter = string;
 interface RankingItem {
   id: string;
@@ -157,6 +158,7 @@ export default function ProductosPage() {
   const [categoryFilter, setCategoryFilter] = useState<CategoryFilter>("all");
   const [priceFilter, setPriceFilter] = useState<PriceFilter>("all");
   const [stockFilter, setStockFilter] = useState<StockFilter>("all");
+  const [origenFilter, setOrigenFilter] = useState<OrigenFilter>("all");
   const [habilitadosIds, setHabilitadosIds] = useState<Set<string>>(new Set());
   const [selectedProducts, setSelectedProducts] = useState<string[]>([]);
   const [showFilters, setShowFilters] = useState(false);
@@ -1047,9 +1049,13 @@ tr.cat td{border:none}
           matchesPrice = product.price > 20000;
           break;
       }
-      return matchesPrice;
+      const isMayorista = product.id.startsWith("prod_");
+      const matchesOrigen =
+        origenFilter === "all" ||
+        (origenFilter === "mayorista" ? isMayorista : !isMayorista);
+      return matchesPrice && matchesOrigen;
     });
-  }, [products, priceFilter]);
+  }, [products, priceFilter, origenFilter]);
 
   const [stats, setStats] = useState({
     totalProducts: 0,
@@ -1127,12 +1133,14 @@ tr.cat td{border:none}
     categoryFilter !== "all",
     priceFilter !== "all",
     stockFilter !== "all",
+    origenFilter !== "all",
   ].filter(Boolean).length;
 
   const clearFilters = () => {
     setCategoryFilter("all");
     setPriceFilter("all");
     setStockFilter("all");
+    setOrigenFilter("all");
     setSearchInput("");
     setSearchQuery("");
   };
@@ -1462,6 +1470,26 @@ tr.cat td{border:none}
                   <SelectItem value="available">Disponible</SelectItem>
                   <SelectItem value="low">Bajo stock</SelectItem>
                   <SelectItem value="out">Sin stock</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+
+            {/* Origen */}
+            <div className="space-y-1">
+              <label className="text-xs font-medium text-muted-foreground">
+                Origen
+              </label>
+              <Select
+                value={origenFilter}
+                onValueChange={(v) => setOrigenFilter(v as OrigenFilter)}
+              >
+                <SelectTrigger className="h-9 text-xs">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">Todos</SelectItem>
+                  <SelectItem value="manual">Creados manualmente</SelectItem>
+                  <SelectItem value="mayorista">De mayorista</SelectItem>
                 </SelectContent>
               </Select>
             </div>
