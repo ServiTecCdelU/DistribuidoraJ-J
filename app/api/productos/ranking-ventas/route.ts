@@ -45,16 +45,15 @@ export async function GET(req: NextRequest) {
       soldCount: countMap[p.id] || 0,
     }))
 
-    const masVendidos = [...conVentas].filter((p) => p.soldCount > 0).sort((a, b) => b.soldCount - a.soldCount).slice(0, 15)
-    const menosVendidos = [...conVentas].filter((p) => p.soldCount > 0).sort((a, b) => a.soldCount - b.soldCount).slice(0, 15)
-    const sinVenderTodos = conVentas.filter((p) => p.soldCount === 0)
-    const sinVender = sinVenderTodos.slice(0, 50)
+    const masVendidos = [...conVentas].filter((p) => p.soldCount > 0).sort((a, b) => b.soldCount - a.soldCount)
+    const menosVendidos = [...conVentas].filter((p) => p.soldCount > 0).sort((a, b) => a.soldCount - b.soldCount)
+    const sinVender = conVentas.filter((p) => p.soldCount === 0).sort((a, b) => a.name.localeCompare(b.name))
 
     return NextResponse.json({
       masVendidos,
       menosVendidos,
       sinVender,
-      sinVenderCount: sinVenderTodos.length,
+      sinVenderCount: sinVender.length,
     })
   } catch (err: any) {
     console.error('[ranking-ventas]', err)
