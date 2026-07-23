@@ -749,6 +749,23 @@ tr.cat td{border:none}
     setModalOpen(true);
   };
 
+  const handleEditFromGananciaDistinta = async (productId: string) => {
+    const enMemoria = products.find((p) => p.id === productId);
+    if (enMemoria) {
+      setGananciaDistintaOpen(false);
+      handleEdit(enMemoria);
+      return;
+    }
+    try {
+      const producto = await productsApi.getById(productId);
+      if (!producto) { toast.error("El producto ya no existe"); return; }
+      setGananciaDistintaOpen(false);
+      handleEdit(producto);
+    } catch {
+      toast.error("No se pudo abrir el producto");
+    }
+  };
+
   // NUEVO: Abrir diálogo de Deshabilitar
   const handleDeactivate = (product: Product) => {
     setProductToDeactivate(product);
@@ -2164,7 +2181,12 @@ tr.cat td{border:none}
               ) : (
                 <div className="divide-y">
                   {productosGananciaDistinta.map((p) => (
-                    <div key={p.id} className="py-2 flex items-center justify-between gap-3">
+                    <button
+                      key={p.id}
+                      type="button"
+                      onClick={() => handleEditFromGananciaDistinta(p.id)}
+                      className="w-full py-2 flex items-center justify-between gap-3 text-left hover:bg-muted/40 rounded-md px-1.5 -mx-1.5 transition-colors"
+                    >
                       <div className="min-w-0">
                         <p className="text-sm font-medium truncate">{p.name}</p>
                         <p className="text-xs text-muted-foreground truncate">{p.category}</p>
@@ -2173,7 +2195,7 @@ tr.cat td{border:none}
                         <Badge variant="secondary" className="text-xs">{p.gananciaGlobal}%</Badge>
                         <p className="text-xs text-muted-foreground mt-0.5">{formatCurrency(p.price)}</p>
                       </div>
-                    </div>
+                    </button>
                   ))}
                 </div>
               )
@@ -2184,7 +2206,12 @@ tr.cat td{border:none}
             ) : (
               <div className="divide-y">
                 {gananciaHistorial.map((h) => (
-                  <div key={h.id} className="py-2">
+                  <button
+                    key={h.id}
+                    type="button"
+                    onClick={() => handleEditFromGananciaDistinta(h.productoId)}
+                    className="w-full py-2 text-left hover:bg-muted/40 rounded-md px-1.5 -mx-1.5 transition-colors"
+                  >
                     <div className="flex items-center justify-between gap-3">
                       <p className="text-sm font-medium truncate">{h.productoNombre}</p>
                       <Badge variant="secondary" className="text-xs flex-shrink-0">
@@ -2194,7 +2221,7 @@ tr.cat td{border:none}
                     <p className="text-xs text-muted-foreground">
                       {h.categoria ? `${h.categoria} · ` : ""}{h.createdAt.toLocaleString("es-AR")}
                     </p>
-                  </div>
+                  </button>
                 ))}
               </div>
             )}
