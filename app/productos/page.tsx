@@ -160,7 +160,7 @@ export default function ProductosPage() {
   const [priceFilter, setPriceFilter] = useState<PriceFilter>("all");
   const [stockFilter, setStockFilter] = useState<StockFilter>("all");
   const [origenFilter, setOrigenFilter] = useState<OrigenFilter>("all");
-  const [estadoFilter, setEstadoFilter] = useState<EstadoFilter>("all");
+  const [estadoFilter, setEstadoFilter] = useState<EstadoFilter>("activos");
   const [habilitadosIds, setHabilitadosIds] = useState<Set<string>>(new Set());
   const [selectedProducts, setSelectedProducts] = useState<string[]>([]);
   const [showFilters, setShowFilters] = useState(false);
@@ -1116,7 +1116,7 @@ tr.cat td{border:none}
     priceFilter !== "all",
     stockFilter !== "all",
     origenFilter !== "all",
-    estadoFilter !== "all",
+    estadoFilter !== "activos",
   ].filter(Boolean).length;
 
   const clearFilters = () => {
@@ -1124,7 +1124,7 @@ tr.cat td{border:none}
     setPriceFilter("all");
     setStockFilter("all");
     setOrigenFilter("all");
-    setEstadoFilter("all");
+    setEstadoFilter("activos");
     setSearchInput("");
     setSearchQuery("");
   };
