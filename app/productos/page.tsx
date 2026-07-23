@@ -83,6 +83,16 @@ import { toast } from "sonner";
 type PriceFilter = "all" | "0-5000" | "5001-10000" | "10001-20000" | "20001+";
 type StockFilter = "all" | "available" | "low" | "out";
 type CategoryFilter = string;
+type MarcaFilter = string;
+
+interface RankingItem {
+  id: string;
+  name: string;
+  category: string;
+  price: number;
+  stock: number;
+  soldCount: number;
+}
 type ViewMode = "grid" | "list";
 
 // Tipos para historiales
@@ -149,6 +159,7 @@ export default function ProductosPage() {
   const [categoryFilter, setCategoryFilter] = useState<CategoryFilter>("all");
   const [priceFilter, setPriceFilter] = useState<PriceFilter>("all");
   const [stockFilter, setStockFilter] = useState<StockFilter>("all");
+  const [marcaFilter, setMarcaFilter] = useState<MarcaFilter>("all");
   const [habilitadosIds, setHabilitadosIds] = useState<Set<string>>(new Set());
   const [selectedProducts, setSelectedProducts] = useState<string[]>([]);
   const [showFilters, setShowFilters] = useState(false);
@@ -169,6 +180,13 @@ export default function ProductosPage() {
   const [gananciaHistorial, setGananciaHistorial] = useState<GananciaHistorialEntry[]>([]);
   const [loadingGananciaDistinta, setLoadingGananciaDistinta] = useState(false);
   const [gananciaDistintaTab, setGananciaDistintaTab] = useState<"productos" | "historial">("productos");
+
+  // Ranking de ventas (más / menos vendidos)
+  const [rankingOpen, setRankingOpen] = useState(false);
+  const [rankingTab, setRankingTab] = useState<"mas" | "menos">("mas");
+  const [rankingMasVendidos, setRankingMasVendidos] = useState<RankingItem[]>([]);
+  const [rankingMenosVendidos, setRankingMenosVendidos] = useState<RankingItem[]>([]);
+  const [loadingRanking, setLoadingRanking] = useState(false);
 
   // Exportar lista de precios a PDF
   const [exportandoPdf, setExportandoPdf] = useState(false);
@@ -663,6 +681,25 @@ tr.cat td{border:none}
     }
   };
 
+  const loadRanking = async () => {
+    setLoadingRanking(true);
+    try {
+      const token = await getAuthToken();
+      if (!token) throw new Error("No autenticado");
+      const res = await fetch("/api/productos/ranking-ventas", {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Error del servidor");
+      setRankingMasVendidos(data.masVendidos ?? []);
+      setRankingMenosVendidos(data.menosVendidos ?? []);
+    } catch (err: any) {
+      toast.error(err.message || "Error al cargar el ranking de ventas");
+    } finally {
+      setLoadingRanking(false);
+    }
+  };
+
   const loadGananciaDistinta = async () => {
     setLoadingGananciaDistinta(true);
     try {
@@ -1009,9 +1046,10 @@ tr.cat td{border:none}
           matchesPrice = product.price > 20000;
           break;
       }
-      return matchesPrice;
+      const matchesMarca = marcaFilter === "all" || (product as any).marca === marcaFilter;
+      return matchesPrice && matchesMarca;
     });
-  }, [products, priceFilter]);
+  }, [products, priceFilter, marcaFilter]);
 
   const [stats, setStats] = useState({
     totalProducts: 0,
@@ -1079,15 +1117,22 @@ tr.cat td{border:none}
     categoryFilter !== "all",
     priceFilter !== "all",
     stockFilter !== "all",
+    marcaFilter !== "all",
   ].filter(Boolean).length;
 
   const clearFilters = () => {
     setCategoryFilter("all");
     setPriceFilter("all");
     setStockFilter("all");
+    setMarcaFilter("all");
     setSearchInput("");
     setSearchQuery("");
   };
+
+  const availableMarcasFilter = useMemo(
+    () => [...new Set(products.map((p) => (p as any).marca).filter(Boolean))].sort(),
+    [products],
+  );
 
   const toggleProductSelection = (productId: string) => {
     setSelectedProducts((prev) =>
@@ -1417,6 +1462,27 @@ tr.cat td{border:none}
                 </SelectContent>
               </Select>
             </div>
+
+            {/* Marca */}
+            <div className="space-y-1">
+              <label className="text-xs font-medium text-muted-foreground">
+                Marca
+              </label>
+              <Select
+                value={marcaFilter}
+                onValueChange={(v) => setMarcaFilter(v)}
+              >
+                <SelectTrigger className="h-9 text-xs">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">Todas</SelectItem>
+                  {availableMarcasFilter.map((m) => (
+                    <SelectItem key={m} value={m}>{m}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
           </div>
 
           <div className="mt-3 pt-3 border-t border-border">
@@ -1440,57 +1506,59 @@ tr.cat td{border:none}
 
       {/* Estadísticas - Responsive */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-2 sm:gap-3 mb-4 sm:mb-6">
-        <div className="rounded-xl bg-primary/5 border border-primary/20 dark:bg-primary/10 dark:border-primary/30 p-3 sm:p-4">
+        {/* Total + valor de inventario combinados */}
+        <button
+          type="button"
+          onClick={clearFilters}
+          className="text-left rounded-xl bg-primary/5 border border-primary/20 dark:bg-primary/10 dark:border-primary/30 p-3 sm:p-4 hover:bg-primary/10 transition-colors"
+        >
           <div className="flex items-center gap-2 sm:gap-3">
-            <div className="h-8 w-8 sm:h-10 sm:w-10 rounded-lg bg-primary/10 dark:bg-primary/20 flex items-center justify-center">
+            <div className="h-8 w-8 sm:h-10 sm:w-10 rounded-lg bg-primary/10 dark:bg-primary/20 flex items-center justify-center flex-shrink-0">
               <Package className="h-4 w-4 sm:h-5 sm:w-5 text-primary" />
             </div>
-            <div>
+            <div className="min-w-0">
               <p className="text-[10px] sm:text-sm text-muted-foreground">
-                Total
-              </p>
-              <p className="text-lg sm:text-2xl font-bold text-foreground">
-                {stats.totalProducts}
-              </p>
-            </div>
-          </div>
-        </div>
-
-        <div className="rounded-xl bg-success/5 border border-success/20 dark:bg-success/10 dark:border-success/30 p-3 sm:p-4">
-          <div className="flex items-center gap-2 sm:gap-3">
-            <div className="h-8 w-8 sm:h-10 sm:w-10 rounded-lg bg-success/10 dark:bg-success/20 flex items-center justify-center">
-              <DollarSign className="h-4 w-4 sm:h-5 sm:w-5 text-success" />
-            </div>
-            <div>
-              <p className="text-[10px] sm:text-sm text-muted-foreground">
-                Valor
+                Total productos
               </p>
               <p className="text-lg sm:text-2xl font-bold text-foreground truncate">
-                {formatCompactNumber(stats.totalInventoryValue)}
+                {stats.totalProducts}
+                <span className="text-xs sm:text-sm font-medium text-muted-foreground ml-1.5">
+                  · {formatCompactNumber(stats.totalInventoryValue)}
+                </span>
               </p>
             </div>
           </div>
-        </div>
+        </button>
 
-        <div className="rounded-xl bg-warning/5 border border-warning/20 dark:bg-warning/10 dark:border-warning/30 p-3 sm:p-4">
+        {/* Bajo stock — filtra la lista */}
+        <button
+          type="button"
+          onClick={() => { setShowFilters(true); setStockFilter("low"); }}
+          className="text-left rounded-xl bg-warning/5 border border-warning/20 dark:bg-warning/10 dark:border-warning/30 p-3 sm:p-4 hover:bg-warning/10 transition-colors"
+        >
           <div className="flex items-center gap-2 sm:gap-3">
-            <div className="h-8 w-8 sm:h-10 sm:w-10 rounded-lg bg-warning/10 dark:bg-warning/20 flex items-center justify-center">
+            <div className="h-8 w-8 sm:h-10 sm:w-10 rounded-lg bg-warning/10 dark:bg-warning/20 flex items-center justify-center flex-shrink-0">
               <AlertCircle className="h-4 w-4 sm:h-5 sm:w-5 text-warning" />
             </div>
             <div>
               <p className="text-[10px] sm:text-sm text-muted-foreground">
-                Bajo
+                Bajo stock
               </p>
               <p className="text-lg sm:text-2xl font-bold text-foreground">
                 {stats.lowStockCount}
               </p>
             </div>
           </div>
-        </div>
+        </button>
 
-        <div className="rounded-xl bg-destructive/5 border border-destructive/20 dark:bg-destructive/10 dark:border-destructive/30 p-3 sm:p-4">
+        {/* Sin stock — filtra la lista */}
+        <button
+          type="button"
+          onClick={() => { setShowFilters(true); setStockFilter("out"); }}
+          className="text-left rounded-xl bg-destructive/5 border border-destructive/20 dark:bg-destructive/10 dark:border-destructive/30 p-3 sm:p-4 hover:bg-destructive/10 transition-colors"
+        >
           <div className="flex items-center gap-2 sm:gap-3">
-            <div className="h-8 w-8 sm:h-10 sm:w-10 rounded-lg bg-destructive/10 dark:bg-destructive/20 flex items-center justify-center">
+            <div className="h-8 w-8 sm:h-10 sm:w-10 rounded-lg bg-destructive/10 dark:bg-destructive/20 flex items-center justify-center flex-shrink-0">
               <X className="h-4 w-4 sm:h-5 sm:w-5 text-destructive" />
             </div>
             <div>
@@ -1502,7 +1570,28 @@ tr.cat td{border:none}
               </p>
             </div>
           </div>
-        </div>
+        </button>
+
+        {/* Más / menos vendidos — abre ranking */}
+        <button
+          type="button"
+          onClick={() => { setRankingOpen(true); setRankingTab("mas"); loadRanking(); }}
+          className="text-left rounded-xl bg-success/5 border border-success/20 dark:bg-success/10 dark:border-success/30 p-3 sm:p-4 hover:bg-success/10 transition-colors"
+        >
+          <div className="flex items-center gap-2 sm:gap-3">
+            <div className="h-8 w-8 sm:h-10 sm:w-10 rounded-lg bg-success/10 dark:bg-success/20 flex items-center justify-center flex-shrink-0">
+              <TrendingUp className="h-4 w-4 sm:h-5 sm:w-5 text-success" />
+            </div>
+            <div className="min-w-0">
+              <p className="text-[10px] sm:text-sm text-muted-foreground">
+                Ranking de ventas
+              </p>
+              <p className="text-sm sm:text-lg font-bold text-foreground truncate">
+                Más / menos vendidos
+              </p>
+            </div>
+          </div>
+        </button>
       </div>
 
       {/* Productos a revisar - irregularidades de stock — oculto temporalmente */}
@@ -2221,6 +2310,66 @@ tr.cat td{border:none}
                     <p className="text-xs text-muted-foreground">
                       {h.categoria ? `${h.categoria} · ` : ""}{h.createdAt.toLocaleString("es-AR")}
                     </p>
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Ranking de ventas: más / menos vendidos */}
+      <Dialog open={rankingOpen} onOpenChange={setRankingOpen}>
+        <DialogContent className="sm:max-w-lg max-h-[80vh] overflow-hidden flex flex-col">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <TrendingUp className="h-4 w-4 text-success" />
+              Ranking de ventas
+            </DialogTitle>
+          </DialogHeader>
+
+          <div className="flex gap-1 border-b border-border pb-2">
+            <button
+              onClick={() => setRankingTab("mas")}
+              className={cn(
+                "px-3 py-1.5 text-xs font-medium rounded-lg transition-colors",
+                rankingTab === "mas" ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:bg-muted",
+              )}
+            >
+              Más vendidos
+            </button>
+            <button
+              onClick={() => setRankingTab("menos")}
+              className={cn(
+                "px-3 py-1.5 text-xs font-medium rounded-lg transition-colors",
+                rankingTab === "menos" ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:bg-muted",
+              )}
+            >
+              Menos vendidos
+            </button>
+          </div>
+
+          <div className="overflow-y-auto flex-1 -mx-1 px-1">
+            {loadingRanking ? (
+              <div className="py-8 text-center text-sm text-muted-foreground">Cargando...</div>
+            ) : (
+              <div className="divide-y">
+                {(rankingTab === "mas" ? rankingMasVendidos : rankingMenosVendidos).map((item, idx) => (
+                  <button
+                    key={item.id}
+                    type="button"
+                    onClick={() => { setRankingOpen(false); handleEditFromGananciaDistinta(item.id); }}
+                    className="w-full py-2 flex items-center gap-3 text-left hover:bg-muted/40 rounded-md px-1.5 -mx-1.5 transition-colors"
+                  >
+                    <span className="text-xs font-semibold text-muted-foreground w-5 flex-shrink-0">{idx + 1}</span>
+                    <div className="min-w-0 flex-1">
+                      <p className="text-sm font-medium truncate">{item.name}</p>
+                      <p className="text-xs text-muted-foreground truncate">{item.category}</p>
+                    </div>
+                    <div className="text-right flex-shrink-0">
+                      <Badge variant="secondary" className="text-xs">{item.soldCount} vendidos</Badge>
+                      <p className="text-xs text-muted-foreground mt-0.5">{formatCurrency(item.price)}</p>
+                    </div>
                   </button>
                 ))}
               </div>
