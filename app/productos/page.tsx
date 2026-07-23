@@ -180,9 +180,11 @@ export default function ProductosPage() {
 
   // Ranking de ventas (más / menos vendidos)
   const [rankingOpen, setRankingOpen] = useState(false);
-  const [rankingTab, setRankingTab] = useState<"mas" | "menos">("mas");
+  const [rankingTab, setRankingTab] = useState<"mas" | "menos" | "sin">("mas");
   const [rankingMasVendidos, setRankingMasVendidos] = useState<RankingItem[]>([]);
   const [rankingMenosVendidos, setRankingMenosVendidos] = useState<RankingItem[]>([]);
+  const [rankingSinVender, setRankingSinVender] = useState<RankingItem[]>([]);
+  const [rankingSinVenderCount, setRankingSinVenderCount] = useState(0);
   const [loadingRanking, setLoadingRanking] = useState(false);
 
   // Exportar lista de precios a PDF
@@ -690,6 +692,8 @@ tr.cat td{border:none}
       if (!res.ok) throw new Error(data.error || "Error del servidor");
       setRankingMasVendidos(data.masVendidos ?? []);
       setRankingMenosVendidos(data.menosVendidos ?? []);
+      setRankingSinVender(data.sinVender ?? []);
+      setRankingSinVenderCount(data.sinVenderCount ?? 0);
     } catch (err: any) {
       toast.error(err.message || "Error al cargar el ranking de ventas");
     } finally {
@@ -1585,47 +1589,48 @@ tr.cat td{border:none}
           </div>
         </button>
 
-        {/* Más vendidos — mini ranking + abre modal completo */}
-        <button
-          type="button"
-          onClick={() => { setRankingOpen(true); setRankingTab("mas"); loadRanking(); }}
-          className="group text-left rounded-2xl bg-success/5 border border-success/20 dark:bg-success/10 dark:border-success/30 p-3.5 sm:p-4 shadow-sm hover:shadow-lg hover:-translate-y-0.5 hover:bg-success/10 transition-all duration-200 flex flex-col justify-between"
-        >
-          <div className="flex items-center gap-2 sm:gap-3">
-            <div className="h-9 w-9 sm:h-11 sm:w-11 rounded-xl bg-success/15 dark:bg-success/25 flex items-center justify-center flex-shrink-0 transition-transform duration-200 group-hover:scale-110">
+        {/* Ranking de ventas: más vendidos / menos vendidos / sin vender */}
+        <div className="rounded-2xl bg-success/5 border border-success/20 dark:bg-success/10 dark:border-success/30 p-3.5 sm:p-4 shadow-sm">
+          <div className="flex items-center gap-2 sm:gap-3 mb-2.5">
+            <div className="h-9 w-9 sm:h-11 sm:w-11 rounded-xl bg-success/15 dark:bg-success/25 flex items-center justify-center flex-shrink-0">
               <TrendingUp className="h-4 w-4 sm:h-5 sm:w-5 text-success" />
             </div>
-            <div className="min-w-0">
-              <p className="text-[10px] sm:text-sm text-muted-foreground">
-                Más vendido
-              </p>
-              <p className="text-sm sm:text-lg font-bold text-foreground truncate">
-                {rankingMasVendidos[0]?.name ?? "Ver ranking"}
-              </p>
-            </div>
+            <p className="text-[10px] sm:text-sm text-muted-foreground">
+              Ranking de ventas
+            </p>
           </div>
-          <div className="mt-2.5 space-y-1">
-            {rankingMasVendidos.length > 0 ? (
-              rankingMasVendidos.slice(0, 3).map((item, idx) => {
-                const max = rankingMasVendidos[0].soldCount || 1;
-                return (
-                  <div key={item.id} className="flex items-center gap-1.5">
-                    <span className="text-[10px] text-muted-foreground w-3 flex-shrink-0">{idx + 1}</span>
-                    <div className="h-1.5 flex-1 rounded-full bg-muted overflow-hidden">
-                      <div
-                        className="h-full bg-success rounded-full"
-                        style={{ width: `${Math.max(6, Math.round((item.soldCount / max) * 100))}%` }}
-                      />
-                    </div>
-                    <span className="text-[10px] text-muted-foreground flex-shrink-0 tabular-nums">{item.soldCount}</span>
-                  </div>
-                );
-              })
-            ) : (
-              <p className="text-[11px] text-muted-foreground">Tocá para ver más y menos vendidos</p>
-            )}
+          <div className="space-y-1">
+            <button
+              type="button"
+              onClick={() => { setRankingOpen(true); setRankingTab("mas"); loadRanking(); }}
+              className="w-full flex items-center justify-between gap-2 rounded-lg px-2 py-1.5 hover:bg-success/10 transition-colors"
+            >
+              <span className="text-xs sm:text-sm font-medium text-foreground">Más vendidos</span>
+              <span className="text-[10px] sm:text-xs font-semibold text-success">Ver</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => { setRankingOpen(true); setRankingTab("menos"); loadRanking(); }}
+              className="w-full flex items-center justify-between gap-2 rounded-lg px-2 py-1.5 hover:bg-success/10 transition-colors"
+            >
+              <span className="text-xs sm:text-sm font-medium text-foreground">Menos vendidos</span>
+              <span className="text-[10px] sm:text-xs font-semibold text-success">Ver</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => { setRankingOpen(true); setRankingTab("sin"); loadRanking(); }}
+              className="w-full flex items-center justify-between gap-2 rounded-lg px-2 py-1.5 hover:bg-success/10 transition-colors"
+            >
+              <span className="text-xs sm:text-sm font-medium text-foreground">
+                Sin vender
+                {rankingSinVenderCount > 0 && (
+                  <span className="ml-1.5 text-[10px] text-muted-foreground">({rankingSinVenderCount})</span>
+                )}
+              </span>
+              <span className="text-[10px] sm:text-xs font-semibold text-success">Ver</span>
+            </button>
           </div>
-        </button>
+        </div>
       </div>
 
       {/* Productos a revisar - irregularidades de stock — oculto temporalmente */}
@@ -2381,14 +2386,27 @@ tr.cat td{border:none}
             >
               Menos vendidos
             </button>
+            <button
+              onClick={() => setRankingTab("sin")}
+              className={cn(
+                "px-3 py-1.5 text-xs font-medium rounded-lg transition-colors",
+                rankingTab === "sin" ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:bg-muted",
+              )}
+            >
+              Sin vender {rankingSinVenderCount > 0 && `(${rankingSinVenderCount})`}
+            </button>
           </div>
 
           <div className="overflow-y-auto flex-1 -mx-1 px-1">
             {loadingRanking ? (
               <div className="py-8 text-center text-sm text-muted-foreground">Cargando...</div>
+            ) : (rankingTab === "mas" ? rankingMasVendidos : rankingTab === "menos" ? rankingMenosVendidos : rankingSinVender).length === 0 ? (
+              <p className="py-8 text-center text-sm text-muted-foreground">
+                {rankingTab === "sin" ? "Todos los productos tienen ventas registradas." : "No hay datos de ventas todavía."}
+              </p>
             ) : (
               <div className="divide-y">
-                {(rankingTab === "mas" ? rankingMasVendidos : rankingMenosVendidos).map((item, idx) => (
+                {(rankingTab === "mas" ? rankingMasVendidos : rankingTab === "menos" ? rankingMenosVendidos : rankingSinVender).map((item, idx) => (
                   <button
                     key={item.id}
                     type="button"

@@ -45,10 +45,17 @@ export async function GET(req: NextRequest) {
       soldCount: countMap[p.id] || 0,
     }))
 
-    const masVendidos = [...conVentas].sort((a, b) => b.soldCount - a.soldCount).slice(0, 15)
-    const menosVendidos = [...conVentas].sort((a, b) => a.soldCount - b.soldCount).slice(0, 15)
+    const masVendidos = [...conVentas].filter((p) => p.soldCount > 0).sort((a, b) => b.soldCount - a.soldCount).slice(0, 15)
+    const menosVendidos = [...conVentas].filter((p) => p.soldCount > 0).sort((a, b) => a.soldCount - b.soldCount).slice(0, 15)
+    const sinVenderTodos = conVentas.filter((p) => p.soldCount === 0)
+    const sinVender = sinVenderTodos.slice(0, 50)
 
-    return NextResponse.json({ masVendidos, menosVendidos })
+    return NextResponse.json({
+      masVendidos,
+      menosVendidos,
+      sinVender,
+      sinVenderCount: sinVenderTodos.length,
+    })
   } catch (err: any) {
     console.error('[ranking-ventas]', err)
     return NextResponse.json({ error: err.message ?? 'Error interno' }, { status: 500 })
