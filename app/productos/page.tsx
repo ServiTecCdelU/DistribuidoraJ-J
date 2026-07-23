@@ -1188,22 +1188,6 @@ tr.cat td{border:none}
             </Button>
           </div>
 
-          {/* Productos con % distinto al normalizado + historial de cambios */}
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => { setGananciaDistintaOpen(true); loadGananciaDistinta(); }}
-            className="h-7 px-2.5 text-xs gap-1.5 rounded-2xl"
-          >
-            <AlertTriangle className="h-3.5 w-3.5 text-amber-600" />
-            Productos con % distinto
-            {productosGananciaDistinta.length > 0 && (
-              <Badge variant="secondary" className="h-4 min-w-4 px-1 text-[10px]">
-                {productosGananciaDistinta.length}
-              </Badge>
-            )}
-          </Button>
-
           <div className="flex items-center justify-center gap-2 flex-wrap">
           <div className="flex items-center gap-1.5 rounded-2xl border border-border bg-card px-3 py-1.5">
             <Percent className="h-3.5 w-3.5 text-teal-600" />
@@ -1269,12 +1253,12 @@ tr.cat td{border:none}
               className="gap-1 h-7 px-2"
             >
               <Filter className="h-3.5 w-3.5" />
-              {activeFilterCount > 0 && (
+              {(activeFilterCount > 0 || productosGananciaDistinta.length > 0) && (
                 <Badge
                   variant="secondary"
                   className="h-4 w-4 p-0 flex items-center justify-center text-[10px]"
                 >
-                  {activeFilterCount}
+                  {activeFilterCount + (productosGananciaDistinta.length > 0 ? 1 : 0)}
                 </Badge>
               )}
             </Button>
@@ -1408,6 +1392,23 @@ tr.cat td{border:none}
                 </SelectContent>
               </Select>
             </div>
+          </div>
+
+          <div className="mt-3 pt-3 border-t border-border">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => { setGananciaDistintaOpen(true); loadGananciaDistinta(); }}
+              className="h-8 px-2.5 text-xs gap-1.5 w-full sm:w-auto"
+            >
+              <AlertTriangle className="h-3.5 w-3.5 text-amber-600" />
+              Productos con % distinto
+              {productosGananciaDistinta.length > 0 && (
+                <Badge variant="secondary" className="h-4 min-w-4 px-1 text-[10px]">
+                  {productosGananciaDistinta.length}
+                </Badge>
+              )}
+            </Button>
           </div>
         </div>
       )}

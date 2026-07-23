@@ -61,7 +61,7 @@ export const getProductosConGananciaDistinta = async (): Promise<ProductoGananci
   const { data, error } = await supabase
     .from('productos')
     .select('id, name, category, ganancia_global, price')
-    .eq('ganancia_individual', true)
+    .eq('ganancia_individual', 1)
     .or('disabled.eq.false,disabled.is.null')
     .order('name', { ascending: true })
   if (error) throw error

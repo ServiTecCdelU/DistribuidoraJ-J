@@ -28,7 +28,7 @@ export async function POST(req: NextRequest) {
       .from('productos')
       .select('id, precio_base')
       .or('disabled.eq.false,disabled.is.null')
-      .or('ganancia_individual.eq.false,ganancia_individual.is.null')
+      .or('ganancia_individual.eq.0,ganancia_individual.is.null')
 
     if (scope === 'medicamentos') {
       query = query.ilike('category', '%medicamento%')
@@ -82,7 +82,7 @@ export async function POST(req: NextRequest) {
         chunk.map(({ id, price }) =>
           supabaseAdmin
             .from('productos')
-            .update({ price, precio_venta: price, ganancia_global: porcentaje, ganancia_individual: false })
+            .update({ price, precio_venta: price, ganancia_global: porcentaje, ganancia_individual: 0 })
             .eq('id', id),
         ),
       )
