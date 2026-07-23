@@ -31,6 +31,7 @@ import { generateReadableId } from "@/services/supabase-helpers";
 import { getAuthToken } from "@/services/auth-service";
 import { registrarMovimiento, getProductosARevisar, type ProductoARevisar } from "@/services/stock-service";
 import type { Product, MayoristaProducto } from "@/lib/types";
+import type { ProductoGananciaDistinta, GananciaHistorialEntry } from "@/services/ganancia-historial-service";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { formatCurrency, formatCompactNumber } from "@/lib/utils/format";
 import { downloadBase64Pdf } from "@/services/pdf-service";
@@ -161,6 +162,13 @@ export default function ProductosPage() {
   const [gananciaMedInput, setGananciaMedInput] = useState("");
   const [applyingMed, setApplyingMed] = useState(false);
   const [progressGanancia, setProgressGanancia] = useState({ done: 0, total: 0 });
+
+  // Productos con % de ganancia distinto al normalizado + historial de cambios
+  const [gananciaDistintaOpen, setGananciaDistintaOpen] = useState(false);
+  const [productosGananciaDistinta, setProductosGananciaDistinta] = useState<ProductoGananciaDistinta[]>([]);
+  const [gananciaHistorial, setGananciaHistorial] = useState<GananciaHistorialEntry[]>([]);
+  const [loadingGananciaDistinta, setLoadingGananciaDistinta] = useState(false);
+  const [gananciaDistintaTab, setGananciaDistintaTab] = useState<"productos" | "historial">("productos");
 
   // Exportar lista de precios a PDF
   const [exportandoPdf, setExportandoPdf] = useState(false);
@@ -623,6 +631,7 @@ tr.cat td{border:none}
       if (!res.ok) throw new Error(data.error || "Error del servidor");
       toast.success(`Ganancia del ${porc}% aplicada a ${data.updated} productos`);
       await fetchProducts(currentPage, searchQuery, categoryFilter, stockFilter);
+      loadGananciaDistinta();
     } catch (err: any) {
       toast.error(err.message || "Error al aplicar la ganancia");
     } finally {
@@ -646,10 +655,27 @@ tr.cat td{border:none}
       if (!res.ok) throw new Error(data.error || "Error del servidor");
       toast.success(`Ganancia del ${porc}% aplicada a ${data.updated} medicamentos`);
       await fetchProducts(currentPage, searchQuery, categoryFilter, stockFilter);
+      loadGananciaDistinta();
     } catch (err: any) {
       toast.error(err.message || "Error al aplicar la ganancia");
     } finally {
       setApplyingMed(false);
+    }
+  };
+
+  const loadGananciaDistinta = async () => {
+    setLoadingGananciaDistinta(true);
+    try {
+      const [distintos, historial] = await Promise.all([
+        productsApi.getProductosConGananciaDistinta(),
+        productsApi.getGananciaHistorial(100),
+      ]);
+      setProductosGananciaDistinta(distintos);
+      setGananciaHistorial(historial);
+    } catch (err: any) {
+      toast.error(err.message || "Error al cargar % con ganancia distinta");
+    } finally {
+      setLoadingGananciaDistinta(false);
     }
   };
 
@@ -937,6 +963,7 @@ tr.cat td{border:none}
       }
       refreshCategories();
       setModalOpen(false);
+      loadGananciaDistinta();
     } catch (error) {
       toast.error("Error al guardar el producto");
     }
@@ -988,6 +1015,10 @@ tr.cat td{border:none}
   useEffect(() => {
     fetchStats();
   }, [products]);
+
+  useEffect(() => {
+    loadGananciaDistinta();
+  }, []);
 
   // Reset page when filters change
   useEffect(() => {
@@ -1156,6 +1187,22 @@ tr.cat td{border:none}
               <span className="hidden sm:inline">Aplicar</span>
             </Button>
           </div>
+
+          {/* Productos con % distinto al normalizado + historial de cambios */}
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => { setGananciaDistintaOpen(true); loadGananciaDistinta(); }}
+            className="h-7 px-2.5 text-xs gap-1.5 rounded-2xl"
+          >
+            <AlertTriangle className="h-3.5 w-3.5 text-amber-600" />
+            Productos con % distinto
+            {productosGananciaDistinta.length > 0 && (
+              <Badge variant="secondary" className="h-4 min-w-4 px-1 text-[10px]">
+                {productosGananciaDistinta.length}
+              </Badge>
+            )}
+          </Button>
 
           <div className="flex items-center justify-center gap-2 flex-wrap">
           <div className="flex items-center gap-1.5 rounded-2xl border border-border bg-card px-3 py-1.5">
@@ -1780,6 +1827,7 @@ tr.cat td{border:none}
                           <th className="text-left px-3 py-3 font-semibold text-muted-foreground">Código</th>
                           <th className="text-left px-3 py-3 font-semibold text-muted-foreground">Descripción</th>
                           <th className="hidden md:table-cell text-left px-3 py-3 font-semibold text-muted-foreground">Categoría</th>
+                          <th className="hidden md:table-cell text-center px-3 py-3 font-semibold text-muted-foreground whitespace-nowrap">% Ind.</th>
                           <th className="text-right px-3 py-3 font-semibold text-muted-foreground whitespace-nowrap">Precio</th>
                           <th className="text-right px-3 py-3 font-semibold text-muted-foreground">Stock</th>
                           <th className="text-center px-3 py-3 font-semibold text-muted-foreground whitespace-nowrap">Lote</th>
@@ -1809,6 +1857,15 @@ tr.cat td{border:none}
                               </td>
                               <td className="hidden md:table-cell px-3 py-2.5 text-xs text-muted-foreground whitespace-nowrap">
                                 {product.category}
+                              </td>
+                              <td className="hidden md:table-cell px-3 py-2.5 text-center whitespace-nowrap">
+                                {product.gananciaIndividual && product.gananciaGlobal != null ? (
+                                  <Badge variant="secondary" className="text-[10px] px-1.5 py-0">
+                                    {product.gananciaGlobal}%
+                                  </Badge>
+                                ) : (
+                                  <span className="text-xs text-muted-foreground">—</span>
+                                )}
                               </td>
                               <td className="px-3 py-2.5 text-right font-semibold text-teal-600 whitespace-nowrap">
                                 {product.unidadesPorBulto && product.seDivideEn && product.unidadesPorBulto > 0
@@ -2055,6 +2112,86 @@ tr.cat td{border:none}
         onOpenChange={setCargarListaOpen}
         onImportado={onListaImportada}
       />
+
+      {/* Productos con % de ganancia distinto + historial de cambios */}
+      <Dialog open={gananciaDistintaOpen} onOpenChange={setGananciaDistintaOpen}>
+        <DialogContent className="sm:max-w-lg max-h-[80vh] overflow-hidden flex flex-col">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <AlertTriangle className="h-4 w-4 text-amber-600" />
+              % de ganancia distinto al normalizado
+            </DialogTitle>
+          </DialogHeader>
+
+          <div className="flex gap-1 border-b border-border pb-2">
+            <button
+              onClick={() => setGananciaDistintaTab("productos")}
+              className={cn(
+                "px-3 py-1.5 text-xs font-medium rounded-lg transition-colors",
+                gananciaDistintaTab === "productos" ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:bg-muted",
+              )}
+            >
+              Productos ({productosGananciaDistinta.length})
+            </button>
+            <button
+              onClick={() => setGananciaDistintaTab("historial")}
+              className={cn(
+                "px-3 py-1.5 text-xs font-medium rounded-lg transition-colors",
+                gananciaDistintaTab === "historial" ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:bg-muted",
+              )}
+            >
+              Historial de cambios
+            </button>
+          </div>
+
+          <div className="overflow-y-auto flex-1 -mx-1 px-1">
+            {loadingGananciaDistinta ? (
+              <div className="py-8 text-center text-sm text-muted-foreground">Cargando...</div>
+            ) : gananciaDistintaTab === "productos" ? (
+              productosGananciaDistinta.length === 0 ? (
+                <p className="py-8 text-center text-sm text-muted-foreground">
+                  No hay productos con % individual distinto al normalizado.
+                </p>
+              ) : (
+                <div className="divide-y">
+                  {productosGananciaDistinta.map((p) => (
+                    <div key={p.id} className="py-2 flex items-center justify-between gap-3">
+                      <div className="min-w-0">
+                        <p className="text-sm font-medium truncate">{p.name}</p>
+                        <p className="text-xs text-muted-foreground truncate">{p.category}</p>
+                      </div>
+                      <div className="text-right flex-shrink-0">
+                        <Badge variant="secondary" className="text-xs">{p.gananciaGlobal}%</Badge>
+                        <p className="text-xs text-muted-foreground mt-0.5">{formatCurrency(p.price)}</p>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )
+            ) : gananciaHistorial.length === 0 ? (
+              <p className="py-8 text-center text-sm text-muted-foreground">
+                Todavía no se registraron cambios de % individual.
+              </p>
+            ) : (
+              <div className="divide-y">
+                {gananciaHistorial.map((h) => (
+                  <div key={h.id} className="py-2">
+                    <div className="flex items-center justify-between gap-3">
+                      <p className="text-sm font-medium truncate">{h.productoNombre}</p>
+                      <Badge variant="secondary" className="text-xs flex-shrink-0">
+                        {h.gananciaAnterior != null ? `${h.gananciaAnterior}% → ` : ""}{h.gananciaNueva}%
+                      </Badge>
+                    </div>
+                    <p className="text-xs text-muted-foreground">
+                      {h.categoria ? `${h.categoria} · ` : ""}{h.createdAt.toLocaleString("es-AR")}
+                    </p>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        </DialogContent>
+      </Dialog>
     </MainLayout>
   );
 }

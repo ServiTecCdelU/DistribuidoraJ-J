@@ -146,6 +146,12 @@ import {
   convertirPagoVenta,
 } from '@/services/ajustes-venta-service'
 import type { DescuentoVenta, ConversionPago, DireccionConversion } from '@/services/ajustes-venta-service'
+import {
+  logGananciaIndividual,
+  getGananciaHistorial,
+  getProductosConGananciaDistinta,
+} from '@/services/ganancia-historial-service'
+import type { GananciaHistorialEntry, ProductoGananciaDistinta } from '@/services/ganancia-historial-service'
 
 export const productsApi = {
   async getAll(): Promise<Product[]> {
@@ -189,6 +195,21 @@ export const productsApi = {
   },
   async delete(id: string): Promise<void> {
     return deleteProduct(id)
+  },
+  async logGananciaIndividual(entry: {
+    productoId: string
+    productoNombre: string
+    categoria: string | null
+    gananciaAnterior: number | null
+    gananciaNueva: number
+  }): Promise<void> {
+    return logGananciaIndividual(entry)
+  },
+  async getGananciaHistorial(limit?: number): Promise<GananciaHistorialEntry[]> {
+    return getGananciaHistorial(limit)
+  },
+  async getProductosConGananciaDistinta(): Promise<ProductoGananciaDistinta[]> {
+    return getProductosConGananciaDistinta()
   },
 }
 
