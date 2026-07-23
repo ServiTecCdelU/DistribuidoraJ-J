@@ -1020,6 +1020,14 @@ tr.cat td{border:none}
     loadGananciaDistinta();
   }, []);
 
+  // Un % individual que coincide con el % normalizado vigente (global o medicamentos) no cuenta como "distinto"
+  const esGananciaDistinta = (product: Product) => {
+    if (product.gananciaGlobal == null) return false;
+    const esMedicamento = (product.category || "").trim().toLowerCase().includes("medicamento");
+    const normalizado = esMedicamento ? stats.gananciaMedicamentos : stats.gananciaActual;
+    return normalizado == null || Number(normalizado) !== Number(product.gananciaGlobal);
+  };
+
   // Reset page when filters change
   useEffect(() => {
     setCurrentPage(1);
@@ -1860,7 +1868,7 @@ tr.cat td{border:none}
                                 {product.category}
                               </td>
                               <td className="hidden md:table-cell px-3 py-2.5 text-center whitespace-nowrap">
-                                {product.gananciaIndividual && product.gananciaGlobal != null ? (
+                                {product.gananciaIndividual && product.gananciaGlobal != null && esGananciaDistinta(product) ? (
                                   <Badge variant="secondary" className="text-[10px] px-1.5 py-0">
                                     {product.gananciaGlobal}%
                                   </Badge>
