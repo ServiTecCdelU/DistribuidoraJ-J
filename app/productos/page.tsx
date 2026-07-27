@@ -347,24 +347,24 @@ export default function ProductosPage() {
 
       const html = `<!DOCTYPE html><html><head><meta charset="utf-8"><title>Lista de Precios</title><style>
 *{margin:0;padding:0;box-sizing:border-box}
-body{font-family:-apple-system,Segoe UI,Roboto,sans-serif;padding:28px;font-size:12px;color:#1f2937}
-.header{display:flex;justify-content:space-between;align-items:flex-end;border-bottom:3px solid #0d9488;padding-bottom:12px;margin-bottom:6px}
-.header h1{font-size:20px;color:#0f172a}
-.header .sub{font-size:13px;color:#0d9488;font-weight:600;margin-top:2px}
-.header .meta{text-align:right;font-size:11px;color:#6b7280;line-height:1.5}
-.legend{font-size:10px;color:#9ca3af;margin-bottom:14px}
+body{font-family:-apple-system,Segoe UI,Roboto,sans-serif;padding:28px;font-size:12px;color:#111827}
+.header{display:flex;justify-content:space-between;align-items:flex-end;border-bottom:3px solid #2563eb;padding-bottom:12px;margin-bottom:6px}
+.header h1{font-size:20px;color:#1e3a8a}
+.header .sub{font-size:13px;color:#2563eb;font-weight:600;margin-top:2px}
+.header .meta{text-align:right;font-size:11px;color:#2563eb;font-weight:600;line-height:1.5}
+.legend{font-size:10px;color:#7c3aed;font-weight:600;margin-bottom:14px}
 table{width:100%;border-collapse:collapse}
-th{font-size:10px;text-transform:uppercase;letter-spacing:.05em;color:#6b7280;text-align:left;padding:6px 10px;border-bottom:1px solid #e5e7eb;background:#f9fafb}
+th{font-size:10px;text-transform:uppercase;letter-spacing:.05em;color:#4338ca;font-weight:700;text-align:left;padding:6px 10px;border-bottom:2px solid #c7d2fe;background:#eef2ff}
 th.right,td.precio{text-align:right}
-td{padding:5px 10px;border-bottom:1px solid #f3f4f6;vertical-align:top}
-td.cod{font-family:ui-monospace,monospace;font-size:10px;color:#9ca3af;white-space:nowrap;width:90px}
-td.nom{font-weight:500}
-td.precio{font-weight:700;color:#0d9488;white-space:nowrap}
-td.precio .unit{font-size:9px;font-weight:400;color:#9ca3af}
-tr.cat td{background:#0f172a;color:#fff;font-weight:700;font-size:11px;text-transform:uppercase;letter-spacing:.04em;padding:7px 10px}
-tr.cat .cat-count{font-weight:400;color:#94a3b8}
+td{padding:5px 10px;border-bottom:1px solid #eef2ff;vertical-align:top}
+td.cod{font-family:ui-monospace,monospace;font-size:10px;color:#111827;font-weight:700;white-space:nowrap;width:90px}
+td.nom{font-weight:500;color:#111827}
+td.precio{font-weight:700;color:#2563eb;white-space:nowrap}
+td.precio .unit{font-size:9px;font-weight:700;color:#111827}
+tr.cat td{background:#4338ca;color:#fff;font-weight:700;font-size:11px;text-transform:uppercase;letter-spacing:.04em;padding:7px 10px}
+tr.cat .cat-count{font-weight:600;color:#c7d2fe}
 tr.cat td{border:none}
-.footer{margin-top:18px;text-align:center;font-size:10px;color:#9ca3af;border-top:1px solid #e5e7eb;padding-top:8px}
+.footer{margin-top:18px;text-align:center;font-size:10px;color:#2563eb;font-weight:600;border-top:2px solid #c7d2fe;padding-top:8px}
 @page{margin:14mm}
 @media print{body{padding:0}thead{display:table-header-group}tr.cat{page-break-after:avoid}tr{page-break-inside:avoid}}
 </style></head><body>
@@ -379,7 +379,7 @@ tr.cat td{border:none}
       const res = await fetch("/api/generate-pdf", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ html, filename }),
+        body: JSON.stringify({ html, filename, pageNumbers: true }),
       });
       const data = await res.json();
       if (!res.ok || !data?.pdf) {
