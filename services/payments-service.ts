@@ -1,7 +1,7 @@
 import { supabase } from '@/lib/supabase'
 import type { Transaction } from '@/lib/types'
 import { generateReadableId } from '@/services/supabase-helpers'
-import { imputarADeuda, imputarFIFO } from '@/lib/utils/saldo-imputacion'
+import { imputarADeuda, imputarFIFO, recomputarSaldos } from '@/lib/utils/saldo-imputacion'
 
 // Baja el saldo de las deudas (remitos/ventas) del cliente.
 // - Con debtTxId: imputa el pago a ESA deuda puntual.
@@ -41,6 +41,54 @@ export const aplicarPagoADeudas = async (
   }
 }
 
+// Recalcula desde cero el saldo por-boleta de un cliente/cuenta replayeando
+// TODOS los pagos no anulados en orden cronológico sobre las deudas restauradas
+// a su monto original. Es la fuente de verdad del detalle por-boleta: evita los
+// residuos que deja imputar cada pago suelto contra las deudas abiertas "en ese
+// momento" (pagos retroactivos, previos a su venta, o devoluciones). Idempotente.
+// No toca current_balance (ese lo maneja quien registra el pago/devolución).
+export const recomputarSaldosDeudas = async (
+  clientId: string,
+  cuenta: 'minorista' | 'mayorista',
+): Promise<void> => {
+  const cuentaFilter = cuenta === 'minorista' ? 'cuenta.eq.minorista,cuenta.is.null' : 'cuenta.eq.mayorista'
+
+  // Deudas con saldo trackeado (las legacy de saldo null no se tocan), FIFO.
+  const { data: debts } = await supabase
+    .from('transacciones')
+    .select('id, amount, saldo')
+    .eq('client_id', clientId)
+    .eq('type', 'debt')
+    .eq('anulado', false)
+    .not('saldo', 'is', null)
+    .or(cuentaFilter)
+    .order('date', { ascending: true })
+  if (!debts || debts.length === 0) return
+
+  // Pagos/devoluciones vigentes, en orden cronológico.
+  const { data: pagos } = await supabase
+    .from('transacciones')
+    .select('amount, debt_id')
+    .eq('client_id', clientId)
+    .eq('type', 'payment')
+    .eq('anulado', false)
+    .or(cuentaFilter)
+    .order('date', { ascending: true })
+
+  const nuevos = recomputarSaldos(
+    debts.map((d) => ({ id: d.id, amount: Number(d.amount) })),
+    (pagos ?? []).map((p) => ({ monto: Number(p.amount), debtId: (p as any).debt_id ?? undefined })),
+  )
+
+  // Persistir solo las boletas cuyo saldo cambió.
+  for (const d of debts) {
+    const nuevo = nuevos.get(d.id)
+    if (nuevo != null && Math.abs(nuevo - Number(d.saldo)) > 1e-9) {
+      await supabase.from('transacciones').update({ saldo: nuevo }).eq('id', d.id)
+    }
+  }
+}
+
 const registerPayment = async (
   cuenta: 'minorista' | 'mayorista',
   data: { clientId: string; amount: number; description?: string; debtTxId?: string; date?: string },
@@ -57,13 +105,6 @@ const registerPayment = async (
     .from('clientes')
     .update({ [balanceCol]: newBalance })
     .eq('id', data.clientId)
-
-  // Imputar el pago a la(s) deuda(s): específica o FIFO
-  try {
-    await aplicarPagoADeudas(data.clientId, cuenta, data.amount, data.debtTxId)
-  } catch {
-    // Si la columna saldo aún no existe, el pago global sigue funcionando
-  }
 
   // Número de recibo atómico y consecutivo (función next_recibo_number en Postgres).
   // Si la función no existe todavía, fallback con timestamp para no bloquear el pago.
@@ -93,6 +134,15 @@ const registerPayment = async (
     // Columna debt_id aún no creada: registrar el pago sin la referencia
     delete row.debt_id
     await supabase.from('transacciones').insert(row)
+  }
+
+  // Recalcular saldos por-boleta con el pago ya persistido: replay holístico de
+  // todos los pagos vigentes. Evita residuos por pagos retroactivos o previos a
+  // su venta (imputar el pago suelto solo veía las boletas abiertas del momento).
+  try {
+    await recomputarSaldosDeudas(data.clientId, cuenta)
+  } catch {
+    // Si la columna saldo aún no existe, el pago global sigue funcionando
   }
 
   return {
@@ -224,31 +274,9 @@ export const deletePayment = async (txId: string): Promise<void> => {
   const newBalance = (Number((client as any)?.[balanceCol]) || 0) + amount
   await supabase.from('clientes').update({ [balanceCol]: newBalance }).eq('id', clientId)
 
-  // Recalcular saldos por remito de la cuenta
+  // Recalcular saldos por remito: replay de los pagos restantes (el borrado ya no está).
   try {
-    const cuentaFilter = cuenta === 'minorista' ? 'cuenta.eq.minorista,cuenta.is.null' : 'cuenta.eq.mayorista'
-    // Restaurar cada deuda (con saldo no-null) a su monto original
-    const { data: debts } = await supabase
-      .from('transacciones')
-      .select('id, amount, saldo')
-      .eq('client_id', clientId)
-      .eq('type', 'debt')
-      .not('saldo', 'is', null)
-      .or(cuentaFilter)
-    for (const d of debts ?? []) {
-      await supabase.from('transacciones').update({ saldo: Number(d.amount) }).eq('id', d.id)
-    }
-    // Re-imputar los pagos restantes en orden cronológico
-    const { data: pagos } = await supabase
-      .from('transacciones')
-      .select('id, amount, debt_id')
-      .eq('client_id', clientId)
-      .eq('type', 'payment')
-      .or(cuentaFilter)
-      .order('date', { ascending: true })
-    for (const p of pagos ?? []) {
-      await aplicarPagoADeudas(clientId, cuenta, Number(p.amount), (p as any).debt_id ?? undefined)
-    }
+    await recomputarSaldosDeudas(clientId, cuenta)
   } catch {
     // Si la columna saldo no existe, el balance del cliente ya quedó corregido
   }
@@ -293,30 +321,10 @@ export const voidPayment = async (txId: string, motivo: string, adminName: strin
   const newBalance = (Number((client as any)?.[balanceCol]) || 0) + amount
   await supabase.from('clientes').update({ [balanceCol]: newBalance }).eq('id', clientId)
 
-  // Recalcular saldos por remito, excluyendo el pago recién anulado
+  // Recalcular saldos por remito: replay de los pagos vigentes (el anulado ya
+  // quedó marcado y el helper lo excluye).
   try {
-    const cuentaFilter = cuenta === 'minorista' ? 'cuenta.eq.minorista,cuenta.is.null' : 'cuenta.eq.mayorista'
-    const { data: debts } = await supabase
-      .from('transacciones')
-      .select('id, amount, saldo')
-      .eq('client_id', clientId)
-      .eq('type', 'debt')
-      .not('saldo', 'is', null)
-      .or(cuentaFilter)
-    for (const d of debts ?? []) {
-      await supabase.from('transacciones').update({ saldo: Number(d.amount) }).eq('id', d.id)
-    }
-    const { data: pagos } = await supabase
-      .from('transacciones')
-      .select('id, amount, debt_id')
-      .eq('client_id', clientId)
-      .eq('type', 'payment')
-      .eq('anulado', false)
-      .or(cuentaFilter)
-      .order('date', { ascending: true })
-    for (const p of pagos ?? []) {
-      await aplicarPagoADeudas(clientId, cuenta, Number(p.amount), (p as any).debt_id ?? undefined)
-    }
+    await recomputarSaldosDeudas(clientId, cuenta)
   } catch {
     // Si la columna saldo no existe, el balance del cliente ya quedó corregido
   }

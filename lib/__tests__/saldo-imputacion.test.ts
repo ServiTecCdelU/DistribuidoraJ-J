@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { imputarADeuda, imputarFIFO } from "../utils/saldo-imputacion";
+import { imputarADeuda, imputarFIFO, recomputarSaldos } from "../utils/saldo-imputacion";
 
 describe("imputarADeuda", () => {
   it("baja el saldo por el monto imputado", () => {
@@ -75,5 +75,84 @@ describe("imputarFIFO", () => {
     const r = imputarFIFO(deudas, 50);
     expect(r).toEqual([{ id: "d1", nuevoSaldo: 50 }]);
     expect(deudas[0].saldo).toBe(100); // no mutó
+  });
+});
+
+describe("recomputarSaldos", () => {
+  const saldoTotal = (m: Map<string, number>) =>
+    [...m.values()].reduce((a, s) => a + s, 0);
+
+  it("cada deuda arranca en su monto y el pago se imputa FIFO", () => {
+    const deudas = [
+      { id: "d1", amount: 100 },
+      { id: "d2", amount: 50 },
+    ];
+    const r = recomputarSaldos(deudas, [{ monto: 120 }]);
+    expect(r.get("d1")).toBe(0);
+    expect(r.get("d2")).toBe(30);
+  });
+
+  it("mantiene la invariante Σsaldo = Σdeuda − Σpagos con varios pagos", () => {
+    const deudas = [
+      { id: "d1", amount: 100 },
+      { id: "d2", amount: 50 },
+    ];
+    const r = recomputarSaldos(deudas, [{ monto: 70 }, { monto: 60 }]);
+    expect(saldoTotal(r)).toBe(20); // 150 - 130
+  });
+
+  it("imputa a la boleta puntual cuando el pago trae debtId", () => {
+    const deudas = [
+      { id: "d1", amount: 100 },
+      { id: "d2", amount: 50 },
+    ];
+    const r = recomputarSaldos(deudas, [{ monto: 50, debtId: "d2" }]);
+    expect(r.get("d1")).toBe(100);
+    expect(r.get("d2")).toBe(0);
+  });
+
+  it("no deja residuo cuando un pago no cabía en las boletas 'del momento' pero sí en el total (bug raíz)", () => {
+    // Escenario Dominguez/VILLAGRAN: un pago (retroactivo o devolución) que en el
+    // camino incremental habría descartado excedente contra las boletas abiertas
+    // de ese instante. Con replay todas coexisten y no queda saldo inflado.
+    const deudas = [
+      { id: "vieja", amount: 40 },
+      { id: "nueva", amount: 100 },
+    ];
+    // El pago de 40 corresponde a "nueva" pero entra antes en la cronología.
+    const r = recomputarSaldos(deudas, [
+      { monto: 40 }, // FIFO: cancela "vieja"
+      { monto: 100 }, // FIFO: cancela "nueva"
+    ]);
+    expect(saldoTotal(r)).toBe(0);
+    expect(r.get("vieja")).toBe(0);
+    expect(r.get("nueva")).toBe(0);
+  });
+
+  it("descarta el excedente que supera todas las deudas (crédito a favor vive en el global)", () => {
+    const deudas = [{ id: "d1", amount: 100 }];
+    const r = recomputarSaldos(deudas, [{ monto: 150 }]);
+    expect(r.get("d1")).toBe(0);
+    expect(saldoTotal(r)).toBe(0);
+  });
+
+  it("un pago puntual a una boleta ya cancelada no la vuelve negativa", () => {
+    const deudas = [{ id: "d1", amount: 100 }];
+    const r = recomputarSaldos(deudas, [
+      { monto: 100, debtId: "d1" },
+      { monto: 100, debtId: "d1" },
+    ]);
+    expect(r.get("d1")).toBe(0);
+  });
+
+  it("es idempotente: recalcula igual sin importar cuántas veces se corra", () => {
+    const deudas = [
+      { id: "d1", amount: 100 },
+      { id: "d2", amount: 200 },
+    ];
+    const pagos = [{ monto: 150 }, { monto: 90, debtId: "d2" }];
+    const r1 = recomputarSaldos(deudas, pagos);
+    const r2 = recomputarSaldos(deudas, pagos);
+    expect([...r1.entries()]).toEqual([...r2.entries()]);
   });
 });

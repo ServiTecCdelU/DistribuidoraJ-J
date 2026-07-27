@@ -9,7 +9,7 @@
 import { supabase } from '@/lib/supabase'
 import { generateReadableId } from '@/services/supabase-helpers'
 import { registrarMovimiento } from '@/services/stock-service'
-import { aplicarPagoADeudas } from '@/services/payments-service'
+import { recomputarSaldosDeudas } from '@/services/payments-service'
 
 export interface DevolucionItem {
   productId: string
@@ -132,22 +132,8 @@ export async function registrarDevolucion(data: {
         .update({ current_balance: (Number(cr.current_balance) || 0) - total })
         .eq('id', data.clientId)
     }
-    const detalle = items.map((i) => `${i.quantity}x ${i.name}`).join(', ')
-    const txId = await generateReadableId('transacciones', 'transaccion', data.clientName || 'cliente')
-    await supabase.from('transacciones').insert({
-      id: txId,
-      client_id: data.clientId,
-      type: 'payment',
-      amount: total,
-      description: `[DEVOLUCION] ${data.saleNumber ? `#${data.saleNumber} — ` : ''}${detalle}`,
-      date: new Date().toISOString(),
-      cuenta: 'minorista',
-      sale_id: data.saleId ?? null,
-    })
-
-    // Bajar el saldo del remito de esta venta (igual que un pago), para que
-    // el detalle (Σ saldos) coincida con current_balance arriba y en el listado.
-    // Imputa a la deuda de esta venta; si no la encuentra, FIFO.
+    // Deuda (remito) de esta venta: la devolución se imputa a ESA boleta.
+    // Si no se encuentra, queda sin debt_id y el replay la imputa FIFO.
     let debtTxId: string | undefined
     if (data.saleId) {
       const { data: deudaVenta } = await supabase
@@ -159,7 +145,35 @@ export async function registrarDevolucion(data: {
         .maybeSingle()
       debtTxId = deudaVenta?.id
     }
-    await aplicarPagoADeudas(data.clientId, 'minorista', total, debtTxId)
+
+    const detalle = items.map((i) => `${i.quantity}x ${i.name}`).join(', ')
+    const txId = await generateReadableId('transacciones', 'transaccion', data.clientName || 'cliente')
+    const row: Record<string, unknown> = {
+      id: txId,
+      client_id: data.clientId,
+      type: 'payment',
+      amount: total,
+      description: `[DEVOLUCION] ${data.saleNumber ? `#${data.saleNumber} — ` : ''}${detalle}`,
+      date: new Date().toISOString(),
+      cuenta: 'minorista',
+      sale_id: data.saleId ?? null,
+    }
+    if (debtTxId) row.debt_id = debtTxId
+    const { error: insErr } = await supabase.from('transacciones').insert(row)
+    if (insErr && debtTxId) {
+      // Columna debt_id aún no creada: registrar sin la referencia
+      delete row.debt_id
+      await supabase.from('transacciones').insert(row)
+    }
+
+    // Recalcular el detalle por-boleta con la devolución ya persistida, para que
+    // Σ saldos coincida con current_balance. Replay holístico (misma fuente de
+    // verdad que los pagos): imputa a la boleta de la venta si hay debt_id.
+    try {
+      await recomputarSaldosDeudas(data.clientId, 'minorista')
+    } catch {
+      // Si la columna saldo no existe, el balance global ya quedó corregido
+    }
   }
 
   // 3. Comisión del vendedor: bajar running totals (la lista se deriva con devoluciones negativas)

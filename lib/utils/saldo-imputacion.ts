@@ -46,3 +46,48 @@ export function imputarFIFO(
   }
   return updates;
 }
+
+export type DeudaOriginal = {
+  id: string;
+  amount: number;
+};
+
+export type PagoImputacion = {
+  monto: number;
+  // Si viene, el pago se imputa a ESA deuda puntual; si no, FIFO.
+  debtId?: string;
+};
+
+// Recalcula desde cero el saldo de todas las deudas replayeando los pagos.
+// Cada deuda arranca en su monto original y se le aplican los pagos en el orden
+// recibido (que debe ser cronológico). A diferencia de imputar un pago suelto
+// contra las deudas abiertas "en ese momento", acá TODAS las deudas coexisten,
+// así que un pago retroactivo o previo a su venta se imputa igual y no deja
+// residuos inflados. El excedente que supera todas las deudas es crédito a favor
+// y se descarta del detalle por-boleta (vive en current_balance).
+// `deudas` debe venir en orden FIFO (más antigua primero) para los pagos sin debtId.
+export function recomputarSaldos(
+  deudas: ReadonlyArray<DeudaOriginal>,
+  pagos: ReadonlyArray<PagoImputacion>,
+): Map<string, number> {
+  const saldos = new Map<string, number>();
+  for (const d of deudas) {
+    saldos.set(d.id, limpiarResiduo(Math.max(0, Number(d.amount) || 0)));
+  }
+  for (const p of pagos) {
+    if (p.debtId && saldos.has(p.debtId)) {
+      saldos.set(p.debtId, imputarADeuda(saldos.get(p.debtId)!, p.monto));
+      continue;
+    }
+    let restante = p.monto;
+    for (const d of deudas) {
+      if (restante <= 0) break;
+      const saldo = saldos.get(d.id)!;
+      if (saldo <= 0) continue;
+      const aplicado = Math.min(saldo, restante);
+      saldos.set(d.id, limpiarResiduo(saldo - aplicado));
+      restante -= aplicado;
+    }
+  }
+  return saldos;
+}
