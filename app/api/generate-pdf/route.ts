@@ -67,7 +67,7 @@ export async function POST(request: NextRequest) {
       displayHeaderFooter: !!pageNumbers,
       headerTemplate: "<div></div>",
       footerTemplate: pageNumbers
-        ? '<div style="width:100%;font-size:9px;color:#666;text-align:center;padding-top:4px;font-family:Arial,sans-serif;"><span class="pageNumber"></span>/<span class="totalPages"></span></div>'
+        ? '<div style="width:100%;font-size:9px;color:#000;font-weight:bold;text-align:center;padding-top:4px;font-family:Arial,sans-serif;"><span class="pageNumber"></span>/<span class="totalPages"></span></div>'
         : "<div></div>",
     });
 
