@@ -41,8 +41,21 @@ export function HojasRutaPanel() {
     );
   }, [hojas, search]);
 
-  const openHoja = useCallback((hoja: HojaRuta) => {
-    window.open(hoja.url, "_blank", "noopener");
+  // Storage sirve el archivo como text/plain y con CSP sandbox, así que no se puede
+  // abrir la URL pública directamente: se descarga el HTML y se renderiza local.
+  const openHoja = useCallback(async (hoja: HojaRuta) => {
+    setBusyId(hoja.id);
+    try {
+      const html = await hojaRutaApi.getHtml(hoja.storagePath);
+      const url = URL.createObjectURL(new Blob([html], { type: "text/html;charset=utf-8" }));
+      const win = window.open(url, "_blank", "noopener");
+      if (!win) toast.error("El navegador bloqueó la ventana emergente");
+      setTimeout(() => URL.revokeObjectURL(url), 60000);
+    } catch {
+      toast.error("No se pudo abrir la hoja de ruta");
+    } finally {
+      setBusyId(null);
+    }
   }, []);
 
   const printHoja = useCallback(async (hoja: HojaRuta) => {
@@ -132,7 +145,7 @@ export function HojasRutaPanel() {
                         <td className="px-4 py-3 text-right font-semibold">{formatCurrency(h.total)}</td>
                         <td className="px-4 py-3">
                           <div className="flex justify-end gap-2">
-                            <Button variant="outline" size="sm" className="rounded-2xl" onClick={() => openHoja(h)}>
+                            <Button variant="outline" size="sm" className="rounded-2xl" disabled={busyId === h.id} onClick={() => openHoja(h)}>
                               <Eye className="h-4 w-4 mr-1" /> Ver
                             </Button>
                             <Button
@@ -177,7 +190,7 @@ export function HojasRutaPanel() {
                       <span className="font-semibold text-foreground text-sm">{formatCurrency(h.total)}</span>
                     </div>
                     <div className="flex gap-2 pt-1">
-                      <Button variant="outline" size="sm" className="rounded-2xl flex-1" onClick={() => openHoja(h)}>
+                      <Button variant="outline" size="sm" className="rounded-2xl flex-1" disabled={busyId === h.id} onClick={() => openHoja(h)}>
                         <Eye className="h-4 w-4 mr-1" /> Ver
                       </Button>
                       <Button
