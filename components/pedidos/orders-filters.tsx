@@ -42,6 +42,10 @@ interface OrdersFiltersProps {
   orders: Order[];
   children?: React.ReactNode;
   visibleStatuses?: string[];
+  /** Pestañas adicionales que no son estados de pedido (ej: hojas de ruta) */
+  extraTabs?: { value: string; label: string; icon?: React.ElementType }[];
+  /** Oculta el buscador y el panel de filtros (para pestañas que no listan pedidos) */
+  hideSearch?: boolean;
 }
 
 export function OrdersFilters({
@@ -63,6 +67,8 @@ export function OrdersFilters({
   orders,
   children,
   visibleStatuses,
+  extraTabs,
+  hideSearch,
 }: OrdersFiltersProps) {
   const [filtersOpen, setFiltersOpen] = useState(false);
   const tabStatuses = statusFlow.filter(
@@ -114,6 +120,11 @@ export function OrdersFilters({
                   </SelectItem>
                 );
               })}
+              {extraTabs?.map((tab) => (
+                <SelectItem key={tab.value} value={tab.value}>
+                  {tab.label}
+                </SelectItem>
+              ))}
             </SelectContent>
           </Select>
         </div>
@@ -145,6 +156,27 @@ export function OrdersFilters({
               </button>
             );
           })}
+
+          {extraTabs?.map((tab) => {
+            const isActive = filterStatus === tab.value;
+            const Icon = tab.icon;
+            return (
+              <button
+                key={tab.value}
+                onClick={() => setFilterStatus(tab.value)}
+                className={`flex items-center gap-2 px-4 py-2.5 rounded-xl border-2 transition-all whitespace-nowrap min-w-fit text-sm ${
+                  isActive
+                    ? "bg-teal-50 border-teal-500 text-teal-700 shadow-md ring-2 ring-offset-1"
+                    : "bg-white border-gray-200 hover:border-gray-300"
+                }`}
+              >
+                {Icon && <Icon className={`h-4 w-4 ${isActive ? "text-teal-700" : "text-gray-400"}`} />}
+                <span className={`font-semibold ${isActive ? "text-teal-700" : "text-gray-900"}`}>
+                  {tab.label}
+                </span>
+              </button>
+            );
+          })}
         </div>
 
         {/* Botones de acción (children) */}
@@ -156,6 +188,7 @@ export function OrdersFilters({
       </div>
 
       {/* Fila 2: Buscador + toggle filtros */}
+      {!hideSearch && (
       <div className="flex gap-2">
         <div className="relative flex-1">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
@@ -212,9 +245,10 @@ export function OrdersFilters({
           )}
         </Button>
       </div>
+      )}
 
       {/* Panel de filtros colapsable */}
-      {filtersOpen && (
+      {!hideSearch && filtersOpen && (
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 p-4 bg-gray-50/80 rounded-2xl border border-gray-200 animate-in fade-in slide-in-from-top-2 duration-200">
           <div className="space-y-1.5">
             <label className="text-xs font-medium text-gray-600 flex items-center gap-1.5">

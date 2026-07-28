@@ -9,12 +9,13 @@ import { DataTableSkeleton } from "@/components/ui/data-table-skeleton";
 import { ClientModal } from "@/components/clientes/client-modal";
 import { ordersApi, salesApi, clientsApi, sellersApi, productsApi, faltantesApi, hojaRutaApi } from "@/lib/api";
 import type { Order, OrderStatus, Client, Seller } from "@/lib/types";
-import { Package, Filter, Loader2, ClipboardList, FileText, Eye, ArrowRightCircle, ArrowLeftCircle, Ban, TrendingUp, ChevronDown, ChevronRight, MapPin, Phone, AlertTriangle } from "lucide-react";
+import { Package, Filter, Loader2, ClipboardList, FileText, Eye, ArrowRightCircle, ArrowLeftCircle, Ban, TrendingUp, ChevronDown, ChevronRight, MapPin, Phone, AlertTriangle, Route } from "lucide-react";
 import { toast } from "sonner";
 import { useAuth } from "@/hooks/use-auth";
 import { useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabase";
 import { OrdersFilters } from "@/components/pedidos/orders-filters";
+import { HojasRutaPanel } from "@/components/pedidos/hojas-ruta-panel";
 
 import { OrderDetailModal } from "@/components/pedidos/order-detail-modal";
 import { PaymentModal, type ItemAdjustment } from "@/components/pedidos/payment-modal";
@@ -25,6 +26,9 @@ import { statusConfig } from "@/lib/order-constants";
 import { formatCurrency as formatPrice, formatTime } from "@/lib/utils/format";
 import { salidasRemito, reconciliarCobro, reposicionEliminarRemito } from "@/lib/utils/stock-remito";
 import { ordersToMoveAll, ordersToMoveSelected } from "@/lib/utils/order-move";
+
+// Pestaña extra (no es un estado de pedido): historial de hojas de ruta archivadas.
+const HOJAS_RUTA_TAB = "hojas-ruta";
 
 export const generateOrderNumber = (date: Date, index: number) => {
   const d = new Date(date);
@@ -64,6 +68,7 @@ export default function PedidosPage() {
 
   // Filtros
   const [filterStatus, setFilterStatus] = useState<string>("pending");
+  const isHojasRutaTab = filterStatus === HOJAS_RUTA_TAB;
   const [filterClient, setFilterClient] = useState<string>("");
   const [filterSeller, setFilterSeller] = useState<string>("");
   const [filterTransportista, setFilterTransportista] = useState<string>("");
@@ -1812,7 +1817,10 @@ tbody tr:nth-child(even){background:#fafafa}
         transportistas={transportistas}
         visibleStatuses={isTransportistaRole ? ["delivery"] : undefined}
         orders={activeOrders}
+        extraTabs={[{ value: HOJAS_RUTA_TAB, label: "Hojas de Ruta", icon: Route }]}
+        hideSearch={isHojasRutaTab}
       >
+        {!isHojasRutaTab && (<>
         {hasActiveFilters && (
           <Button
             variant="ghost"
@@ -1907,10 +1915,12 @@ tbody tr:nth-child(even){background:#fafafa}
             <span className="hidden sm:inline">Todos a {selBack.label}</span>
           </Button>
         )}
+        </>)}
       </OrdersFilters>
 
-
-      {loading ? (
+      {isHojasRutaTab ? (
+        <HojasRutaPanel />
+      ) : loading ? (
         <DataTableSkeleton columns={5} rows={5} />
       ) : filteredOrders.length === 0 ? (
         <Card>

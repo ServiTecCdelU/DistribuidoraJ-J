@@ -1,7 +1,6 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { MainLayout } from "@/components/layout/main-layout";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -13,7 +12,7 @@ import { formatCurrency, formatDate } from "@/lib/utils/format";
 import { Printer, Eye, Search, Route } from "lucide-react";
 import { toast } from "sonner";
 
-export default function HojasRutaPage() {
+export function HojasRutaPanel() {
   const [hojas, setHojas] = useState<HojaRuta[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
@@ -73,15 +72,10 @@ export default function HojasRutaPage() {
   }, []);
 
   if (loading) {
-    return (
-      <MainLayout title="Hojas de Ruta" description="Historial de hojas de ruta emitidas">
-        <DataTableSkeleton columns={6} rows={6} />
-      </MainLayout>
-    );
+    return <DataTableSkeleton columns={6} rows={6} />;
   }
 
   return (
-    <MainLayout title="Hojas de Ruta" description="Historial de hojas de ruta emitidas">
       <div className="space-y-4">
         <div className="relative max-w-sm">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
@@ -202,6 +196,5 @@ export default function HojasRutaPage() {
           </>
         )}
       </div>
-    </MainLayout>
   );
 }
