@@ -1699,6 +1699,25 @@ tbody tr:nth-child(even){background:#fafafa}
 
     html += `</body></html>`;
     printHtml(html);
+
+    // Archivar la hoja en Storage para poder consultarla después (solapa Hojas de Ruta).
+    if (hojaRutaNro) {
+      try {
+        await hojaRutaApi.save({
+          numero: hojaRutaNro,
+          html,
+          fechaReparto: now,
+          total: totalGeneral,
+          pedidoIds: cargoGroups.flatMap(({ orders }) => orders.map((o) => o.id)),
+          cantidadClientes: cargoGroups.length,
+          vendedores: Array.from(bySeller.keys()),
+          fingerprint,
+        });
+      } catch (e) {
+        console.error("Error archivando hoja de ruta:", e);
+        toast.error("La hoja se imprimió pero no se pudo archivar");
+      }
+    }
   }, [ordersGroupedByClient, clients, heldOrderIds, selectedOrderIds, printHtml]);
 
 

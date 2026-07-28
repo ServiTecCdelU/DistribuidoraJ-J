@@ -21,6 +21,7 @@ import {
   Store,
   Percent,
   Wallet,
+  Route,
 } from "lucide-react";
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
@@ -67,6 +68,7 @@ export function AppSidebar() {
         { href: "/ventas", label: user?.role === "seller" ? "Mis Ventas" : "Ventas", icon: Receipt, roles: ["admin", ...(isVendedor ? ["seller"] : [])] },
         { href: "/ventas/nueva", label: "Nueva Venta", icon: ShoppingCart, roles: ["admin", ...(isVendedor ? ["seller"] : [])] },
         { href: "/pedidos", label: "Pedidos", icon: Truck, roles: ["admin", ...(isTransportista ? ["seller"] : [])] },
+        { href: "/hojas-ruta", label: "Hojas de Ruta", icon: Route, roles: ["admin", ...(isTransportista ? ["seller"] : [])] },
         { href: "/mis-pedidos", label: "Mis Pedidos", icon: Package, roles: [...(isVendedor ? ["seller"] : [])] },
         { href: "/comisiones", label: "Mis Comisiones", icon: Banknote, roles: [...(isVendedor || isTransportista ? ["seller"] : [])] },
         // { href: "/cobranzas", label: "Cobranzas", icon: Receipt, roles: [...(isVendedor ? ["seller"] : [])] },

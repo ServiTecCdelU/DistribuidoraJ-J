@@ -110,7 +110,8 @@ import {
   saveTransferConfig,
 } from '@/services/transfer-config-service'
 import type { TransferConfig } from '@/services/transfer-config-service'
-import { assignHojaRuta } from '@/services/hoja-ruta-service'
+import { assignHojaRuta, saveHojaRuta, getHojasRuta, getHojaRutaHtml } from '@/services/hoja-ruta-service'
+import type { HojaRuta } from '@/services/hoja-ruta-service'
 import {
   getClientsBySeller,
   getDebtClients,
@@ -537,7 +538,11 @@ export type { TransferConfig }
 
 export const hojaRutaApi = {
   assign: assignHojaRuta,
+  save: saveHojaRuta,
+  getAll: getHojasRuta,
+  getHtml: getHojaRutaHtml,
 }
+export type { HojaRuta }
 
 export const cobranzasApi = {
   async getClientsBySeller(sellerId: string) {
