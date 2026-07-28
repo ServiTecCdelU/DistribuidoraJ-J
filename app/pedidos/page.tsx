@@ -559,8 +559,10 @@ export default function PedidosPage() {
     return () => { supabase.removeChannel(channel); };
   }, []);
 
-  // Transportista (solo o combinado con vendedor/cobrador) solo ve "En reparto"
+  // El transportista ve los tres estados, pero fuera de "En reparto" es solo consulta:
+  // no puede seleccionar, retener, mover ni generar documentos.
   const isTransportistaRole = user?.employeeType === "transportista" || user?.employeeType === "ambos";
+  const soloConsulta = isTransportistaRole && filterStatus !== "delivery";
 
   const [appliedTransportistaTab, setAppliedTransportistaTab] = useState(false);
   useEffect(() => {
@@ -1815,7 +1817,6 @@ tbody tr:nth-child(even){background:#fafafa}
         clients={clients}
         sellers={uniqueSellers}
         transportistas={transportistas}
-        visibleStatuses={isTransportistaRole ? ["delivery"] : undefined}
         orders={activeOrders}
         extraTabs={[{ value: HOJAS_RUTA_TAB, label: "Hojas de Ruta", icon: Route }]}
         hideSearch={isHojasRutaTab}
@@ -1832,7 +1833,7 @@ tbody tr:nth-child(even){background:#fafafa}
             Limpiar filtros
           </Button>
         )}
-        {filterStatus !== "pending" && (
+        {filterStatus !== "pending" && !soloConsulta && (
           <Button
             variant="outline"
             size="sm"
@@ -1844,7 +1845,7 @@ tbody tr:nth-child(even){background:#fafafa}
             <span className="hidden sm:inline">Hoja de Ruta</span>
           </Button>
         )}
-        {filterStatus !== "preparation" && filterStatus !== "delivery" && (
+        {filterStatus !== "preparation" && filterStatus !== "delivery" && !isTransportistaRole && (
           <Button
             variant="outline"
             size="sm"
@@ -1949,14 +1950,16 @@ tbody tr:nth-child(even){background:#fafafa}
                   className="flex items-center gap-3 px-4 py-3 bg-muted/40 hover:bg-muted/60 cursor-pointer select-none"
                   onClick={() => toggleDay(day.key)}
                 >
-                  <input
-                    type="checkbox"
-                    checked={dayAllSelected}
-                    onChange={() => toggleDaySelection(day.groups, day.key)}
-                    onClick={(e) => e.stopPropagation()}
-                    className="h-4 w-4 accent-teal-600 cursor-pointer"
-                    title="Seleccionar todo el día"
-                  />
+                  {!soloConsulta && (
+                    <input
+                      type="checkbox"
+                      checked={dayAllSelected}
+                      onChange={() => toggleDaySelection(day.groups, day.key)}
+                      onClick={(e) => e.stopPropagation()}
+                      className="h-4 w-4 accent-teal-600 cursor-pointer"
+                      title="Seleccionar todo el día"
+                    />
+                  )}
                   {isExpanded ? <ChevronDown className="h-4 w-4 text-muted-foreground" /> : <ChevronRight className="h-4 w-4 text-muted-foreground" />}
                   <span className="text-sm font-semibold capitalize">{day.label}</span>
                   <span className="text-xs text-muted-foreground">
@@ -1993,6 +1996,7 @@ tbody tr:nth-child(even){background:#fafafa}
                             return (
                               <tr key={groupKey} className={`transition-colors text-sm cursor-pointer ${isHeld ? "bg-red-50/60 opacity-60" : isSelected ? "bg-teal-50/60" : "hover:bg-muted/30"}`} onClick={onView}>
                                 <td className="px-2 py-2.5 text-center" onClick={(e) => e.stopPropagation()}>
+                                  {!soloConsulta && (
                                   <input
                                     type="checkbox"
                                     checked={isSelected}
@@ -2000,8 +2004,10 @@ tbody tr:nth-child(even){background:#fafafa}
                                     className="h-4 w-4 accent-teal-600 cursor-pointer align-middle"
                                     title="Seleccionar"
                                   />
+                                  )}
                                 </td>
                                 <td className="px-2 py-2.5 text-center" onClick={(e) => e.stopPropagation()}>
+                                  {!soloConsulta && (
                                   <button
                                     onClick={() => toggleHeldOrder(orderId, client)}
                                     className={`p-1 rounded-full transition-colors ${isHeld ? "text-red-500 bg-red-100 hover:bg-red-200" : "text-muted-foreground/40 hover:text-red-400 hover:bg-red-50"}`}
@@ -2009,6 +2015,7 @@ tbody tr:nth-child(even){background:#fafafa}
                                   >
                                     <Ban className="h-4 w-4" />
                                   </button>
+                                  )}
                                 </td>
                                 <td className="px-4 py-2.5">
                                   <p className={`text-xs font-semibold truncate ${isHeld ? "text-red-400 line-through" : "text-foreground"}`}>
@@ -2137,21 +2144,25 @@ tbody tr:nth-child(even){background:#fafafa}
                         return (
                           <div key={groupKey} className={`grid grid-cols-[1.25rem_1.5rem_minmax(0,1fr)] gap-2 px-3 py-2 cursor-pointer transition-colors items-center ${isHeld ? "bg-red-50/60 opacity-60" : isSelected ? "bg-teal-50/60" : "hover:bg-muted/20"}`} onClick={onView}>
                             <div className="shrink-0" onClick={(e) => e.stopPropagation()}>
-                              <input
-                                type="checkbox"
-                                checked={isSelected}
-                                onChange={() => toggleSelectedOrder(orderId)}
-                                className="h-4 w-4 accent-teal-600 cursor-pointer align-middle"
-                                title="Seleccionar"
-                              />
+                              {!soloConsulta && (
+                                <input
+                                  type="checkbox"
+                                  checked={isSelected}
+                                  onChange={() => toggleSelectedOrder(orderId)}
+                                  className="h-4 w-4 accent-teal-600 cursor-pointer align-middle"
+                                  title="Seleccionar"
+                                />
+                              )}
                             </div>
                             <div className="shrink-0" onClick={(e) => e.stopPropagation()}>
-                              <button
-                                onClick={() => toggleHeldOrder(orderId, client)}
-                                className={`p-1 rounded-full transition-colors ${isHeld ? "text-red-500 bg-red-100" : "text-muted-foreground/40 hover:text-red-400"}`}
-                              >
-                                <Ban className="h-3.5 w-3.5" />
-                              </button>
+                              {!soloConsulta && (
+                                <button
+                                  onClick={() => toggleHeldOrder(orderId, client)}
+                                  className={`p-1 rounded-full transition-colors ${isHeld ? "text-red-500 bg-red-100" : "text-muted-foreground/40 hover:text-red-400"}`}
+                                >
+                                  <Ban className="h-3.5 w-3.5" />
+                                </button>
+                              )}
                             </div>
                             <div className="min-w-0">
                               <div className="flex items-baseline justify-between gap-2">
@@ -2202,6 +2213,7 @@ tbody tr:nth-child(even){background:#fafafa}
         onHacerPedido={undefined}
         onDelete={handleDeleteOrder}
         onUpdateItems={handleUpdateItems}
+        readOnly={soloConsulta}
       />
 
       <ConfirmDialog

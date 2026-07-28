@@ -84,6 +84,8 @@ interface OrderDetailModalProps {
   onHacerPedido?: () => void;
   onDelete?: (order: Order) => void;
   onUpdateItems?: (orderId: string, items: Order["items"]) => Promise<void>;
+  /** Solo consulta: oculta las acciones que modifican el pedido */
+  readOnly?: boolean;
 }
 
 export function OrderDetailModal({
@@ -101,6 +103,7 @@ export function OrderDetailModal({
   onHacerPedido,
   onDelete,
   onUpdateItems,
+  readOnly,
 }: OrderDetailModalProps) {
   const router = useRouter();
   const [selectedTransportista, setSelectedTransportista] = useState<string>("");
@@ -528,7 +531,7 @@ export function OrderDetailModal({
           )}
 
           {/* Botón avanzar */}
-          {nextStatus && (
+          {nextStatus && !readOnly && (
             <Button
               className="w-full h-12 text-base font-semibold shadow-lg hover:shadow-xl transition-shadow"
               size="lg"
@@ -580,7 +583,7 @@ export function OrderDetailModal({
                     </Button>
                   )}
                 </>
-              ) : (
+              ) : readOnly ? null : (
                 <Button variant="outline" size="sm" className="w-full gap-1.5 text-xs mt-3"
                   onClick={handleGenerarRemito} disabled={generando || !onGenerateRemito}>
                   {generando ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Truck className="h-3.5 w-3.5" />}
