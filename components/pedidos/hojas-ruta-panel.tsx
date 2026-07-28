@@ -9,13 +9,15 @@ import { DataTableSkeleton } from "@/components/ui/data-table-skeleton";
 import { hojaRutaApi } from "@/lib/api";
 import type { HojaRuta } from "@/lib/api";
 import { formatCurrency, formatDate } from "@/lib/utils/format";
-import { Printer, Eye, Search, Route } from "lucide-react";
+import { filtrarHojasRuta } from "@/lib/utils/hoja-ruta-filter";
+import { Printer, Search, Route, X } from "lucide-react";
 import { toast } from "sonner";
 
 export function HojasRutaPanel() {
   const [hojas, setHojas] = useState<HojaRuta[]>([]);
   const [loading, setLoading] = useState(true);
-  const [search, setSearch] = useState("");
+  const [searchNumero, setSearchNumero] = useState("");
+  const [searchFecha, setSearchFecha] = useState("");
   const [busyId, setBusyId] = useState<string | null>(null);
 
   useEffect(() => {
@@ -30,33 +32,12 @@ export function HojasRutaPanel() {
     })();
   }, []);
 
-  const filtered = useMemo(() => {
-    const q = search.trim().toLowerCase();
-    if (!q) return hojas;
-    return hojas.filter(
-      (h) =>
-        h.numero.toLowerCase().includes(q) ||
-        h.vendedores.some((v) => v.toLowerCase().includes(q)) ||
-        formatDate(new Date(h.fechaReparto + "T12:00:00")).includes(q),
-    );
-  }, [hojas, search]);
+  const filtered = useMemo(
+    () => filtrarHojasRuta(hojas, { numero: searchNumero, fecha: searchFecha }),
+    [hojas, searchNumero, searchFecha],
+  );
 
-  // Storage sirve el archivo como text/plain y con CSP sandbox, así que no se puede
-  // abrir la URL pública directamente: se descarga el HTML y se renderiza local.
-  const openHoja = useCallback(async (hoja: HojaRuta) => {
-    setBusyId(hoja.id);
-    try {
-      const html = await hojaRutaApi.getHtml(hoja.storagePath);
-      const url = URL.createObjectURL(new Blob([html], { type: "text/html;charset=utf-8" }));
-      const win = window.open(url, "_blank", "noopener");
-      if (!win) toast.error("El navegador bloqueó la ventana emergente");
-      setTimeout(() => URL.revokeObjectURL(url), 60000);
-    } catch {
-      toast.error("No se pudo abrir la hoja de ruta");
-    } finally {
-      setBusyId(null);
-    }
-  }, []);
+  const hasFilters = searchNumero.trim() !== "" || searchFecha !== "";
 
   const printHoja = useCallback(async (hoja: HojaRuta) => {
     setBusyId(hoja.id);
@@ -90,14 +71,36 @@ export function HojasRutaPanel() {
 
   return (
       <div className="space-y-4">
-        <div className="relative max-w-sm">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+        <div className="flex flex-wrap items-center gap-2">
+          <div className="relative w-full sm:w-56">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+            <Input
+              placeholder="N° de hoja (ej: 56)"
+              value={searchNumero}
+              onChange={(e) => setSearchNumero(e.target.value)}
+              className="pl-9 rounded-2xl"
+            />
+          </div>
           <Input
-            placeholder="Buscar por N°, fecha o vendedor..."
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            className="pl-9 rounded-2xl"
+            type="date"
+            value={searchFecha}
+            onChange={(e) => setSearchFecha(e.target.value)}
+            className={`rounded-2xl w-full sm:w-[170px] ${searchFecha ? "border-teal-500 ring-1 ring-teal-500/30" : ""}`}
+            title="Filtrar por fecha de reparto"
           />
+          {hasFilters && (
+            <Button
+              variant="ghost"
+              size="sm"
+              className="rounded-2xl text-muted-foreground"
+              onClick={() => {
+                setSearchNumero("");
+                setSearchFecha("");
+              }}
+            >
+              <X className="h-4 w-4 mr-1" /> Limpiar
+            </Button>
+          )}
         </div>
 
         {filtered.length === 0 ? (
@@ -145,9 +148,6 @@ export function HojasRutaPanel() {
                         <td className="px-4 py-3 text-right font-semibold">{formatCurrency(h.total)}</td>
                         <td className="px-4 py-3">
                           <div className="flex justify-end gap-2">
-                            <Button variant="outline" size="sm" className="rounded-2xl" disabled={busyId === h.id} onClick={() => openHoja(h)}>
-                              <Eye className="h-4 w-4 mr-1" /> Ver
-                            </Button>
                             <Button
                               size="sm"
                               className="rounded-2xl"
@@ -190,9 +190,6 @@ export function HojasRutaPanel() {
                       <span className="font-semibold text-foreground text-sm">{formatCurrency(h.total)}</span>
                     </div>
                     <div className="flex gap-2 pt-1">
-                      <Button variant="outline" size="sm" className="rounded-2xl flex-1" disabled={busyId === h.id} onClick={() => openHoja(h)}>
-                        <Eye className="h-4 w-4 mr-1" /> Ver
-                      </Button>
                       <Button
                         size="sm"
                         className="rounded-2xl flex-1"
