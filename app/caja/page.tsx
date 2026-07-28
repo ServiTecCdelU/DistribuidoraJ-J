@@ -140,12 +140,13 @@ const cajaPdfStyles = StyleSheet.create({
   diffPositive: { color: "#059669" },
   diffNegative: { color: "#dc2626" },
   diffNeutral: { color: "#059669" },
-  saleRow: { flexDirection: "row", justifyContent: "space-between", paddingVertical: 3, borderBottom: "0.5px solid #f0f0f0", alignItems: "center" },
-  saleClient: { fontSize: 8, fontWeight: "bold", width: "30%" },
+  saleRow: { flexDirection: "row", paddingVertical: 3, borderBottom: "0.5px solid #f0f0f0", alignItems: "center" },
+  saleClient: { fontSize: 8, fontWeight: "bold", width: "33%", paddingRight: 4 },
   saleNumber: { fontSize: 7, color: "#888", width: "12%" },
-  saleTime: { fontSize: 7, color: "#888", width: "10%" },
-  saleAmount: { fontSize: 8, fontWeight: "bold", textAlign: "right", width: "18%" },
-  saleBadge: { fontSize: 6, textAlign: "center", width: "15%", padding: "2px 4px", borderRadius: 3 },
+  saleHr: { fontSize: 7, color: "#0d9488", fontWeight: "bold", textAlign: "center", width: "8%" },
+  saleTime: { fontSize: 7, color: "#888", textAlign: "center", width: "9%" },
+  saleAmount: { fontSize: 8, fontWeight: "bold", textAlign: "right", width: "22%" },
+  saleBadge: { fontSize: 6, textAlign: "center", width: "16%", padding: "2px 4px", borderRadius: 3 },
   cashBadge: { backgroundColor: "#d1fae5", color: "#065f46" },
   transferBadge: { backgroundColor: "#ede9fe", color: "#5b21b6" },
   creditBadge: { backgroundColor: "#dbeafe", color: "#1e40af" },
@@ -189,6 +190,7 @@ const CajaPdfDocument = ({ register, sales, losses = [], pagos = [], rejected = 
   const salesCount = register.salesCount ?? sales.length;
   const pagosTotal = pagos.reduce((a, p) => a + p.monto, 0);
   const expectedCash = register.initialAmount + cashTotal;
+  const hojasRutaCaja = Array.from(new Set(sales.map((s) => (s as any).hojaRutaNumber).filter(Boolean))).sort() as string[];
 
   return (
     <Document>
@@ -229,6 +231,12 @@ const CajaPdfDocument = ({ register, sales, losses = [], pagos = [], rejected = 
             <Text style={cajaPdfStyles.label}>Monto inicial</Text>
             <Text style={cajaPdfStyles.value}>{formatCurrency(register.initialAmount)}</Text>
           </View>
+          {hojasRutaCaja.length > 0 && (
+            <View style={cajaPdfStyles.row}>
+              <Text style={cajaPdfStyles.label}>Hojas de ruta</Text>
+              <Text style={cajaPdfStyles.value}>{hojasRutaCaja.join(", ")}</Text>
+            </View>
+          )}
         </View>
 
         {/* Estadísticas */}
@@ -301,6 +309,7 @@ const CajaPdfDocument = ({ register, sales, losses = [], pagos = [], rejected = 
             <View style={[cajaPdfStyles.saleRow, { borderBottom: "1px solid #d1d5db", paddingBottom: 4, marginBottom: 2 }]}>
               <Text style={[cajaPdfStyles.saleClient, { fontWeight: "bold", color: "#333" }]}>Cliente</Text>
               <Text style={[cajaPdfStyles.saleNumber, { fontWeight: "bold", color: "#333" }]}>#Venta</Text>
+              <Text style={[cajaPdfStyles.saleHr, { fontWeight: "bold", color: "#333" }]}>HR</Text>
               <Text style={[cajaPdfStyles.saleTime, { fontWeight: "bold", color: "#333" }]}>Hora</Text>
               <Text style={[cajaPdfStyles.saleBadge, { fontWeight: "bold", color: "#333" }]}>Pago</Text>
               <Text style={[cajaPdfStyles.saleAmount, { fontWeight: "bold", color: "#333" }]}>Monto</Text>
@@ -313,8 +322,9 @@ const CajaPdfDocument = ({ register, sales, losses = [], pagos = [], rejected = 
                   : cajaPdfStyles.mixedBadge;
               return (
                 <View key={i} style={cajaPdfStyles.saleRow}>
-                  <Text style={cajaPdfStyles.saleClient}>{sale.clientName || "Cons. Final"}{(sale as any).hojaRutaNumber ? `  (HR ${(sale as any).hojaRutaNumber})` : ""}</Text>
+                  <Text style={cajaPdfStyles.saleClient}>{sale.clientName || "Cons. Final"}</Text>
                   <Text style={cajaPdfStyles.saleNumber}>{sale.saleNumber ? `#${sale.saleNumber}` : "-"}</Text>
+                  <Text style={cajaPdfStyles.saleHr}>{(sale as any).hojaRutaNumber || "-"}</Text>
                   <Text style={cajaPdfStyles.saleTime}>{formatTimeStr(new Date(sale.createdAt))}</Text>
                   <Text style={[cajaPdfStyles.saleBadge, badgeStyle]}>
                     {sale.paymentType === "cash"
@@ -335,6 +345,7 @@ const CajaPdfDocument = ({ register, sales, losses = [], pagos = [], rejected = 
             <View style={[cajaPdfStyles.saleRow, { borderBottom: "1px solid #d1d5db", paddingBottom: 4, marginBottom: 2 }]}>
               <Text style={[cajaPdfStyles.saleClient, { fontWeight: "bold", color: "#333" }]}>Cliente</Text>
               <Text style={[cajaPdfStyles.saleNumber, { fontWeight: "bold", color: "#333" }]}>Remito</Text>
+              <Text style={[cajaPdfStyles.saleHr, { fontWeight: "bold", color: "#333" }]}>HR</Text>
               <Text style={[cajaPdfStyles.saleTime, { fontWeight: "bold", color: "#333" }]}>Hora</Text>
               <Text style={[cajaPdfStyles.saleBadge, { fontWeight: "bold", color: "#333" }]}>Estado</Text>
             </View>
@@ -342,6 +353,7 @@ const CajaPdfDocument = ({ register, sales, losses = [], pagos = [], rejected = 
               <View key={i} style={cajaPdfStyles.saleRow}>
                 <Text style={cajaPdfStyles.saleClient}>{o.clientName || "Cons. Final"}</Text>
                 <Text style={cajaPdfStyles.saleNumber}>{o.remitoNumber || "-"}</Text>
+                <Text style={cajaPdfStyles.saleHr}>-</Text>
                 <Text style={cajaPdfStyles.saleTime}>{formatTimeStr(new Date(o.date))}</Text>
                 <Text style={[cajaPdfStyles.saleBadge, { color: "#dc2626" }]}>Rechazado</Text>
               </View>
@@ -1486,6 +1498,7 @@ export default function CajaPage() {
                                   <div className="min-w-0">
                                     <p className="font-medium text-xs truncate">{sale.clientName || "Consumidor Final"}</p>
                                     {sale.saleNumber && <p className="text-xs text-muted-foreground truncate">{sale.saleNumber}</p>}
+                                    {(sale as any).hojaRutaNumber && <p className="text-[10px] font-medium text-teal-700">HR {(sale as any).hojaRutaNumber}</p>}
                                   </div>
                                   {/* Col 2: forma de pago / fecha */}
                                   <div className="text-center">
@@ -1542,10 +1555,11 @@ export default function CajaPage() {
                         {/* DESKTOP: tabla de columnas */}
                         <div className="hidden sm:block rounded-xl border divide-y overflow-hidden">
                           {/* Encabezado */}
-                          <div className="grid grid-cols-[6rem_minmax(6rem,8rem)_minmax(0,1fr)_8rem_6rem_6rem_7rem] gap-x-2 px-3 py-2 bg-muted/50 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
+                          <div className="grid grid-cols-[6rem_minmax(6rem,8rem)_minmax(0,1fr)_3.5rem_8rem_6rem_6rem_7rem] gap-x-2 px-3 py-2 bg-muted/50 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
                             <span>Fecha</span>
                             <span>Venta</span>
                             <span>Cliente</span>
+                            <span className="text-center">HR</span>
                             <span className="text-center">Forma de pago</span>
                             <span className="text-right">Pérdida</span>
                             <span className="text-right">Devolución</span>
@@ -1560,10 +1574,11 @@ export default function CajaPage() {
                               : sale.paymentType === "credit" ? "bg-blue-100 text-blue-800" : "bg-amber-100 text-amber-800";
                             const { perdida, devolucion } = calcIncidencia(sale);
                             return (
-                              <div key={sale.id} className="grid grid-cols-[6rem_minmax(6rem,8rem)_minmax(0,1fr)_8rem_6rem_6rem_7rem] gap-x-2 px-3 py-2 items-center text-sm">
+                              <div key={sale.id} className="grid grid-cols-[6rem_minmax(6rem,8rem)_minmax(0,1fr)_3.5rem_8rem_6rem_6rem_7rem] gap-x-2 px-3 py-2 items-center text-sm">
                                 <span className="text-xs text-muted-foreground leading-tight">{formatDateShort(new Date(sale.createdAt))}<br />{formatTimeStr(new Date(sale.createdAt))}</span>
                                 <span className="text-xs text-muted-foreground truncate">{sale.saleNumber ? `#${sale.saleNumber}` : (sale.remitoNumber || "—")}</span>
                                 <span className="font-medium truncate">{sale.clientName || "Consumidor Final"}</span>
+                                <span className="text-center text-xs font-medium text-teal-700 tabular-nums">{(sale as any).hojaRutaNumber || <span className="text-muted-foreground/40">—</span>}</span>
                                 <span className="flex items-center justify-center gap-1">
                                   {(sale as any).comprobanteTransferencia && (
                                     <button type="button" onClick={() => setComprobanteUrl((sale as any).comprobanteTransferencia)} className="text-violet-600 hover:text-violet-800" title="Ver comprobante de transferencia">
@@ -1583,10 +1598,11 @@ export default function CajaPage() {
                             );
                           })}
                           {rejectedOrders.map((o) => (
-                            <div key={o.id} className="grid grid-cols-[6rem_minmax(6rem,8rem)_minmax(0,1fr)_8rem_6rem_6rem_7rem] gap-x-2 px-3 py-2 items-center text-sm">
+                            <div key={o.id} className="grid grid-cols-[6rem_minmax(6rem,8rem)_minmax(0,1fr)_3.5rem_8rem_6rem_6rem_7rem] gap-x-2 px-3 py-2 items-center text-sm">
                               <span className="text-xs text-muted-foreground">{formatDateShort(new Date(o.date))}</span>
                               <span className="text-xs text-muted-foreground truncate">{o.remitoNumber || "—"}</span>
                               <span className="font-medium truncate">{o.clientName || "Consumidor Final"}</span>
+                              <span className="text-center text-muted-foreground/40">—</span>
                               <span className="flex justify-center"><Badge className="text-[10px] border-0 bg-red-100 text-red-700">Rechazado</Badge></span>
                               <span className="text-right text-muted-foreground/40">—</span>
                               <span className="text-right text-muted-foreground/40">—</span>
@@ -1717,6 +1733,11 @@ export default function CajaPage() {
                   <div className="flex items-center justify-between">
                     <CardTitle className="text-base">
                       Caja del {formatDateShort(selectedHistorial.openedAt)}
+                      {(() => {
+                        const hrs = Array.from(new Set(selectedSales.map((s) => (s as any).hojaRutaNumber).filter(Boolean))).sort();
+                        if (hrs.length === 0) return null;
+                        return <span className="ml-2 text-sm font-medium text-teal-700">— HR {hrs.join(", ")}</span>;
+                      })()}
                     </CardTitle>
                     <div className="flex items-center gap-2">
                       <Button
@@ -1801,7 +1822,15 @@ export default function CajaPage() {
                       {selectedSales.length > 0 && (
                         <div>
                           <p className="text-sm font-medium mb-2">Ventas ({selectedSales.length})</p>
-                          <div className="space-y-1 max-h-60 overflow-y-auto">
+                          <div className="rounded-xl border divide-y overflow-hidden max-h-72 overflow-y-auto">
+                            <div className="grid grid-cols-[minmax(0,1fr)_5.5rem_3rem_3.5rem_5.5rem_6rem] gap-x-2 px-3 py-2 bg-muted/50 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground sticky top-0">
+                              <span>Cliente</span>
+                              <span>Venta</span>
+                              <span className="text-center">HR</span>
+                              <span className="text-center">Hora</span>
+                              <span className="text-center">Pago</span>
+                              <span className="text-right">Total</span>
+                            </div>
                             {selectedSales.map((sale) => {
                               const paymentLabel = sale.paymentType === "cash"
                                 ? ((sale as any).paymentMethod === "transferencia" ? "Transf." : "Efectivo")
@@ -1814,18 +1843,12 @@ export default function CajaPage() {
                                   ? "bg-blue-100 text-blue-800"
                                   : "bg-amber-100 text-amber-800";
                               return (
-                                <div key={sale.id} className="flex items-center justify-between py-1.5 border-b border-border/30 last:border-0 text-sm gap-2">
-                                  <div className="flex items-center gap-2 min-w-0 flex-1">
-                                    <span className="font-medium truncate">{sale.clientName || "Cons. Final"}</span>
-                                    {sale.saleNumber && (
-                                      <span className="text-xs text-muted-foreground shrink-0">#{sale.saleNumber}</span>
-                                    )}
-                                    {(sale as any).hojaRutaNumber && (
-                                      <span className="text-xs text-teal-600 font-medium shrink-0">HR {(sale as any).hojaRutaNumber}</span>
-                                    )}
-                                    <span className="text-xs text-muted-foreground shrink-0">{formatTimeStr(new Date(sale.createdAt))}</span>
-                                  </div>
-                                  <div className="flex items-center gap-2 shrink-0">
+                                <div key={sale.id} className="grid grid-cols-[minmax(0,1fr)_5.5rem_3rem_3.5rem_5.5rem_6rem] gap-x-2 px-3 py-2 items-center text-sm bg-background">
+                                  <span className="font-medium truncate">{sale.clientName || "Cons. Final"}</span>
+                                  <span className="text-xs text-muted-foreground truncate">{sale.saleNumber ? `#${sale.saleNumber}` : "—"}</span>
+                                  <span className="text-center text-xs font-medium text-teal-700 tabular-nums">{(sale as any).hojaRutaNumber || <span className="text-muted-foreground/40">—</span>}</span>
+                                  <span className="text-center text-xs text-muted-foreground tabular-nums">{formatTimeStr(new Date(sale.createdAt))}</span>
+                                  <span className="flex items-center justify-center gap-1">
                                     {(sale as any).comprobanteTransferencia && (
                                       <button
                                         type="button"
@@ -1833,14 +1856,12 @@ export default function CajaPage() {
                                         className="text-violet-600 hover:text-violet-800"
                                         title="Ver comprobante de transferencia"
                                       >
-                                        <Receipt className="h-4 w-4" />
+                                        <Receipt className="h-3.5 w-3.5" />
                                       </button>
                                     )}
-                                    <Badge className={`text-[10px] border-0 ${badgeClass}`}>
-                                      {paymentLabel}
-                                    </Badge>
-                                    <span className="font-semibold text-right tabular-nums">{formatCurrency(sale.total || 0)}</span>
-                                  </div>
+                                    <Badge className={`text-[10px] border-0 ${badgeClass}`}>{paymentLabel}</Badge>
+                                  </span>
+                                  <span className="text-right font-semibold tabular-nums">{formatCurrency(sale.total || 0)}</span>
                                 </div>
                               );
                             })}
