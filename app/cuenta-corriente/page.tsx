@@ -2292,9 +2292,8 @@ ${renderTabla('Cuenta Mayorista', mayorista, balanceMay)}
             </div>
 
             {/* Listado simple de saldos (solo clientes que deben) */}
-            <div className="flex">
+            <div className="flex justify-end">
               <Button
-                variant="outline"
                 onClick={() => setSaldosDialogOpen(true)}
                 className="h-10 rounded-xl gap-1.5 w-full sm:w-auto"
               >
