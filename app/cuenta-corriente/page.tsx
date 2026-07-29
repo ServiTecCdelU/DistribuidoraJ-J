@@ -39,6 +39,7 @@ import type { Faltante } from '@/services/faltantes-service'
 import type { Devolucion } from '@/services/devoluciones-service'
 import type { ReciboMatch } from '@/services/payments-service'
 import { descargarDocumento } from '@/lib/utils/doc-actions'
+import { downloadBase64Pdf } from '@/services/pdf-service'
 import { useAuth } from '@/hooks/use-auth'
 import type { Client, ComprobantePago, DebtClassification, Sale, Seller, Transaction } from '@/lib/types'
 import { MovimientoDeudaCard, MOVIMIENTO_GRID } from '@/components/cuenta-corriente/movimiento-deuda-card'
@@ -98,6 +99,34 @@ export default function CuentaCorrientePage() {
   const [printMode, setPrintMode] = useState<'choose' | 'seller'>('choose')
   const [printSeller, setPrintSeller] = useState('all')
   const [printing, setPrinting] = useState(false)
+
+  // Modal "Imprimir solo saldos": listado simple de clientes con saldo > 0
+  const SALDOS_COLS_KEY = 'cc_print_saldos_columnas'
+  const [saldosDialogOpen, setSaldosDialogOpen] = useState(false)
+  const [saldosCodigo, setSaldosCodigo] = useState<string>('all')
+  const [saldosOrder, setSaldosOrder] = useState<'nombre' | 'diaCobro' | 'saldo' | 'codigo'>('saldo')
+  const [saldosPrinting, setSaldosPrinting] = useState(false)
+  const [saldosCols, setSaldosCols] = useState({
+    cuit: false,
+    categoria: false,
+    telefono: true,
+    direccion: true,
+    codigoVendedor: true,
+    diaCobro: true,
+    saldo: true,
+  })
+  useEffect(() => {
+    try {
+      const raw = localStorage.getItem(SALDOS_COLS_KEY)
+      if (raw) setSaldosCols((prev) => ({ ...prev, ...JSON.parse(raw) }))
+    } catch {}
+  }, [])
+  const toggleSaldosCol = (key: keyof typeof saldosCols) =>
+    setSaldosCols((prev) => {
+      const next = { ...prev, [key]: !prev[key] }
+      try { localStorage.setItem(SALDOS_COLS_KEY, JSON.stringify(next)) } catch {}
+      return next
+    })
 
   // Cliente seleccionado
   const [selectedClient, setSelectedClient] = useState<ClientWithSeller | null>(null)
@@ -810,6 +839,142 @@ ${bloques}
       toast.dismiss(loadingId)
       setPrinting(false)
       toast.error('Error al generar el listado de cobranza')
+    }
+  }
+
+  // Código de vendedor por id (usa rawSellers para cubrir vendedores dados de baja)
+  const sellerCodigoById = useMemo(
+    () => new Map(rawSellers.map((s) => [s.id, (s.codigoVendedor || '').trim()])),
+    [rawSellers]
+  )
+
+  // Opciones de filtro por código de vendedor (un código puede compartirse entre varios vendedores)
+  const codigoOptions = useMemo(() => {
+    const map = new Map<string, string[]>()
+    for (const s of sellers) {
+      const cod = (s.codigoVendedor || '').trim()
+      if (!cod) continue
+      const arr = map.get(cod) ?? []
+      arr.push(s.name)
+      map.set(cod, arr)
+    }
+    return Array.from(map.entries())
+      .map(([codigo, names]) => ({ codigo, names }))
+      .sort((a, b) => a.codigo.localeCompare(b.codigo, undefined, { numeric: true }))
+  }, [sellers])
+
+  // Imprime un listado simple (sin movimientos) de los clientes con saldo > 0.
+  const handlePrintSoloSaldos = async () => {
+    if (saldosPrinting) return
+    const esc = (s: any) => String(s ?? '').replace(/[&<>]/g, (m) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' }[m] as string))
+
+    let list = scopedDebtClients.filter((c) => (c.currentBalance || 0) > 0).filter((c) => {
+      if (saldosCodigo === 'all') return true
+      if (saldosCodigo === 'none') return !c.sellerId || !sellerCodigoById.get(c.sellerId)
+      return c.sellerId ? sellerCodigoById.get(c.sellerId) === saldosCodigo : false
+    })
+    if (list.length === 0) { toast.error('No hay clientes con saldo para imprimir'); return }
+
+    const diaLabel = (d?: string) => d ? d.charAt(0).toUpperCase() + d.slice(1) : '—'
+    list = [...list].sort((a, b) => {
+      switch (saldosOrder) {
+        case 'saldo': return (b.currentBalance || 0) - (a.currentBalance || 0)
+        case 'codigo': {
+          const ca = a.sellerId ? (sellerCodigoById.get(a.sellerId) || '') : ''
+          const cb = b.sellerId ? (sellerCodigoById.get(b.sellerId) || '') : ''
+          return ca.localeCompare(cb, undefined, { numeric: true }) || a.name.localeCompare(b.name)
+        }
+        case 'diaCobro': {
+          const orden = ['lunes', 'martes', 'miercoles', 'jueves', 'viernes', 'sabado', 'domingo']
+          const ia = a.diaCobro ? orden.indexOf(a.diaCobro) : 99
+          const ib = b.diaCobro ? orden.indexOf(b.diaCobro) : 99
+          return ia - ib || a.name.localeCompare(b.name)
+        }
+        default: return a.name.localeCompare(b.name)
+      }
+    })
+
+    const categoriaLabel = (cat: Client['taxCategory']) => {
+      switch (cat) {
+        case 'responsable_inscripto': return 'Resp. Inscripto'
+        case 'monotributo': return 'Monotributo'
+        case 'exento': return 'Exento'
+        case 'no_responsable': return 'No Resp.'
+        default: return 'Cons. Final'
+      }
+    }
+
+    const cols: { key: string; label: string; align?: string }[] = [{ key: 'nombre', label: 'Cliente' }]
+    if (saldosCols.codigoVendedor) cols.push({ key: 'codigoVendedor', label: 'Cód. Vend.' })
+    if (saldosCols.cuit) cols.push({ key: 'cuit', label: 'CUIT' })
+    if (saldosCols.categoria) cols.push({ key: 'categoria', label: 'Categoría' })
+    if (saldosCols.telefono) cols.push({ key: 'telefono', label: 'Teléfono' })
+    if (saldosCols.direccion) cols.push({ key: 'direccion', label: 'Dirección' })
+    if (saldosCols.diaCobro) cols.push({ key: 'diaCobro', label: 'Día de pago', align: 'center' })
+    if (saldosCols.saldo) cols.push({ key: 'saldo', label: 'Saldo', align: 'right' })
+
+    const cellValue = (c: ClientWithSeller, key: string): string => {
+      switch (key) {
+        case 'nombre': return esc(c.name)
+        case 'codigoVendedor': return esc(c.sellerId ? (sellerCodigoById.get(c.sellerId) || '—') : '—')
+        case 'cuit': return esc(c.cuit || '—')
+        case 'categoria': return esc(categoriaLabel(c.taxCategory))
+        case 'telefono': return esc(c.phone || '—')
+        case 'direccion': return esc(c.address || '—')
+        case 'diaCobro': return esc(diaLabel(c.diaCobro))
+        case 'saldo': return esc(formatCurrency(c.currentBalance || 0))
+        default: return ''
+      }
+    }
+
+    const codigoTitulo = saldosCodigo === 'all'
+      ? 'Todos los vendedores'
+      : saldosCodigo === 'none'
+      ? 'Sin vendedor asignado'
+      : (codigoOptions.find((c) => c.codigo === saldosCodigo)?.names.join(', ') || saldosCodigo)
+    const fecha = new Intl.DateTimeFormat('es-AR', { day: '2-digit', month: 'long', year: 'numeric' }).format(new Date())
+    const total = list.reduce((acc, c) => acc + (c.currentBalance || 0), 0)
+
+    const thead = cols.map((c) => `<th style="text-align:${c.align || 'left'}">${c.label}</th>`).join('')
+    const tbody = list.map((c) =>
+      `<tr>${cols.map((col) => `<td style="text-align:${col.align || 'left'}">${cellValue(c, col.key)}</td>`).join('')}</tr>`
+    ).join('')
+
+    const html = `<!doctype html><html><head><meta charset="utf-8">
+      <style>
+        * { box-sizing: border-box; }
+        body { font-family: Arial, Helvetica, sans-serif; color: #111; margin: 0; padding: 14mm; }
+        h1 { font-size: 15px; margin: 0 0 14px; font-weight: 700; }
+        table { width: 100%; border-collapse: collapse; font-size: 11px; }
+        th { background: #0d9488; color: #fff; padding: 6px 8px; text-align: left; }
+        td { padding: 5px 8px; border-bottom: 1px solid #e5e7eb; }
+        tr:nth-child(even) td { background: #f8fafc; }
+        .count { font-size: 12px; color: #555; margin-top: 12px; }
+        .total { font-size: 13px; font-weight: 700; margin-top: 4px; }
+      </style></head><body>
+      <h1>Saldos de Cuenta Corriente · ${esc(codigoTitulo)} · ${fecha}</h1>
+      <table><thead><tr>${thead}</tr></thead><tbody>${tbody}</tbody></table>
+      <div class="count">Total: ${list.length} cliente(s) con saldo</div>
+      <div class="total">Total a cobrar: ${formatCurrency(total)}</div>
+      </body></html>`
+
+    setSaldosPrinting(true)
+    const toastId = toast.loading('Generando PDF...')
+    try {
+      const res = await fetch('/api/generate-pdf', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ html, filename: 'saldos.pdf', pageNumbers: true }),
+      })
+      const data = await res.json()
+      if (!res.ok || !data?.pdf) throw new Error(data?.error || 'Error generando PDF')
+      downloadBase64Pdf(data.pdf, `saldos_${new Date().toISOString().slice(0, 10)}.pdf`)
+      toast.success(`${list.length} clientes impresos`, { id: toastId })
+      setSaldosDialogOpen(false)
+    } catch {
+      toast.error('Error al generar el PDF', { id: toastId })
+    } finally {
+      setSaldosPrinting(false)
     }
   }
 
@@ -2126,6 +2291,18 @@ ${renderTabla('Cuenta Mayorista', mayorista, balanceMay)}
               </Button>
             </div>
 
+            {/* Listado simple de saldos (solo clientes que deben) */}
+            <div className="flex">
+              <Button
+                variant="outline"
+                onClick={() => setSaldosDialogOpen(true)}
+                className="h-10 rounded-xl gap-1.5 w-full sm:w-auto"
+              >
+                <Printer className="h-4 w-4" />
+                Imprimir solo saldos
+              </Button>
+            </div>
+
             {/* Selects: panel colapsable en mobile, fila con wrap en desktop */}
             <div className={`${filtersOpen ? 'grid grid-cols-1' : 'hidden'} sm:flex sm:flex-row sm:flex-wrap gap-3`}>
               <Select value={sortBy} onValueChange={(v) => setSortBy(v as 'deuda' | 'dias')}>
@@ -2730,6 +2907,83 @@ ${renderTabla('Cuenta Mayorista', mayorista, balanceMay)}
                   </DialogFooter>
                 </div>
               )}
+            </DialogContent>
+          </Dialog>
+
+          {/* Modal: imprimir solo saldos (clientes con saldo > 0) */}
+          <Dialog open={saldosDialogOpen} onOpenChange={(open) => { if (!saldosPrinting) setSaldosDialogOpen(open) }}>
+            <DialogContent className="max-w-[calc(100vw-2rem)] sm:max-w-md max-h-[90vh] overflow-y-auto">
+              <DialogHeader>
+                <DialogTitle className="flex items-center gap-2">
+                  <Printer className="h-4 w-4 text-teal-600" />
+                  Imprimir solo saldos
+                </DialogTitle>
+                <DialogDescription>
+                  Se imprimen únicamente los clientes con saldo mayor a $0.
+                </DialogDescription>
+              </DialogHeader>
+              <div className="space-y-4 pt-2">
+                {/* Vendedor / código */}
+                <div className="space-y-2">
+                  <label className="text-sm font-medium text-foreground">Vendedor</label>
+                  <select
+                    className="h-10 w-full rounded-md border border-input bg-background px-3 text-sm"
+                    value={saldosCodigo}
+                    onChange={(e) => setSaldosCodigo(e.target.value)}
+                  >
+                    <option value="all">Todos los vendedores</option>
+                    <option value="none">Sin código</option>
+                    {codigoOptions.map((c) => (
+                      <option key={c.codigo} value={c.codigo}>Cód. {c.codigo} — {c.names.join(', ')}</option>
+                    ))}
+                  </select>
+                </div>
+
+                {/* Columnas a mostrar */}
+                <div className="space-y-2">
+                  <label className="text-sm font-medium text-foreground">Qué mostrar</label>
+                  <div className="grid grid-cols-2 gap-2">
+                    {([
+                      ['codigoVendedor', 'Cód. vendedor'],
+                      ['cuit', 'CUIT'],
+                      ['categoria', 'Categoría'],
+                      ['telefono', 'Teléfono'],
+                      ['direccion', 'Dirección'],
+                      ['diaCobro', 'Día de pago'],
+                      ['saldo', 'Saldo'],
+                    ] as [keyof typeof saldosCols, string][]).map(([key, label]) => (
+                      <label key={key} className="flex items-center gap-2 text-sm p-2 rounded-lg border border-border cursor-pointer hover:bg-muted/40">
+                        <input type="checkbox" checked={saldosCols[key]} onChange={() => toggleSaldosCol(key)} className="accent-teal-600 h-4 w-4" />
+                        {label}
+                      </label>
+                    ))}
+                  </div>
+                  <p className="text-xs text-muted-foreground">El nombre del cliente se muestra siempre.</p>
+                </div>
+
+                {/* Orden */}
+                <div className="space-y-2">
+                  <label className="text-sm font-medium text-foreground">Ordenar por</label>
+                  <select
+                    className="h-10 w-full rounded-md border border-input bg-background px-3 text-sm"
+                    value={saldosOrder}
+                    onChange={(e) => setSaldosOrder(e.target.value as typeof saldosOrder)}
+                  >
+                    <option value="saldo">Saldo (mayor a menor)</option>
+                    <option value="nombre">Nombre (A-Z)</option>
+                    <option value="diaCobro">Día de pago</option>
+                    <option value="codigo">Código de vendedor</option>
+                  </select>
+                </div>
+
+                <div className="flex gap-2 justify-end pt-2">
+                  <Button variant="outline" onClick={() => setSaldosDialogOpen(false)} disabled={saldosPrinting}>Cancelar</Button>
+                  <Button onClick={handlePrintSoloSaldos} disabled={saldosPrinting} className="gap-2">
+                    {saldosPrinting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Printer className="h-4 w-4" />}
+                    Imprimir
+                  </Button>
+                </div>
+              </div>
             </DialogContent>
           </Dialog>
 
