@@ -1,4 +1,5 @@
 import { describe, it, expect } from 'vitest'
+import { clasificarDeuda } from './deuda'
 import {
   DEUDA_ANT_TAG,
   descripcionDeudaAnterior,
@@ -44,5 +45,28 @@ describe('descripcionDeudaAnterior', () => {
   it('es reversible con notaDeudaAnterior', () => {
     const desc = descripcionDeudaAnterior('Boleta vieja')
     expect(notaDeudaAnterior(desc)).toBe('Boleta vieja')
+  })
+})
+
+// La deuda anterior queda como la deuda pendiente más antigua (debtSince) y define
+// la clasificación del cliente según la fecha de la venta original que se cargó.
+describe('clasificación según la fecha de la deuda anterior', () => {
+  const ahora = new Date('2026-07-29T12:00:00')
+  const haceDias = (dias: number) => new Date(ahora.getTime() - dias * 86400000)
+
+  it('deuda de esta semana queda normal', () => {
+    expect(clasificarDeuda(haceDias(3), ahora)).toBe('normal')
+  })
+
+  it('deuda de 10 días queda atrasado', () => {
+    expect(clasificarDeuda(haceDias(10), ahora)).toBe('atrasado')
+  })
+
+  it('deuda de 2 meses queda moroso', () => {
+    expect(clasificarDeuda(haceDias(60), ahora)).toBe('moroso')
+  })
+
+  it('deuda de más de un año queda incobrable', () => {
+    expect(clasificarDeuda(haceDias(400), ahora)).toBe('incobrable')
   })
 })

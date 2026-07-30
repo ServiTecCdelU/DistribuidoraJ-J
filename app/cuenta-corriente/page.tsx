@@ -591,9 +591,22 @@ export default function CuentaCorrientePage() {
       })
 
       const newBalance = selectedClient.currentBalance + amount
-      setSelectedClient((prev) => (prev ? { ...prev, currentBalance: newBalance } : prev))
+      // La clasificación (normal/atrasado/moroso/incobrable) sale de la deuda pendiente más
+      // antigua: si esta deuda vieja es anterior, pasa a ser el debtSince del cliente.
+      const fechaDeuda = new Date(`${deudaFecha || new Date().toISOString().slice(0, 10)}T12:00:00`)
+      const newDebtSince =
+        selectedClient.debtSince && selectedClient.debtSince.getTime() < fechaDeuda.getTime()
+          ? selectedClient.debtSince
+          : fechaDeuda
+      setSelectedClient((prev) =>
+        prev ? { ...prev, currentBalance: newBalance, debtSince: newDebtSince } : prev
+      )
       setDebtClients((prev) =>
-        prev.map((c) => (c.id === selectedClient.id ? { ...c, currentBalance: newBalance } : c))
+        prev.map((c) =>
+          c.id === selectedClient.id
+            ? { ...c, currentBalance: newBalance, debtSince: newDebtSince }
+            : c
+        )
       )
       const txs = await clientsApi.getTransactions(selectedClient.id)
       setClientTransactions(txs)
