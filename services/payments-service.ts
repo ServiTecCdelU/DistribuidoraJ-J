@@ -2,6 +2,7 @@ import { supabase } from '@/lib/supabase'
 import type { Transaction } from '@/lib/types'
 import { generateReadableId } from '@/services/supabase-helpers'
 import { imputarADeuda, imputarFIFO, recomputarSaldos } from '@/lib/utils/saldo-imputacion'
+import { descripcionDeudaAnterior } from '@/lib/utils/deuda-anterior'
 
 // Baja el saldo de las deudas (remitos/ventas) del cliente.
 // - Con debtTxId: imputa el pago a ESA deuda puntual.
@@ -155,6 +156,85 @@ const registerPayment = async (
     cuenta,
     debtId: data.debtTxId,
     reciboNumero,
+  }
+}
+
+/**
+ * Registra una deuda vieja (venta anterior al sistema) en la cuenta minorista del cliente.
+ * No carga productos, no toca stock ni comisiones: solo la deuda con su saldo pendiente,
+ * su fecha real y (opcional) la foto de la factura. Se puede pagar como cualquier boleta.
+ */
+export const registerDeudaAnterior = async (data: {
+  clientId: string
+  amount: number
+  /** Fecha de la venta original, formato YYYY-MM-DD */
+  date?: string
+  notes?: string
+  file?: File
+}): Promise<Transaction> => {
+  const { data: client } = await supabase
+    .from('clientes')
+    .select('current_balance, name')
+    .eq('id', data.clientId)
+    .single()
+
+  // Foto de la factura (opcional) al bucket de comprobantes
+  let fotoUrl: string | undefined
+  if (data.file) {
+    const ext = data.file.name.split('.').pop() || 'jpg'
+    const path = `deudas-anteriores/${data.clientId}/${Date.now()}.${ext}`
+    const { error: uploadError } = await supabase.storage
+      .from('comprobantes')
+      .upload(path, data.file, { upsert: false })
+    if (uploadError) throw new Error(`Error subiendo la foto: ${uploadError.message}`)
+    fotoUrl = supabase.storage.from('comprobantes').getPublicUrl(path).data.publicUrl
+  }
+
+  const description = descripcionDeudaAnterior(data.notes)
+  const clientName = (client as any)?.name || 'deuda'
+  const docId = await generateReadableId('transacciones', 'transaccion', clientName)
+  const fecha = data.date ? new Date(`${data.date}T12:00:00`) : new Date()
+
+  const row: Record<string, unknown> = {
+    id: docId,
+    client_id: data.clientId,
+    type: 'debt',
+    amount: data.amount,
+    description,
+    date: fecha.toISOString(),
+    cuenta: 'minorista',
+    saldo: data.amount,
+  }
+  if (fotoUrl) row.foto_url = fotoUrl
+  const { error } = await supabase.from('transacciones').insert(row)
+  if (error) {
+    if (!fotoUrl) throw new Error(`Error registrando la deuda: ${error.message}`)
+    // Columna foto_url aún no creada: registrar la deuda sin la foto
+    delete row.foto_url
+    const { error: retryError } = await supabase.from('transacciones').insert(row)
+    if (retryError) throw new Error(`Error registrando la deuda: ${retryError.message}`)
+  }
+
+  const newBalance = (Number((client as any)?.current_balance) || 0) + data.amount
+  await supabase.from('clientes').update({ current_balance: newBalance }).eq('id', data.clientId)
+
+  // Si el cliente tenía saldo a favor, ese crédito se imputa a esta deuda.
+  try {
+    await recomputarSaldosDeudas(data.clientId, 'minorista')
+  } catch {
+    // Si la columna saldo aún no existe, la deuda sigue registrada
+  }
+
+  return {
+    id: docId,
+    clientId: data.clientId,
+    type: 'debt',
+    amount: data.amount,
+    description,
+    date: fecha,
+    cuenta: 'minorista',
+    saldo: data.amount,
+    fotoUrl,
   }
 }
 

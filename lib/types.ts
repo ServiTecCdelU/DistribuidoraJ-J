@@ -90,6 +90,8 @@ export interface Transaction {
   saldo?: number | null;
   /** Pagos: id de la transacción de deuda a la que se imputó */
   debtId?: string;
+  /** Deudas anteriores cargadas a mano: foto de la factura/boleta (URL pública) */
+  fotoUrl?: string;
   /** Pagos: número de recibo emitido */
   reciboNumero?: string;
   /** Pagos: PDF del recibo (base64) */

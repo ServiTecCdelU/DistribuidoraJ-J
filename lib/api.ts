@@ -38,7 +38,7 @@ import {
   updateSaleInvoice,
   updateSaleRemito,
 } from '@/services/sales-service'
-import { registerCashPayment, registerMayoristaPayment, saveReciboPdf, ensureReciboNumero, findReciboByNumero, deletePayment, voidPayment } from '@/services/payments-service'
+import { registerCashPayment, registerMayoristaPayment, registerDeudaAnterior, saveReciboPdf, ensureReciboNumero, findReciboByNumero, deletePayment, voidPayment } from '@/services/payments-service'
 import {
   getTransaccionesMayorista,
   getBalanceMayorista,
@@ -313,6 +313,15 @@ export const paymentsApi = {
     date?: string
   }): Promise<Transaction> {
     return registerMayoristaPayment(data)
+  },
+  async registerDeudaAnterior(data: {
+    clientId: string
+    amount: number
+    date?: string
+    notes?: string
+    file?: File
+  }): Promise<Transaction> {
+    return registerDeudaAnterior(data)
   },
   saveReciboPdf,
   ensureReciboNumero,

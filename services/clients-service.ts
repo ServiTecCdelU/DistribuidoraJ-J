@@ -169,6 +169,7 @@ export const getClientTransactions = async (clientId: string): Promise<Transacti
     cuenta: (d.cuenta as 'minorista' | 'mayorista') ?? 'minorista',
     saldo: d.saldo != null ? Number(d.saldo) : null,
     debtId: d.debt_id ?? undefined,
+    fotoUrl: d.foto_url ?? undefined,
     reciboNumero: d.recibo_numero ?? undefined,
     reciboPdfBase64: d.recibo_pdf_base64 ?? undefined,
     anulado: d.anulado ?? false,

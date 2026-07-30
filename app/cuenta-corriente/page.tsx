@@ -43,6 +43,7 @@ import { downloadBase64Pdf } from '@/services/pdf-service'
 import { useAuth } from '@/hooks/use-auth'
 import type { Client, ComprobantePago, DebtClassification, Sale, Seller, Transaction } from '@/lib/types'
 import { MovimientoDeudaCard, MOVIMIENTO_GRID } from '@/components/cuenta-corriente/movimiento-deuda-card'
+import { DEUDA_ANT_CONCEPTO, esDeudaAnterior } from '@/lib/utils/deuda-anterior'
 import { formatCurrency, formatDate } from '@/lib/utils/format'
 import { clasificarDeuda, diasDesde, esDiaDePago, diaDePagoInfo } from '@/lib/utils/deuda'
 import {
@@ -155,6 +156,13 @@ export default function CuentaCorrientePage() {
   const [payComprobante, setPayComprobante] = useState<File | null>(null)
   // Día en que el cliente pagó (puede diferir del día en que se carga el pago)
   const [payFecha, setPayFecha] = useState(() => new Date().toISOString().slice(0, 10))
+
+  // Registrar deuda anterior (venta vieja, sin productos ni stock)
+  const [deudaDialog, setDeudaDialog] = useState(false)
+  const [deudaAmount, setDeudaAmount] = useState('')
+  const [deudaFecha, setDeudaFecha] = useState(() => new Date().toISOString().slice(0, 10))
+  const [deudaNotas, setDeudaNotas] = useState('')
+  const [deudaFoto, setDeudaFoto] = useState<File | null>(null)
 
   // Registrar pago manual (mayorista)
   const [payMayoristaDialog, setPayMayoristaDialog] = useState(false)
@@ -484,7 +492,11 @@ export default function CuentaCorrientePage() {
       const deudaImputada = payDebtId ? clientTransactions.find((t) => t.id === payDebtId) : undefined
       const saleImputada = deudaImputada?.saleId ? clientSales.find((s) => s.id === deudaImputada.saleId) : undefined
       const refImputacion = deudaImputada
-        ? ` (${saleImputada?.remitoNumber ? `Remito ${saleImputada.remitoNumber}` : deudaImputada.description})`
+        ? ` (${saleImputada?.remitoNumber
+            ? `Remito ${saleImputada.remitoNumber}`
+            : esDeudaAnterior(deudaImputada.description)
+              ? `Deuda anterior ${formatDate(deudaImputada.date)}`
+              : deudaImputada.description})`
         : ''
       const cobradorNombre = rawSellers.find((s) => s.id === user.sellerId)?.name || user.name
       const cobradorRef = isCobrador ? ` — Cobrado por ${cobradorNombre}` : ''
@@ -555,6 +567,45 @@ export default function CuentaCorrientePage() {
       toast.success(`Pago de ${formatCurrency(amount)} registrado`)
     } catch (err: any) {
       toast.error(err.message || 'Error al registrar pago')
+    } finally {
+      setProcessing(false)
+    }
+  }
+
+  // Registrar deuda anterior: venta vieja que quedó pendiente (sin productos, sin stock)
+  const handleRegisterDeuda = async () => {
+    if (!selectedClient || !canManage) return
+    const amount = parseFloat(deudaAmount)
+    if (isNaN(amount) || amount <= 0) {
+      toast.error('Ingresá un monto válido')
+      return
+    }
+    setProcessing(true)
+    try {
+      await paymentsApi.registerDeudaAnterior({
+        clientId: selectedClient.id,
+        amount,
+        date: deudaFecha || undefined,
+        notes: deudaNotas || undefined,
+        file: deudaFoto || undefined,
+      })
+
+      const newBalance = selectedClient.currentBalance + amount
+      setSelectedClient((prev) => (prev ? { ...prev, currentBalance: newBalance } : prev))
+      setDebtClients((prev) =>
+        prev.map((c) => (c.id === selectedClient.id ? { ...c, currentBalance: newBalance } : c))
+      )
+      const txs = await clientsApi.getTransactions(selectedClient.id)
+      setClientTransactions(txs)
+
+      setDeudaDialog(false)
+      setDeudaAmount('')
+      setDeudaNotas('')
+      setDeudaFoto(null)
+      setDeudaFecha(new Date().toISOString().slice(0, 10))
+      toast.success(`Deuda de ${formatCurrency(amount)} registrada`)
+    } catch (err: any) {
+      toast.error(err.message || 'Error al registrar la deuda')
     } finally {
       setProcessing(false)
     }
@@ -1438,7 +1489,9 @@ ${renderTabla('Cuenta Mayorista', mayorista, balanceMay)}
       .sort((a, b) => a.date.getTime() - b.date.getTime())
     const etiquetaDeuda = (tx: Transaction) => {
       const sale = tx.saleId ? salesById.get(tx.saleId) : undefined
-      const ref = sale?.remitoNumber ? `Remito ${sale.remitoNumber}` : tx.description
+      const ref = esDeudaAnterior(tx.description)
+        ? `${DEUDA_ANT_CONCEPTO} ${formatDate(tx.date)}`
+        : sale?.remitoNumber ? `Remito ${sale.remitoNumber}` : tx.description
       return `${ref} — saldo ${formatCurrency(tx.saldo ?? 0)}`
     }
 
@@ -1581,6 +1634,15 @@ ${renderTabla('Cuenta Mayorista', mayorista, balanceMay)}
                 >
                   <Banknote className="h-4 w-4" />
                   Registrar pago
+                </Button>
+                )}
+                {canManage && (
+                <Button
+                  className="gap-2 rounded-xl bg-red-600 hover:bg-red-700 text-white"
+                  onClick={() => setDeudaDialog(true)}
+                >
+                  <ArrowUpCircle className="h-4 w-4" />
+                  Registrar deuda
                 </Button>
                 )}
                 <Button
@@ -1860,6 +1922,73 @@ ${renderTabla('Cuenta Mayorista', mayorista, balanceMay)}
               >
                 {processing && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
                 Registrar pago
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+
+        {/* Dialog Registrar deuda anterior */}
+        <Dialog open={deudaDialog} onOpenChange={(open) => { if (!open) { setDeudaDialog(false); setDeudaAmount(''); setDeudaNotas(''); setDeudaFoto(null); setDeudaFecha(new Date().toISOString().slice(0, 10)) } }}>
+          <DialogContent className="sm:max-w-sm">
+            <DialogHeader>
+              <DialogTitle>Registrar deuda</DialogTitle>
+              <DialogDescription>
+                Venta vieja que quedó pendiente. Se carga como <strong>DEUDA ANT.</strong> — no carga productos ni toca stock.
+              </DialogDescription>
+            </DialogHeader>
+            <div className="space-y-4">
+              <div className="space-y-2">
+                <Label>Monto de la deuda</Label>
+                <div className="relative">
+                  <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground font-medium">$</span>
+                  <Input
+                    type="number"
+                    min="0"
+                    step="0.01"
+                    value={deudaAmount}
+                    onChange={(e) => setDeudaAmount(e.target.value)}
+                    className="pl-7"
+                    placeholder="0"
+                    autoFocus
+                  />
+                </div>
+              </div>
+              <div className="space-y-2">
+                <Label>Fecha de la venta</Label>
+                <Input
+                  type="date"
+                  value={deudaFecha}
+                  max={new Date().toISOString().slice(0, 10)}
+                  onChange={(e) => setDeudaFecha(e.target.value)}
+                />
+              </div>
+              <div className="space-y-2">
+                <Label>Comentario (opcional)</Label>
+                <Textarea
+                  placeholder="Ej: Factura 0001-00023 de marzo"
+                  value={deudaNotas}
+                  onChange={(e) => setDeudaNotas(e.target.value)}
+                  rows={2}
+                />
+              </div>
+              <div className="space-y-2">
+                <Label>Foto de la factura (opcional)</Label>
+                <Input
+                  type="file"
+                  accept="image/*,application/pdf"
+                  onChange={(e) => setDeudaFoto(e.target.files?.[0] ?? null)}
+                />
+              </div>
+            </div>
+            <DialogFooter>
+              <Button variant="outline" onClick={() => setDeudaDialog(false)}>Cancelar</Button>
+              <Button
+                className="bg-red-600 hover:bg-red-700 text-white"
+                onClick={handleRegisterDeuda}
+                disabled={processing || !deudaAmount || parseFloat(deudaAmount) <= 0}
+              >
+                {processing && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
+                Registrar deuda
               </Button>
             </DialogFooter>
           </DialogContent>

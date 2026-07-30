@@ -29,11 +29,12 @@
       "Bash(grep -vE '^\\\\s*[+-]\\\\s*[{}\\(\\)></]*\\\\s*$')",
       "Bash(git merge *)",
       "Bash(ls app/api/generate-pdf/)",
-      "Bash(head -60 app/api/generate-pdf/route.ts)"
+      "Bash(head -60 app/api/generate-pdf/route.ts)",
+      "mcp__supabase__execute_sql"
     ]
   },
+  "enableAllProjectMcpServers": true,
   "enabledMcpjsonServers": [
     "supabase"
-  ],
-  "enableAllProjectMcpServers": true
+  ]
 }

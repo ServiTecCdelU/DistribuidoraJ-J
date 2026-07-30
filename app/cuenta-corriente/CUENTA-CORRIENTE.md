@@ -33,6 +33,23 @@ lleva su **saldo pendiente individual** (columna `saldo`):
   cliente** (`current_balance_mayorista`), cada una con sus movimientos (`transacciones`, campo `cuenta`).
 - Pagos manuales: `paymentsApi.registerCashPayment` (minorista) / `registerMayoristaPayment` (mayorista).
 
+## Deuda anterior (botón "Registrar deuda", rojo — solo admin)
+
+Ventas viejas que quedaron pendientes y nunca pasaron por el sistema. Cargan **solo la deuda**:
+sin productos, sin stock, sin comisión, sin remito.
+
+- `paymentsApi.registerDeudaAnterior({ clientId, amount, date, notes, file })`
+  (`services/payments-service.ts`) inserta una `transaccion` `type: 'debt'`, `cuenta: 'minorista'`,
+  `saldo = amount`, fecha de la venta original (mediodía local) y suma al `current_balance`.
+- Descripción marcada con el tag `[DEUDA_ANT]` (helpers puros en `lib/utils/deuda-anterior.ts`).
+  En la tabla de movimientos el concepto se muestra como **DEUDA ANT.**, la Descripción es el
+  comentario, Incidencias queda vacío, y Debe/Haber/Saldo funcionan como cualquier boleta.
+- Foto de la factura (opcional) → bucket `comprobantes`, prefijo `deudas-anteriores/<clientId>/`,
+  URL en la columna `foto_url` de `transacciones` (`ALTER TABLE transacciones ADD COLUMN IF NOT
+  EXISTS foto_url text;`). Se ve con el botón "Foto" en la fila.
+- Al tener `saldo > 0` aparece en el selector **Imputar a** de "Registrar pago", así que se le
+  puede pagar puntualmente. Se ordena por su fecha como el resto de los movimientos.
+
 ## Cuenta con el Mayorista (proveedor) — tabla `transacciones_mayorista`
 
 Servicio: `services/mayorista-cuenta-service.ts` (API: `mayoristaCuentaApi`).
