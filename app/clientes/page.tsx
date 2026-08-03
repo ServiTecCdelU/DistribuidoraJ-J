@@ -866,6 +866,7 @@ export default function ClientesPage() {
                       <tr className="border-b border-border bg-muted/50">
                         <th className="text-left p-4 font-semibold text-muted-foreground text-xs uppercase tracking-wider w-12">#</th>
                         <th className="text-left p-4 font-semibold text-muted-foreground text-xs uppercase tracking-wider">Cliente</th>
+                        <th className="text-left p-4 font-semibold text-muted-foreground text-xs uppercase tracking-wider">Código</th>
                         {visibleCols.cuit && <th className="text-left p-4 font-semibold text-muted-foreground text-xs uppercase tracking-wider">CUIT</th>}
                         {visibleCols.categoria && <th className="text-left p-4 font-semibold text-muted-foreground text-xs uppercase tracking-wider">Categoria</th>}
                         {visibleCols.codigoVendedor && <th className="text-left p-4 font-semibold text-muted-foreground text-xs uppercase tracking-wider">Cód. Vendedor</th>}
@@ -888,9 +889,6 @@ export default function ClientesPage() {
                                 <div className="min-w-0">
                                   <div className="flex items-center gap-2">
                                     <p className="font-medium text-foreground truncate">{client.name}</p>
-                                    {client.codigo && (
-                                      <span className="text-xs font-mono text-muted-foreground shrink-0">{client.codigo}</span>
-                                    )}
                                     {client.activo === false && (
                                       <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400 border border-red-200 dark:border-red-800 shrink-0">
                                         <Ban className="h-3 w-3" />
@@ -910,6 +908,9 @@ export default function ClientesPage() {
                                 </div>
                               </div>
                             </td>
+                            <td className="p-4">
+                              <span className="font-mono text-sm text-muted-foreground">{client.codigo || '-'}</span>
+                            </td>
                             {visibleCols.cuit && (
                               <td className="p-4">
                                 <span className="font-mono text-sm text-foreground bg-muted px-2 py-1 rounded">
@@ -926,9 +927,14 @@ export default function ClientesPage() {
                             )}
                             {visibleCols.codigoVendedor && (
                               <td className="p-4">
-                                <span className="font-mono text-sm text-foreground">
-                                  {(client.sellerId && sellerCodigoById.get(client.sellerId)) || '-'}
-                                </span>
+                                <div className="min-w-0">
+                                  <p className="font-mono text-sm text-foreground">
+                                    {(client.sellerId && sellerCodigoById.get(client.sellerId)) || '-'}
+                                  </p>
+                                  <p className="text-xs text-muted-foreground truncate">
+                                    {(client.sellerId && sellerNameById.get(client.sellerId)) || '-'}
+                                  </p>
+                                </div>
                               </td>
                             )}
                             <td className="p-4">
