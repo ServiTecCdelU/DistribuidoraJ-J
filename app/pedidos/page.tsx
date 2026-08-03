@@ -1647,6 +1647,8 @@ tbody tr:nth-child(even){background:#fafafa}
 .cond{display:inline-flex;gap:10px;font-size:10px;color:#6b7280;white-space:nowrap}
 .cond .box{display:inline-flex;align-items:center;gap:3px}
 .checkbox{display:inline-block;width:11px;height:11px;border:1.5px solid #9ca3af;border-radius:2px}
+.subtotal-vendedor{display:flex;justify-content:space-between;align-items:center;margin-top:4px;padding:6px 10px;background:#f0fdfa;border:1px solid #99f6e4;border-radius:6px;font-weight:700;font-size:12px;color:#0f766e;page-break-inside:avoid}
+.subtotal-vendedor .deuda-ant{color:#dc2626;font-weight:700;margin-left:8px}
 .total-final{display:flex;justify-content:space-between;align-items:center;margin-top:10px;padding:9px 14px;background:#0f766e;color:#fff;border-radius:6px;font-weight:800;font-size:15px;page-break-inside:avoid}
 *{-webkit-print-color-adjust:exact;print-color-adjust:exact}
 @media print{body{padding:10mm}}
@@ -1676,6 +1678,8 @@ tbody tr:nth-child(even){background:#fafafa}
         html += `<table><thead><tr>`;
         html += `<th>N° Comprobante</th><th>Código</th><th>Cliente</th><th class="right">Importe</th><th class="right">Cta. Cte. / Deuda Ant.</th><th class="center">Condición</th>`;
         html += `</tr></thead><tbody>`;
+        let subtotalVendedor = 0;
+        let deudaAnteriorVendedor = 0;
         groups.forEach(({ client, orders: clientOrders }) => {
           const firstOrder = clientOrders[0];
           const clientData = clients.find((c) => c.id === firstOrder.clientId);
@@ -1693,8 +1697,12 @@ tbody tr:nth-child(even){background:#fafafa}
           html += `<td class="right">${deudaCell}</td>`;
           html += `<td class="center">${cond}</td>`;
           html += `</tr>`;
+          subtotalVendedor += importe;
+          if (deuda > 0) deudaAnteriorVendedor += deuda;
         });
-        html += `</tbody></table></div>`;
+        html += `</tbody></table>`;
+        html += `<div class="subtotal-vendedor"><span>Subtotal ${escapeHtml(seller)}${deudaAnteriorVendedor > 0 ? ` <span class="deuda-ant">+ Deuda anterior: ${fmtMoney(deudaAnteriorVendedor)}</span>` : ""}</span><span>${fmtMoney(subtotalVendedor)}</span></div>`;
+        html += `</div>`;
       });
 
     // Total general de la hoja de ruta (suma de todos los importes)
