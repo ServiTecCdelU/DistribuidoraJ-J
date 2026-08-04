@@ -3,6 +3,7 @@ import type { Client, ComprobantePago, Transaction } from '@/lib/types'
 import { generateReadableId } from '@/services/supabase-helpers'
 import { getSellerIdsByCodigo } from '@/services/sellers-service'
 import { SALDO_EPSILON } from '@/lib/utils/saldo-imputacion'
+import { esDeudaAnterior } from '@/lib/utils/deuda-anterior'
 
 // Clientes con deuda asignados a un vendedor (incluye clientes de vendedores anteriores
 // con el mismo codigo_vendedor, para cubrir reemplazos de personal)
@@ -40,7 +41,7 @@ export const getDebtClients = async (
   sellerId?: string,
   includeAll = false,
   onlyActive = false,
-): Promise<(Client & { sellerName?: string })[]> => {
+): Promise<(Client & { sellerName?: string; hasDeudaAnterior?: boolean })[]> => {
   let query = supabase
     .from('clientes')
     .select('*')
@@ -63,10 +64,11 @@ export const getDebtClients = async (
   // Fecha de la deuda pendiente más antigua por cliente (entrada a cuenta corriente)
   const clientIds = (data ?? []).map((d: any) => d.id)
   const debtSinceMap: Record<string, Date> = {}
+  const deudaAnteriorSet = new Set<string>()
   if (clientIds.length > 0) {
     const { data: debts } = await supabase
       .from('transacciones')
-      .select('client_id, date, saldo, amount')
+      .select('client_id, date, saldo, amount, description')
       .in('client_id', clientIds)
       .eq('type', 'debt')
       .order('date', { ascending: true })
@@ -76,6 +78,7 @@ export const getDebtClients = async (
       if (saldo <= SALDO_EPSILON) continue
       // Orden ascendente: la primera deuda pendiente encontrada es la más antigua
       if (!debtSinceMap[t.client_id]) debtSinceMap[t.client_id] = new Date(t.date)
+      if (esDeudaAnterior(t.description)) deudaAnteriorSet.add(t.client_id)
     }
   }
 
@@ -109,6 +112,7 @@ export const getDebtClients = async (
     debtClassification: d.debt_classification ?? 'normal',
     diaCobro: d.dia_cobro ?? undefined,
     debtSince: debtSinceMap[d.id] ?? undefined,
+    hasDeudaAnterior: deudaAnteriorSet.has(d.id),
     activo: d.activo ?? true,
     notes: d.notes ?? '',
     createdAt: new Date(d.created_at),

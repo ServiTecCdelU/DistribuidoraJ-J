@@ -54,7 +54,7 @@ import {
 } from 'lucide-react'
 import { toast } from 'sonner'
 
-type ClientWithSeller = Client & { sellerName?: string }
+type ClientWithSeller = Client & { sellerName?: string; hasDeudaAnterior?: boolean }
 
 // Metadata de cada clasificación para la card de estado y su detalle
 const ESTADO_META: { key: DebtClassification; label: string; dot: string; text: string }[] = [
@@ -87,6 +87,8 @@ export default function CuentaCorrientePage() {
   // Día de visita/cobro asignado al cliente ('all' = todos)
   const [filterDiaCobro, setFilterDiaCobro] = useState<string>('all')
   const [filterClassification, setFilterClassification] = useState<string>('all')
+  // 'all' | 'si' (solo con deuda anterior cargada) | 'no' (sin deuda anterior)
+  const [filterDeudaAnterior, setFilterDeudaAnterior] = useState<string>('all')
   const [searchQuery, setSearchQuery] = useState('')
   // Búsqueda de recibos por número (ej: "N° RC-2026-00012")
   const [reciboMatches, setReciboMatches] = useState<ReciboMatch[]>([])
@@ -280,7 +282,10 @@ export default function CuentaCorrientePage() {
       const matchesSearch = !searchQuery || c.name.toLowerCase().includes(searchQuery.toLowerCase())
       const matchesClassification = filterClassification === 'all' || clasificarDeuda(c.debtSince) === filterClassification
       const matchesDia = filterDiaCobro === 'all' || (c.diaCobro ?? '') === filterDiaCobro
-      return matchesSeller && matchesSearch && matchesClassification && matchesDia
+      const matchesDeudaAnterior =
+        filterDeudaAnterior === 'all' ||
+        (filterDeudaAnterior === 'si' ? !!c.hasDeudaAnterior : !c.hasDeudaAnterior)
+      return matchesSeller && matchesSearch && matchesClassification && matchesDia && matchesDeudaAnterior
     })
     .sort((a, b) => {
       if (sortBy === 'dias') {
@@ -299,10 +304,11 @@ export default function CuentaCorrientePage() {
     (sortBy !== 'deuda' ? 1 : 0) +
     (filterClassification !== 'all' ? 1 : 0) +
     (filterSeller !== 'all' ? 1 : 0) +
-    (filterDiaCobro !== 'all' ? 1 : 0)
+    (filterDiaCobro !== 'all' ? 1 : 0) +
+    (filterDeudaAnterior !== 'all' ? 1 : 0)
 
   // Reset página al cambiar filtros
-  useEffect(() => { setCurrentPage(1) }, [searchQuery, filterSeller, filterClassification, filterDiaCobro, sortBy])
+  useEffect(() => { setCurrentPage(1) }, [searchQuery, filterSeller, filterClassification, filterDiaCobro, filterDeudaAnterior, sortBy])
 
   // Detecta si lo escrito en el buscador es un número de recibo (RC-AAAA-NNNNN, "N° ..." o numérico)
   const reciboTerm = searchQuery.replace(/n[°ºo]/gi, '').replace(/\s+/g, '').toUpperCase()
@@ -2493,6 +2499,16 @@ ${renderTabla('Cuenta Mayorista', mayorista, balanceMay)}
                   <SelectItem value="viernes">Viernes</SelectItem>
                   <SelectItem value="sabado">Sábado</SelectItem>
                   <SelectItem value="domingo">Domingo</SelectItem>
+                </SelectContent>
+              </Select>
+              <Select value={filterDeudaAnterior} onValueChange={setFilterDeudaAnterior}>
+                <SelectTrigger className="w-full sm:w-[190px] rounded-xl">
+                  <SelectValue placeholder="Deudas anteriores" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">Deudas anteriores: todas</SelectItem>
+                  <SelectItem value="si">Con deuda anterior</SelectItem>
+                  <SelectItem value="no">Sin deuda anterior</SelectItem>
                 </SelectContent>
               </Select>
             </div>
