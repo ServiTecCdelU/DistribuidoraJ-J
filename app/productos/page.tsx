@@ -2045,8 +2045,14 @@ tr.cat td{border:none}
                                 {product.category}
                               </td>
                               <td className="hidden md:table-cell px-3 py-2.5 text-center whitespace-nowrap">
-                                {product.gananciaIndividual && product.gananciaGlobal != null && esGananciaDistinta(product) ? (
-                                  <Badge variant="secondary" className="text-[10px] px-1.5 py-0">
+                                {product.gananciaGlobal != null ? (
+                                  <Badge
+                                    variant="secondary"
+                                    className={cn(
+                                      "text-[10px] px-1.5 py-0",
+                                      esGananciaDistinta(product) && "bg-amber-100 text-amber-800 border-amber-200",
+                                    )}
+                                  >
                                     {product.gananciaGlobal}%
                                   </Badge>
                                 ) : (

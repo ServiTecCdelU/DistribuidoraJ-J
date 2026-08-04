@@ -422,9 +422,7 @@ export function ProductModal({
         stock: finalStock,
         codigo: effectiveData.codigo?.trim() || undefined,
         ...precioFields,
-        ...(isMayorista && loteNum > 0
-          ? { unidadesPorBulto: loteNum }
-          : {}),
+        ...(loteNum > 0 ? { unidadesPorBulto: loteNum } : {}),
       } as any, adjustment);
 
       // Historial: solo registrar si el % individual cambió realmente
@@ -970,7 +968,7 @@ export function ProductModal({
                   </div>
                 </div>
 
-                {/* Stock */}
+                {/* Stock + Unidades por bulto */}
                 <div className="grid grid-cols-2 gap-4">
                   <div className="space-y-2">
                     {isEditing ? (
@@ -1000,6 +998,20 @@ export function ProductModal({
                         />
                       </>
                     )}
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="lote-manual" className="text-xs text-muted-foreground">
+                      Unidades por bulto
+                    </Label>
+                    <Input
+                      id="lote-manual"
+                      type="number"
+                      min="1"
+                      placeholder="Ej: 12"
+                      value={lote}
+                      onChange={(e) => setLote(e.target.value)}
+                      className="h-10"
+                    />
                   </div>
                 </div>
 
