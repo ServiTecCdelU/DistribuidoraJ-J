@@ -653,7 +653,7 @@ export function ModalDetalleVenta({
                   onClick={() => setModalDevAbierto(true)}
                 >
                   <RotateCcw className="h-3.5 w-3.5" />
-                  Registrar devolución
+                  Nota de crédito
                 </Button>
               )}
               <Button

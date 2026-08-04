@@ -9,7 +9,8 @@ import {
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { RotateCcw, Loader2, Undo2, Trash2 } from "lucide-react";
+import { Textarea } from "@/components/ui/textarea";
+import { RotateCcw, Loader2, Undo2, Trash2, Package, DollarSign } from "lucide-react";
 import { toast } from "sonner";
 import { formatCurrency } from "@/lib/utils/format";
 import { clientsApi, devolucionesApi, type DevolucionItem } from "@/lib/api";
@@ -36,6 +37,10 @@ export function ModalDevolucion({ abierto, venta, onCerrar, onRegistrada }: Moda
   const [filas, setFilas] = useState<FilaDevolucion[]>([]);
   const [procesando, setProcesando] = useState(false);
   const [inicializado, setInicializado] = useState<string | null>(null);
+  const [modo, setModo] = useState<"productos" | "monto">("productos");
+  const [montoLibre, setMontoLibre] = useState<number>(0);
+  const [nota, setNota] = useState("");
+  const [destinoSaldo, setDestinoSaldo] = useState<"cuenta_corriente" | "solo_nota">("cuenta_corriente");
 
   // Inicializar filas cuando se abre con una venta nueva
   const ventaId = venta?.id ?? null;
@@ -59,11 +64,14 @@ export function ModalDevolucion({ abierto, venta, onCerrar, onRegistrada }: Moda
     setInicializado(ventaId);
   }
 
+  const esCuentaCorriente = venta?.paymentType === "credit";
+  const tieneCliente = !!venta?.clientId;
+
   const total = useMemo(
-    () => filas.reduce((acc, f) => acc + f.precioUnit * f.cantidad, 0),
-    [filas],
+    () => (modo === "productos" ? filas.reduce((acc, f) => acc + f.precioUnit * f.cantidad, 0) : montoLibre),
+    [filas, modo, montoLibre],
   );
-  const hayAlgo = filas.some((f) => f.cantidad > 0);
+  const hayAlgo = modo === "productos" ? filas.some((f) => f.cantidad > 0) : montoLibre > 0;
 
   const setCantidad = (idx: number, value: number) => {
     setFilas((prev) =>
@@ -81,6 +89,10 @@ export function ModalDevolucion({ abierto, venta, onCerrar, onRegistrada }: Moda
     if (procesando) return;
     setInicializado(null);
     setFilas([]);
+    setModo("productos");
+    setMontoLibre(0);
+    setNota("");
+    setDestinoSaldo("cuenta_corriente");
     onCerrar();
   };
 
@@ -88,16 +100,21 @@ export function ModalDevolucion({ abierto, venta, onCerrar, onRegistrada }: Moda
     if (!venta || !hayAlgo) return;
     setProcesando(true);
     try {
-      const items: DevolucionItem[] = filas
-        .filter((f) => f.cantidad > 0)
-        .map((f) => ({
-          productId: f.productId,
-          name: f.name,
-          codigo: f.codigo,
-          quantity: f.cantidad,
-          price: f.precioUnit,
-          destino: f.destino,
-        }));
+      const esMonto = modo === "monto";
+      const items: DevolucionItem[] = esMonto
+        ? []
+        : filas
+            .filter((f) => f.cantidad > 0)
+            .map((f) => ({
+              productId: f.productId,
+              name: f.name,
+              codigo: f.codigo,
+              quantity: f.cantidad,
+              price: f.precioUnit,
+              destino: f.destino,
+            }));
+
+      const affectsBalance = esMonto ? (tieneCliente && (esCuentaCorriente || destinoSaldo === "cuenta_corriente")) : true;
 
       // Saldo anterior del cliente (para el recibo)
       let saldoAnterior = 0;
@@ -114,6 +131,9 @@ export function ModalDevolucion({ abierto, venta, onCerrar, onRegistrada }: Moda
         sellerId: venta.sellerId,
         sellerName: venta.sellerName,
         items,
+        monto: esMonto ? montoLibre : undefined,
+        note: esMonto ? (nota.trim() || undefined) : undefined,
+        affectsBalance,
       });
 
       // Generar recibo de devolución
@@ -128,7 +148,7 @@ export function ModalDevolucion({ abierto, venta, onCerrar, onRegistrada }: Moda
           items: items.map((i) => ({ name: i.name, quantity: i.quantity, price: i.price, destino: i.destino })),
           total: dev.total,
           saldoAnterior,
-          saldoNuevo: saldoAnterior - dev.total,
+          saldoNuevo: affectsBalance ? saldoAnterior - dev.total : saldoAnterior,
         });
         await devolucionesApi.saveRecibo(dev.id, base64);
         const link = document.createElement("a");
@@ -136,14 +156,14 @@ export function ModalDevolucion({ abierto, venta, onCerrar, onRegistrada }: Moda
         link.download = `recibo-devolucion-${dev.reciboNumero}.pdf`;
         link.click();
       } catch {
-        toast.warning("Devolución registrada, pero falló la generación del recibo");
+        toast.warning("Nota de crédito registrada, pero falló la generación del recibo");
       }
 
-      toast.success(`Devolución registrada: ${formatCurrency(dev.total)}`);
+      toast.success(`Nota de crédito registrada: ${formatCurrency(dev.total)}`);
       cerrar();
       onRegistrada?.();
     } catch (e: any) {
-      toast.error(e?.message || "Error al registrar la devolución");
+      toast.error(e?.message || "Error al registrar la nota de crédito");
     } finally {
       setProcesando(false);
     }
@@ -160,7 +180,7 @@ export function ModalDevolucion({ abierto, venta, onCerrar, onRegistrada }: Moda
               <RotateCcw className="h-6 w-6 text-amber-600" />
             </div>
             <div>
-              <DialogTitle className="text-xl font-bold text-foreground">Registrar devolución</DialogTitle>
+              <DialogTitle className="text-xl font-bold text-foreground">Nota de crédito</DialogTitle>
               <DialogDescription className="text-sm text-muted-foreground">
                 {venta.clientName || "Cliente final"} · Venta {venta.saleNumber || "?"}
               </DialogDescription>
@@ -169,6 +189,31 @@ export function ModalDevolucion({ abierto, venta, onCerrar, onRegistrada }: Moda
         </div>
 
         <div className="p-6 space-y-3">
+          <div className="flex items-center gap-2 p-1 rounded-xl bg-muted/50">
+            <button
+              type="button"
+              onClick={() => setModo("productos")}
+              className={`flex-1 flex items-center justify-center gap-1.5 text-sm font-medium py-2 rounded-lg transition-colors ${
+                modo === "productos" ? "bg-background shadow-sm text-foreground" : "text-muted-foreground"
+              }`}
+            >
+              <Package className="h-4 w-4" />
+              Productos
+            </button>
+            <button
+              type="button"
+              onClick={() => setModo("monto")}
+              className={`flex-1 flex items-center justify-center gap-1.5 text-sm font-medium py-2 rounded-lg transition-colors ${
+                modo === "monto" ? "bg-background shadow-sm text-foreground" : "text-muted-foreground"
+              }`}
+            >
+              <DollarSign className="h-4 w-4" />
+              Monto en $
+            </button>
+          </div>
+
+          {modo === "productos" && (
+          <>
           <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider">
             Productos a devolver
           </p>
@@ -232,14 +277,92 @@ export function ModalDevolucion({ abierto, venta, onCerrar, onRegistrada }: Moda
               </p>
             )}
           </div>
+          </>
+          )}
+
+          {modo === "monto" && (
+          <div className="space-y-3">
+            <div>
+              <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider mb-1.5">
+                Monto a devolver
+              </p>
+              <Input
+                type="number"
+                min={0}
+                value={montoLibre || ""}
+                placeholder="0"
+                onChange={(e) => setMontoLibre(Math.max(0, Number(e.target.value) || 0))}
+                className="h-11 rounded-xl text-lg"
+              />
+            </div>
+
+            <div>
+              <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider mb-1.5">
+                Nota (opcional)
+              </p>
+              <Textarea
+                value={nota}
+                onChange={(e) => setNota(e.target.value)}
+                placeholder="Motivo de la devolución..."
+                className="rounded-xl resize-none"
+                rows={2}
+              />
+            </div>
+
+            {tieneCliente && !esCuentaCorriente && (
+              <div>
+                <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider mb-1.5">
+                  ¿Dónde se guarda?
+                </p>
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setDestinoSaldo("cuenta_corriente")}
+                    className={`flex-1 text-xs font-medium py-2 rounded-xl border transition-colors ${
+                      destinoSaldo === "cuenta_corriente"
+                        ? "bg-teal-50 border-teal-300 text-teal-700"
+                        : "border-border text-muted-foreground hover:bg-muted"
+                    }`}
+                  >
+                    Cuenta corriente
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setDestinoSaldo("solo_nota")}
+                    className={`flex-1 text-xs font-medium py-2 rounded-xl border transition-colors ${
+                      destinoSaldo === "solo_nota"
+                        ? "bg-teal-50 border-teal-300 text-teal-700"
+                        : "border-border text-muted-foreground hover:bg-muted"
+                    }`}
+                  >
+                    Solo nota en la venta
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {tieneCliente && esCuentaCorriente && (
+              <p className="text-xs text-muted-foreground px-1">
+                Esta venta es de cuenta corriente: el monto se acredita al saldo del cliente.
+              </p>
+            )}
+
+            {!tieneCliente && (
+              <p className="text-xs text-muted-foreground px-1">
+                Venta sin cliente asociado: se guarda solo como nota en la venta.
+              </p>
+            )}
+          </div>
+          )}
 
           <div className="flex items-center justify-between p-4 rounded-2xl bg-foreground text-background mt-2">
             <span className="font-medium">Total a devolver</span>
             <span className="text-2xl font-bold">{formatCurrency(total)}</span>
           </div>
           <p className="text-[11px] text-muted-foreground px-1">
-            Baja el saldo del cliente, descuenta la comisión del vendedor y genera el recibo.
-            Los productos "vuelve a stock" se reponen al depósito.
+            {modo === "productos"
+              ? 'Baja el saldo del cliente, descuenta la comisión del vendedor y genera el recibo. Los productos "vuelve a stock" se reponen al depósito.'
+              : "Genera un recibo. Si se guarda en cuenta corriente, baja el saldo del cliente."}
           </p>
 
           <div className="flex gap-2 pt-2">
@@ -257,7 +380,7 @@ export function ModalDevolucion({ abierto, venta, onCerrar, onRegistrada }: Moda
                   Procesando...
                 </>
               ) : (
-                "Confirmar devolución"
+                "Confirmar nota de crédito"
               )}
             </Button>
           </div>

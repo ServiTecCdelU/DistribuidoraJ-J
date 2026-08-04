@@ -31,6 +31,8 @@ export interface Devolucion {
   sellerName?: string
   items: DevolucionItem[]
   total: number
+  note?: string
+  affectsBalance: boolean
   commissionRate: number
   commissionAmount: number
   reciboPdfBase64?: string
@@ -49,6 +51,8 @@ function mapDevolucion(d: Record<string, any>): Devolucion {
     sellerName: d.seller_name ?? undefined,
     items: (d.items ?? []) as DevolucionItem[],
     total: Number(d.total) || 0,
+    note: d.note ?? undefined,
+    affectsBalance: d.affects_balance ?? true,
     commissionRate: Number(d.commission_rate) || 0,
     commissionAmount: Number(d.commission_amount) || 0,
     reciboPdfBase64: d.recibo_pdf_base64 ?? undefined,
@@ -63,12 +67,19 @@ export async function registrarDevolucion(data: {
   clientName?: string
   sellerId?: string
   sellerName?: string
-  items: DevolucionItem[]
+  items?: DevolucionItem[]
+  monto?: number
+  note?: string
+  affectsBalance?: boolean
 }): Promise<Devolucion> {
-  const items = data.items.filter((i) => i.productId && i.quantity > 0)
-  if (items.length === 0) throw new Error('No hay productos para devolver')
+  const items = (data.items ?? []).filter((i) => i.productId && i.quantity > 0)
+  const montoLibre = Number(data.monto) || 0
+  if (items.length === 0 && montoLibre <= 0) {
+    throw new Error('No hay productos ni monto para devolver')
+  }
 
-  const total = items.reduce((acc, i) => acc + i.price * i.quantity, 0)
+  const total = items.length > 0 ? items.reduce((acc, i) => acc + i.price * i.quantity, 0) : montoLibre
+  const affectsBalance = data.affectsBalance !== false
 
   // Tasa de comisión del vendedor (para descontar lo que se le había generado)
   let commissionRate = 0
@@ -101,6 +112,8 @@ export async function registrarDevolucion(data: {
     seller_name: data.sellerName ?? null,
     items,
     total,
+    note: data.note ?? null,
+    affects_balance: affectsBalance,
     commission_rate: commissionRate,
     commission_amount: commissionAmount,
   }
@@ -120,7 +133,7 @@ export async function registrarDevolucion(data: {
   }
 
   // 2. Cuenta corriente del cliente: baja el saldo (devolución = crédito a favor)
-  if (data.clientId && total > 0) {
+  if (affectsBalance && data.clientId && total > 0) {
     const { data: cr } = await supabase
       .from('clientes')
       .select('current_balance')
@@ -146,7 +159,9 @@ export async function registrarDevolucion(data: {
       debtTxId = deudaVenta?.id
     }
 
-    const detalle = items.map((i) => `${i.quantity}x ${i.name}`).join(', ')
+    const detalle = items.length > 0
+      ? items.map((i) => `${i.quantity}x ${i.name}`).join(', ')
+      : (data.note || 'nota de crédito')
     const txId = await generateReadableId('transacciones', 'transaccion', data.clientName || 'cliente')
     const row: Record<string, unknown> = {
       id: txId,
@@ -177,7 +192,7 @@ export async function registrarDevolucion(data: {
   }
 
   // 3. Comisión del vendedor: bajar running totals (la lista se deriva con devoluciones negativas)
-  if (data.sellerId && (total > 0 || commissionAmount > 0)) {
+  if (affectsBalance && data.sellerId && (total > 0 || commissionAmount > 0)) {
     const { data: sr } = await supabase
       .from('vendedores')
       .select('total_sales, total_commission')
