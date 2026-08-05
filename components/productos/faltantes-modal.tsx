@@ -50,21 +50,80 @@ function mesLabel(key: string): string {
   return `${MES_LABELS[idx] ?? m} ${y}`
 }
 
-function printHtml(html: string) {
-  const iframe = document.createElement('iframe')
-  iframe.style.cssText = 'position:fixed;top:0;left:0;width:0;height:0;border:0;opacity:0;'
-  document.body.appendChild(iframe)
-  const doc = iframe.contentWindow?.document
-  if (!doc) { document.body.removeChild(iframe); return }
-  doc.open(); doc.write(html); doc.close()
-  iframe.onload = () => {
-    iframe.contentWindow?.print()
-    setTimeout(() => document.body.removeChild(iframe), 1000)
-  }
-}
-
 function escHtml(s: string): string {
   return (s ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+}
+
+const fmtMoney = (n: number) => new Intl.NumberFormat('es-AR', { style: 'currency', currency: 'ARS', minimumFractionDigits: 0 }).format(n)
+
+// Handler de Paged.js: al paginar, inyecta un renglón de subtotal con SOLO
+// las filas que quedaron en esa hoja física (no el total general).
+let subtotalHandlerRegistered = false
+async function registrarSubtotalHandler() {
+  if (subtotalHandlerRegistered) return
+  const { Handler, registerHandlers } = await import('pagedjs')
+  class SubtotalHandler extends Handler {
+    afterPageLayout(pageElement: HTMLElement) {
+      const table = pageElement.querySelector('table[data-faltantes-print]')
+      if (!table) return
+      const rows = Array.from(table.querySelectorAll('tbody > tr[data-cant]')) as HTMLElement[]
+      if (rows.length === 0) return
+      let cant = 0, con = 0, sin = 0
+      for (const r of rows) {
+        cant += Number(r.getAttribute('data-cant')) || 0
+        con += Number(r.getAttribute('data-con')) || 0
+        sin += Number(r.getAttribute('data-sin')) || 0
+      }
+      const labelColspan = Number(table.getAttribute('data-label-colspan')) || 1
+      const priceCols = Number(table.getAttribute('data-price-cols')) || 2
+      const hasFecha = table.getAttribute('data-has-fecha') === '1'
+
+      const tr = document.createElement('tr')
+      tr.className = 'subtotal-hoja'
+      let html = `<td colspan="${labelColspan}">Subtotal de esta hoja</td><td class="num">${cant}</td>`
+      html += priceCols === 4
+        ? `<td class="num">—</td><td class="num">—</td><td class="num">${fmtMoney(con)}</td><td class="num">${fmtMoney(sin)}</td>`
+        : `<td class="num">—</td><td class="num">${fmtMoney(sin)}</td>`
+      if (hasFecha) html += '<td></td>'
+      tr.innerHTML = html
+
+      rows[rows.length - 1].insertAdjacentElement('afterend', tr)
+    }
+  }
+  registerHandlers(SubtotalHandler)
+  subtotalHandlerRegistered = true
+}
+
+// Renderiza el HTML paginado con Paged.js (permite subtotal real por hoja
+// y numeración de página "Página X de Y" propia, en vez del header/footer
+// que agrega el navegador).
+async function imprimirPaginado(bodyHtml: string, css: string) {
+  await registrarSubtotalHandler()
+  const { Previewer } = await import('pagedjs')
+
+  const container = document.createElement('div')
+  container.id = 'pagedjs-print-root'
+  container.style.cssText = 'position:fixed;left:-99999px;top:0;'
+  document.body.appendChild(container)
+
+  const globalStyle = document.createElement('style')
+  globalStyle.textContent = `
+    @media print { body > *:not(#pagedjs-print-root) { display: none !important; } #pagedjs-print-root { position: static !important; left: auto !important; } }
+  `
+  document.head.appendChild(globalStyle)
+
+  const previewer = new Previewer()
+  await previewer.preview(bodyHtml, { 'faltantes-print.css': css }, container)
+
+  const cleanup = () => {
+    container.remove()
+    globalStyle.remove()
+    previewer.polisher?.styleEl?.remove()
+    window.removeEventListener('afterprint', cleanup)
+  }
+  window.addEventListener('afterprint', cleanup)
+
+  window.print()
 }
 
 export function FaltantesModal({ open, onOpenChange }: FaltantesModalProps) {
@@ -203,45 +262,54 @@ export function FaltantesModal({ open, onOpenChange }: FaltantesModalProps) {
       ? '<th class="num">Precio c/gan.</th><th class="num">Precio s/gan.</th><th class="num">Total c/gan.</th><th class="num">Total s/gan.</th>'
       : '<th class="num">Precio</th><th class="num">Total</th>'
 
+    // data-cant/con/sin: valores crudos que usa el handler de Paged.js para
+    // calcular el subtotal real de cada hoja impresa (no el total general).
     const rows = filasPrint.map((f) => {
       const precios = printMostrarGanancia
         ? `<td class="num">${formatCurrency(f.conUnit)}</td><td class="num">${formatCurrency(f.sinUnit)}</td><td class="num">${formatCurrency(f.con)}</td><td class="num">${formatCurrency(f.sin)}</td>`
         : `<td class="num">${formatCurrency(f.sinUnit)}</td><td class="num">${formatCurrency(f.sin)}</td>`
       const clienteCol = esSimple ? '' : `<td>${escHtml(f.cliente ?? '')}</td>`
       const fechaCol = esSimple ? '' : `<td class="num">${formatDateShort(f.fecha ?? '')}</td>`
-      return `<tr>${clienteCol}<td>${escHtml(f.producto)}${f.rechazo ? ' (rechazo)' : ''}</td><td class="num">${f.cantidad}</td>${precios}${fechaCol}</tr>`
+      return `<tr data-cant="${f.cantidad}" data-con="${f.con}" data-sin="${f.sin}">${clienteCol}<td>${escHtml(f.producto)}${f.rechazo ? ' (rechazo)' : ''}</td><td class="num">${f.cantidad}</td>${precios}${fechaCol}</tr>`
     }).join('')
 
-    const footerCols = printMostrarGanancia
+    // Total final: fila normal (sin data-cant) para que aparezca una única vez,
+    // donde caiga naturalmente al paginar — no se repite en cada hoja.
+    const totalFinalCols = printMostrarGanancia
       ? `<td class="num">—</td><td class="num">—</td><td class="num">${formatCurrency(totalCon)}</td><td class="num">${formatCurrency(totalSin)}</td>`
       : `<td class="num">—</td><td class="num">${formatCurrency(totalSin)}</td>`
-    const footerColspan = esSimple ? 1 : 2
+    const totalFinalColspan = esSimple ? 1 : 2
+    const totalFinalRow = `<tr class="total-final"><td colspan="${totalFinalColspan}">TOTAL FINAL</td><td class="num">${totalUnidades}</td>${totalFinalCols}${esSimple ? '' : '<td></td>'}</tr>`
 
-    const html = `<!DOCTYPE html><html><head><title>Productos faltantes</title><style>
-@page{size:A4 landscape;margin:0}
-*{margin:0;padding:0;box-sizing:border-box}
-body{font-family:-apple-system,Arial,sans-serif;color:#1f2937;font-size:11px;padding:8mm}
-.header{display:flex;justify-content:space-between;align-items:flex-end;border-bottom:2px solid #1f2937;padding-bottom:8px;margin-bottom:12px}
-.header h2{font-size:18px}
-.header .meta{text-align:right;font-size:11px;color:#6b7280}
-table{width:100%;border-collapse:collapse}
-th,td{border:1px solid #d1d5db;padding:4px 6px;font-size:10px}
-thead th{background:#1f4e78;color:#fff;font-weight:700;text-align:center}
-th:first-child,td:first-child,th:nth-child(2),td:nth-child(2){text-align:left}
-th.num,td.num{text-align:right}
-tbody tr:nth-child(even){background:#f9fafb}
-tfoot td{border-top:2px solid #1f4e78;background:#f2f2f2;font-weight:700;font-size:11px}
-*{-webkit-print-color-adjust:exact;print-color-adjust:exact}
-</style></head><body>
+    const labelColspan = esSimple ? 1 : 2
+    const priceCols = printMostrarGanancia ? 4 : 2
+
+    const bodyHtml = `
 <div class="header"><div><h2>Productos faltantes — Historial en Cuenta Corriente</h2><div style="font-size:11px;color:#6b7280">${escHtml(alcanceLabel)}</div></div><div class="meta"><div style="font-weight:600;color:#1f2937;font-size:13px">${fechaStr}</div><div>${filasPrint.length} ítems · ${totalUnidades} u.${esSimple ? '' : ` · ${clientesCount} cliente(s)`}</div></div></div>
-<table>
+<table data-faltantes-print="1" data-label-colspan="${labelColspan}" data-price-cols="${priceCols}" data-has-fecha="${esSimple ? '0' : '1'}">
 <thead><tr>${cabezaExtra}<th>Producto</th><th class="num">Cant.</th>${cols}${colaExtra}</tr></thead>
-<tbody>${rows}</tbody>
-<tfoot><tr><td colspan="${footerColspan}">TOTAL</td><td class="num">${totalUnidades}</td>${footerCols}${esSimple ? '' : '<td></td>'}</tr></tfoot>
-</table>
-</body></html>`
+<tbody>${rows}${totalFinalRow}</tbody>
+</table>`
 
-    printHtml(html)
+    const css = `
+@page { size: A4 landscape; margin: 10mm; @bottom-right { content: "Página " counter(page) " de " counter(pages); font-size: 9px; color: #6b7280; } }
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body { font-family: -apple-system, Arial, sans-serif; color: #1f2937; font-size: 11px; }
+.header { display: flex; justify-content: space-between; align-items: flex-end; border-bottom: 2px solid #1f2937; padding-bottom: 8px; margin-bottom: 12px; }
+.header h2 { font-size: 18px; }
+.header .meta { text-align: right; font-size: 11px; color: #6b7280; }
+table { width: 100%; border-collapse: collapse; }
+th, td { border: 1px solid #d1d5db; padding: 4px 6px; font-size: 10px; }
+thead th { background: #1f4e78; color: #fff; font-weight: 700; text-align: center; }
+th:first-child, td:first-child, th:nth-child(2), td:nth-child(2) { text-align: left; }
+th.num, td.num { text-align: right; }
+tbody tr:nth-child(even) { background: #f9fafb; }
+tr.subtotal-hoja td { border-top: 2px solid #1f4e78; background: #eef2f7; font-weight: 700; font-style: italic; }
+tr.total-final td { border-top: 3px double #1f4e78; background: #f2f2f2; font-weight: 700; }
+* { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+`
+
+    imprimirPaginado(bodyHtml, css)
     setShowPrintDialog(false)
   }
 
