@@ -118,16 +118,33 @@ export async function getFaltantesResumen(): Promise<FaltantesResumen> {
   }
 
   const clienteIds = [...new Set(data.map((r: any) => r.cliente_id).filter(Boolean))];
-  const productoIds = [...new Set(data.map((r: any) => r.producto_id).filter(Boolean))];
+  // producto_id puede venir en dos formatos: el id de "productos" (prod_mp_XXXX) o,
+  // para faltantes registrados desde el chequeo de stock del reparto, el id de
+  // "mayorista_productos" (mp_XXXX) — hay que resolver este último vía su FK producto_id.
+  const allIds = [...new Set(data.map((r: any) => r.producto_id).filter(Boolean))] as string[];
+  const mpIds = allIds.filter((id) => id.startsWith("mp_"));
+  const directIds = allIds.filter((id) => !id.startsWith("mp_"));
 
-  const [{ data: clientesData }, { data: productosData }] = await Promise.all([
+  const [{ data: clientesData }, { data: mpData }] = await Promise.all([
     clienteIds.length > 0
       ? supabase.from("clientes").select("id, name").in("id", clienteIds)
       : Promise.resolve({ data: [] as any[] }),
-    productoIds.length > 0
-      ? supabase.from("productos").select("id, price, precio_venta, precio_base, ganancia_global").in("id", productoIds)
+    mpIds.length > 0
+      ? supabase.from("mayorista_productos").select("id, producto_id, precio_lista").in("id", mpIds)
       : Promise.resolve({ data: [] as any[] }),
   ]);
+
+  const mpMap = new Map<string, { productoId: string | null; precioLista: number }>(
+    (mpData ?? []).map((m: any) => [m.id, { productoId: m.producto_id ?? null, precioLista: Number(m.precio_lista) || 0 }]),
+  );
+
+  const productoIds = [
+    ...new Set([...directIds, ...[...mpMap.values()].map((m) => m.productoId).filter((id): id is string => !!id)]),
+  ];
+
+  const { data: productosData } = productoIds.length > 0
+    ? await supabase.from("productos").select("id, price, precio_venta, precio_base, ganancia_global").in("id", productoIds)
+    : { data: [] as any[] };
 
   const clienteNombreMap = new Map<string, string>((clientesData ?? []).map((c: any) => [c.id, c.name]));
   const productoMap = new Map<string, { price: number; precioBase: number | null; ganancia: number | null }>(
@@ -137,17 +154,32 @@ export async function getFaltantesResumen(): Promise<FaltantesResumen> {
     ]),
   );
 
+  // Resuelve precio con/sin ganancia para un producto_id de cliente_faltantes,
+  // sea id de productos o de mayorista_productos.
+  function resolverPrecios(productoId: string): { conGanancia: number; sinGanancia: number } {
+    const mp = mpIds.includes(productoId) ? mpMap.get(productoId) : undefined;
+    const producto = productoMap.get(mp?.productoId ?? productoId);
+    if (producto) {
+      const conGanancia = producto.price;
+      const sinGanancia = producto.precioBase != null && producto.precioBase > 0
+        ? producto.precioBase
+        : conGanancia * ratioCosto(producto.ganancia);
+      return { conGanancia, sinGanancia };
+    }
+    // Producto nunca habilitado en el catálogo: solo tenemos el precio de lista mayorista.
+    if (mp && mp.precioLista > 0) {
+      return { conGanancia: mp.precioLista / ratioCosto(null), sinGanancia: mp.precioLista };
+    }
+    return { conGanancia: 0, sinGanancia: 0 };
+  }
+
   let totalUnidades = 0;
   let totalConGanancia = 0;
   let totalSinGanancia = 0;
 
   const items: FaltanteDetalle[] = data.map((r: any) => {
     const cantidad = r.cantidad ?? 0;
-    const producto = productoMap.get(r.producto_id);
-    const precioConGanancia = producto?.price ?? 0;
-    const precioSinGanancia = producto?.precioBase != null && producto.precioBase > 0
-      ? producto.precioBase
-      : precioConGanancia * ratioCosto(producto?.ganancia);
+    const { conGanancia: precioConGanancia, sinGanancia: precioSinGanancia } = resolverPrecios(r.producto_id);
 
     const totalCon = precioConGanancia * cantidad;
     const totalSin = precioSinGanancia * cantidad;
