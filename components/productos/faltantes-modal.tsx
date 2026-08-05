@@ -113,7 +113,7 @@ async function imprimirPaginado(bodyHtml: string, css: string) {
   document.head.appendChild(globalStyle)
 
   const previewer = new Previewer()
-  await previewer.preview(bodyHtml, { 'faltantes-print.css': css }, container)
+  await previewer.preview(bodyHtml, [{ 'faltantes-print.css': css }], container)
 
   const cleanup = () => {
     container.remove()
