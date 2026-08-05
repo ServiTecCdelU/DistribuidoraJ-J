@@ -18,6 +18,7 @@ import { ProductModal, type StockAdjustment } from "@/components/productos/produ
 import { StockHistoryModal } from "@/components/productos/stock-history-modal";
 import { InventoryValueHistory } from "@/components/productos/inventory-value-history";
 import { RemitoImportModal } from "@/components/productos/remito-import-modal";
+import { FaltantesModal } from "@/components/productos/faltantes-modal";
 import {
   Select,
   SelectContent,
@@ -25,7 +26,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { productsApi } from "@/lib/api";
+import { productsApi, faltantesApi, type FaltantesResumen } from "@/lib/api";
 import { supabase } from "@/lib/supabase";
 import { generateReadableId } from "@/services/supabase-helpers";
 import { getAuthToken } from "@/services/auth-service";
@@ -74,6 +75,7 @@ import {
   Pill,
   ChevronDown,
   AlertTriangle,
+  PackageX,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -202,6 +204,8 @@ export default function ProductosPage() {
     [],
   );
   const [showStockHistory, setShowStockHistory] = useState(false);
+  const [showFaltantesModal, setShowFaltantesModal] = useState(false);
+  const [faltantesResumen, setFaltantesResumen] = useState<FaltantesResumen | null>(null);
   const [selectedProductHistory, setSelectedProductHistory] =
     useState<Product | null>(null);
   const [showInventoryHistory, setShowInventoryHistory] = useState(false);
@@ -249,6 +253,7 @@ export default function ProductosPage() {
     loadStockHistory();
     loadInventoryHistory();
     getProductosARevisar().then(setProductosARevisar).catch(() => {});
+    faltantesApi.getResumen().then(setFaltantesResumen).catch(() => {});
   }, []);
 
   const loadProducts = async () => {
@@ -1563,61 +1568,71 @@ tr.cat td{border:none}
           </div>
         </button>
 
-        {/* Bajo stock — filtra la lista */}
-        <button
-          type="button"
-          onClick={() => { setShowFilters(true); setStockFilter("low"); }}
-          className="group text-left rounded-2xl bg-warning/5 border border-warning/20 dark:bg-warning/10 dark:border-warning/30 p-3.5 sm:p-4 shadow-sm hover:shadow-lg hover:-translate-y-0.5 hover:bg-warning/10 transition-all duration-200 flex flex-col justify-between"
-        >
-          <div className="flex items-center gap-2 sm:gap-3">
-            <div className="h-9 w-9 sm:h-11 sm:w-11 rounded-xl bg-warning/15 dark:bg-warning/25 flex items-center justify-center flex-shrink-0 transition-transform duration-200 group-hover:scale-110">
-              <AlertCircle className="h-4 w-4 sm:h-5 sm:w-5 text-warning" />
-            </div>
-            <div>
-              <p className="text-[10px] sm:text-sm text-muted-foreground">
-                Bajo stock
-              </p>
-              <p className="text-lg sm:text-2xl font-bold text-foreground">
-                {stats.lowStockCount}
-              </p>
-            </div>
+        {/* Bajo stock + Sin stock — un único dashboard, cada mitad filtra la lista */}
+        <div className="rounded-2xl bg-warning/5 border border-warning/20 dark:bg-warning/10 dark:border-warning/30 p-3.5 sm:p-4 shadow-sm flex flex-col justify-between">
+          <div className="grid grid-cols-2 gap-2">
+            <button
+              type="button"
+              onClick={() => { setShowFilters(true); setStockFilter("low"); }}
+              className="group text-left rounded-xl hover:bg-warning/10 transition-all duration-200 p-1"
+            >
+              <div className="flex items-center gap-1.5">
+                <div className="h-7 w-7 sm:h-9 sm:w-9 rounded-lg bg-warning/15 dark:bg-warning/25 flex items-center justify-center flex-shrink-0 transition-transform duration-200 group-hover:scale-110">
+                  <AlertCircle className="h-3.5 w-3.5 sm:h-4 sm:w-4 text-warning" />
+                </div>
+                <div className="min-w-0">
+                  <p className="text-[9px] sm:text-[11px] text-muted-foreground truncate">Bajo stock</p>
+                  <p className="text-base sm:text-xl font-bold text-foreground">{stats.lowStockCount}</p>
+                </div>
+              </div>
+            </button>
+            <button
+              type="button"
+              onClick={() => { setShowFilters(true); setStockFilter("out"); }}
+              className="group text-left rounded-xl hover:bg-destructive/10 transition-all duration-200 p-1"
+            >
+              <div className="flex items-center gap-1.5">
+                <div className="h-7 w-7 sm:h-9 sm:w-9 rounded-lg bg-destructive/15 dark:bg-destructive/25 flex items-center justify-center flex-shrink-0 transition-transform duration-200 group-hover:scale-110">
+                  <X className="h-3.5 w-3.5 sm:h-4 sm:w-4 text-destructive" />
+                </div>
+                <div className="min-w-0">
+                  <p className="text-[9px] sm:text-[11px] text-muted-foreground truncate">Sin stock</p>
+                  <p className="text-base sm:text-xl font-bold text-foreground">{stats.outOfStockCount}</p>
+                </div>
+              </div>
+            </button>
           </div>
           <div className="mt-2.5">
-            <p className="text-[11px] sm:text-xs text-muted-foreground mb-1">
-              {stockPct.bajo}% del catálogo
-            </p>
-            <div className="h-1.5 w-full rounded-full bg-muted overflow-hidden">
-              <div className="h-full bg-warning rounded-full" style={{ width: `${stockPct.bajo}%` }} />
+            <div className="h-1.5 w-full rounded-full bg-muted overflow-hidden flex">
+              <div className="h-full bg-warning" style={{ width: `${stockPct.bajo}%` }} title={`Bajo stock: ${stockPct.bajo}%`} />
+              <div className="h-full bg-destructive" style={{ width: `${stockPct.sin}%` }} title={`Sin stock: ${stockPct.sin}%`} />
             </div>
           </div>
-        </button>
+        </div>
 
-        {/* Sin stock — filtra la lista */}
+        {/* Productos faltantes — historial de faltantes en Cuenta Corriente */}
         <button
           type="button"
-          onClick={() => { setShowFilters(true); setStockFilter("out"); }}
+          onClick={() => setShowFaltantesModal(true)}
           className="group text-left rounded-2xl bg-destructive/5 border border-destructive/20 dark:bg-destructive/10 dark:border-destructive/30 p-3.5 sm:p-4 shadow-sm hover:shadow-lg hover:-translate-y-0.5 hover:bg-destructive/10 transition-all duration-200 flex flex-col justify-between"
         >
           <div className="flex items-center gap-2 sm:gap-3">
             <div className="h-9 w-9 sm:h-11 sm:w-11 rounded-xl bg-destructive/15 dark:bg-destructive/25 flex items-center justify-center flex-shrink-0 transition-transform duration-200 group-hover:scale-110">
-              <X className="h-4 w-4 sm:h-5 sm:w-5 text-destructive" />
+              <PackageX className="h-4 w-4 sm:h-5 sm:w-5 text-destructive" />
             </div>
             <div>
               <p className="text-[10px] sm:text-sm text-muted-foreground">
-                Sin stock
+                Productos faltantes
               </p>
               <p className="text-lg sm:text-2xl font-bold text-foreground">
-                {stats.outOfStockCount}
+                {faltantesResumen?.items.length ?? "—"}
               </p>
             </div>
           </div>
           <div className="mt-2.5">
-            <p className="text-[11px] sm:text-xs text-muted-foreground mb-1">
-              {stockPct.sin}% del catálogo
+            <p className="text-[11px] sm:text-xs text-muted-foreground">
+              {faltantesResumen ? `${faltantesResumen.clientesAfectados} cliente(s) afectados` : "Historial en cuenta corriente"}
             </p>
-            <div className="h-1.5 w-full rounded-full bg-muted overflow-hidden">
-              <div className="h-full bg-destructive rounded-full" style={{ width: `${stockPct.sin}%` }} />
-            </div>
           </div>
         </button>
 
@@ -2217,6 +2232,11 @@ tr.cat td{border:none}
           if ((p as any).disabled) handleEnable(p);
           else handleDeactivate(p);
         } : undefined}
+      />
+
+      <FaltantesModal
+        open={showFaltantesModal}
+        onOpenChange={setShowFaltantesModal}
       />
 
       <StockHistoryModal

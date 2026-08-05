@@ -130,8 +130,9 @@ import {
   quitarFaltantes,
   eliminarFaltante,
   getFaltantesByCliente,
+  getFaltantesResumen,
 } from '@/services/faltantes-service'
-import type { Faltante } from '@/services/faltantes-service'
+import type { Faltante, FaltantesResumen, FaltanteDetalle } from '@/services/faltantes-service'
 import {
   registrarDevolucion,
   saveReciboToDevolucion,
@@ -346,9 +347,10 @@ export const faltantesApi = {
   quitar: quitarFaltantes,
   eliminar: eliminarFaltante,
   getByCliente: getFaltantesByCliente,
+  getResumen: getFaltantesResumen,
 }
 
-export type { Faltante }
+export type { Faltante, FaltantesResumen, FaltanteDetalle }
 
 export const devolucionesApi = {
   registrar: registrarDevolucion,
