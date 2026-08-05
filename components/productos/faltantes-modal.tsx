@@ -34,7 +34,7 @@ export function FaltantesModal({ open, onOpenChange }: FaltantesModalProps) {
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-3xl max-h-[85vh] flex flex-col rounded-2xl">
+      <DialogContent className="max-w-3xl lg:max-w-5xl xl:max-w-6xl max-h-[85vh] flex flex-col rounded-2xl">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <PackageX className="h-5 w-5 text-destructive" />
@@ -53,23 +53,23 @@ export function FaltantesModal({ open, onOpenChange }: FaltantesModalProps) {
         ) : (
           <>
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 sm:gap-3">
-              <div className="rounded-xl bg-muted/50 p-3">
+              <div className="rounded-xl bg-muted/50 p-3 min-w-0">
                 <p className="text-[11px] text-muted-foreground">Ítems pendientes</p>
-                <p className="text-lg font-bold">{resumen.items.length}</p>
+                <p className="text-base sm:text-lg font-bold truncate">{resumen.items.length}</p>
               </div>
-              <div className="rounded-xl bg-muted/50 p-3">
+              <div className="rounded-xl bg-muted/50 p-3 min-w-0">
                 <p className="text-[11px] text-muted-foreground flex items-center gap-1">
                   <Users className="h-3 w-3" /> Clientes afectados
                 </p>
-                <p className="text-lg font-bold">{resumen.clientesAfectados}</p>
+                <p className="text-base sm:text-lg font-bold truncate">{resumen.clientesAfectados}</p>
               </div>
-              <div className="rounded-xl bg-success/10 p-3">
+              <div className="rounded-xl bg-success/10 p-3 min-w-0">
                 <p className="text-[11px] text-muted-foreground">Total con % ganancia</p>
-                <p className="text-lg font-bold text-success">{formatCurrency(resumen.totalConGanancia)}</p>
+                <p className="text-sm sm:text-base font-bold text-success truncate">{formatCurrency(resumen.totalConGanancia)}</p>
               </div>
-              <div className="rounded-xl bg-muted/50 p-3">
+              <div className="rounded-xl bg-muted/50 p-3 min-w-0">
                 <p className="text-[11px] text-muted-foreground">Total sin % ganancia</p>
-                <p className="text-lg font-bold">{formatCurrency(resumen.totalSinGanancia)}</p>
+                <p className="text-sm sm:text-base font-bold truncate">{formatCurrency(resumen.totalSinGanancia)}</p>
               </div>
             </div>
 
