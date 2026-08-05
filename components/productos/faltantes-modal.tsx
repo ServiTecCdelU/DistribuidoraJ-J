@@ -78,6 +78,7 @@ export function FaltantesModal({ open, onOpenChange }: FaltantesModalProps) {
   const [printMostrarGanancia, setPrintMostrarGanancia] = useState(true)
   const [printAlcance, setPrintAlcance] = useState<'todos' | 'mes'>('todos')
   const [printMes, setPrintMes] = useState('todos')
+  const [printFormato, setPrintFormato] = useState<'detallado' | 'simple'>('detallado')
 
   useEffect(() => {
     if (!open) return
@@ -170,27 +171,56 @@ export function FaltantesModal({ open, onOpenChange }: FaltantesModalProps) {
     const clientesCount = new Set(ordenados.map((it) => it.clienteId)).size
 
     const fechaStr = new Intl.DateTimeFormat('es-AR', { day: '2-digit', month: 'long', year: 'numeric' }).format(new Date())
-    const alcanceLabel = printAlcance === 'mes' ? mesLabel(printMes) : 'Todo el historial'
+    const esSimple = printFormato === 'simple'
+    const alcanceLabel = esSimple
+      ? (printAlcance === 'mes' ? `Productos de ${mesLabel(printMes)} sin especificar fecha` : 'Productos sin especificar fecha')
+      : (printAlcance === 'mes' ? mesLabel(printMes) : 'Todo el historial')
 
+    let filasPrint: { producto: string; cantidad: number; con: number; sin: number; conUnit: number; sinUnit: number; cliente?: string; fecha?: string; rechazo?: boolean }[]
+
+    if (esSimple) {
+      const mapa = new Map<string, { producto: string; cantidad: number; con: number; sin: number; conUnit: number; sinUnit: number }>()
+      for (const it of ordenados) {
+        const key = it.productoId || it.productoNombre
+        const g = mapa.get(key) ?? { producto: it.productoNombre, cantidad: 0, con: 0, sin: 0, conUnit: it.precioUnitarioConGanancia, sinUnit: it.precioUnitarioSinGanancia }
+        g.cantidad += it.cantidad
+        g.con += it.totalConGanancia
+        g.sin += it.totalSinGanancia
+        mapa.set(key, g)
+      }
+      filasPrint = [...mapa.values()].sort((a, b) => b.cantidad - a.cantidad)
+    } else {
+      filasPrint = ordenados.map((it) => ({
+        producto: it.productoNombre, cantidad: it.cantidad, con: it.totalConGanancia, sin: it.totalSinGanancia,
+        conUnit: it.precioUnitarioConGanancia, sinUnit: it.precioUnitarioSinGanancia,
+        cliente: it.clienteNombre, fecha: it.fecha, rechazo: it.motivo === 'no_quiso',
+      }))
+    }
+
+    const cabezaExtra = esSimple ? '' : '<th>Cliente</th>'
+    const colaExtra = esSimple ? '' : '<th class="num">Fecha</th>'
     const cols = printMostrarGanancia
       ? '<th class="num">Precio c/gan.</th><th class="num">Precio s/gan.</th><th class="num">Total c/gan.</th><th class="num">Total s/gan.</th>'
       : '<th class="num">Precio</th><th class="num">Total</th>'
 
-    const rows = ordenados.map((it) => {
-      const base = printMostrarGanancia
-        ? `<td class="num">${formatCurrency(it.precioUnitarioConGanancia)}</td><td class="num">${formatCurrency(it.precioUnitarioSinGanancia)}</td><td class="num">${formatCurrency(it.totalConGanancia)}</td><td class="num">${formatCurrency(it.totalSinGanancia)}</td>`
-        : `<td class="num">${formatCurrency(it.precioUnitarioSinGanancia)}</td><td class="num">${formatCurrency(it.totalSinGanancia)}</td>`
-      return `<tr><td>${escHtml(it.clienteNombre)}</td><td>${escHtml(it.productoNombre)}${it.motivo === 'no_quiso' ? ' (rechazo)' : ''}</td><td class="num">${it.cantidad}</td>${base}<td class="num">${formatDateShort(it.fecha)}</td></tr>`
+    const rows = filasPrint.map((f) => {
+      const precios = printMostrarGanancia
+        ? `<td class="num">${formatCurrency(f.conUnit)}</td><td class="num">${formatCurrency(f.sinUnit)}</td><td class="num">${formatCurrency(f.con)}</td><td class="num">${formatCurrency(f.sin)}</td>`
+        : `<td class="num">${formatCurrency(f.sinUnit)}</td><td class="num">${formatCurrency(f.sin)}</td>`
+      const clienteCol = esSimple ? '' : `<td>${escHtml(f.cliente ?? '')}</td>`
+      const fechaCol = esSimple ? '' : `<td class="num">${formatDateShort(f.fecha ?? '')}</td>`
+      return `<tr>${clienteCol}<td>${escHtml(f.producto)}${f.rechazo ? ' (rechazo)' : ''}</td><td class="num">${f.cantidad}</td>${precios}${fechaCol}</tr>`
     }).join('')
 
     const footerCols = printMostrarGanancia
       ? `<td class="num">—</td><td class="num">—</td><td class="num">${formatCurrency(totalCon)}</td><td class="num">${formatCurrency(totalSin)}</td>`
       : `<td class="num">—</td><td class="num">${formatCurrency(totalSin)}</td>`
+    const footerColspan = esSimple ? 1 : 2
 
     const html = `<!DOCTYPE html><html><head><title>Productos faltantes</title><style>
-@page{size:A4 landscape;margin:12mm}
+@page{size:A4 landscape;margin:0}
 *{margin:0;padding:0;box-sizing:border-box}
-body{font-family:-apple-system,Arial,sans-serif;color:#1f2937;font-size:11px}
+body{font-family:-apple-system,Arial,sans-serif;color:#1f2937;font-size:11px;padding:8mm}
 .header{display:flex;justify-content:space-between;align-items:flex-end;border-bottom:2px solid #1f2937;padding-bottom:8px;margin-bottom:12px}
 .header h2{font-size:18px}
 .header .meta{text-align:right;font-size:11px;color:#6b7280}
@@ -203,11 +233,11 @@ tbody tr:nth-child(even){background:#f9fafb}
 tfoot td{border-top:2px solid #1f4e78;background:#f2f2f2;font-weight:700;font-size:11px}
 *{-webkit-print-color-adjust:exact;print-color-adjust:exact}
 </style></head><body>
-<div class="header"><div><h2>Productos faltantes — Historial en Cuenta Corriente</h2><div style="font-size:11px;color:#6b7280">${escHtml(alcanceLabel)}</div></div><div class="meta"><div style="font-weight:600;color:#1f2937;font-size:13px">${fechaStr}</div><div>${ordenados.length} ítems · ${totalUnidades} u. · ${clientesCount} cliente(s)</div></div></div>
+<div class="header"><div><h2>Productos faltantes — Historial en Cuenta Corriente</h2><div style="font-size:11px;color:#6b7280">${escHtml(alcanceLabel)}</div></div><div class="meta"><div style="font-weight:600;color:#1f2937;font-size:13px">${fechaStr}</div><div>${filasPrint.length} ítems · ${totalUnidades} u.${esSimple ? '' : ` · ${clientesCount} cliente(s)`}</div></div></div>
 <table>
-<thead><tr><th>Cliente</th><th>Producto</th><th class="num">Cant.</th>${cols}<th class="num">Fecha</th></tr></thead>
+<thead><tr>${cabezaExtra}<th>Producto</th><th class="num">Cant.</th>${cols}${colaExtra}</tr></thead>
 <tbody>${rows}</tbody>
-<tfoot><tr><td colspan="2">TOTAL</td><td class="num">${totalUnidades}</td>${footerCols}<td></td></tr></tfoot>
+<tfoot><tr><td colspan="${footerColspan}">TOTAL</td><td class="num">${totalUnidades}</td>${footerCols}${esSimple ? '' : '<td></td>'}</tr></tfoot>
 </table>
 </body></html>`
 
@@ -441,6 +471,19 @@ tfoot td{border-top:2px solid #1f4e78;background:#f2f2f2;font-weight:700;font-si
                 <span className="block text-xs text-muted-foreground">Si es para mostrar al mayorista, no es necesario.</span>
               </span>
             </label>
+
+            <div className="space-y-1.5">
+              <p className="text-sm font-medium">Formato</p>
+              <Select value={printFormato} onValueChange={(v) => setPrintFormato(v as 'detallado' | 'simple')}>
+                <SelectTrigger className="h-9 text-sm">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="detallado">Detallado (cliente, producto y fecha)</SelectItem>
+                  <SelectItem value="simple">Solo producto y cantidad</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
 
             <div className="space-y-1.5">
               <p className="text-sm font-medium">Alcance</p>
