@@ -21,6 +21,8 @@ import {
   Store,
   Percent,
   Wallet,
+  PanelLeftClose,
+  PanelLeftOpen,
 } from "lucide-react";
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
@@ -47,7 +49,12 @@ function getRoleLabel(user: { role: string; employeeType?: string }): string {
   return "Vendedor";
 }
 
-export function AppSidebar() {
+interface AppSidebarProps {
+  hidden: boolean;
+  onToggle: () => void;
+}
+
+export function AppSidebar({ hidden, onToggle }: AppSidebarProps) {
   const pathname = usePathname();
   const [mobileOpen, setMobileOpen] = useState(false);
 
@@ -140,12 +147,28 @@ export function AppSidebar() {
         />
       )}
 
-      {/* SIDEBAR */}
-      <aside
+      {/* BOTÓN MOSTRAR — flota fuera del sidebar cuando está oculto (solo desktop) */}
+      {hidden && (
+        <button
+          type="button"
+          onClick={onToggle}
+          title="Mostrar barra de navegación"
+          className="hidden lg:flex fixed top-4 left-4 z-40 h-9 w-9 items-center justify-center rounded-xl bg-sidebar text-sidebar-foreground border border-sidebar-border shadow-md hover:bg-sidebar-accent transition-colors"
+        >
+          <PanelLeftOpen className="h-4 w-4" />
+        </button>
+      )}
+
+      {/* SIDEBAR — wrapper fijo (posición/ocultamiento) + contenido escalado al 80% en desktop */}
+      <div
         className={cn(
-          "fixed top-0 left-0 z-[70] lg:z-40 h-full w-64 lg:w-72 lg:h-[125%] bg-sidebar text-sidebar-foreground border-r border-sidebar-border transition-transform duration-300 flex flex-col lg:[zoom:0.8]",
-          mobileOpen ? "translate-x-0" : "-translate-x-full lg:translate-x-0",
+          "fixed top-0 left-0 z-[70] lg:z-40 h-screen w-64 lg:w-[14.4rem] overflow-hidden transition-transform duration-300",
+          mobileOpen ? "translate-x-0" : "-translate-x-full",
+          hidden ? "lg:-translate-x-full" : "lg:translate-x-0",
         )}
+      >
+      <aside
+        className="h-screen lg:h-[125vh] w-64 lg:w-72 lg:origin-top-left lg:scale-[0.8] bg-sidebar text-sidebar-foreground border-r border-sidebar-border flex flex-col"
       >
         {/* Header: Logo + User */}
         <div className="px-5 pt-5 pb-4 border-b border-sidebar-border">
@@ -163,6 +186,16 @@ export function AppSidebar() {
                 </p>
               )}
             </div>
+            {/* Ocultar barra — solo desktop */}
+            <Button
+              variant="ghost"
+              size="icon"
+              className="hidden lg:inline-flex shrink-0"
+              onClick={onToggle}
+              title="Ocultar barra de navegación"
+            >
+              <PanelLeftClose className="h-4 w-4" />
+            </Button>
             {/* Cerrar móvil */}
             <Button
               variant="ghost"
@@ -223,6 +256,7 @@ export function AppSidebar() {
           </button>
         </div>
       </aside>
+      </div>
     </>
   );
 }

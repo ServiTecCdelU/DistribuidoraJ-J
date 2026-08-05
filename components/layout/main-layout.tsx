@@ -1,12 +1,15 @@
 'use client'
 
-import React, { useEffect } from 'react'
+import React, { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { AppSidebar } from './app-sidebar'
 import { useAuth } from '@/hooks/use-auth'
 import { Button } from '@/components/ui/button'
 import { ArrowLeft } from 'lucide-react'
+import { cn } from '@/lib/utils'
 import type { UserRole } from '@/lib/types'
+
+const SIDEBAR_HIDDEN_KEY = 'sidebarHidden'
 
 interface MainLayoutProps {
   children: React.ReactNode
@@ -27,6 +30,21 @@ function getRoleHome(user: { role: string; employeeType?: string }): string {
 export function MainLayout({ children, title, description, allowedRoles }: MainLayoutProps) {
   const router = useRouter()
   const { user, loading } = useAuth()
+  const [sidebarHidden, setSidebarHidden] = useState(false)
+
+  useEffect(() => {
+    if (typeof window !== 'undefined' && window.localStorage.getItem(SIDEBAR_HIDDEN_KEY) === '1') {
+      setSidebarHidden(true)
+    }
+  }, [])
+
+  const toggleSidebar = () => {
+    setSidebarHidden((prev) => {
+      const next = !prev
+      if (typeof window !== 'undefined') window.localStorage.setItem(SIDEBAR_HIDDEN_KEY, next ? '1' : '0')
+      return next
+    })
+  }
 
   useEffect(() => {
     if (!loading && !user) {
@@ -50,8 +68,8 @@ export function MainLayout({ children, title, description, allowedRoles }: MainL
 
   return (
     <div className="min-h-screen bg-background">
-      <AppSidebar />
-      <main className="lg:ml-[14.4rem] min-h-screen">
+      <AppSidebar hidden={sidebarHidden} onToggle={toggleSidebar} />
+      <main className={cn("min-h-screen transition-[margin] duration-300", sidebarHidden ? "lg:ml-0" : "lg:ml-[14.4rem]")}>
         <div className="px-4 pb-6 pt-14 sm:px-6 sm:pt-14 lg:p-8">
           {title && (
             <div className="relative flex items-center h-10 mb-1">
