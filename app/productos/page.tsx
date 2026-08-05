@@ -1608,14 +1608,20 @@ tr.cat td{border:none}
               </p>
             </div>
           </div>
-          <div className="mt-2.5 space-y-1">
+          <div className="mt-2.5">
             <p className="text-[11px] sm:text-xs text-muted-foreground">
               {faltantesResumen ? `${faltantesResumen.totalUnidades} unidad(es) · ${faltantesResumen.clientesAfectados} cliente(s)` : "Historial en cuenta corriente"}
             </p>
             {faltantesResumen && faltantesResumen.items.length > 0 && (
-              <div className="flex items-center justify-between gap-2 text-[11px] sm:text-xs">
-                <span className="text-success font-semibold truncate">Con gan.: {formatCompactNumber(faltantesResumen.totalConGanancia)}</span>
-                <span className="text-muted-foreground font-semibold truncate">Sin gan.: {formatCompactNumber(faltantesResumen.totalSinGanancia)}</span>
+              <div className="grid grid-cols-2 gap-2 mt-2.5 pt-2.5 border-t border-destructive/10">
+                <div className="rounded-xl bg-success/10 p-1.5">
+                  <p className="text-[9px] sm:text-[11px] text-muted-foreground truncate">Con % gan.</p>
+                  <p className="text-sm sm:text-lg font-bold text-success truncate">{formatCompactNumber(faltantesResumen.totalConGanancia)}</p>
+                </div>
+                <div className="rounded-xl bg-muted p-1.5">
+                  <p className="text-[9px] sm:text-[11px] text-muted-foreground truncate">Sin % gan.</p>
+                  <p className="text-sm sm:text-lg font-bold text-foreground truncate">{formatCompactNumber(faltantesResumen.totalSinGanancia)}</p>
+                </div>
               </div>
             )}
           </div>
