@@ -54,76 +54,81 @@ function escHtml(s: string): string {
   return (s ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
 }
 
-const fmtMoney = (n: number) => new Intl.NumberFormat('es-AR', { style: 'currency', currency: 'ARS', minimumFractionDigits: 0 }).format(n)
+// Paged.js corre DENTRO de un iframe aislado (su propio documento), nunca en
+// el documento de la app — así su CSS/DOM global no afecta la página en pantalla.
+// El handler de subtotal se registra con JS plano dentro de ese iframe.
+const PAGEDJS_HANDLER_SCRIPT = `
+(function() {
+  function fmtMoney(n) {
+    return new Intl.NumberFormat('es-AR', { style: 'currency', currency: 'ARS', minimumFractionDigits: 0 }).format(n);
+  }
+  class SubtotalHandler extends Paged.Handler {
+    afterPageLayout(pageElement) {
+      var table = pageElement.querySelector('table[data-faltantes-print]');
+      if (!table) return;
+      var rows = Array.prototype.slice.call(table.querySelectorAll('tbody > tr[data-cant]'));
+      if (rows.length === 0) return;
+      var cant = 0, con = 0, sin = 0;
+      rows.forEach(function (r) {
+        cant += Number(r.getAttribute('data-cant')) || 0;
+        con += Number(r.getAttribute('data-con')) || 0;
+        sin += Number(r.getAttribute('data-sin')) || 0;
+      });
+      var labelColspan = Number(table.getAttribute('data-label-colspan')) || 1;
+      var priceCols = Number(table.getAttribute('data-price-cols')) || 2;
+      var hasFecha = table.getAttribute('data-has-fecha') === '1';
 
-// Handler de Paged.js: al paginar, inyecta un renglón de subtotal con SOLO
-// las filas que quedaron en esa hoja física (no el total general).
-let subtotalHandlerRegistered = false
-async function registrarSubtotalHandler() {
-  if (subtotalHandlerRegistered) return
-  const { Handler, registerHandlers } = await import('@/lib/vendor/pagedjs/paged.esm.js')
-  class SubtotalHandler extends Handler {
-    afterPageLayout(pageElement: HTMLElement) {
-      const table = pageElement.querySelector('table[data-faltantes-print]')
-      if (!table) return
-      const rows = Array.from(table.querySelectorAll('tbody > tr[data-cant]')) as HTMLElement[]
-      if (rows.length === 0) return
-      let cant = 0, con = 0, sin = 0
-      for (const r of rows) {
-        cant += Number(r.getAttribute('data-cant')) || 0
-        con += Number(r.getAttribute('data-con')) || 0
-        sin += Number(r.getAttribute('data-sin')) || 0
-      }
-      const labelColspan = Number(table.getAttribute('data-label-colspan')) || 1
-      const priceCols = Number(table.getAttribute('data-price-cols')) || 2
-      const hasFecha = table.getAttribute('data-has-fecha') === '1'
-
-      const tr = document.createElement('tr')
-      tr.className = 'subtotal-hoja'
-      let html = `<td colspan="${labelColspan}">Subtotal de esta hoja</td><td class="num">${cant}</td>`
+      var tr = document.createElement('tr');
+      tr.className = 'subtotal-hoja';
+      var html = '<td colspan="' + labelColspan + '">Subtotal de esta hoja</td><td class="num">' + cant + '</td>';
       html += priceCols === 4
-        ? `<td class="num">—</td><td class="num">—</td><td class="num">${fmtMoney(con)}</td><td class="num">${fmtMoney(sin)}</td>`
-        : `<td class="num">—</td><td class="num">${fmtMoney(sin)}</td>`
-      if (hasFecha) html += '<td></td>'
-      tr.innerHTML = html
+        ? '<td class="num">—</td><td class="num">—</td><td class="num">' + fmtMoney(con) + '</td><td class="num">' + fmtMoney(sin) + '</td>'
+        : '<td class="num">—</td><td class="num">' + fmtMoney(sin) + '</td>';
+      if (hasFecha) html += '<td></td>';
+      tr.innerHTML = html;
 
-      rows[rows.length - 1].insertAdjacentElement('afterend', tr)
+      rows[rows.length - 1].insertAdjacentElement('afterend', tr);
     }
   }
-  registerHandlers(SubtotalHandler)
-  subtotalHandlerRegistered = true
-}
+  Paged.registerHandlers(SubtotalHandler);
 
-// Renderiza el HTML paginado con Paged.js (permite subtotal real por hoja
-// y numeración de página "Página X de Y" propia, en vez del header/footer
-// que agrega el navegador).
-async function imprimirPaginado(bodyHtml: string, css: string) {
-  await registrarSubtotalHandler()
-  const { Previewer } = await import('@/lib/vendor/pagedjs/paged.esm.js')
+  var source = document.getElementById('pagedjs-source');
+  var content = source.innerHTML;
+  source.remove();
 
-  const container = document.createElement('div')
-  container.id = 'pagedjs-print-root'
-  container.style.cssText = 'position:fixed;left:-99999px;top:0;'
-  document.body.appendChild(container)
+  var previewer = new Paged.Previewer();
+  previewer.preview(content, [window.__faltantesPrintCss], document.body).then(function () {
+    window.print();
+  });
+})();
+`
 
-  const globalStyle = document.createElement('style')
-  globalStyle.textContent = `
-    @media print { body > *:not(#pagedjs-print-root) { display: none !important; } #pagedjs-print-root { position: static !important; left: auto !important; } }
-  `
-  document.head.appendChild(globalStyle)
+// Genera e imprime el listado en un iframe aislado con Paged.js: subtotal real
+// por hoja, total final único y numeración de página propia.
+function imprimirPaginado(bodyHtml: string, css: string) {
+  const iframe = document.createElement('iframe')
+  iframe.style.cssText = 'position:fixed;top:0;left:0;width:0;height:0;border:0;opacity:0;'
+  document.body.appendChild(iframe)
+  const doc = iframe.contentWindow?.document
+  if (!doc) { document.body.removeChild(iframe); return }
 
-  const previewer = new Previewer()
-  await previewer.preview(bodyHtml, [{ 'faltantes-print.css': css }], container)
+  const win = iframe.contentWindow as Window & { __faltantesPrintCss?: Record<string, string> }
+  win.__faltantesPrintCss = { 'faltantes-print.css': css }
+
+  const html = `<!DOCTYPE html><html><head><title>Productos faltantes</title></head><body>
+<div id="pagedjs-source" style="display:none">${bodyHtml}</div>
+<script src="/vendor/pagedjs/paged.umd.js"><\/script>
+<script>${PAGEDJS_HANDLER_SCRIPT}<\/script>
+</body></html>`
+
+  doc.open(); doc.write(html); doc.close()
 
   const cleanup = () => {
-    container.remove()
-    globalStyle.remove()
-    previewer.polisher?.styleEl?.remove()
-    window.removeEventListener('afterprint', cleanup)
+    if (iframe.parentNode) document.body.removeChild(iframe)
+    win.removeEventListener('afterprint', cleanup)
   }
-  window.addEventListener('afterprint', cleanup)
-
-  window.print()
+  win.addEventListener('afterprint', cleanup)
+  setTimeout(cleanup, 60000)
 }
 
 export function FaltantesModal({ open, onOpenChange }: FaltantesModalProps) {

@@ -1614,13 +1614,13 @@ tr.cat td{border:none}
             </p>
             {faltantesResumen && faltantesResumen.items.length > 0 && (
               <div className="grid grid-cols-2 gap-2 mt-2.5 pt-2.5 border-t border-destructive/10">
-                <div className="rounded-xl bg-success/10 p-1.5">
+                <div className="rounded-xl bg-success/10 p-1.5 min-w-0">
                   <p className="text-[9px] sm:text-[11px] text-muted-foreground truncate">Con % gan.</p>
-                  <p className="text-sm sm:text-lg font-bold text-success truncate">{formatCompactNumber(faltantesResumen.totalConGanancia)}</p>
+                  <p className="text-[11px] sm:text-sm font-bold text-success truncate">{formatCurrency(faltantesResumen.totalConGanancia)}</p>
                 </div>
-                <div className="rounded-xl bg-muted p-1.5">
+                <div className="rounded-xl bg-muted p-1.5 min-w-0">
                   <p className="text-[9px] sm:text-[11px] text-muted-foreground truncate">Sin % gan.</p>
-                  <p className="text-sm sm:text-lg font-bold text-foreground truncate">{formatCompactNumber(faltantesResumen.totalSinGanancia)}</p>
+                  <p className="text-[11px] sm:text-sm font-bold text-foreground truncate">{formatCurrency(faltantesResumen.totalSinGanancia)}</p>
                 </div>
               </div>
             )}
