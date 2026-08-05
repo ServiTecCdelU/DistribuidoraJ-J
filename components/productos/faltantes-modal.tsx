@@ -61,7 +61,7 @@ const fmtMoney = (n: number) => new Intl.NumberFormat('es-AR', { style: 'currenc
 let subtotalHandlerRegistered = false
 async function registrarSubtotalHandler() {
   if (subtotalHandlerRegistered) return
-  const { Handler, registerHandlers } = await import('pagedjs')
+  const { Handler, registerHandlers } = await import('@/lib/vendor/pagedjs/paged.esm.js')
   class SubtotalHandler extends Handler {
     afterPageLayout(pageElement: HTMLElement) {
       const table = pageElement.querySelector('table[data-faltantes-print]')
@@ -99,7 +99,7 @@ async function registrarSubtotalHandler() {
 // que agrega el navegador).
 async function imprimirPaginado(bodyHtml: string, css: string) {
   await registrarSubtotalHandler()
-  const { Previewer } = await import('pagedjs')
+  const { Previewer } = await import('@/lib/vendor/pagedjs/paged.esm.js')
 
   const container = document.createElement('div')
   container.id = 'pagedjs-print-root'
