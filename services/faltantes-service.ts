@@ -125,7 +125,7 @@ export async function getFaltantesResumen(): Promise<FaltantesResumen> {
       ? supabase.from("clientes").select("id, name").in("id", clienteIds)
       : Promise.resolve({ data: [] as any[] }),
     productoIds.length > 0
-      ? supabase.from("productos").select("id, price, precio_base, ganancia_global").in("id", productoIds)
+      ? supabase.from("productos").select("id, price, precio_venta, precio_base, ganancia_global").in("id", productoIds)
       : Promise.resolve({ data: [] as any[] }),
   ]);
 
@@ -133,7 +133,7 @@ export async function getFaltantesResumen(): Promise<FaltantesResumen> {
   const productoMap = new Map<string, { price: number; precioBase: number | null; ganancia: number | null }>(
     (productosData ?? []).map((p: any) => [
       p.id,
-      { price: Number(p.price) || 0, precioBase: p.precio_base != null ? Number(p.precio_base) : null, ganancia: p.ganancia_global != null ? Number(p.ganancia_global) : null },
+      { price: Number(p.precio_venta) || Number(p.price) || 0, precioBase: p.precio_base != null ? Number(p.precio_base) : null, ganancia: p.ganancia_global != null ? Number(p.ganancia_global) : null },
     ]),
   );
 
