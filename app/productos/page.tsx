@@ -1524,53 +1524,38 @@ tr.cat td{border:none}
       )}
 
       {/* Estadísticas - Responsive */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-2 sm:gap-3 mb-4 sm:mb-6">
-        {/* Total + valor de inventario, con composición de stock */}
-        <button
-          type="button"
-          onClick={clearFilters}
-          className="group text-left rounded-2xl bg-primary/5 border border-primary/20 dark:bg-primary/10 dark:border-primary/30 p-3.5 sm:p-4 shadow-sm hover:shadow-lg hover:-translate-y-0.5 hover:bg-primary/10 transition-all duration-200 flex flex-col justify-between"
-        >
-          <div className="flex items-center gap-2 sm:gap-3">
-            <div className="h-9 w-9 sm:h-11 sm:w-11 rounded-xl bg-primary/15 dark:bg-primary/25 flex items-center justify-center flex-shrink-0 transition-transform duration-200 group-hover:scale-110">
-              <Package className="h-4 w-4 sm:h-5 sm:w-5 text-primary" />
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 sm:gap-3 mb-4 sm:mb-6">
+        {/* Total + valor de inventario + bajo/sin stock, todo en un solo dashboard */}
+        <div className="rounded-2xl bg-primary/5 border border-primary/20 dark:bg-primary/10 dark:border-primary/30 p-3.5 sm:p-4 shadow-sm flex flex-col justify-between">
+          <button
+            type="button"
+            onClick={clearFilters}
+            className="group text-left w-full"
+          >
+            <div className="flex items-center gap-2 sm:gap-3">
+              <div className="h-9 w-9 sm:h-11 sm:w-11 rounded-xl bg-primary/15 dark:bg-primary/25 flex items-center justify-center flex-shrink-0 transition-transform duration-200 group-hover:scale-110">
+                <Package className="h-4 w-4 sm:h-5 sm:w-5 text-primary" />
+              </div>
+              <div className="min-w-0">
+                <p className="text-[10px] sm:text-sm text-muted-foreground">
+                  Total productos
+                </p>
+                <p className="text-lg sm:text-2xl font-bold text-foreground truncate">
+                  {stats.totalProducts}
+                </p>
+              </div>
             </div>
-            <div className="min-w-0">
-              <p className="text-[10px] sm:text-sm text-muted-foreground">
-                Total productos
-              </p>
-              <p className="text-lg sm:text-2xl font-bold text-foreground truncate">
-                {stats.totalProducts}
-              </p>
-            </div>
-          </div>
-          <div className="mt-2.5">
-            <p className="text-[11px] sm:text-xs text-muted-foreground mb-1">
+            <p className="text-[11px] sm:text-xs text-muted-foreground mt-2.5 mb-1">
               Valor de inventario: <span className="font-semibold text-foreground">{formatCompactNumber(stats.totalInventoryValue)}</span>
             </p>
             <div className="h-1.5 w-full rounded-full bg-muted overflow-hidden flex">
-              <div
-                className="h-full bg-success"
-                style={{ width: `${stockPct.disponible}%` }}
-                title={`Disponible: ${stockPct.disponible}%`}
-              />
-              <div
-                className="h-full bg-warning"
-                style={{ width: `${stockPct.bajo}%` }}
-                title={`Bajo stock: ${stockPct.bajo}%`}
-              />
-              <div
-                className="h-full bg-destructive"
-                style={{ width: `${stockPct.sin}%` }}
-                title={`Sin stock: ${stockPct.sin}%`}
-              />
+              <div className="h-full bg-success" style={{ width: `${stockPct.disponible}%` }} title={`Disponible: ${stockPct.disponible}%`} />
+              <div className="h-full bg-warning" style={{ width: `${stockPct.bajo}%` }} title={`Bajo stock: ${stockPct.bajo}%`} />
+              <div className="h-full bg-destructive" style={{ width: `${stockPct.sin}%` }} title={`Sin stock: ${stockPct.sin}%`} />
             </div>
-          </div>
-        </button>
+          </button>
 
-        {/* Bajo stock + Sin stock — un único dashboard, cada mitad filtra la lista */}
-        <div className="rounded-2xl bg-warning/5 border border-warning/20 dark:bg-warning/10 dark:border-warning/30 p-3.5 sm:p-4 shadow-sm flex flex-col justify-between">
-          <div className="grid grid-cols-2 gap-2">
+          <div className="grid grid-cols-2 gap-2 mt-3 pt-3 border-t border-primary/10">
             <button
               type="button"
               onClick={() => { setShowFilters(true); setStockFilter("low"); }}
@@ -1602,12 +1587,6 @@ tr.cat td{border:none}
               </div>
             </button>
           </div>
-          <div className="mt-2.5">
-            <div className="h-1.5 w-full rounded-full bg-muted overflow-hidden flex">
-              <div className="h-full bg-warning" style={{ width: `${stockPct.bajo}%` }} title={`Bajo stock: ${stockPct.bajo}%`} />
-              <div className="h-full bg-destructive" style={{ width: `${stockPct.sin}%` }} title={`Sin stock: ${stockPct.sin}%`} />
-            </div>
-          </div>
         </div>
 
         {/* Productos faltantes — historial de faltantes en Cuenta Corriente */}
@@ -1620,19 +1599,25 @@ tr.cat td{border:none}
             <div className="h-9 w-9 sm:h-11 sm:w-11 rounded-xl bg-destructive/15 dark:bg-destructive/25 flex items-center justify-center flex-shrink-0 transition-transform duration-200 group-hover:scale-110">
               <PackageX className="h-4 w-4 sm:h-5 sm:w-5 text-destructive" />
             </div>
-            <div>
+            <div className="min-w-0">
               <p className="text-[10px] sm:text-sm text-muted-foreground">
                 Productos faltantes
               </p>
-              <p className="text-lg sm:text-2xl font-bold text-foreground">
+              <p className="text-lg sm:text-2xl font-bold text-foreground truncate">
                 {faltantesResumen?.items.length ?? "—"}
               </p>
             </div>
           </div>
-          <div className="mt-2.5">
+          <div className="mt-2.5 space-y-1">
             <p className="text-[11px] sm:text-xs text-muted-foreground">
-              {faltantesResumen ? `${faltantesResumen.clientesAfectados} cliente(s) afectados` : "Historial en cuenta corriente"}
+              {faltantesResumen ? `${faltantesResumen.totalUnidades} unidad(es) · ${faltantesResumen.clientesAfectados} cliente(s)` : "Historial en cuenta corriente"}
             </p>
+            {faltantesResumen && faltantesResumen.items.length > 0 && (
+              <div className="flex items-center justify-between gap-2 text-[11px] sm:text-xs">
+                <span className="text-success font-semibold truncate">Con gan.: {formatCompactNumber(faltantesResumen.totalConGanancia)}</span>
+                <span className="text-muted-foreground font-semibold truncate">Sin gan.: {formatCompactNumber(faltantesResumen.totalSinGanancia)}</span>
+              </div>
+            )}
           </div>
         </button>
 
