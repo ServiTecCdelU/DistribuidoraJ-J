@@ -75,6 +75,7 @@ export default function ClientesPage() {
   const debouncedSearch = useDebounce(searchQuery, 300)
   const [activoFilter, setActivoFilter] = useState<'all' | 'active' | 'inactive'>('all')
   const [sellerFilter, setSellerFilter] = useState<string>('all')
+  const [ccFilter, setCcFilter] = useState<'all' | 'enabled' | 'disabled'>('all')
   const [modalOpen, setModalOpen] = useState(false)
   const [editingClient, setEditingClient] = useState<Client | null>(null)
   
@@ -564,11 +565,14 @@ export default function ClientesPage() {
     const matchesSeller =
       sellerFilter === 'all' ||
       (sellerFilter === 'none' ? !clientCodigo : clientCodigo === sellerFilter)
-    return matchesSearch && matchesActivo && matchesSeller
+    const matchesCC =
+      ccFilter === 'all' ||
+      (ccFilter === 'enabled' ? client.cuentaCorrienteHabilitada !== false : client.cuentaCorrienteHabilitada === false)
+    return matchesSearch && matchesActivo && matchesSeller && matchesCC
   })
 
   // Reset to page 1 when filters change
-  useEffect(() => { setCurrentPage(1) }, [debouncedSearch, activoFilter, sellerFilter])
+  useEffect(() => { setCurrentPage(1) }, [debouncedSearch, activoFilter, sellerFilter, ccFilter])
 
   const pagedClients = useMemo(
     () => filteredClients.slice((currentPage - 1) * pageSize, currentPage * pageSize),
@@ -747,6 +751,15 @@ export default function ClientesPage() {
               </option>
             ))}
           </select>
+          <select
+            className="h-10 rounded-md border border-input bg-background px-3 text-sm text-foreground shadow-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+            value={ccFilter}
+            onChange={(e) => setCcFilter(e.target.value as typeof ccFilter)}
+          >
+            <option value="all">C.C.: todos</option>
+            <option value="enabled">C.C. habilitada</option>
+            <option value="disabled">C.C. deshabilitada</option>
+          </select>
           {/* <Button variant="outline" onClick={() => setArcaDialogOpen(true)} className="gap-2">
             <Search className="h-4 w-4" />
             Consultar ARCA
@@ -822,6 +835,17 @@ export default function ClientesPage() {
                 Cód. {c.codigo} — {c.names.join(', ')}
               </option>
             ))}
+          </select>
+        </div>
+        <div className="flex gap-2">
+          <select
+            className="h-10 flex-1 min-w-0 rounded-md border border-input bg-background px-3 text-sm text-foreground shadow-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+            value={ccFilter}
+            onChange={(e) => setCcFilter(e.target.value as typeof ccFilter)}
+          >
+            <option value="all">C.C.: todos</option>
+            <option value="enabled">C.C. habilitada</option>
+            <option value="disabled">C.C. deshabilitada</option>
           </select>
         </div>
         <div className="flex gap-2">
