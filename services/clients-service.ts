@@ -25,6 +25,7 @@ function mapClient(d: Record<string, any>): Client {
     debtClassification: d.debt_classification ?? 'normal',
     diaCobro: d.dia_cobro ?? undefined,
     activo: d.activo ?? true,
+    cuentaCorrienteHabilitada: d.cuenta_corriente_habilitada ?? true,
     notes: d.notes ?? '',
     createdAt: new Date(d.created_at),
   }
@@ -121,6 +122,7 @@ export const updateClient = async (id: string, updates: Partial<Client>): Promis
   if (updates.codigoExterno !== undefined) mapped.codigo_externo = updates.codigoExterno || null
   if (updates.diaCobro !== undefined) mapped.dia_cobro = updates.diaCobro || null
   if (updates.activo !== undefined) mapped.activo = updates.activo
+  if (updates.cuentaCorrienteHabilitada !== undefined) mapped.cuenta_corriente_habilitada = updates.cuentaCorrienteHabilitada
 
   await supabase.from('clientes').update(mapped).eq('id', id)
   const updated = await getClientById(id)

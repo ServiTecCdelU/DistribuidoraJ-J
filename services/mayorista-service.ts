@@ -481,14 +481,26 @@ export const habilitarDesdeRemito = async (mpId: string): Promise<string | null>
     // La ficha ya existe: solo asegurar que esté visible. No tocar precio ni unidades.
     await supabase.from('productos').update({ disabled: false }).eq('id', productoId)
   } else {
-    // Crear ficha. Precio de venta a partir de la ganancia global vigente.
+    // Crear ficha. Precio de venta a partir de la ganancia global vigente:
+    // se toma el valor MÁS FRECUENTE entre productos activos (no el de una fila cualquiera),
+    // ya que "aplicar ganancia global" pisa esta columna en todos los productos habilitados a la vez.
     let ganancia: number | undefined
     try {
       const { data: rows } = await supabase
-        .from('productos').select('ganancia_global').gte('ganancia_global', 0).limit(1)
+        .from('productos').select('ganancia_global').eq('disabled', false).gte('ganancia_global', 0)
       if (rows && rows.length > 0) {
-        const g = Number(rows[0].ganancia_global)
-        if (!isNaN(g)) ganancia = g
+        const counts = new Map<number, number>()
+        for (const r of rows) {
+          const g = Number(r.ganancia_global)
+          if (isNaN(g)) continue
+          counts.set(g, (counts.get(g) ?? 0) + 1)
+        }
+        let best: number | undefined
+        let bestCount = 0
+        for (const [g, count] of counts) {
+          if (count > bestCount) { best = g; bestCount = count }
+        }
+        ganancia = best
       }
     } catch { /* noop */ }
 

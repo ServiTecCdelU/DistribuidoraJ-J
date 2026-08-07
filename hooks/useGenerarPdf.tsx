@@ -28,6 +28,7 @@ export interface Venta {
   clientTaxCategory?: string;
   sellerName?: string;
   saldoAnterior?: number;
+  cuentaCorrienteHabilitada?: boolean;
   items: VentaItem[];
   total: number;
   paymentType: "cash" | "credit" | "mixed";
@@ -652,6 +653,14 @@ const guiaStyles = StyleSheet.create({
   footerLeft: { flexDirection: "row", gap: 8 },
   footerRight: { flexDirection: "row", gap: 10 },
   footerBold: { fontWeight: "bold" },
+  footerTotalGeneral: {
+    flexDirection: "row",
+    justifyContent: "flex-end",
+    borderTop: "0.5px solid #999",
+    marginTop: 2,
+    paddingTop: 2,
+    fontSize: 9,
+  },
   pageNum: { fontSize: 8, color: "#aaa", textAlign: "center", marginTop: 2 },
 });
 
@@ -677,6 +686,9 @@ const fmtDateGuia = (date: any): string => {
 
 const getCondVenta = (venta: Venta): string => {
   if ((venta as any).condVenta) return (venta as any).condVenta;
+  if (venta.cuentaCorrienteHabilitada != null) {
+    return venta.cuentaCorrienteHabilitada ? "C.C." : "CONTADO";
+  }
   const map: Record<string, string> = {
     credit: "CTA CTE",
     cash: "CONTADO",
@@ -816,6 +828,17 @@ const GuiaCopia = ({
               </Text>
             </Text>
           </View>
+        </View>
+      )}
+
+      {isLast && (
+        <View style={guiaStyles.footerTotalGeneral}>
+          <Text>
+            Total (Saldo Anterior + Venta):{" "}
+            <Text style={guiaStyles.footerBold}>
+              {formatCurrency((venta.total || 0) + saldoAnterior)}
+            </Text>
+          </Text>
         </View>
       )}
 

@@ -71,6 +71,8 @@ export interface Client {
   debtSince?: Date;
   /** Cliente activo. Si es false, los vendedores no lo ven y al venderle (solo admin) se avisa. */
   activo?: boolean;
+  /** Si es false, no se puede seguir sumando ventas a cuenta corriente (el saldo existente se conserva). */
+  cuentaCorrienteHabilitada?: boolean;
   notes?: string;
   createdAt: Date;
 }

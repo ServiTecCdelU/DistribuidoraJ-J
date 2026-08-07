@@ -154,6 +154,7 @@ export default function ClientesPage() {
     cuit: true,
     categoria: true,
     saldo: true,
+    cuentaCorriente: true,
     codigoVendedor: false,
   })
   const [colsLoaded, setColsLoaded] = useState(false)
@@ -467,6 +468,23 @@ export default function ClientesPage() {
     }
   }
 
+  const [togglingCC, setTogglingCC] = useState(false)
+  const handleToggleCuentaCorriente = async (client: Client) => {
+    if (togglingCC) return
+    const nuevoHabilitada = client.cuentaCorrienteHabilitada === false
+    setTogglingCC(true)
+    try {
+      const updated = await clientsApi.update(client.id, { cuentaCorrienteHabilitada: nuevoHabilitada })
+      setClients((prev) => prev.map((c) => (c.id === updated.id ? updated : c)))
+      setSelectedClient((prev) => (prev && prev.id === updated.id ? updated : prev))
+      toast.success(nuevoHabilitada ? 'Cuenta corriente habilitada' : 'Cuenta corriente deshabilitada')
+    } catch {
+      toast.error('Error al cambiar la cuenta corriente')
+    } finally {
+      setTogglingCC(false)
+    }
+  }
+
   // Asigna el cliente a un código de vendedor (vía el vendedor representante de ese código)
   const handleAssignByCodigo = async (codigo: string) => {
     if (!selectedClient) return
@@ -752,6 +770,9 @@ export default function ClientesPage() {
               <DropdownMenuCheckboxItem checked={visibleCols.saldo} onCheckedChange={() => toggleCol('saldo')} onSelect={(e) => e.preventDefault()}>
                 Saldo
               </DropdownMenuCheckboxItem>
+              <DropdownMenuCheckboxItem checked={visibleCols.cuentaCorriente} onCheckedChange={() => toggleCol('cuentaCorriente')} onSelect={(e) => e.preventDefault()}>
+                C.C.
+              </DropdownMenuCheckboxItem>
               <DropdownMenuCheckboxItem checked={visibleCols.codigoVendedor} onCheckedChange={() => toggleCol('codigoVendedor')} onSelect={(e) => e.preventDefault()}>
                 Código de vendedor
               </DropdownMenuCheckboxItem>
@@ -872,6 +893,7 @@ export default function ClientesPage() {
                         {visibleCols.codigoVendedor && <th className="text-left p-4 font-semibold text-muted-foreground text-xs uppercase tracking-wider">Cód. Vendedor</th>}
                         <th className="text-left p-4 font-semibold text-muted-foreground text-xs uppercase tracking-wider">Contacto</th>
                         {visibleCols.saldo && <th className="text-right p-4 font-semibold text-muted-foreground text-xs uppercase tracking-wider">Saldo</th>}
+                        {visibleCols.cuentaCorriente && <th className="text-center p-4 font-semibold text-muted-foreground text-xs uppercase tracking-wider">C.C.</th>}
                         <th className="text-center p-4 font-semibold text-muted-foreground text-xs uppercase tracking-wider">Acciones</th>
                       </tr>
                     </thead>
@@ -978,11 +1000,33 @@ export default function ClientesPage() {
                                 </div>
                               </td>
                             )}
+                            {visibleCols.cuentaCorriente && (
+                              <td className="p-4 text-center">
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
+                                  disabled={togglingCC}
+                                  onClick={() => handleToggleCuentaCorriente(client)}
+                                  title={client.cuentaCorrienteHabilitada === false ? 'Habilitar cuenta corriente' : 'Deshabilitar cuenta corriente'}
+                                  className={`h-7 px-2 gap-1 text-[11px] font-semibold rounded-full ${
+                                    client.cuentaCorrienteHabilitada === false
+                                      ? 'bg-red-100 text-red-700 hover:bg-red-200 dark:bg-red-900/30 dark:text-red-400'
+                                      : 'bg-teal-100 text-teal-700 hover:bg-teal-200 dark:bg-teal-900/30 dark:text-teal-400'
+                                  }`}
+                                >
+                                  {client.cuentaCorrienteHabilitada === false ? (
+                                    <><Ban className="h-3 w-3" /> Deshabilitada</>
+                                  ) : (
+                                    <><CreditCard className="h-3 w-3" /> Habilitada</>
+                                  )}
+                                </Button>
+                              </td>
+                            )}
                             <td className="p-4">
                               <div className="flex justify-center gap-1">
-                                <Button 
-                                  variant="ghost" 
-                                  size="icon" 
+                                <Button
+                                  variant="ghost"
+                                  size="icon"
                                   className="h-8 w-8 hover:bg-primary/10 hover:text-primary"
                                   onClick={() => handleViewDetail(client)}
                                 >

@@ -64,7 +64,6 @@ export function ModalDevolucion({ abierto, venta, onCerrar, onRegistrada }: Moda
     setInicializado(ventaId);
   }
 
-  const esCuentaCorriente = venta?.paymentType === "credit";
   const tieneCliente = !!venta?.clientId;
 
   const total = useMemo(
@@ -114,7 +113,7 @@ export function ModalDevolucion({ abierto, venta, onCerrar, onRegistrada }: Moda
               destino: f.destino,
             }));
 
-      const affectsBalance = esMonto ? (tieneCliente && (esCuentaCorriente || destinoSaldo === "cuenta_corriente")) : true;
+      const affectsBalance = tieneCliente && destinoSaldo === "cuenta_corriente";
 
       // Saldo anterior del cliente (para el recibo)
       let saldoAnterior = 0;
@@ -132,7 +131,7 @@ export function ModalDevolucion({ abierto, venta, onCerrar, onRegistrada }: Moda
         sellerName: venta.sellerName,
         items,
         monto: esMonto ? montoLibre : undefined,
-        note: esMonto ? (nota.trim() || undefined) : undefined,
+        note: nota.trim() || (tieneCliente && !affectsBalance ? "Devuelto en efectivo" : undefined),
         affectsBalance,
       });
 
@@ -295,64 +294,61 @@ export function ModalDevolucion({ abierto, venta, onCerrar, onRegistrada }: Moda
                 className="h-11 rounded-xl text-lg"
               />
             </div>
+          </div>
+          )}
 
+          <div>
+            <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider mb-1.5">
+              Nota (opcional)
+            </p>
+            <Textarea
+              value={nota}
+              onChange={(e) => setNota(e.target.value)}
+              placeholder="Motivo de la devolución..."
+              className="rounded-xl resize-none"
+              rows={2}
+            />
+          </div>
+
+          {tieneCliente ? (
             <div>
               <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider mb-1.5">
-                Nota (opcional)
+                ¿Dónde se guarda?
               </p>
-              <Textarea
-                value={nota}
-                onChange={(e) => setNota(e.target.value)}
-                placeholder="Motivo de la devolución..."
-                className="rounded-xl resize-none"
-                rows={2}
-              />
-            </div>
-
-            {tieneCliente && !esCuentaCorriente && (
-              <div>
-                <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider mb-1.5">
-                  ¿Dónde se guarda?
-                </p>
-                <div className="flex items-center gap-2">
-                  <button
-                    type="button"
-                    onClick={() => setDestinoSaldo("cuenta_corriente")}
-                    className={`flex-1 text-xs font-medium py-2 rounded-xl border transition-colors ${
-                      destinoSaldo === "cuenta_corriente"
-                        ? "bg-teal-50 border-teal-300 text-teal-700"
-                        : "border-border text-muted-foreground hover:bg-muted"
-                    }`}
-                  >
-                    Cuenta corriente
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setDestinoSaldo("solo_nota")}
-                    className={`flex-1 text-xs font-medium py-2 rounded-xl border transition-colors ${
-                      destinoSaldo === "solo_nota"
-                        ? "bg-teal-50 border-teal-300 text-teal-700"
-                        : "border-border text-muted-foreground hover:bg-muted"
-                    }`}
-                  >
-                    Solo nota en la venta
-                  </button>
-                </div>
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => setDestinoSaldo("cuenta_corriente")}
+                  className={`flex-1 text-xs font-medium py-2 rounded-xl border transition-colors ${
+                    destinoSaldo === "cuenta_corriente"
+                      ? "bg-teal-50 border-teal-300 text-teal-700"
+                      : "border-border text-muted-foreground hover:bg-muted"
+                  }`}
+                >
+                  A favor en C.C.
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setDestinoSaldo("solo_nota")}
+                  className={`flex-1 text-xs font-medium py-2 rounded-xl border transition-colors ${
+                    destinoSaldo === "solo_nota"
+                      ? "bg-teal-50 border-teal-300 text-teal-700"
+                      : "border-border text-muted-foreground hover:bg-muted"
+                  }`}
+                >
+                  Devuelto en efectivo
+                </button>
               </div>
-            )}
-
-            {tieneCliente && esCuentaCorriente && (
-              <p className="text-xs text-muted-foreground px-1">
-                Esta venta es de cuenta corriente: el monto se acredita al saldo del cliente.
-              </p>
-            )}
-
-            {!tieneCliente && (
-              <p className="text-xs text-muted-foreground px-1">
-                Venta sin cliente asociado: se guarda solo como nota en la venta.
-              </p>
-            )}
-          </div>
+              {destinoSaldo === "solo_nota" && (
+                <p className="text-[11px] text-muted-foreground px-1 mt-1">
+                  Se guarda como nota, pero no es a favor. No modifica la cuenta corriente del cliente.
+                </p>
+              )}
+            </div>
+          ) : (
+            <p className="text-xs text-muted-foreground px-1">
+              Venta sin cliente asociado: se guarda solo como nota en la venta.
+            </p>
           )}
 
           <div className="flex items-center justify-between p-4 rounded-2xl bg-foreground text-background mt-2">
@@ -361,8 +357,11 @@ export function ModalDevolucion({ abierto, venta, onCerrar, onRegistrada }: Moda
           </div>
           <p className="text-[11px] text-muted-foreground px-1">
             {modo === "productos"
-              ? 'Baja el saldo del cliente, descuenta la comisión del vendedor y genera el recibo. Los productos "vuelve a stock" se reponen al depósito.'
-              : "Genera un recibo. Si se guarda en cuenta corriente, baja el saldo del cliente."}
+              ? 'Genera el recibo. Los productos "vuelve a stock" se reponen al depósito. '
+              : "Genera un recibo. "}
+            {tieneCliente && destinoSaldo === "cuenta_corriente"
+              ? "Baja el saldo y la comisión del vendedor."
+              : "No modifica la cuenta corriente del cliente."}
           </p>
 
           <div className="flex gap-2 pt-2">

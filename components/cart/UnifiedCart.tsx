@@ -72,6 +72,7 @@ export function UnifiedCart({ role, state, actions, onConfirmSale, allowDiscount
     const missing: string[] = [];
     if (role === "admin") {
       if ((paymentType === "credit" || paymentType === "mixed") && !selectedClientData) missing.push("Seleccioná un cliente para pago a cuenta");
+      if ((paymentType === "credit" || paymentType === "mixed") && selectedClientData?.cuentaCorrienteHabilitada === false) missing.push("El cliente no tiene cuenta corriente habilitada");
       if (deliveryMethod === "delivery") {
         if (deliveryAddress === "saved" && selectedClientData && !state.selectedSavedAddress?.address && !selectedClientData.address) missing.push("El cliente no tiene dirección guardada");
         if (deliveryAddress === "new" && !newAddress.trim()) missing.push("Ingresá una dirección de entrega");
@@ -633,8 +634,8 @@ export function UnifiedCart({ role, state, actions, onConfirmSale, allowDiscount
             <>
               <div className="grid grid-cols-3 gap-2">
                 <PaymentButton type="cash" current={paymentType} onClick={actions.setPaymentType} label="Contado" icon={Banknote} color="emerald" />
-                <PaymentButton type="credit" current={paymentType} onClick={actions.setPaymentType} label="A Cuenta" icon={CreditCard} color="blue" />
-                <PaymentButton type="mixed" current={paymentType} onClick={actions.setPaymentType} label="Mixto" icon={Sparkles} color="amber" />
+                <PaymentButton type="credit" current={paymentType} onClick={actions.setPaymentType} label="A Cuenta" icon={CreditCard} color="blue" disabled={selectedClientData?.cuentaCorrienteHabilitada === false} />
+                <PaymentButton type="mixed" current={paymentType} onClick={actions.setPaymentType} label="Mixto" icon={Sparkles} color="amber" disabled={selectedClientData?.cuentaCorrienteHabilitada === false} />
               </div>
               {(paymentType === "cash" || paymentType === "mixed") && (
                 <div className="grid grid-cols-2 gap-2">
@@ -1344,7 +1345,7 @@ export function DeliveryAddressSection({
 }
 
 function PaymentButton({
-  type, current, onClick, label, icon: Icon, color,
+  type, current, onClick, label, icon: Icon, color, disabled,
 }: {
   type: "cash" | "credit" | "mixed";
   current: string;
@@ -1352,6 +1353,7 @@ function PaymentButton({
   label: string;
   icon: React.ElementType;
   color: string;
+  disabled?: boolean;
 }) {
   const colorMap: Record<string, string> = {
     emerald: "bg-emerald-600 hover:bg-emerald-700",
@@ -1362,6 +1364,8 @@ function PaymentButton({
     <Button
       type="button"
       variant={current === type ? "default" : "outline"}
+      disabled={disabled}
+      title={disabled ? "El cliente no tiene cuenta corriente habilitada" : undefined}
       className={cn(
         "h-9 gap-1.5 text-xs font-medium transition-all",
         current === type && `${colorMap[color]} shadow-md`,

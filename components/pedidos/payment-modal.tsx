@@ -193,12 +193,18 @@ export function PaymentModal({
     );
   });
 
+  const ccClient = order.clientId
+    ? clients.find((c) => c.id === order.clientId)
+    : clients.find((c) => c.id === selectedClientId);
+  const ccHabilitada = ccClient ? ccClient.cuentaCorrienteHabilitada !== false : true;
+
   const isValid = () => {
     const soloRoturas = adjustmentsList.length > 0 && adjustmentsList.every(a => a.type === "rotura");
     if (total <= 0 && !soloRoturas) return false;
     if (total <= 0 && soloRoturas) return true;
     if (!cubierto) return false;
     if (cuentaCorriente > 0 && !selectedClientId && !order.clientId) return false;
+    if (cuentaCorriente > 0 && !ccHabilitada) return false;
     return true;
   };
 
@@ -455,30 +461,36 @@ export function PaymentModal({
               <Label className="text-xs font-semibold text-gray-600 flex items-center gap-1.5">
                 <CreditCard className="h-3.5 w-3.5 text-blue-600" /> Cuenta Corriente
               </Label>
-              <div className="flex gap-2">
-                <div className="relative flex-1">
-                  <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 text-sm">$</span>
-                  <Input
-                    type="number"
-                    min="0"
-                    value={cuentaCorrienteAmount}
-                    onChange={(e) => setCuentaCorrienteAmount(e.target.value)}
-                    placeholder="0"
-                    className="pl-7 bg-white"
-                  />
+              {ccHabilitada ? (
+                <div className="flex gap-2">
+                  <div className="relative flex-1">
+                    <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 text-sm">$</span>
+                    <Input
+                      type="number"
+                      min="0"
+                      value={cuentaCorrienteAmount}
+                      onChange={(e) => setCuentaCorrienteAmount(e.target.value)}
+                      placeholder="0"
+                      className="pl-7 bg-white"
+                    />
+                  </div>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    className="h-9 px-2.5 text-xs gap-1 shrink-0 border-blue-300 text-blue-700 hover:bg-blue-50"
+                    onClick={() => fillResto("cuentaCorriente")}
+                    title="Completar con el monto restante"
+                  >
+                    <ChevronDownIcon className="h-3.5 w-3.5" />
+                    Resto
+                  </Button>
                 </div>
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  className="h-9 px-2.5 text-xs gap-1 shrink-0 border-blue-300 text-blue-700 hover:bg-blue-50"
-                  onClick={() => fillResto("cuentaCorriente")}
-                  title="Completar con el monto restante"
-                >
-                  <ChevronDownIcon className="h-3.5 w-3.5" />
-                  Resto
-                </Button>
-              </div>
+              ) : (
+                <p className="text-xs text-red-600 bg-red-50 border border-red-200 rounded-lg px-3 py-2">
+                  Este cliente no tiene cuenta corriente habilitada. Solo puede pagar en efectivo o transferencia.
+                </p>
+              )}
             </div>
             </div>
             )}
@@ -555,6 +567,24 @@ export function PaymentModal({
                   {!selectedClientId && <p className="text-xs text-amber-600">Seleccioná un cliente para continuar</p>}
                 </>
               )}
+            </div>
+          )}
+
+          {/* Saldo anterior del cliente (deuda previa a este pedido) */}
+          {ccClient && (ccClient.currentBalance || 0) > 0 && (
+            <div className="p-3 bg-amber-50 border border-amber-200 rounded-xl space-y-1.5">
+              <div className="flex justify-between items-center text-sm">
+                <span className="text-amber-800">Saldo anterior</span>
+                <span className="font-semibold text-amber-900">{formatPrice(ccClient.currentBalance || 0)}</span>
+              </div>
+              <div className="flex justify-between items-center text-sm">
+                <span className="text-amber-800">Total del pedido (sin deuda anterior)</span>
+                <span className="font-semibold text-amber-900">{formatPrice(total)}</span>
+              </div>
+              <div className="flex justify-between items-center text-sm pt-1.5 border-t border-amber-300">
+                <span className="text-amber-900 font-semibold">Total con deuda anterior</span>
+                <span className="font-bold text-amber-900">{formatPrice((ccClient.currentBalance || 0) + total)}</span>
+              </div>
             </div>
           )}
 

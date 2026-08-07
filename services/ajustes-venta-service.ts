@@ -117,9 +117,11 @@ export async function registrarDescuentoVenta(data: {
   sellerName?: string
   monto: number
   motivo?: string
+  affectsBalance?: boolean
 }): Promise<DescuentoVenta> {
   const monto = round2(data.monto)
   if (!(monto > 0)) throw new Error('El descuento debe ser mayor a 0')
+  const affectsBalance = data.affectsBalance !== false
 
   const commissionRate = await getCommissionRate(data.sellerId)
   const commissionAmount = calcularComisionDescuento(monto, commissionRate)
@@ -128,11 +130,13 @@ export async function registrarDescuentoVenta(data: {
   const motivoTxt = data.motivo ? ` — ${data.motivo}` : ''
   const description = `[DESCUENTO] ${data.saleNumber ? `#${data.saleNumber}` : ''}${motivoTxt}`.trim()
 
-  if (data.clientId) await bajarSaldoCliente(data.clientId, monto)
+  if (data.clientId && affectsBalance) await bajarSaldoCliente(data.clientId, monto)
 
+  // Si no afecta la cta cte, se guarda sin client_id: queda como registro de la venta
+  // (visible en el detalle vía sale_id) pero no aparece en el historial de cta cte del cliente.
   await supabase.from('transacciones').insert({
     id,
-    client_id: data.clientId ?? null,
+    client_id: affectsBalance ? (data.clientId ?? null) : null,
     type: 'payment',
     amount: monto,
     description,
@@ -142,12 +146,12 @@ export async function registrarDescuentoVenta(data: {
     recibo_numero: reciboNumero,
   })
 
-  if (data.clientId) {
+  if (data.clientId && affectsBalance) {
     const debtTxId = await debtTxIdForSale(data.saleId)
     await aplicarPagoADeudas(data.clientId, 'minorista', monto, debtTxId)
   }
 
-  if (data.sellerId) await bajarComision(data.sellerId, monto, commissionAmount)
+  if (data.sellerId && affectsBalance) await bajarComision(data.sellerId, monto, commissionAmount)
 
   return {
     id,

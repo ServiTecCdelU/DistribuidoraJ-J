@@ -42,6 +42,7 @@ export function ModalDescuentoVenta({ abierto, venta, onCerrar, onRegistrada }: 
   const [motivo, setMotivo] = useState<string>("");
   const [procesando, setProcesando] = useState(false);
   const [inicializado, setInicializado] = useState<string | null>(null);
+  const [destinoSaldo, setDestinoSaldo] = useState<"cuenta_corriente" | "solo_nota">("cuenta_corriente");
 
   const total = venta?.total || 0;
 
@@ -93,6 +94,7 @@ export function ModalDescuentoVenta({ abierto, venta, onCerrar, onRegistrada }: 
     setTipoFinal("percent");
     setValorFinal("");
     setMotivo("");
+    setDestinoSaldo("cuenta_corriente");
     onCerrar();
   };
 
@@ -115,6 +117,8 @@ export function ModalDescuentoVenta({ abierto, venta, onCerrar, onRegistrada }: 
             : `Final -${formatCurrency(monto)}`;
       const motivoFinal = `${detalle}${motivo.trim() ? ` (${motivo.trim()})` : ""}`.trim() || undefined;
 
+      const affectsBalance = !venta.clientId || destinoSaldo === "cuenta_corriente";
+
       const desc = await ajustesVentaApi.registrarDescuento({
         saleId: venta.id,
         saleNumber: venta.saleNumber ? String(venta.saleNumber) : undefined,
@@ -124,6 +128,7 @@ export function ModalDescuentoVenta({ abierto, venta, onCerrar, onRegistrada }: 
         sellerName: venta.sellerName,
         monto,
         motivo: motivoFinal,
+        affectsBalance,
       });
 
       try {
@@ -150,7 +155,7 @@ export function ModalDescuentoVenta({ abierto, venta, onCerrar, onRegistrada }: 
           motivo: motivo.trim() || undefined,
           total: desc.monto,
           saldoAnterior,
-          saldoNuevo: saldoAnterior - desc.monto,
+          saldoNuevo: affectsBalance ? saldoAnterior - desc.monto : saldoAnterior,
         });
         await paymentsApi.saveReciboPdf(desc.id, base64);
         const link = document.createElement("a");
@@ -338,8 +343,47 @@ export function ModalDescuentoVenta({ abierto, venta, onCerrar, onRegistrada }: 
             </div>
           </div>
 
+          {venta.clientId && (
+            <div>
+              <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider mb-1.5">
+                ¿Dónde se guarda?
+              </p>
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => setDestinoSaldo("cuenta_corriente")}
+                  className={`flex-1 text-xs font-medium py-2 rounded-xl border transition-colors ${
+                    destinoSaldo === "cuenta_corriente"
+                      ? "bg-teal-50 border-teal-300 text-teal-700"
+                      : "border-border text-muted-foreground hover:bg-muted"
+                  }`}
+                >
+                  A favor en C.C.
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setDestinoSaldo("solo_nota")}
+                  className={`flex-1 text-xs font-medium py-2 rounded-xl border transition-colors ${
+                    destinoSaldo === "solo_nota"
+                      ? "bg-teal-50 border-teal-300 text-teal-700"
+                      : "border-border text-muted-foreground hover:bg-muted"
+                  }`}
+                >
+                  Devuelto en efectivo
+                </button>
+              </div>
+              {destinoSaldo === "solo_nota" && (
+                <p className="text-[11px] text-muted-foreground px-1 mt-1">
+                  Se guarda como nota, pero no es a favor. No modifica la cuenta corriente del cliente.
+                </p>
+              )}
+            </div>
+          )}
+
           <p className="text-[11px] text-muted-foreground px-1">
-            Baja el saldo del cliente, descuenta la comisión del vendedor y genera un recibo.
+            {!venta.clientId || destinoSaldo === "cuenta_corriente"
+              ? "Baja el saldo del cliente, descuenta la comisión del vendedor y genera un recibo."
+              : "Genera un recibo. No modifica la cuenta corriente del cliente."}
           </p>
 
           <div className="flex gap-2 pt-1">

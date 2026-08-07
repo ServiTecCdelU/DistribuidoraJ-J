@@ -275,6 +275,9 @@ export default function PedidosPage() {
       }
 
       const total = calculateOrderTotal(order);
+      const clienteRemito = order.clientId
+        ? await clientsApi.getById(order.clientId).catch(() => undefined)
+        : undefined;
       const ventaData = {
         id: order.id,
         clientName: order.clientName,
@@ -285,6 +288,8 @@ export default function PedidosPage() {
         createdAt: order.createdAt,
         deliveryAddress: order.address,
         remitoNumber,
+        saldoAnterior: clienteRemito?.currentBalance ?? 0,
+        cuentaCorrienteHabilitada: clienteRemito?.cuentaCorrienteHabilitada !== false,
       };
 
       const { generarPdfCliente } = await import("@/hooks/useGenerarPdf");
