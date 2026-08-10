@@ -179,6 +179,8 @@ export interface Order {
   clientEmail?: string;
   sellerId?: string;
   sellerName?: string;
+  /** Origen del pedido: "tienda" (cliente público), "direct_sale" (carrito interno admin/vendedor), "direct" (legacy) */
+  source?: string;
   transportistaId?: string;
   transportistaName?: string;
   items: { productId: string; quantity: number; name: string; price: number; itemDiscount?: number; unidadesPorBulto?: number; seDivideEn?: number; precioUnitarioMayorista?: number }[];

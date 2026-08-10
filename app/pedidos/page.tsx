@@ -53,6 +53,15 @@ export const calculateOrderTotal = (order: Order) => {
   return itemsTotal;
 };
 
+/**
+ * Etiqueta de vendedor a mostrar. Los pedidos sin vendedor asignado no son un dato faltante:
+ * o los cargó el admin desde el carrito interno, o entraron por la tienda pública.
+ */
+function sellerLabel(order: Pick<Order, "sellerName" | "source">): string {
+  if (order.sellerName) return order.sellerName;
+  return order.source === "tienda" ? "Tienda" : "Admin";
+}
+
 export default function PedidosPage() {
   const router = useRouter();
   const { user } = useAuth();
@@ -1307,7 +1316,7 @@ tfoot td{border-top:2px solid #1f4e78;background:#f2f2f2;font-weight:700;font-si
       const query = searchQuery.toLowerCase();
       filtered = filtered.filter((o) => {
         if (o.clientName?.toLowerCase().includes(query)) return true;
-        if (o.sellerName?.toLowerCase().includes(query)) return true;
+        if (sellerLabel(o).toLowerCase().includes(query)) return true;
         if (o.id.toLowerCase().includes(query)) return true;
         // buscar por nombre en la lista de clientes si el pedido tiene clientId
         if (o.clientId) {
@@ -1666,15 +1675,16 @@ tbody tr:nth-child(even){background:#fafafa}
     // Agrupar por vendedor.
     const bySeller = new Map<string, typeof cargoGroups>();
     cargoGroups.forEach((g) => {
-      const seller = g.orders[0].sellerName || "Sin vendedor";
+      const seller = sellerLabel(g.orders[0]);
       if (!bySeller.has(seller)) bySeller.set(seller, []);
       bySeller.get(seller)!.push(g);
     });
 
     Array.from(bySeller.entries())
       .sort((a, b) => {
-        const aSin = a[0] === "Sin vendedor";
-        const bSin = b[0] === "Sin vendedor";
+        // Admin/Tienda (pedidos sin vendedor asignado) van al final del listado.
+        const aSin = a[0] === "Admin" || a[0] === "Tienda";
+        const bSin = b[0] === "Admin" || b[0] === "Tienda";
         if (aSin !== bSin) return aSin ? 1 : -1;
         return a[0].localeCompare(b[0], "es");
       })
@@ -2040,7 +2050,7 @@ tbody tr:nth-child(even){background:#fafafa}
                                   </p>
                                 </td>
                                 <td className="px-4 py-2.5">
-                                  <span className="text-xs text-foreground truncate">{displayOrder.sellerName || "—"}</span>
+                                  <span className="text-xs text-foreground truncate">{sellerLabel(displayOrder)}</span>
                                   {(() => {
                                     const notas = clientOrders.map((o) => o.notes?.trim()).filter(Boolean);
                                     return notas.length > 0 ? (
@@ -2188,7 +2198,7 @@ tbody tr:nth-child(even){background:#fafafa}
                               </div>
                               <p className="text-[11px] text-muted-foreground truncate">
                                 {codigo && <span className="font-medium text-foreground/70">({codigo}) </span>}
-                                {displayOrder.sellerName || "Sin vendedor"}
+                                {sellerLabel(displayOrder)}
                                 {clientOrders.length > 1 && ` (${clientOrders.length})`}
                                 <span> · 🕒 {formatTime(displayOrder.createdAt)}</span>
                               </p>

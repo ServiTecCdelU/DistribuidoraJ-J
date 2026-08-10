@@ -6,7 +6,7 @@ import { generateReadableId } from '@/services/supabase-helpers'
 // por fila. Los PDFs se bajan on-demand con getRemitoPdf / getInvoicePdf.
 const LIGHT_COLUMNS =
   'id, sale_id, client_id, client_name, client_phone, client_email, seller_id, seller_name, ' +
-  'transportista_id, transportista_name, items, status, city, address, lat, lng, delivery_method, ' +
+  'transportista_id, transportista_name, source, items, status, city, address, lat, lng, delivery_method, ' +
   'remito_number, stock_descontado, invoice_number, checked_items, held, notes, discount, discount_type, created_at, updated_at'
 
 export function mapOrder(d: Record<string, any>): Order {
@@ -19,6 +19,7 @@ export function mapOrder(d: Record<string, any>): Order {
     clientEmail: d.client_email ?? undefined,
     sellerId: d.seller_id ?? undefined,
     sellerName: d.seller_name ?? undefined,
+    source: d.source ?? undefined,
     transportistaId: d.transportista_id ?? undefined,
     transportistaName: d.transportista_name ?? undefined,
     items: d.items ?? [],
