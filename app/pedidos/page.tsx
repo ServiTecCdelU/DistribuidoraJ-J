@@ -53,17 +53,15 @@ export const calculateOrderTotal = (order: Order) => {
   return itemsTotal;
 };
 
-// Ids sintéticos para filtrar pedidos sin vendedor asignado.
+// Id sintético para filtrar pedidos sin vendedor asignado.
 const SELLER_FILTER_ADMIN = "__admin__";
-const SELLER_FILTER_TIENDA = "__tienda__";
 
 /**
  * Etiqueta de vendedor a mostrar. Los pedidos sin vendedor asignado no son un dato faltante:
  * o los cargó el admin desde el carrito interno, o entraron por la tienda pública.
  */
-function sellerLabel(order: Pick<Order, "sellerName" | "source">): string {
-  if (order.sellerName) return order.sellerName;
-  return order.source === "tienda" ? "Tienda" : "Admin";
+function sellerLabel(order: Pick<Order, "sellerName">): string {
+  return order.sellerName || "Admin";
 }
 
 export default function PedidosPage() {
@@ -1336,9 +1334,7 @@ tfoot td{border-top:2px solid #1f4e78;background:#f2f2f2;font-weight:700;font-si
     }
 
     if (filterSeller === SELLER_FILTER_ADMIN) {
-      filtered = filtered.filter((o) => !o.sellerId && o.source !== "tienda");
-    } else if (filterSeller === SELLER_FILTER_TIENDA) {
-      filtered = filtered.filter((o) => !o.sellerId && o.source === "tienda");
+      filtered = filtered.filter((o) => !o.sellerId);
     } else if (filterSeller) {
       filtered = filtered.filter((o) => o.sellerId === filterSeller);
     }
@@ -1463,20 +1459,16 @@ tfoot td{border-top:2px solid #1f4e78;background:#f2f2f2;font-weight:700;font-si
   const uniqueSellers = useMemo(() => {
     const sellersMap = new Map();
     let hasAdmin = false;
-    let hasTienda = false;
     orders.forEach((o) => {
       if (o.sellerId && o.sellerName) {
         sellersMap.set(o.sellerId, { id: o.sellerId, name: o.sellerName });
-      } else if (o.source === "tienda") {
-        hasTienda = true;
       } else {
         hasAdmin = true;
       }
     });
     const list = Array.from(sellersMap.values());
-    // Pseudo-vendedores para los pedidos sin vendedor asignado (ver sellerLabel).
+    // Pseudo-vendedor para los pedidos sin vendedor asignado (ver sellerLabel).
     if (hasAdmin) list.push({ id: SELLER_FILTER_ADMIN, name: "Admin" });
-    if (hasTienda) list.push({ id: SELLER_FILTER_TIENDA, name: "Tienda" });
     return list;
   }, [orders]);
 
@@ -1700,9 +1692,9 @@ tbody tr:nth-child(even){background:#fafafa}
 
     Array.from(bySeller.entries())
       .sort((a, b) => {
-        // Admin/Tienda (pedidos sin vendedor asignado) van al final del listado.
-        const aSin = a[0] === "Admin" || a[0] === "Tienda";
-        const bSin = b[0] === "Admin" || b[0] === "Tienda";
+        // Admin (pedidos sin vendedor asignado) va al final del listado.
+        const aSin = a[0] === "Admin";
+        const bSin = b[0] === "Admin";
         if (aSin !== bSin) return aSin ? 1 : -1;
         return a[0].localeCompare(b[0], "es");
       })
