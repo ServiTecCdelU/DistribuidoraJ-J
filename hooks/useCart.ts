@@ -758,6 +758,8 @@ export function useCart(role: UserRole, userEmail?: string, externalProducts?: P
     if (role === null && (!clientEmail || !clientPhone)) return false;
 
     if (role === "admin") {
+      // Vendedor obligatorio: evita pedidos sin vendedor asignado.
+      if (!selectedSeller || selectedSeller === "none") return false;
       if (deliveryMethod === "delivery") {
         if (deliveryAddress === "saved" && !selectedSavedAddress?.address && (!selectedClientData || !selectedClientData.address)) return false;
         if (deliveryAddress === "new" && !newAddress.trim()) return false;
@@ -780,11 +782,15 @@ export function useCart(role: UserRole, userEmail?: string, externalProducts?: P
     cart, role, selectedClient, selectedClientData, deliveryMethod,
     deliveryAddress, newAddress, paymentType, finalTotal, cashAmount,
     creditAmountInput, dniLookup, clientName, dniFound, selectedCity,
-    clientEmail, clientPhone, selectedSavedAddress,
+    clientEmail, clientPhone, selectedSavedAddress, selectedSeller,
   ]);
 
   // --- Process sale ---
   const handleProcessSale = useCallback(async (modo: "esperar" | "disponible" = "disponible") => {
+    if (role === "admin" && (!selectedSeller || selectedSeller === "none")) {
+      toast.error("Seleccioná un vendedor antes de confirmar el pedido");
+      return;
+    }
     setProcessing(true);
     try {
       const resolvedAddress =

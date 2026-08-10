@@ -71,6 +71,7 @@ export function UnifiedCart({ role, state, actions, onConfirmSale, allowDiscount
   const getMissingRequirements = (): string[] => {
     const missing: string[] = [];
     if (role === "admin") {
+      if (!selectedSeller || selectedSeller === "none") missing.push("Seleccioná un vendedor");
       if ((paymentType === "credit" || paymentType === "mixed") && !selectedClientData) missing.push("Seleccioná un cliente para pago a cuenta");
       if ((paymentType === "credit" || paymentType === "mixed") && selectedClientData?.cuentaCorrienteHabilitada === false) missing.push("El cliente no tiene cuenta corriente habilitada");
       if (deliveryMethod === "delivery") {
@@ -508,13 +509,14 @@ export function UnifiedCart({ role, state, actions, onConfirmSale, allowDiscount
         {/* Seller section (step 2 for admin/seller) */}
         {(role === null || cartStep === "client") && role === "admin" && (
           <div className="space-y-2">
-            <Label className="text-xs font-medium text-foreground">Vendedor (opcional)</Label>
+            <Label className="text-xs font-medium text-foreground">
+              Vendedor <span className="text-destructive">*</span>
+            </Label>
             <Select value={selectedSeller} onValueChange={actions.setSelectedSeller}>
               <SelectTrigger className="h-9 text-sm">
-                <SelectValue placeholder="Sin vendedor" />
+                <SelectValue placeholder="Seleccioná un vendedor" />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="none" className="text-sm">Sin vendedor</SelectItem>
                 {sellers.map((seller) => (
                   <SelectItem key={seller.id} value={seller.id} className="text-sm">
                     {seller.codigoVendedor && !seller.name.includes(seller.codigoVendedor)
