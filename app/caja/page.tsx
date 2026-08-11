@@ -324,7 +324,7 @@ const CajaPdfDocument = ({ register, sales, losses = [], pagos = [], rejected = 
                 <View key={i} style={cajaPdfStyles.saleRow}>
                   <Text style={cajaPdfStyles.saleClient}>{sale.clientName || "Cons. Final"}</Text>
                   <Text style={cajaPdfStyles.saleNumber}>{sale.saleNumber ? `#${sale.saleNumber}` : "-"}</Text>
-                  <Text style={cajaPdfStyles.saleHr}>{(sale as any).hojaRutaNumber || "-"}</Text>
+                  <Text style={cajaPdfStyles.saleHr}>{(sale as any).hojaRutaNumber || "Local"}</Text>
                   <Text style={cajaPdfStyles.saleTime}>{formatTimeStr(new Date(sale.createdAt))}</Text>
                   <Text style={[cajaPdfStyles.saleBadge, badgeStyle]}>
                     {sale.paymentType === "cash"
@@ -1498,7 +1498,9 @@ export default function CajaPage() {
                                   <div className="min-w-0">
                                     <p className="font-medium text-xs truncate">{sale.clientName || "Consumidor Final"}</p>
                                     {sale.saleNumber && <p className="text-xs text-muted-foreground truncate">{sale.saleNumber}</p>}
-                                    {(sale as any).hojaRutaNumber && <p className="text-[10px] font-medium text-teal-700">HR {(sale as any).hojaRutaNumber}</p>}
+                                    {(sale as any).hojaRutaNumber
+                                      ? <p className="text-[10px] font-medium text-teal-700">HR {(sale as any).hojaRutaNumber}</p>
+                                      : <p className="text-[10px] font-medium text-slate-500">Entregado en local</p>}
                                   </div>
                                   {/* Col 2: forma de pago / fecha */}
                                   <div className="text-center">
@@ -1578,7 +1580,7 @@ export default function CajaPage() {
                                 <span className="text-xs text-muted-foreground leading-tight">{formatDateShort(new Date(sale.createdAt))}<br />{formatTimeStr(new Date(sale.createdAt))}</span>
                                 <span className="text-xs text-muted-foreground truncate">{sale.saleNumber ? `#${sale.saleNumber}` : (sale.remitoNumber || "—")}</span>
                                 <span className="font-medium truncate">{sale.clientName || "Consumidor Final"}</span>
-                                <span className="text-center text-xs font-medium text-teal-700 tabular-nums">{(sale as any).hojaRutaNumber || <span className="text-muted-foreground/40">—</span>}</span>
+                                <span className="text-center text-xs font-medium text-teal-700 tabular-nums">{(sale as any).hojaRutaNumber || <span className="text-[10px] font-medium text-slate-500">Local</span>}</span>
                                 <span className="flex items-center justify-center gap-1">
                                   {(sale as any).comprobanteTransferencia && (
                                     <button type="button" onClick={() => setComprobanteUrl((sale as any).comprobanteTransferencia)} className="text-violet-600 hover:text-violet-800" title="Ver comprobante de transferencia">
@@ -1846,7 +1848,7 @@ export default function CajaPage() {
                                 <div key={sale.id} className="grid grid-cols-[minmax(0,1fr)_5.5rem_3rem_3.5rem_5.5rem_6rem] gap-x-2 px-3 py-2 items-center text-sm bg-background">
                                   <span className="font-medium truncate">{sale.clientName || "Cons. Final"}</span>
                                   <span className="text-xs text-muted-foreground truncate">{sale.saleNumber ? `#${sale.saleNumber}` : "—"}</span>
-                                  <span className="text-center text-xs font-medium text-teal-700 tabular-nums">{(sale as any).hojaRutaNumber || <span className="text-muted-foreground/40">—</span>}</span>
+                                  <span className="text-center text-xs font-medium text-teal-700 tabular-nums">{(sale as any).hojaRutaNumber || <span className="text-[10px] font-medium text-slate-500">Local</span>}</span>
                                   <span className="text-center text-xs text-muted-foreground tabular-nums">{formatTimeStr(new Date(sale.createdAt))}</span>
                                   <span className="flex items-center justify-center gap-1">
                                     {(sale as any).comprobanteTransferencia && (
