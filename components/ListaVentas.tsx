@@ -697,7 +697,9 @@ export function ListaVentas({
                     <div className="min-w-0">
                       <p className="font-medium text-sm text-foreground truncate">{venta.clientName || "Venta directa"}</p>
                       <p className="text-[11px] text-muted-foreground">{fmtDate(venta.createdAt)} · {venta.saleNumber || venta.remitoNumber || `#${ventas.length - index}`}</p>
-                      {venta.hojaRutaNumber && <p className="text-[10px] text-teal-600 font-medium">Hoja de ruta: {venta.hojaRutaNumber}</p>}
+                      {venta.hojaRutaNumber
+                        ? <p className="text-[10px] text-teal-600 font-medium">Hoja de ruta: {venta.hojaRutaNumber}</p>
+                        : <p className="text-[10px] text-slate-500 font-medium">Entregado en local</p>}
                     </div>
                   </div>
                   <div className="text-right shrink-0">
@@ -743,7 +745,9 @@ export function ListaVentas({
                   <div className="min-w-0">
                     <p className="text-sm font-medium text-foreground truncate">{venta.clientName || "Venta directa"}</p>
                     {venta.sellerName && <p className="text-[10px] text-muted-foreground truncate">Vendedor: {venta.sellerName}</p>}
-                    {venta.hojaRutaNumber && <p className="text-[10px] text-teal-600 font-medium truncate">Hoja de ruta: {venta.hojaRutaNumber}</p>}
+                    {venta.hojaRutaNumber
+                      ? <p className="text-[10px] text-teal-600 font-medium truncate">Hoja de ruta: {venta.hojaRutaNumber}</p>
+                      : <p className="text-[10px] text-slate-500 font-medium truncate">Entregado en local</p>}
                   </div>
                 </div>
                 {(() => {
