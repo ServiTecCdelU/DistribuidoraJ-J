@@ -162,7 +162,7 @@ export default function ComisionesPage() {
                 <TrendingUp className="h-4 w-4 text-teal-600 shrink-0" />
               </CardHeader>
               <CardContent className="pb-4 px-4">
-                <div className="text-xl font-bold text-teal-600 dark:text-teal-400 truncate">{formatPrice(total)}</div>
+                <div className="text-xs sm:text-sm md:text-base font-bold text-teal-600 dark:text-teal-400 whitespace-nowrap leading-tight">{formatPrice(total)}</div>
                 <p className="text-xs text-muted-foreground mt-0.5">Comisiones − devoluciones</p>
               </CardContent>
             </Card>
@@ -172,7 +172,7 @@ export default function ComisionesPage() {
                 <Clock className="h-4 w-4 text-orange-500 shrink-0" />
               </CardHeader>
               <CardContent className="pb-4 px-4">
-                <div className="text-xl font-bold text-orange-500 truncate">{formatPrice(pendingTotal)}</div>
+                <div className="text-xs sm:text-sm md:text-base font-bold text-orange-500 whitespace-nowrap leading-tight">{formatPrice(pendingTotal)}</div>
                 <p className="text-xs text-muted-foreground mt-0.5">{pendingCount} pendientes</p>
               </CardContent>
             </Card>
@@ -182,7 +182,7 @@ export default function ComisionesPage() {
                 <CheckCircle2 className="h-4 w-4 text-green-500 shrink-0" />
               </CardHeader>
               <CardContent className="pb-4 px-4">
-                <div className="text-xl font-bold text-green-600 truncate">{formatPrice(paidTotal)}</div>
+                <div className="text-xs sm:text-sm md:text-base font-bold text-green-600 whitespace-nowrap leading-tight">{formatPrice(paidTotal)}</div>
                 <p className="text-xs text-muted-foreground mt-0.5">{filtered.length - pendingCount} cobradas</p>
               </CardContent>
             </Card>
@@ -192,7 +192,7 @@ export default function ComisionesPage() {
                 <DollarSign className="h-4 w-4 text-rose-500 shrink-0" />
               </CardHeader>
               <CardContent className="pb-4 px-4">
-                <div className="text-xl font-bold text-rose-600 dark:text-rose-400 truncate">{formatPrice(Math.abs(devolucionesTotal))}</div>
+                <div className="text-xs sm:text-sm md:text-base font-bold text-rose-600 dark:text-rose-400 whitespace-nowrap leading-tight">{formatPrice(Math.abs(devolucionesTotal))}</div>
                 <p className="text-xs text-muted-foreground mt-0.5">{devolucionesCount} {devolucionesCount === 1 ? 'devolución' : 'devoluciones'}</p>
               </CardContent>
             </Card>
