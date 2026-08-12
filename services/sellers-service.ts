@@ -205,6 +205,10 @@ export interface PagoComision {
   nota?: string
   periodoDesde?: Date
   periodoHasta?: Date
+  anulado: boolean
+  anuladoMotivo?: string
+  anuladoBy?: string
+  anuladoAt?: Date
 }
 
 function mapPago(d: Record<string, any>): PagoComision {
@@ -224,7 +228,44 @@ function mapPago(d: Record<string, any>): PagoComision {
     nota: d.nota ?? undefined,
     periodoDesde: d.periodo_desde ? new Date(d.periodo_desde) : undefined,
     periodoHasta: d.periodo_hasta ? new Date(d.periodo_hasta) : undefined,
+    anulado: !!d.anulado,
+    anuladoMotivo: d.anulado_motivo ?? undefined,
+    anuladoBy: d.anulado_by ?? undefined,
+    anuladoAt: d.anulado_at ? new Date(d.anulado_at) : undefined,
   }
+}
+
+/**
+ * Anula un pago de comisiones. No borra el registro: queda en el historial
+ * marcado como anulado. Como la imputación se recalcula sobre los pagos
+ * vigentes, las comisiones que cubría vuelven solas a pendiente/parcial.
+ */
+export const anularPagoComision = async (
+  pagoId: string,
+  motivo: string,
+  adminName: string,
+): Promise<void> => {
+  const { data: pago } = await supabase
+    .from('pagos_comisiones')
+    .select('id, anulado')
+    .eq('id', pagoId)
+    .maybeSingle()
+
+  if (!pago) throw new Error('Pago no encontrado')
+  if (pago.anulado) throw new Error('Este pago ya fue anulado')
+  if (!motivo?.trim()) throw new Error('Indicá el motivo de la anulación')
+
+  const { error } = await supabase
+    .from('pagos_comisiones')
+    .update({
+      anulado: true,
+      anulado_motivo: motivo.trim(),
+      anulado_by: adminName,
+      anulado_at: new Date().toISOString(),
+    })
+    .eq('id', pagoId)
+
+  if (error) throw error
 }
 
 /**

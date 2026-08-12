@@ -518,6 +518,7 @@ export default function CajaPage() {
         const st = agg(periodo);
         const { data: pagos } = await supabase
           .from("pagos_comisiones").select("monto, monto_pagado")
+          .or("anulado.is.null,anulado.eq.false")
           .gte("fecha_pago", ap.toISOString()).lte("fecha_pago", cierreReg.toISOString());
         const comis = (pagos || []).reduce((a: number, p: any) => a + (Number(p.monto_pagado ?? p.monto) || 0), 0);
         const esperado = (reg.initial_amount || 0) + st.efectivo - comis;
@@ -551,7 +552,7 @@ export default function CajaPage() {
       const diasConCaja = new Set((cajasRango || []).map((r: any) => dayKey(new Date(r.opened_at))));
 
       const { data: pagosRango } = await supabase
-        .from("pagos_comisiones").select("monto, monto_pagado, created_at, fecha_pago").gte("fecha_pago", limite.toISOString());
+        .from("pagos_comisiones").select("monto, monto_pagado, created_at, fecha_pago").or("anulado.is.null,anulado.eq.false").gte("fecha_pago", limite.toISOString());
 
       // Agrupar ventas con remito de días pasados (dentro del rango, sin contar hoy) por día.
       const ventasPorDia = new Map<string, any[]>();
@@ -673,6 +674,7 @@ export default function CajaPage() {
         const { data: pagosData } = await supabase
           .from("pagos_comisiones")
           .select("id, seller_name, monto, monto_pagado, created_at, fecha_pago")
+          .or("anulado.is.null,anulado.eq.false")
           .gte("fecha_pago", cajaDate.toISOString());
         if (!mounted) return;
         setPagosComisiones((pagosData || []).map((p: any) => ({ id: p.id, sellerName: p.seller_name, monto: Number(p.monto_pagado ?? p.monto) || 0, createdAt: p.fecha_pago ?? p.created_at })));
@@ -748,6 +750,7 @@ export default function CajaPage() {
       const { data: pagosData } = await supabase
         .from("pagos_comisiones")
         .select("id, seller_name, monto, monto_pagado, created_at, fecha_pago")
+        .or("anulado.is.null,anulado.eq.false")
         .gte("fecha_pago", cajaDate.toISOString());
       setPagosComisiones((pagosData || []).map((p: any) => ({ id: p.id, sellerName: p.seller_name, monto: Number(p.monto_pagado ?? p.monto) || 0, createdAt: p.fecha_pago ?? p.created_at })));
 
@@ -1113,6 +1116,7 @@ export default function CajaPage() {
       const { data: pagosData } = await supabase
         .from("pagos_comisiones")
         .select("id, seller_name, monto, monto_pagado, created_at, fecha_pago")
+        .or("anulado.is.null,anulado.eq.false")
         .gte("fecha_pago", start.toISOString())
         .lte("fecha_pago", end.toISOString());
       const dayPagos = (pagosData || []).map((p: any) => ({ id: p.id, sellerName: p.seller_name, monto: Number(p.monto_pagado ?? p.monto) || 0, createdAt: p.fecha_pago ?? p.created_at }));

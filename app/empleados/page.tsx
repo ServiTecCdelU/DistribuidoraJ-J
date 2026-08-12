@@ -27,6 +27,7 @@ import {
 } from '@/components/ui/dropdown-menu'
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs'
 import { sellersApi, ordersApi } from '@/lib/api'
+import { useAuth } from '@/hooks/use-auth'
 import type { Seller, SellerCommission, EmployeeType, Order } from '@/lib/types'
 import { formatCurrency, formatDate } from '@/lib/utils/format'
 import { statusConfig } from '@/lib/order-constants'
@@ -77,6 +78,7 @@ const EMPLOYEE_TYPE_BADGE: Record<EmployeeType, string> = {
 }
 
 export default function EmpleadosPage() {
+  const { user } = useAuth()
   const [sellers, setSellers] = useState<Seller[]>([])
   const [loading, setLoading] = useState(true)
   const [searchQuery, setSearchQuery] = useState('')
@@ -107,6 +109,11 @@ export default function EmpleadosPage() {
   const [pagoMonto, setPagoMonto] = useState('')
   const [pagoFecha, setPagoFecha] = useState('')
   const [pagoNota, setPagoNota] = useState('')
+
+  // Anulacion de un cobro registrado
+  const [pagoAnular, setPagoAnular] = useState<any | null>(null)
+  const [motivoAnulacion, setMotivoAnulacion] = useState('')
+  const [anulando, setAnulando] = useState(false)
 
   // Pedidos activos del empleado
   const [activeOrders, setActiveOrders] = useState<Order[]>([])
@@ -491,7 +498,7 @@ export default function EmpleadosPage() {
       )
       setPagoModalOpen(false)
       // El comprobante lista solo lo que este pago alcanzó a cubrir.
-      const acumuladoAntes = pagos.reduce((sum: number, p: any) => sum + (p.montoPagado ?? p.monto ?? 0), 0)
+      const acumuladoAntes = pagos.reduce((sum: number, p: any) => (p.anulado ? sum : sum + (p.montoPagado ?? p.monto ?? 0)), 0)
       const cubiertas = comisionesDelPago(
         [...commissions].sort((a, b) => a.createdAt.getTime() - b.createdAt.getTime()),
         acumuladoAntes,
@@ -518,6 +525,32 @@ export default function EmpleadosPage() {
       toast.error(error?.message || 'Error al pagar comisiones')
     } finally {
       setPaying(false)
+    }
+  }
+
+  const handleAnularPago = async () => {
+    if (!pagoAnular || !selectedSeller) return
+    if (!motivoAnulacion.trim()) {
+      toast.error('Indica el motivo de la anulacion')
+      return
+    }
+    setAnulando(true)
+    try {
+      await sellersApi.anularPagoComision(pagoAnular.id, motivoAnulacion, user?.name || 'Admin')
+      const [updatedCommissions, pagosData] = await Promise.all([
+        sellersApi.getCommissions(selectedSeller.id),
+        sellersApi.getPagosComisiones(selectedSeller.id),
+      ])
+      setCommissions(updatedCommissions.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()))
+      setPagos(pagosData)
+      await loadSellers()
+      setPagoAnular(null)
+      setMotivoAnulacion('')
+      toast.success('Cobro anulado — las comisiones volvieron a pendiente')
+    } catch (error: any) {
+      toast.error(error?.message || 'Error al anular el cobro')
+    } finally {
+      setAnulando(false)
     }
   }
 
@@ -549,7 +582,7 @@ export default function EmpleadosPage() {
     if (idx < 0) return []
     const acumuladoAntes = cronologicos
       .slice(0, idx)
-      .reduce((sum: number, p: any) => sum + (p.montoPagado ?? p.monto ?? 0), 0)
+      .reduce((sum: number, p: any) => (p.anulado ? sum : sum + (p.montoPagado ?? p.monto ?? 0)), 0)
     return comisionesDelPago(
       [...commissions].sort((a, b) => a.createdAt.getTime() - b.createdAt.getTime()),
       acumuladoAntes,
@@ -1532,15 +1565,20 @@ export default function EmpleadosPage() {
                             const dif = pagado - pago.monto
                             return (
                               <React.Fragment key={pago.id}>
-                                <tr className="hover:bg-muted/30">
-                                  <td className="px-2 py-1.5 whitespace-nowrap">{formatDate(pago.fechaPago ?? pago.createdAt)}</td>
+                                <tr className={`hover:bg-muted/30 ${pago.anulado ? 'opacity-60' : ''}`}>
+                                  <td className="px-2 py-1.5 whitespace-nowrap">
+                                    {formatDate(pago.fechaPago ?? pago.createdAt)}
+                                    {pago.anulado && (
+                                      <span className="block text-[10px] font-medium text-rose-600">ANULADO</span>
+                                    )}
+                                  </td>
                                   <td className="px-2 py-1.5 whitespace-nowrap text-muted-foreground">
                                     {pago.periodoDesde || pago.periodoHasta
                                       ? `${pago.periodoDesde ? formatDate(pago.periodoDesde) : '-'} al ${pago.periodoHasta ? formatDate(pago.periodoHasta) : '-'}`
                                       : '-'}
                                   </td>
                                   <td className="px-2 py-1.5 text-right tabular-nums whitespace-nowrap">{formatCurrency(pago.monto)}</td>
-                                  <td className="px-2 py-1.5 text-right tabular-nums whitespace-nowrap font-semibold text-emerald-600 dark:text-emerald-400">
+                                  <td className={`px-2 py-1.5 text-right tabular-nums whitespace-nowrap font-semibold ${pago.anulado ? 'text-muted-foreground line-through' : 'text-emerald-600 dark:text-emerald-400'}`}>
                                     {formatCurrency(pagado)}
                                     {Math.abs(dif) > 0.01 && (
                                       <span className={`block text-[10px] font-normal ${dif < 0 ? 'text-amber-600' : 'text-teal-600'}`}>
@@ -1549,7 +1587,9 @@ export default function EmpleadosPage() {
                                     )}
                                   </td>
                                   <td className="px-2 py-1.5 text-center text-muted-foreground">{pago.cantidadComisiones}</td>
-                                  <td className="px-2 py-1.5 text-muted-foreground max-w-[120px] truncate">{pago.nota || '-'}</td>
+                                  <td className="px-2 py-1.5 text-muted-foreground max-w-[120px] truncate" title={pago.anulado ? `Anulado: ${pago.anuladoMotivo ?? ''}` : (pago.nota || '')}>
+                                    {pago.anulado ? <span className="text-rose-600">{pago.anuladoMotivo || 'anulado'}</span> : (pago.nota || '-')}
+                                  </td>
                                   <td className="px-2 py-1.5">
                                     <div className="flex items-center justify-end gap-1">
                                       <Button
@@ -1566,10 +1606,22 @@ export default function EmpleadosPage() {
                                         size="icon"
                                         className="h-6 w-6"
                                         title="Comprobante PDF"
+                                        disabled={pago.anulado}
                                         onClick={() => handlePagoPdf(pago)}
                                       >
                                         <Eye className="h-3.5 w-3.5" />
                                       </Button>
+                                      {!pago.anulado && (
+                                        <Button
+                                          variant="ghost"
+                                          size="icon"
+                                          className="h-6 w-6 text-rose-600 hover:text-rose-700"
+                                          title="Anular cobro"
+                                          onClick={() => { setPagoAnular(pago); setMotivoAnulacion('') }}
+                                        >
+                                          <X className="h-3.5 w-3.5" />
+                                        </Button>
+                                      )}
                                     </div>
                                   </td>
                                 </tr>
@@ -1828,6 +1880,52 @@ export default function EmpleadosPage() {
           )}
         </div>
       )}
+
+      {/* Modal: Anular cobro */}
+      <Dialog open={!!pagoAnular} onOpenChange={(open) => { if (!open) setPagoAnular(null) }}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Anular cobro</DialogTitle>
+          </DialogHeader>
+          {pagoAnular && (
+            <div className="space-y-3">
+              <div className="rounded-2xl border bg-muted/30 p-3 text-sm space-y-1">
+                <div className="flex justify-between">
+                  <span className="text-muted-foreground">Fecha</span>
+                  <span>{formatDate(pagoAnular.fechaPago ?? pagoAnular.createdAt)}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-muted-foreground">Monto pagado</span>
+                  <span className="font-semibold tabular-nums">{formatCurrency(pagoAnular.montoPagado ?? pagoAnular.monto)}</span>
+                </div>
+              </div>
+              <p className="text-xs text-muted-foreground">
+                El registro no se borra: queda en el historial marcado como anulado. Las comisiones
+                que cubria vuelven a pendiente y el monto deja de descontarse de la caja.
+              </p>
+              <div>
+                <Label htmlFor="motivoAnulacion" className="text-xs text-muted-foreground">Motivo</Label>
+                <Input
+                  id="motivoAnulacion"
+                  value={motivoAnulacion}
+                  onChange={(e) => setMotivoAnulacion(e.target.value)}
+                  placeholder="Ej: se cargo por error"
+                  className="rounded-2xl mt-1"
+                />
+              </div>
+            </div>
+          )}
+          <DialogFooter>
+            <Button variant="outline" className="rounded-2xl" onClick={() => setPagoAnular(null)} disabled={anulando}>
+              Cancelar
+            </Button>
+            <Button variant="destructive" className="rounded-2xl gap-2" onClick={handleAnularPago} disabled={anulando}>
+              {anulando ? <Loader2 className="h-4 w-4 animate-spin" /> : <X className="h-4 w-4" />}
+              Anular cobro
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       {/* Modal: Registrar pago de comisiones */}
       <Dialog open={pagoModalOpen} onOpenChange={setPagoModalOpen}>

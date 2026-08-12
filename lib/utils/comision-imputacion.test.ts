@@ -45,6 +45,27 @@ describe('comisionesDelPago', () => {
   })
 })
 
+describe('total pagado con pagos anulados', () => {
+  // Mismo criterio que commissions-service: los anulados no suman.
+  const totalPagado = (pagos: { montoPagado: number; anulado?: boolean }[]) =>
+    pagos.reduce((s, p) => (p.anulado ? s : s + p.montoPagado), 0)
+
+  it('anular un pago devuelve las comisiones a pendiente', () => {
+    const comisiones = [c(1000, 1), c(1000, 2)]
+    const pagos = [{ montoPagado: 1000 }, { montoPagado: 1000, anulado: true }]
+
+    const { items } = imputarComisiones(comisiones, totalPagado(pagos))
+    expect(items[0].estadoPago).toBe('pagado')
+    expect(items[1].estadoPago).toBe('pendiente')
+  })
+
+  it('anular el único pago deja todo pendiente', () => {
+    const { items } = imputarComisiones([c(1000, 1)], totalPagado([{ montoPagado: 1000, anulado: true }]))
+    expect(items[0].estadoPago).toBe('pendiente')
+    expect(items[0].montoImputado).toBe(0)
+  })
+})
+
 describe('imputarComisiones', () => {
   it('sin pagos deja todo pendiente', () => {
     const { items } = imputarComisiones([c(1000, 1), c(2000, 2)], 0)

@@ -75,6 +75,7 @@ async function generarIdCaja(dateStr: string): Promise<string> {
 async function comisionesEntre(desde: Date, hasta: Date): Promise<number> {
   const { data } = await supabaseAdmin
     .from("pagos_comisiones").select("monto, monto_pagado")
+    .or("anulado.is.null,anulado.eq.false")
     .gte("fecha_pago", desde.toISOString()).lte("fecha_pago", hasta.toISOString());
   // Sale de caja lo efectivamente entregado, no lo devengado.
   return (data || []).reduce((a: number, p: any) => a + (Number(p.monto_pagado ?? p.monto) || 0), 0);

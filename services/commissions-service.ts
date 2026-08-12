@@ -37,7 +37,7 @@ export const getCommissionsBySeller = async (sellerId: string): Promise<SellerCo
   // Total efectivamente entregado al vendedor (pagos legacy sin monto_pagado
   // se asumen pagados por el devengado del período).
   const totalPagado = (pagos ?? []).reduce(
-    (s: number, p: any) => s + (Number(p.monto_pagado ?? p.monto) || 0),
+    (s: number, p: any) => (p.anulado ? s : s + (Number(p.monto_pagado ?? p.monto) || 0)),
     0,
   )
 
