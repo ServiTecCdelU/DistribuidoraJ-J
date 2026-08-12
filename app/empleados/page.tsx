@@ -1396,21 +1396,24 @@ export default function EmpleadosPage() {
                     <p>No tiene pedidos activos</p>
                   </div>
                 ) : (
-                  <div className="space-y-4 max-h-[min(360px,45vh)] overflow-y-auto">
-                    {orderDays.map((dayKey) => {
-                      const day = ordersByDay[dayKey]
-                      const clientNames = Object.keys(day.clients)
-                      return (
-                        <div key={dayKey}>
-                          <div className="flex items-center gap-2 mb-2 sticky top-0 bg-background py-1">
-                            <Calendar className="h-3.5 w-3.5 text-muted-foreground" />
-                            <span className="text-sm font-medium text-foreground">{day.label}</span>
-                            <span className="text-xs text-muted-foreground">
-                              · {clientNames.length} {clientNames.length === 1 ? 'cliente' : 'clientes'}
-                            </span>
-                          </div>
-                          <div className="space-y-2">
-                            {clientNames.map((cliente) => {
+                  <div className="rounded-2xl border overflow-hidden">
+                    <div className="max-h-[min(360px,45vh)] overflow-auto">
+                      <table className="w-full text-xs">
+                        <thead className="bg-muted/50 sticky top-0">
+                          <tr className="[&>th]:px-2 [&>th]:py-1.5 [&>th]:font-medium [&>th]:text-muted-foreground [&>th]:whitespace-nowrap">
+                            <th className="text-left">Fecha</th>
+                            <th className="text-left">Cliente</th>
+                            <th className="text-left">Direccion</th>
+                            <th className="text-center">Prod.</th>
+                            <th className="text-center">Unid.</th>
+                            <th className="text-left">Estado</th>
+                            <th className="text-right"></th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y">
+                          {orderDays.map((dayKey) => {
+                            const day = ordersByDay[dayKey]
+                            return Object.keys(day.clients).map((cliente) => {
                               const clientOrders = day.clients[cliente]
                               const groupKey = `${dayKey}-${cliente}`
                               const isExpanded = expandedOrderId === groupKey
@@ -1418,73 +1421,71 @@ export default function EmpleadosPage() {
                               const productsCount = clientOrders.reduce((n, o) => n + o.items.length, 0)
                               const firstStatus = statusConfig[clientOrders[0].status]
                               return (
-                                <div key={groupKey} className="rounded-lg border bg-card overflow-hidden">
-                                  <button
-                                    type="button"
+                                <React.Fragment key={groupKey}>
+                                  <tr
+                                    className="hover:bg-muted/30 cursor-pointer"
                                     onClick={() => setExpandedOrderId(isExpanded ? null : groupKey)}
-                                    className="w-full text-left p-3 flex items-start justify-between gap-3 hover:bg-muted/40 transition-colors"
                                   >
-                                    <div className="min-w-0 flex-1">
-                                      <div className="flex items-center gap-2 mb-1 flex-wrap">
-                                        {clientOrders.length > 1 ? (
-                                          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-primary/10 text-primary border border-primary/20">
-                                            {clientOrders.length} pedidos
-                                          </span>
-                                        ) : (
-                                          <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium ${firstStatus.bgColor} ${firstStatus.color} ${firstStatus.borderColor} border`}>
-                                            <span className={`h-1.5 w-1.5 rounded-full ${firstStatus.dotColor}`} />
-                                            {firstStatus.label}
-                                          </span>
-                                        )}
-                                        <span className="text-xs text-muted-foreground">
-                                          {productsCount} {productsCount === 1 ? 'producto' : 'productos'} · {itemsCount} u.
+                                    <td className="px-2 py-1.5 whitespace-nowrap text-muted-foreground">{day.label}</td>
+                                    <td className="px-2 py-1.5 max-w-[150px] truncate font-medium">{cliente}</td>
+                                    <td className="px-2 py-1.5 max-w-[160px] truncate text-muted-foreground">{clientOrders[0].address}</td>
+                                    <td className="px-2 py-1.5 text-center text-muted-foreground">{productsCount}</td>
+                                    <td className="px-2 py-1.5 text-center text-muted-foreground">{itemsCount}</td>
+                                    <td className="px-2 py-1.5 whitespace-nowrap">
+                                      {clientOrders.length > 1 ? (
+                                        <span className="inline-flex items-center px-1.5 py-0.5 rounded-full text-[10px] font-medium bg-primary/10 text-primary border border-primary/20">
+                                          {clientOrders.length} pedidos
                                         </span>
-                                      </div>
-                                      <p className="font-medium text-foreground truncate">{cliente}</p>
-                                      <p className="text-xs text-muted-foreground flex items-center gap-1 truncate">
-                                        <MapPin className="h-3 w-3 shrink-0" />
-                                        {clientOrders[0].address}
-                                      </p>
-                                    </div>
-                                    <ChevronDown className={`h-4 w-4 text-muted-foreground shrink-0 transition-transform ${isExpanded ? 'rotate-180' : ''}`} />
-                                  </button>
+                                      ) : (
+                                        <span className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[10px] font-medium ${firstStatus.bgColor} ${firstStatus.color} ${firstStatus.borderColor} border`}>
+                                          <span className={`h-1.5 w-1.5 rounded-full ${firstStatus.dotColor}`} />
+                                          {firstStatus.label}
+                                        </span>
+                                      )}
+                                    </td>
+                                    <td className="px-2 py-1.5 text-right">
+                                      <ChevronDown className={`h-3.5 w-3.5 text-muted-foreground inline transition-transform ${isExpanded ? 'rotate-180' : ''}`} />
+                                    </td>
+                                  </tr>
                                   {isExpanded && (
-                                    <div className="border-t bg-muted/20 divide-y divide-border/60">
-                                      {clientOrders.map((order, oIdx) => {
-                                        const cfg = statusConfig[order.status]
-                                        return (
-                                          <div key={order.id} className="p-3 space-y-1.5">
-                                            {clientOrders.length > 1 && (
-                                              <div className="flex items-center gap-2 text-xs">
-                                                <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full font-medium ${cfg.bgColor} ${cfg.color} ${cfg.borderColor} border`}>
-                                                  <span className={`h-1.5 w-1.5 rounded-full ${cfg.dotColor}`} />
-                                                  {cfg.label}
-                                                </span>
-                                                <span className="text-muted-foreground truncate">Pedido {oIdx + 1} · {order.address}</span>
-                                              </div>
-                                            )}
-                                            {order.items.map((it, idx) => (
-                                              <div key={`${order.id}-${idx}`} className="flex items-center justify-between text-sm">
-                                                <span className="text-foreground truncate pr-2">
-                                                  <span className="text-muted-foreground">{it.quantity}×</span> {it.name}
-                                                </span>
-                                                <span className="text-muted-foreground shrink-0">
-                                                  {formatCurrency(it.price * it.quantity)}
-                                                </span>
-                                              </div>
-                                            ))}
-                                          </div>
-                                        )
-                                      })}
-                                    </div>
+                                    <tr>
+                                      <td colSpan={7} className="bg-muted/20 px-2 py-2">
+                                        {clientOrders.map((order, oIdx) => {
+                                          const cfg = statusConfig[order.status]
+                                          return (
+                                            <div key={order.id} className="space-y-1 mb-2 last:mb-0">
+                                              {clientOrders.length > 1 && (
+                                                <div className="flex items-center gap-2 text-[10px]">
+                                                  <span className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full font-medium ${cfg.bgColor} ${cfg.color} ${cfg.borderColor} border`}>
+                                                    <span className={`h-1.5 w-1.5 rounded-full ${cfg.dotColor}`} />
+                                                    {cfg.label}
+                                                  </span>
+                                                  <span className="text-muted-foreground truncate">Pedido {oIdx + 1} - {order.address}</span>
+                                                </div>
+                                              )}
+                                              {order.items.map((it, idx) => (
+                                                <div key={`${order.id}-${idx}`} className="flex items-center justify-between gap-2">
+                                                  <span className="truncate">
+                                                    <span className="text-muted-foreground">{it.quantity}x</span> {it.name}
+                                                  </span>
+                                                  <span className="text-muted-foreground shrink-0 tabular-nums">
+                                                    {formatCurrency(it.price * it.quantity)}
+                                                  </span>
+                                                </div>
+                                              ))}
+                                            </div>
+                                          )
+                                        })}
+                                      </td>
+                                    </tr>
                                   )}
-                                </div>
+                                </React.Fragment>
                               )
-                            })}
-                          </div>
-                        </div>
-                      )
-                    })}
+                            })
+                          })}
+                        </tbody>
+                      </table>
+                    </div>
                   </div>
                 )}
               </div>
@@ -1743,48 +1744,58 @@ export default function EmpleadosPage() {
                     </p>
                   </div>
                 ) : (
-                  <div className="space-y-2 max-h-[min(300px,40vh)] overflow-y-auto">
-                    {filteredCommissions.map((commission) => (
-                      <div
-                        key={commission.id}
-                        className={`rounded-lg border p-4 flex items-center justify-between gap-4 ${
-                          commission.isPaid
-                            ? 'bg-emerald-50/50 dark:bg-emerald-900/10 border-emerald-200 dark:border-emerald-800'
-                            : 'bg-amber-50/50 dark:bg-amber-900/10 border-amber-200 dark:border-amber-800'
-                        }`}
-                      >
-                        <div className="flex-1 min-w-0">
-                          <div className="flex items-center gap-2 mb-1">
-                            {commission.isPaid ? (
-                              <CheckCircle className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />
-                            ) : (
-                              <Clock className="h-4 w-4 text-amber-600 dark:text-amber-400" />
-                            )}
-                            <span className="font-semibold text-foreground">
-                              {formatCurrency(commission.commissionAmount)}
-                            </span>
-                            <span className={`text-xs px-2 py-0.5 rounded-full ${
-                              commission.isPaid
-                                ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400'
-                                : commission.estadoPago === 'parcial'
-                                  ? 'bg-sky-100 text-sky-700 dark:bg-sky-900/30 dark:text-sky-400'
-                                  : 'bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400'
-                            }`}>
-                              {commission.isPaid ? 'Pagada' : commission.estadoPago === 'parcial' ? 'Parcial' : 'Pendiente'}
-                            </span>
-                          </div>
-                          <p className="text-sm text-muted-foreground">
-                            Venta: {formatCurrency(commission.saleTotal)} - {commission.commissionRate}% comision
-                          </p>
-                          <p className="text-xs text-muted-foreground">
-                            {formatDate(commission.createdAt)}
-                            {commission.estadoPago === 'parcial' && (
-                              <> - Cobrado {formatCurrency(commission.montoImputado ?? 0)}, falta {formatCurrency(commission.commissionAmount - (commission.montoImputado ?? 0))}</>
-                            )}
-                          </p>
-                        </div>
-                      </div>
-                    ))}
+                  <div className="rounded-2xl border overflow-hidden">
+                    <div className="max-h-[min(320px,42vh)] overflow-auto">
+                      <table className="w-full text-xs">
+                        <thead className="bg-muted/50 sticky top-0">
+                          <tr className="[&>th]:px-2 [&>th]:py-1.5 [&>th]:font-medium [&>th]:text-muted-foreground [&>th]:whitespace-nowrap">
+                            <th className="text-left">Fecha</th>
+                            <th className="text-left">Venta</th>
+                            <th className="text-left">Cliente</th>
+                            <th className="text-right">Total venta</th>
+                            <th className="text-center">%</th>
+                            <th className="text-right">Comision</th>
+                            <th className="text-right">Cobrado</th>
+                            <th className="text-center">Estado</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y">
+                          {filteredCommissions.map((commission) => {
+                            const imputado = commission.montoImputado ?? (commission.isPaid ? commission.commissionAmount : 0)
+                            const falta = commission.commissionAmount - imputado
+                            return (
+                              <tr key={commission.id} className="hover:bg-muted/30">
+                                <td className="px-2 py-1.5 whitespace-nowrap">{formatDate(commission.createdAt)}</td>
+                                <td className="px-2 py-1.5 whitespace-nowrap text-muted-foreground">{commission.saleNumber || '-'}</td>
+                                <td className="px-2 py-1.5 max-w-[140px] truncate">{commission.clientName || '-'}</td>
+                                <td className="px-2 py-1.5 text-right tabular-nums whitespace-nowrap">{formatCurrency(commission.saleTotal)}</td>
+                                <td className="px-2 py-1.5 text-center text-muted-foreground">{commission.commissionRate}%</td>
+                                <td className={`px-2 py-1.5 text-right tabular-nums whitespace-nowrap font-semibold ${commission.commissionAmount < 0 ? 'text-rose-600 dark:text-rose-400' : 'text-foreground'}`}>
+                                  {formatCurrency(commission.commissionAmount)}
+                                </td>
+                                <td className="px-2 py-1.5 text-right tabular-nums whitespace-nowrap">
+                                  <span className="text-emerald-600 dark:text-emerald-400">{formatCurrency(imputado)}</span>
+                                  {falta > 0.009 && (
+                                    <span className="block text-[10px] text-amber-600">falta {formatCurrency(falta)}</span>
+                                  )}
+                                </td>
+                                <td className="px-2 py-1.5 text-center">
+                                  <span className={`inline-block px-1.5 py-0.5 rounded-full text-[10px] whitespace-nowrap ${
+                                    commission.isPaid
+                                      ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400'
+                                      : commission.estadoPago === 'parcial'
+                                        ? 'bg-sky-100 text-sky-700 dark:bg-sky-900/30 dark:text-sky-400'
+                                        : 'bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400'
+                                  }`}>
+                                    {commission.isPaid ? 'Pagada' : commission.estadoPago === 'parcial' ? 'Parcial' : 'Pendiente'}
+                                  </span>
+                                </td>
+                              </tr>
+                            )
+                          })}
+                        </tbody>
+                      </table>
+                    </div>
                   </div>
                 )}
               </div>
