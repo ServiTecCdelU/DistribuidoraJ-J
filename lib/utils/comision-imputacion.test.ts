@@ -132,6 +132,30 @@ describe('imputarComisiones', () => {
     expect(items[1].isPaid).toBe(false)
   })
 
+  it('una devolución de agosto resta del pendiente de agosto si julio ya se pagó', () => {
+    const julio = { commissionAmount: 1000, createdAt: new Date(2026, 6, 10) }
+    const agostoVenta = { commissionAmount: 800, createdAt: new Date(2026, 7, 5) }
+    // Devolución cargada en agosto sobre una venta de julio ya liquidada.
+    const agostoDevolucion = { commissionAmount: -300, createdAt: new Date(2026, 7, 12) }
+
+    const { items } = imputarComisiones([julio, agostoVenta, agostoDevolucion], 1000)
+
+    // Julio quedó cubierto por el pago real.
+    expect(items[0].estadoPago).toBe('pagado')
+    // La devolución no cuenta como pago.
+    expect(items[2].estadoPago).toBe('devolucion')
+    expect(items[2].isPaid).toBe(false)
+    expect(items[2].montoImputado).toBe(0)
+    // La venta de agosto sigue impaga: la devolución no la cubrió.
+    expect(items[1].estadoPago).toBe('pendiente')
+
+    // Pendiente de agosto = 800 - 300 = 500
+    const pendienteAgosto = items
+      .filter((i) => !i.isPaid && i.createdAt >= new Date(2026, 7, 1))
+      .reduce((s, i) => s + i.commissionAmount - i.montoImputado, 0)
+    expect(pendienteAgosto).toBe(500)
+  })
+
   it('no pierde ni inventa plata', () => {
     const { items, sobrante } = imputarComisiones([c(1000, 1), c(2000, 2), c(500, 3)], 2200)
     const aplicado = items.reduce((s, i) => s + i.montoImputado, 0)
