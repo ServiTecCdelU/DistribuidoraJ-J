@@ -1912,11 +1912,19 @@ export default function EmpleadosPage() {
                                   <span className={`inline-block px-1.5 py-0.5 rounded-full text-[10px] whitespace-nowrap ${
                                     commission.isPaid
                                       ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400'
-                                      : commission.estadoPago === 'parcial'
-                                        ? 'bg-sky-100 text-sky-700 dark:bg-sky-900/30 dark:text-sky-400'
-                                        : 'bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400'
+                                      : commission.estadoPago === 'devolucion'
+                                        ? 'bg-rose-100 text-rose-700 dark:bg-rose-900/30 dark:text-rose-400'
+                                        : commission.estadoPago === 'parcial'
+                                          ? 'bg-sky-100 text-sky-700 dark:bg-sky-900/30 dark:text-sky-400'
+                                          : 'bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400'
                                   }`}>
-                                    {commission.isPaid ? 'Pagada' : commission.estadoPago === 'parcial' ? 'Parcial' : 'Pendiente'}
+                                    {commission.isPaid
+                                      ? 'Pagada'
+                                      : commission.estadoPago === 'devolucion'
+                                        ? 'Devolución'
+                                        : commission.estadoPago === 'parcial'
+                                          ? 'Parcial'
+                                          : 'Pendiente'}
                                   </span>
                                 </td>
                               </tr>

@@ -228,6 +228,8 @@ export default function ComisionesPage() {
                         </div>
                         {c.isPaid ? (
                           <Badge className="bg-green-500 hover:bg-green-600 text-white text-xs shrink-0">Cobrada</Badge>
+                        ) : c.estadoPago === 'devolucion' ? (
+                          <Badge variant="secondary" className="text-rose-700 bg-rose-50 text-xs shrink-0">Devolución</Badge>
                         ) : c.estadoPago === 'parcial' ? (
                           <Badge variant="secondary" className="text-sky-700 bg-sky-50 text-xs shrink-0">Parcial</Badge>
                         ) : (
@@ -299,6 +301,8 @@ export default function ComisionesPage() {
                           <TableCell className="text-center">
                             {c.isPaid ? (
                               <Badge className="bg-green-500 hover:bg-green-600 text-white">Cobrada</Badge>
+                            ) : c.estadoPago === 'devolucion' ? (
+                              <Badge variant="secondary" className="text-rose-700 bg-rose-50">Devolución</Badge>
                             ) : c.estadoPago === 'parcial' ? (
                               <Badge variant="secondary" className="text-sky-700 bg-sky-50">Parcial</Badge>
                             ) : (

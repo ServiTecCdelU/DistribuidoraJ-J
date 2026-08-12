@@ -8,7 +8,7 @@
 // incremental) para que no queden residuos si un pago se edita o se borra.
 // Mismo criterio que la imputación de saldos de clientes.
 
-export type EstadoPagoComision = 'pagado' | 'parcial' | 'pendiente'
+export type EstadoPagoComision = 'pagado' | 'parcial' | 'pendiente' | 'devolucion'
 
 export interface ComisionImputable {
   commissionAmount: number
@@ -25,8 +25,11 @@ const EPSILON = 0.01
 
 /**
  * Aplica `totalPagado` sobre las comisiones ordenadas de más vieja a más nueva.
- * Las devoluciones (montos negativos) reducen lo adeudado, así que liberan
- * plata para cubrir comisiones posteriores.
+ *
+ * Solo la plata realmente pagada marca comisiones como cobradas. Las
+ * devoluciones (montos negativos) NO pagan nada: quedan como entradas
+ * negativas ('devolucion') que restan del pendiente al sumarlo, pero nunca
+ * hacen figurar como pagada una comisión que no se pagó.
  */
 export function imputarComisiones<T extends ComisionImputable>(
   comisiones: T[],
@@ -34,16 +37,13 @@ export function imputarComisiones<T extends ComisionImputable>(
 ): ImputacionResultado<T> {
   const orden = [...comisiones].sort((a, b) => a.createdAt.getTime() - b.createdAt.getTime())
 
-  // Las devoluciones descuentan deuda, no se "pagan": se netean de entrada para
-  // que también cubran comisiones anteriores a la fecha de la devolución.
-  const devoluciones = orden.reduce((s, c) => s + Math.min(0, c.commissionAmount || 0), 0)
-  let disponible = totalPagado - devoluciones
+  let disponible = totalPagado
 
   const imputados = orden.map((c) => {
     const monto = c.commissionAmount || 0
 
     if (monto <= 0) {
-      return { ...c, montoImputado: monto, estadoPago: 'pagado' as EstadoPagoComision, isPaid: true }
+      return { ...c, montoImputado: 0, estadoPago: 'devolucion' as EstadoPagoComision, isPaid: false }
     }
 
     const imputado = Math.max(0, Math.min(disponible, monto))

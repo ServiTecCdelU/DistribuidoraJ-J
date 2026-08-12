@@ -104,22 +104,26 @@ describe('imputarComisiones', () => {
     expect(sobrante).toBe(500)
   })
 
-  it('una devolución sola cubre comisiones aunque no haya pagos', () => {
+  it('una devolución sin pagos no marca nada como pagado', () => {
     const { items } = imputarComisiones([c(1000, 1), c(1000, 2), c(-400, 3)], 0)
-    // La devolución descuenta deuda: cubre 400 de la comisión más vieja.
-    expect(items[0].montoImputado).toBe(400)
-    expect(items[0].estadoPago).toBe('parcial')
+    expect(items[0].estadoPago).toBe('pendiente')
     expect(items[1].estadoPago).toBe('pendiente')
-    // Neto imputado = 0: no salió plata de la caja.
+    expect(items[2].estadoPago).toBe('devolucion')
+    expect(items.every((i) => !i.isPaid)).toBe(true)
     expect(items.reduce((s, i) => s + i.montoImputado, 0)).toBe(0)
   })
 
-  it('una devolución libera plata para las comisiones siguientes', () => {
+  it('la devolución resta del pendiente pero no cuenta como pago', () => {
     const { items } = imputarComisiones([c(1000, 1), c(-400, 2), c(1000, 3)], 1000)
     expect(items[0].estadoPago).toBe('pagado')
-    expect(items[1].estadoPago).toBe('pagado')
-    expect(items[2].montoImputado).toBe(400)
-    expect(items[2].estadoPago).toBe('parcial')
+    expect(items[1].estadoPago).toBe('devolucion')
+    expect(items[1].montoImputado).toBe(0)
+    expect(items[2].estadoPago).toBe('pendiente')
+    // Pendiente neto: 1000 (venta 3) - 400 (devolución) = 600
+    const pendiente = items
+      .filter((i) => !i.isPaid)
+      .reduce((s, i) => s + i.commissionAmount - i.montoImputado, 0)
+    expect(pendiente).toBe(600)
   })
 
   it('isPaid solo es true cuando está totalmente cubierta', () => {
