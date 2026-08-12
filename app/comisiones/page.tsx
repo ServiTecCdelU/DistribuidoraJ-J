@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from 'react'
 import { MainLayout } from '@/components/layout/main-layout'
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import { Card, CardContent, CardHeader } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -86,7 +86,7 @@ export default function ComisionesPage() {
     <MainLayout allowedRoles={['admin', 'seller']} title="Mis Comisiones" description="Resumen y detalle de tus comisiones">
       {loading ? (
         <div className="space-y-6">
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-1.5">
             {Array.from({ length: 4 }).map((_, i) => (
               <Card key={i}>
                 <CardHeader className="pb-2"><Skeleton className="h-4 w-24" /></CardHeader>
@@ -155,47 +155,54 @@ export default function ComisionesPage() {
           </Card>
 
           {/* ── Tarjetas resumen ── */}
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-2 mb-4">
-            <Card className="border-teal-200 dark:border-teal-800 bg-teal-50/50 dark:bg-teal-900/10">
-              <CardHeader className="pb-0.5 pt-2.5 px-3 flex flex-row items-center justify-between space-y-0">
-                <CardTitle className="text-[11px] font-medium text-muted-foreground leading-tight">Comisiones finales</CardTitle>
-                <TrendingUp className="h-3.5 w-3.5 text-teal-600 shrink-0" />
-              </CardHeader>
-              <CardContent className="pb-2.5 px-3">
-                <div className="text-xs sm:text-sm md:text-base font-bold text-teal-600 dark:text-teal-400 whitespace-nowrap leading-tight">{formatPrice(total)}</div>
-                <p className="text-[10px] text-muted-foreground mt-0.5 leading-tight">Comisiones − devoluciones</p>
-              </CardContent>
-            </Card>
-            <Card>
-              <CardHeader className="pb-0.5 pt-2.5 px-3 flex flex-row items-center justify-between space-y-0">
-                <CardTitle className="text-[11px] font-medium text-muted-foreground leading-tight">Pendiente</CardTitle>
-                <Clock className="h-3.5 w-3.5 text-orange-500 shrink-0" />
-              </CardHeader>
-              <CardContent className="pb-2.5 px-3">
-                <div className="text-xs sm:text-sm md:text-base font-bold text-orange-500 whitespace-nowrap leading-tight">{formatPrice(pendingTotal)}</div>
-                <p className="text-[10px] text-muted-foreground mt-0.5 leading-tight">{pendingCount} pendientes</p>
-              </CardContent>
-            </Card>
-            <Card>
-              <CardHeader className="pb-0.5 pt-2.5 px-3 flex flex-row items-center justify-between space-y-0">
-                <CardTitle className="text-[11px] font-medium text-muted-foreground leading-tight">Ya cobrado</CardTitle>
-                <CheckCircle2 className="h-3.5 w-3.5 text-green-500 shrink-0" />
-              </CardHeader>
-              <CardContent className="pb-2.5 px-3">
-                <div className="text-xs sm:text-sm md:text-base font-bold text-green-600 whitespace-nowrap leading-tight">{formatPrice(paidTotal)}</div>
-                <p className="text-[10px] text-muted-foreground mt-0.5 leading-tight">{filtered.length - pendingCount} cobradas</p>
-              </CardContent>
-            </Card>
-            <Card>
-              <CardHeader className="pb-0.5 pt-2.5 px-3 flex flex-row items-center justify-between space-y-0">
-                <CardTitle className="text-[11px] font-medium text-muted-foreground leading-tight">Devoluciones</CardTitle>
-                <DollarSign className="h-3.5 w-3.5 text-rose-500 shrink-0" />
-              </CardHeader>
-              <CardContent className="pb-2.5 px-3">
-                <div className="text-xs sm:text-sm md:text-base font-bold text-rose-600 dark:text-rose-400 whitespace-nowrap leading-tight">{formatPrice(Math.abs(devolucionesTotal))}</div>
-                <p className="text-[10px] text-muted-foreground mt-0.5 leading-tight">{devolucionesCount} {devolucionesCount === 1 ? 'devolución' : 'devoluciones'}</p>
-              </CardContent>
-            </Card>
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-1.5 mb-3">
+            {[
+              {
+                label: 'Comisiones finales',
+                icon: <TrendingUp className="h-3 w-3 text-teal-600 shrink-0" />,
+                value: formatPrice(total),
+                valueClass: 'text-teal-600 dark:text-teal-400',
+                hint: 'comisiones − devoluciones',
+                cardClass: 'border-teal-200 dark:border-teal-800 bg-teal-50/50 dark:bg-teal-900/10',
+              },
+              {
+                label: 'Pendiente',
+                icon: <Clock className="h-3 w-3 text-orange-500 shrink-0" />,
+                value: formatPrice(pendingTotal),
+                valueClass: 'text-orange-500',
+                hint: `${pendingCount} pendientes`,
+                cardClass: '',
+              },
+              {
+                label: 'Ya cobrado',
+                icon: <CheckCircle2 className="h-3 w-3 text-green-500 shrink-0" />,
+                value: formatPrice(paidTotal),
+                valueClass: 'text-green-600',
+                hint: `${filtered.length - pendingCount} cobradas`,
+                cardClass: '',
+              },
+              {
+                label: 'Devoluciones',
+                icon: <DollarSign className="h-3 w-3 text-rose-500 shrink-0" />,
+                value: formatPrice(Math.abs(devolucionesTotal)),
+                valueClass: 'text-rose-600 dark:text-rose-400',
+                hint: `${devolucionesCount} ${devolucionesCount === 1 ? 'devolución' : 'devoluciones'}`,
+                cardClass: '',
+              },
+            ].map((k) => (
+              <Card key={k.label} className={`${k.cardClass} rounded-2xl`}>
+                <CardContent className="p-2 flex flex-col gap-1">
+                  <div className="flex items-center gap-1 min-w-0">
+                    {k.icon}
+                    <span className="text-[10px] text-muted-foreground leading-none truncate">{k.label}</span>
+                  </div>
+                  <div className={`text-sm md:text-base font-bold whitespace-nowrap leading-none ${k.valueClass}`}>
+                    {k.value}
+                  </div>
+                  <span className="text-[9px] text-muted-foreground leading-none truncate">{k.hint}</span>
+                </CardContent>
+              </Card>
+            ))}
           </div>
 
           {filtered.length === 0 ? (
@@ -207,12 +214,12 @@ export default function ComisionesPage() {
           ) : (
             <>
               {/* ── Vista mobile: cards ── */}
-              <div className="flex flex-col gap-3 md:hidden">
+              <div className="flex flex-col gap-2 md:hidden">
                 {filtered.map((c) => (
                   <Card key={c.id} className="overflow-hidden">
                     <CardContent className="p-0">
                       {/* Cabecera de la card */}
-                      <div className="flex items-center justify-between px-4 py-3 bg-muted/30 border-b">
+                      <div className="flex items-center justify-between px-3 py-2 bg-muted/30 border-b">
                         <div>
                           <p className="text-xs text-muted-foreground">{formatDate(c.createdAt)}</p>
                           <p className="font-semibold text-sm mt-0.5 truncate max-w-[180px]">
@@ -227,18 +234,18 @@ export default function ComisionesPage() {
                       </div>
                       {/* Detalle */}
                       <div className="grid grid-cols-3 divide-x px-0">
-                        <div className="px-4 py-3 text-center">
+                        <div className="px-2 py-2 text-center">
                           <p className="text-[10px] text-muted-foreground uppercase tracking-wide mb-1">Venta</p>
                           <p className="text-sm font-medium">{formatPrice(c.saleTotal)}</p>
                           {c.saleNumber && (
                             <p className="text-[10px] text-muted-foreground font-mono mt-0.5">#{c.saleNumber}</p>
                           )}
                         </div>
-                        <div className="px-4 py-3 text-center">
+                        <div className="px-2 py-2 text-center">
                           <p className="text-[10px] text-muted-foreground uppercase tracking-wide mb-1">Tasa</p>
                           <Badge variant="outline" className="text-xs">{c.commissionRate}%</Badge>
                         </div>
-                        <div className="px-4 py-3 text-center">
+                        <div className="px-2 py-2 text-center">
                           <p className="text-[10px] text-muted-foreground uppercase tracking-wide mb-1">Comisión</p>
                           <p className="text-sm font-bold text-green-600">{formatPrice(c.commissionAmount)}</p>
                         </div>
