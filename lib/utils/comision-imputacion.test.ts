@@ -13,27 +13,31 @@ describe('comisionesDelPago', () => {
   it('solo lista lo que el pago alcanza a cubrir', () => {
     const items = comisionesDelPago([v(1000, 1), v(1000, 2), v(1000, 3)], 0, 1500)
     expect(items).toHaveLength(2)
-    expect(items[0].commissionAmount).toBe(1000)
-    expect(items[1].commissionAmount).toBe(500)
+    expect(items[0].pagadoEnEstePago).toBe(1000)
+    expect(items[1].pagadoEnEstePago).toBe(500)
   })
 
-  it('el total del comprobante coincide con lo pagado', () => {
+  it('el total pagado del comprobante coincide con lo entregado', () => {
     const items = comisionesDelPago([v(1000, 1), v(2000, 2)], 0, 1234)
-    expect(items.reduce((s, i) => s + i.commissionAmount, 0)).toBeCloseTo(1234, 6)
+    expect(items.reduce((s, i) => s + i.pagadoEnEstePago, 0)).toBeCloseTo(1234, 6)
   })
 
-  it('prorratea el total de la venta en la comisión parcial', () => {
+  it('no toca la venta ni la comisión originales', () => {
     const items = comisionesDelPago([v(1000, 1)], 0, 250)
-    // 250 de 1000 → un cuarto de la venta (10.000 → 2.500)
-    expect(items[0].saleTotal).toBeCloseTo(2500, 6)
+    expect(items[0].commissionAmount).toBe(1000)
+    expect(items[0].saleTotal).toBe(10000)
+    expect(items[0].pagadoEnEstePago).toBe(250)
+    expect(items[0].restante).toBe(750)
   })
 
   it('un segundo pago arranca donde quedó el anterior', () => {
     const todas = [v(1000, 1), v(1000, 2), v(1000, 3)]
     const items = comisionesDelPago(todas, 1500, 1000)
     expect(items).toHaveLength(2)
-    expect(items[0].commissionAmount).toBe(500) // resto de la segunda
-    expect(items[1].commissionAmount).toBe(500) // parte de la tercera
+    expect(items[0].pagadoEnEstePago).toBe(500) // resto de la segunda
+    expect(items[0].restante).toBe(0)
+    expect(items[1].pagadoEnEstePago).toBe(500) // parte de la tercera
+    expect(items[1].restante).toBe(500)
   })
 
   it('no lista nada si el pago es cero', () => {

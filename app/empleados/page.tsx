@@ -298,11 +298,16 @@ export default function EmpleadosPage() {
     }
   }
 
+  type ComisionPdfItem = SellerCommission & {
+    pagadoEnEstePago?: number
+    restante?: number
+  }
+
   const buildComisionesPDF = (
     seller: Seller,
     desde: Date | null,
     hasta: Date | null,
-    items: SellerCommission[],
+    items: ComisionPdfItem[],
     monto: number,
   ) => {
     const now = new Date()
@@ -318,7 +323,15 @@ export default function EmpleadosPage() {
     const devMonto = Math.abs(devol.reduce((s, c) => s + c.saleTotal, 0))
     const ventasNetas = totalVentas - devMonto
 
-    const rows = (list: SellerCommission[]) =>
+    // Si es un pago concreto, cada fila muestra cuánto se cubrió y cuánto falta.
+    const conImputacion = items.some((c) => c.pagadoEnEstePago != null)
+    const totalPagado = items.reduce((s, c) => s + (c.pagadoEnEstePago ?? c.commissionAmount), 0)
+    const totalRestante = items.reduce((s, c) => s + (c.restante ?? 0), 0)
+    const comisionTotal = items.reduce((s, c) => s + c.commissionAmount, 0)
+    // Parte de estas comisiones que ya estaba cubierta por pagos anteriores.
+    const cubiertoPrevio = comisionTotal - totalPagado - totalRestante
+
+    const rows = (list: ComisionPdfItem[]) =>
       list.map((c) => `
         <tr>
           <td>${formatDate(c.createdAt)}</td>
@@ -327,6 +340,8 @@ export default function EmpleadosPage() {
           <td class="num">${formatCurrency(c.saleTotal)}</td>
           <td class="num">${c.commissionRate}%</td>
           <td class="num">${formatCurrency(c.commissionAmount)}</td>
+          ${conImputacion ? `<td class="num">${formatCurrency(c.pagadoEnEstePago ?? 0)}</td>
+          <td class="num${(c.restante ?? 0) > 0.009 ? ' falta' : ''}">${formatCurrency(c.restante ?? 0)}</td>` : ''}
         </tr>`).join('')
 
     const html = `<!doctype html><html><head><meta charset="utf-8"/>
@@ -353,6 +368,10 @@ export default function EmpleadosPage() {
         .paso.final { background: #ecfdf5; border: 2px solid #5eead4; border-radius: 10px; margin-top: 8px; padding: 12px; }
         .paso.final .lbl { font-size: 16px; font-weight: bold; }
         .paso.final .v { font-size: 22px; color: #0d9488; }
+        .paso.pend { background: #fffbeb; border: 2px solid #fcd34d; border-radius: 10px; margin-top: 6px; padding: 10px; }
+        .paso.pend .lbl { font-size: 14px; font-weight: bold; color: #92400e; }
+        .paso.pend .v { font-size: 18px; color: #b45309; }
+        td.falta { color: #b45309; font-weight: bold; }
         .footer { margin-top: 24px; font-size: 10px; color: #888; }
       </style></head><body>
       <h1>Liquidación de Comisiones</h1>
@@ -362,12 +381,12 @@ export default function EmpleadosPage() {
       <p class="sub"><strong>Ventas incluidas:</strong> ${ventas.length} — Total ventas: ${formatCurrency(totalVentas)}</p>
       <h2>Ventas y comisiones</h2>
       <table>
-        <thead><tr><th>Fecha</th><th>Venta</th><th>Cliente</th><th class="num">Total venta</th><th class="num">%</th><th class="num">Comisión</th></tr></thead>
-        <tbody>${ventas.length ? rows(ventas) : '<tr><td colspan="6">Sin ventas en el período</td></tr>'}</tbody>
+        <thead><tr><th>Fecha</th><th>Venta</th><th>Cliente</th><th class="num">Total venta</th><th class="num">%</th><th class="num">Comisión</th>${conImputacion ? '<th class="num">Se le paga</th><th class="num">Queda por pagar</th>' : ''}</tr></thead>
+        <tbody>${ventas.length ? rows(ventas) : `<tr><td colspan="${conImputacion ? 8 : 6}">Sin ventas en el período</td></tr>`}</tbody>
       </table>
       ${devol.length ? `<h2>Devoluciones / ajustes</h2>
       <table>
-        <thead><tr><th>Fecha</th><th>Ref.</th><th>Cliente</th><th class="num">Total</th><th class="num">%</th><th class="num">Ajuste</th></tr></thead>
+        <thead><tr><th>Fecha</th><th>Ref.</th><th>Cliente</th><th class="num">Total</th><th class="num">%</th><th class="num">Ajuste</th>${conImputacion ? '<th class="num">Se le paga</th><th class="num">Queda por pagar</th>' : ''}</tr></thead>
         <tbody>${rows(devol)}</tbody>
       </table>` : ''}
       <h2>Cómo se calcula lo que se le paga</h2>
@@ -376,7 +395,10 @@ export default function EmpleadosPage() {
         <div class="paso"><span><span class="n">2</span>Devoluciones</span><span class="v neg">− ${formatCurrency(devMonto)}</span></div>
         <div class="paso sub"><span style="margin-left:28px">Venta menos devolución</span><span class="v">${formatCurrency(ventasNetas)}</span></div>
         <div class="paso"><span><span class="n">3</span>Comisión ${seller.commissionRate}%</span><span class="v" style="font-weight:normal;color:#555;font-size:11px">${seller.commissionRate}% × ${formatCurrency(ventasNetas)}</span></div>
+        <div class="paso sub"><span style="margin-left:28px">Comisión de estas ventas</span><span class="v">${formatCurrency(comisionTotal)}</span></div>
+        ${conImputacion && cubiertoPrevio > 0.009 ? `<div class="paso"><span><span class="n">4</span>Ya cobrado antes</span><span class="v neg">− ${formatCurrency(cubiertoPrevio)}</span></div>` : ''}
         <div class="paso final"><span class="lbl">Se le paga</span><span class="v">${formatCurrency(monto)}</span></div>
+        ${conImputacion && totalRestante > 0.009 ? `<div class="paso pend"><span class="lbl">Queda por pagar</span><span class="v">${formatCurrency(totalRestante)}</span></div>` : ''}
       </div>
       <div class="footer">Generado el ${stamp} — Distribuidora Patricia</div>
       </body></html>`

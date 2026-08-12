@@ -61,33 +61,43 @@ export function imputarComisiones<T extends ComisionImputable>(
   }
 }
 
+/** Comisión tocada por un pago, con la venta y la comisión originales intactas. */
+export type ComisionDelPago<T> = T & {
+  /** Lo que ESTE pago aplicó sobre esta comisión. */
+  pagadoEnEstePago: number
+  /** Total cubierto de esta comisión contando pagos anteriores. */
+  cubiertoAcumulado: number
+  /** Lo que todavía falta pagar de esta comisión. */
+  restante: number
+}
+
 /**
- * Comisiones cubiertas por UN pago concreto: la diferencia entre imputar
+ * Comisiones que tocó UN pago concreto: la diferencia entre imputar
  * `acumuladoAntes` y `acumuladoAntes + montoPago`. Sirve para el comprobante,
- * que debe listar solo lo que ese pago alcanzó a cubrir.
+ * que lista solo lo que ese pago alcanzó a cubrir.
  *
- * En la comisión que queda parcial se prorratea también el total de la venta,
- * para que "comisión % × ventas netas" siga cerrando con lo que se pagó.
+ * La venta y la comisión se devuelven SIN modificar — un pago parcial no cambia
+ * la comisión que se generó, solo cuánto de ella quedó cubierto.
  */
-export function comisionesDelPago<T extends ComisionImputable & { saleTotal: number }>(
+export function comisionesDelPago<T extends ComisionImputable>(
   comisiones: T[],
   acumuladoAntes: number,
   montoPago: number,
-): T[] {
+): ComisionDelPago<T>[] {
   const antes = imputarComisiones(comisiones, acumuladoAntes).items
   const despues = imputarComisiones(comisiones, acumuladoAntes + montoPago).items
 
-  const cubiertas: T[] = []
+  const tocadas: ComisionDelPago<T>[] = []
   for (let i = 0; i < comisiones.length; i++) {
     const delta = despues[i].montoImputado - antes[i].montoImputado
     if (Math.abs(delta) < EPSILON) continue
-    const original = comisiones[i].commissionAmount || 0
-    const proporcion = original !== 0 ? delta / original : 1
-    cubiertas.push({
+    const cubierto = despues[i].montoImputado
+    tocadas.push({
       ...comisiones[i],
-      commissionAmount: delta,
-      saleTotal: comisiones[i].saleTotal * proporcion,
+      pagadoEnEstePago: delta,
+      cubiertoAcumulado: cubierto,
+      restante: (comisiones[i].commissionAmount || 0) - cubierto,
     })
   }
-  return cubiertas.sort((a, b) => a.createdAt.getTime() - b.createdAt.getTime())
+  return tocadas.sort((a, b) => a.createdAt.getTime() - b.createdAt.getTime())
 }
