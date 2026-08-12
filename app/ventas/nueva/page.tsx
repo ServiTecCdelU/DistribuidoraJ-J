@@ -348,8 +348,8 @@ function NuevaVentaContent({
   }
 
   return (
-    <MainLayout allowedRoles={['admin', 'seller']} title="Nueva Venta" description="Registra una nueva venta">
-      <div className="space-y-4 pb-24">
+    <MainLayout allowedRoles={['admin', 'seller']} title="Nueva Venta">
+      <div className="space-y-4 pb-20">
         <PageHeader
           description={
             state.deliveryMethod === "delivery"
