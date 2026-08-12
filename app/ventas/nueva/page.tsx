@@ -543,45 +543,53 @@ const ProductListItem = memo(function ProductListItem({
 
   return (
     <div className={cn(
-      "px-3 py-3 rounded-xl border transition-colors space-y-1.5",
+      "px-3 py-3 rounded-xl border transition-colors",
       quantity > 0
         ? "bg-teal-50/60 border-teal-200 dark:bg-teal-950/20 dark:border-teal-800"
         : "bg-card border-border",
     )}>
-      {/* Nombre — línea completa */}
-      <div className="flex items-center gap-2 min-w-0">
-        <p className="font-medium text-sm leading-tight truncate flex-1">{product.name}</p>
-        {product.description && (
-          <span className="hidden lg:inline shrink-0 text-[11px] font-mono text-muted-foreground">
-            #{product.description}
-          </span>
-        )}
-        {ofertaActiva && (
-          <Badge className="h-5 px-1.5 text-[10px] shrink-0 gap-0.5 bg-teal-100 text-teal-700 hover:bg-teal-100 border border-teal-200">
-            <Percent className="h-2.5 w-2.5" />
-            hasta {descuento}% dto.
-          </Badge>
-        )}
-      </div>
-
-      {/* Fila inferior: info + precio + controles */}
       <div className="flex items-center gap-2">
-        {/* Stock y lote */}
-        <div className="flex items-center gap-2 flex-1 min-w-0">
-          {stockLocal !== undefined && (
-            <span className={cn(
-              "text-[11px] font-medium shrink-0",
-              stockLocal === 0 ? "text-rose-500" : "text-emerald-600"
-            )}>
-              {stockLocal === 0 ? "Sin stock" : `${stockLocal} en stock`}
-            </span>
-          )}
-          {unidadesLote && (
-            <>
-              {stockLocal !== undefined && <span className="text-[11px] text-muted-foreground">·</span>}
-              <span className="text-[11px] text-muted-foreground shrink-0">{unidadesLote} u./lote</span>
-            </>
-          )}
+        {/* Info del producto. En desktop se alinea en tabla:
+            código | descripción  /  stock | u./lote */}
+        <div className="flex-1 min-w-0 space-y-1.5 lg:space-y-1 lg:grid lg:grid-cols-[7rem_minmax(0,1fr)] lg:gap-x-4">
+          {/* Código */}
+          <p className="hidden lg:block font-bold text-sm leading-tight truncate tabular-nums">
+            {product.description || ""}
+          </p>
+
+          {/* Descripción */}
+          <div className="flex items-center gap-2 min-w-0">
+            <p className="font-medium text-sm leading-tight truncate">{product.name}</p>
+            {ofertaActiva && (
+              <Badge className="h-5 px-1.5 text-[10px] shrink-0 gap-0.5 bg-teal-100 text-teal-700 hover:bg-teal-100 border border-teal-200">
+                <Percent className="h-2.5 w-2.5" />
+                hasta {descuento}% dto.
+              </Badge>
+            )}
+          </div>
+
+          {/* Stock (en mobile lleva el lote al lado) */}
+          <div className="flex items-center gap-2 min-w-0">
+            {stockLocal !== undefined && (
+              <span className={cn(
+                "text-[11px] font-medium shrink-0",
+                stockLocal === 0 ? "text-rose-500" : "text-emerald-600"
+              )}>
+                {stockLocal === 0 ? "Sin stock" : `${stockLocal} en stock`}
+              </span>
+            )}
+            {unidadesLote && (
+              <span className="lg:hidden flex items-center gap-2 shrink-0">
+                {stockLocal !== undefined && <span className="text-[11px] text-muted-foreground">·</span>}
+                <span className="text-[11px] text-muted-foreground">{unidadesLote} u./lote</span>
+              </span>
+            )}
+          </div>
+
+          {/* Lote — columna propia en desktop */}
+          <span className="hidden lg:block text-[11px] text-muted-foreground truncate">
+            {unidadesLote ? `${unidadesLote} u./lote` : ""}
+          </span>
         </div>
 
         {/* Precio */}
