@@ -101,8 +101,8 @@ export default function ComisionesPage() {
           {/* ── Filtro de período ── */}
           <Card className="mb-4">
             <CardContent className="p-3 flex flex-col gap-3">
-              <div className="flex flex-wrap items-center gap-2">
-                <div className="flex gap-1">
+              <div className="flex flex-wrap items-center justify-center sm:justify-start gap-2">
+                <div className="flex gap-1 w-full sm:w-auto justify-center">
                   {([
                     ['month', 'Mes'],
                     ['day', 'Por día'],
@@ -121,7 +121,7 @@ export default function ComisionesPage() {
                 </div>
 
                 {mode === 'month' && (
-                  <div className="flex items-center gap-1 ml-auto">
+                  <div className="flex items-center gap-1 w-full sm:w-auto justify-center sm:ml-auto">
                     <Button size="icon" variant="outline" className="rounded-2xl h-8 w-8" onClick={() => setAnchor(shiftMonth(anchor, -1))} aria-label="Mes anterior">
                       <ChevronLeft className="h-4 w-4" />
                     </Button>
@@ -133,20 +133,20 @@ export default function ComisionesPage() {
                 )}
 
                 {mode === 'day' && (
-                  <div className="flex items-center gap-2 ml-auto">
+                  <div className="flex items-center gap-2 w-full sm:w-auto justify-center sm:ml-auto">
                     <Input type="date" value={day} onChange={(e) => setDay(e.target.value)} className="rounded-2xl h-8 w-[160px]" />
                   </div>
                 )}
 
                 {mode === 'custom' && (
-                  <div className="flex items-center gap-2 ml-auto flex-wrap">
+                  <div className="flex items-center gap-2 w-full sm:w-auto justify-center sm:ml-auto flex-wrap">
                     <Input type="date" value={dateFrom} onChange={(e) => setDateFrom(e.target.value)} className="rounded-2xl h-8 w-[150px]" />
                     <span className="text-xs text-muted-foreground">a</span>
                     <Input type="date" value={dateTo} onChange={(e) => setDateTo(e.target.value)} className="rounded-2xl h-8 w-[150px]" />
                   </div>
                 )}
               </div>
-              <p className="text-xs text-muted-foreground">
+              <p className="text-xs text-muted-foreground text-center sm:text-left">
                 {range
                   ? `${formatDate(range.from)} — ${formatDate(range.to)} · ${filtered.length} registros`
                   : `Todas las comisiones · ${filtered.length} registros`}
