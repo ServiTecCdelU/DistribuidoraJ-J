@@ -551,7 +551,7 @@ const ProductListItem = memo(function ProductListItem({
       <div className="flex items-center gap-2">
         {/* Info del producto. En desktop se alinea en tabla:
             código | descripción  /  stock | u./lote */}
-        <div className="flex-1 min-w-0 space-y-1.5 lg:space-y-1 lg:grid lg:grid-cols-[7rem_minmax(0,1fr)] lg:gap-x-4">
+        <div className="flex-1 min-w-0 space-y-1.5 lg:space-y-1 lg:grid lg:grid-cols-[5.25rem_minmax(0,1fr)] lg:gap-x-2">
           {/* Código */}
           <p className="hidden lg:block font-bold text-sm leading-tight truncate tabular-nums">
             {product.description || ""}
