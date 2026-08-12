@@ -8,7 +8,6 @@
 // SIN necesidad de Chromium ni ninguna API server-side
 import { Document, Page, Text, View, StyleSheet, Image, pdf } from "@react-pdf/renderer";
 import { formatCurrencyDecimals as formatCurrency } from "@/lib/utils/format";
-import { fechaDiaDePago } from "@/lib/utils/deuda";
 
 // ===================== TIPOS =====================
 export interface VentaItem {
@@ -30,6 +29,8 @@ export interface Venta {
   sellerName?: string;
   saldoAnterior?: number;
   cuentaCorrienteHabilitada?: boolean;
+  /** Día de visita/cobro del cliente (lunes..domingo). Se imprime como "Día de Pago" en el remito. */
+  diaCobro?: string;
   items: VentaItem[];
   total: number;
   paymentType: "cash" | "credit" | "mixed";
@@ -685,19 +686,6 @@ const fmtDateGuia = (date: any): string => {
   } catch { return "—"; }
 };
 
-/** Convierte valores legacy (Timestamp, Date, string) a Date. */
-const toDateGuia = (date: any): Date | null => {
-  if (!date) return null;
-  try {
-    let d: Date;
-    if (date?.toDate) d = date.toDate();
-    else if (date instanceof Date) d = date;
-    else if (date?.seconds) d = new Date(date.seconds * 1000);
-    else d = new Date(date);
-    return isNaN(d.getTime()) ? null : d;
-  } catch { return null; }
-};
-
 /** Es cuenta corriente (tiene día de pago). */
 const esCuentaCorriente = (condVenta: string): boolean =>
   /C\.?C\.?|CTA\s*CTE/i.test(condVenta);
@@ -756,14 +744,13 @@ const GuiaCopia = ({
     (venta as any).sellerCode ||
     (venta.sellerName ? venta.sellerName.trim().split(/\s+/)[0] : "");
   const deposito: string = (venta as any).deposito || "";
-  // Día de pago: solo en cuenta corriente, a los 7 días de la fecha del remito
-  const diaPago = esCuentaCorriente(condVenta)
-    ? fechaDiaDePago(toDateGuia(venta.createdAt))
-    : null;
+  // Día de pago: día de visita/cobro del cliente, solo si es cuenta corriente
+  const diaCobro: string = ((venta as any).diaCobro || "").trim();
+  const diaPago = esCuentaCorriente(condVenta) && diaCobro ? diaCobro.toUpperCase() : "";
   const vendDepStr = [
     sellerCode ? `Vend.: ${sellerCode}` : null,
     deposito ? `Dep: ${deposito}` : null,
-    diaPago ? `Día de Pago: ${fmtDateGuia(diaPago)}` : null,
+    diaPago ? `Día de Pago: ${diaPago}` : null,
   ]
     .filter(Boolean)
     .join("  ");

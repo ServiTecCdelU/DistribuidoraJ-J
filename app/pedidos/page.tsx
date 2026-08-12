@@ -21,6 +21,7 @@ import { OrderDetailModal } from "@/components/pedidos/order-detail-modal";
 import { PaymentModal, type ItemAdjustment } from "@/components/pedidos/payment-modal";
 import { SuccessModal } from "@/components/pedidos/success-modal";
 import { StockCheckModal, type StockCheckItem, type ReplacementOption } from "@/components/pedidos/stock-check-modal";
+import { DiaPagoModal } from "@/components/pedidos/dia-pago-modal";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { statusConfig } from "@/lib/order-constants";
 import { formatCurrency as formatPrice, formatTime } from "@/lib/utils/format";
@@ -145,6 +146,16 @@ export default function PedidosPage() {
   const [stockCheckOpen, setStockCheckOpen] = useState(false);
   const [stockCheckItems, setStockCheckItems] = useState<StockCheckItem[]>([]);
   const [stockCheckOrder, setStockCheckOrder] = useState<Order | null>(null);
+
+  // Recordatorio de día de pago: cliente con cuenta corriente sin día asignado, antes de generar el remito
+  type RemitoArgs = {
+    order: Order;
+    excludeProductIds: string[];
+    replacements: Record<string, ReplacementOption>;
+    quantities: Record<string, number>;
+    discounts: Record<string, number>;
+  };
+  const [diaPagoPending, setDiaPagoPending] = useState<RemitoArgs | null>(null);
 
 
   // Success state
@@ -301,6 +312,7 @@ export default function PedidosPage() {
         remitoNumber,
         saldoAnterior: clienteRemito?.currentBalance ?? 0,
         cuentaCorrienteHabilitada: clienteRemito?.cuentaCorrienteHabilitada !== false,
+        diaCobro: clienteRemito?.diaCobro,
       };
 
       const { generarPdfCliente } = await import("@/hooks/useGenerarPdf");
@@ -383,12 +395,43 @@ export default function PedidosPage() {
 
   const handleStockCheckConfirm = useCallback(async (excludeProductIds: string[], replacements: Record<string, ReplacementOption>, quantities: Record<string, number>, discounts: Record<string, number>) => {
     setStockCheckOpen(false);
-    if (stockCheckOrder) {
-      await generateRemitoForOrder(stockCheckOrder, excludeProductIds, replacements, quantities, discounts);
-    }
+    const order = stockCheckOrder;
     setStockCheckOrder(null);
     setStockCheckItems([]);
+    if (!order) return;
+
+    // Si el cliente es cuenta corriente y no tiene día de pago, recordarlo antes de emitir el remito
+    const cliente = order.clientId
+      ? await clientsApi.getById(order.clientId).catch(() => undefined)
+      : undefined;
+    if (cliente && cliente.cuentaCorrienteHabilitada !== false && !cliente.diaCobro) {
+      setDiaPagoPending({ order, excludeProductIds, replacements, quantities, discounts });
+      return;
+    }
+
+    await generateRemitoForOrder(order, excludeProductIds, replacements, quantities, discounts);
   }, [stockCheckOrder, generateRemitoForOrder]);
+
+  const handleDiaPagoSave = useCallback(async (diaCobro: string) => {
+    const pending = diaPagoPending;
+    if (!pending) return;
+    try {
+      if (pending.order.clientId) {
+        await clientsApi.update(pending.order.clientId, { diaCobro });
+      }
+    } catch {
+      toast.error("No se pudo guardar el día de pago");
+    }
+    setDiaPagoPending(null);
+    await generateRemitoForOrder(pending.order, pending.excludeProductIds, pending.replacements, pending.quantities, pending.discounts);
+  }, [diaPagoPending, generateRemitoForOrder]);
+
+  const handleDiaPagoLater = useCallback(async () => {
+    const pending = diaPagoPending;
+    if (!pending) return;
+    setDiaPagoPending(null);
+    await generateRemitoForOrder(pending.order, pending.excludeProductIds, pending.replacements, pending.quantities, pending.discounts);
+  }, [diaPagoPending, generateRemitoForOrder]);
 
   // Busca productos del mismo tipo (otra marca) con stock para reemplazar un faltante
   const findReplacements = useCallback(async (item: StockCheckItem): Promise<ReplacementOption[]> => {
@@ -2267,6 +2310,13 @@ tbody tr:nth-child(even){background:#fafafa}
         onConfirm={handleStockCheckConfirm}
         findReplacements={findReplacements}
         searchReplacements={searchReplacementProducts}
+      />
+
+      <DiaPagoModal
+        open={!!diaPagoPending}
+        clientName={diaPagoPending?.order.clientName}
+        onSave={handleDiaPagoSave}
+        onLater={handleDiaPagoLater}
       />
 
       <PaymentModal

@@ -11,15 +11,6 @@ export function diasDesde(fecha?: Date | null, ahora: Date = new Date()): number
   return Math.max(0, Math.floor((ahora.getTime() - fecha.getTime()) / 86400000))
 }
 
-/** Fecha del día de pago: la fecha de la venta más el plazo de cuenta corriente. */
-export function fechaDiaDePago(desde?: Date | null): Date | null {
-  if (!desde) return null
-  const d = new Date(desde.getTime())
-  if (isNaN(d.getTime())) return null
-  d.setDate(d.getDate() + DIAS_ATRASADO)
-  return d
-}
-
 export type EstadoDiaPago = 'falta' | 'hoy' | 'atrasado' | 'moroso' | 'incobrable'
 
 export interface DiaDePagoInfo {

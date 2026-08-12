@@ -656,17 +656,19 @@ export function useVentas(filterBySellerId?: string, clientCityMap?: Record<stri
         const remitoNumber = `R-${new Date().getFullYear()}-${String(ultimoNumero + 1).padStart(5, "0")}`;
 
         let saldoAnterior: number | undefined = undefined;
+        let diaCobro: string | undefined = undefined;
         if (venta.clientId) {
           try {
-            const { data: clientRow } = await supabase.from("clientes").select("current_balance").eq("id", venta.clientId).single();
+            const { data: clientRow } = await supabase.from("clientes").select("current_balance, dia_cobro").eq("id", venta.clientId).single();
             if (clientRow) {
               const bal = Number(clientRow.current_balance);
               if (bal !== 0) saldoAnterior = bal;
+              diaCobro = clientRow.dia_cobro ?? undefined;
             }
           } catch {}
         }
 
-        const pdfBase64 = await generarPdfCompleto({ ...venta, remitoNumber, saldoAnterior }, "remito");
+        const pdfBase64 = await generarPdfCompleto({ ...venta, remitoNumber, saldoAnterior, diaCobro }, "remito");
         await supabase.from("ventas").update({
           remito_pdf_base64: pdfBase64, remito_number: remitoNumber,
         }).eq("id", venta.id);
