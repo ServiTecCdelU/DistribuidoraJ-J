@@ -327,7 +327,7 @@ export default function PedidosPage() {
             productoId: mov.productId,
             tipo: "venta",
             cantidad: mov.cantidad,
-            referencia: `Remito ${remitoNumber}`,
+            referencia: `Remito ${remitoNumber} pedido #${order.id}`,
           });
         }
         await ordersApi.markStockDescontado(order.id);
