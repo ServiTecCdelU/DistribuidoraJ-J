@@ -1317,34 +1317,45 @@ export default function EmpleadosPage() {
                 )}
               </div>
 
-              {/* Stats */}
-              <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-                <div className="rounded-xl p-4 bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800">
-                  <p className="text-xs text-muted-foreground font-medium uppercase tracking-wide mb-1">Ventas Totales</p>
-                  <p className="font-bold text-xl text-foreground">
-                    {formatCurrency(allSalesTotal)}
-                  </p>
-                  <p className="text-xs text-muted-foreground">Neto (− devol.): {formatCurrency(ventasNetas)}</p>
+              {/* Stats: 3 tarjetas, dos metricas por tarjeta */}
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                <div className="rounded-2xl p-2.5 bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 grid grid-cols-2 gap-2">
+                  <div className="min-w-0">
+                    <p className="text-[10px] text-muted-foreground font-medium uppercase tracking-wide leading-none">Ventas totales</p>
+                    <p className="font-bold text-sm text-foreground whitespace-nowrap mt-1">{formatCurrency(allSalesTotal)}</p>
+                    <p className="text-[9px] text-muted-foreground leading-tight">{ventaEntries.length} ventas</p>
+                  </div>
+                  <div className="min-w-0 border-l border-amber-200 dark:border-amber-800 pl-2">
+                    <p className="text-[10px] text-muted-foreground font-medium uppercase tracking-wide leading-none">Comisiones totales</p>
+                    <p className="font-bold text-sm text-emerald-600 dark:text-emerald-400 whitespace-nowrap mt-1">{formatCurrency(comisionesBrutas)}</p>
+                    <p className="text-[9px] text-muted-foreground leading-tight">sin restar devoluciones</p>
+                  </div>
                 </div>
-                <div className="rounded-xl p-4 bg-emerald-50 dark:bg-emerald-900/20 border border-emerald-200 dark:border-emerald-800">
-                  <p className="text-xs text-muted-foreground font-medium uppercase tracking-wide mb-1">Comisiones Totales</p>
-                  <p className="font-bold text-xl text-emerald-600 dark:text-emerald-400">
-                    {formatCurrency(comisionesBrutas)}
-                  </p>
+
+                <div className="rounded-2xl p-2.5 bg-rose-50 dark:bg-rose-900/20 border border-rose-200 dark:border-rose-800 grid grid-cols-2 gap-2">
+                  <div className="min-w-0">
+                    <p className="text-[10px] text-muted-foreground font-medium uppercase tracking-wide leading-none">Devoluciones</p>
+                    <p className="font-bold text-sm text-rose-600 dark:text-rose-400 whitespace-nowrap mt-1">{formatCurrency(Math.abs(devolucionesTotal))}</p>
+                    <p className="text-[9px] text-muted-foreground leading-tight">{devEntries.length} {devEntries.length === 1 ? 'devolucion' : 'devoluciones'}</p>
+                  </div>
+                  <div className="min-w-0 border-l border-rose-200 dark:border-rose-800 pl-2">
+                    <p className="text-[10px] text-muted-foreground font-medium uppercase tracking-wide leading-none">Comisiones finales</p>
+                    <p className="font-bold text-sm text-teal-600 dark:text-teal-400 whitespace-nowrap mt-1">{formatCurrency(comisionesFinales)}</p>
+                    <p className="text-[9px] text-muted-foreground leading-tight">comisiones menos devoluciones</p>
+                  </div>
                 </div>
-                <div className="rounded-xl p-4 bg-rose-50 dark:bg-rose-900/20 border border-rose-200 dark:border-rose-800">
-                  <p className="text-xs text-muted-foreground font-medium uppercase tracking-wide mb-1">Devoluciones</p>
-                  <p className="font-bold text-xl text-rose-600 dark:text-rose-400">
-                    {formatCurrency(Math.abs(devolucionesTotal))}
-                  </p>
-                  <p className="text-xs text-muted-foreground">{devEntries.length} {devEntries.length === 1 ? 'devolución' : 'devoluciones'}</p>
-                </div>
-                <div className="rounded-xl p-4 bg-teal-50 dark:bg-teal-900/20 border border-teal-200 dark:border-teal-800">
-                  <p className="text-xs text-muted-foreground font-medium uppercase tracking-wide mb-1">Comisiones Finales</p>
-                  <p className="font-bold text-xl text-teal-600 dark:text-teal-400">
-                    {formatCurrency(comisionesFinales)}
-                  </p>
-                  <p className="text-xs text-muted-foreground">Comisiones − devoluciones</p>
+
+                <div className="rounded-2xl p-2.5 bg-teal-50 dark:bg-teal-900/20 border border-teal-200 dark:border-teal-800 grid grid-cols-2 gap-2">
+                  <div className="min-w-0">
+                    <p className="text-[10px] text-muted-foreground font-medium uppercase tracking-wide leading-none">Comisiones pagadas</p>
+                    <p className="font-bold text-sm text-emerald-600 dark:text-emerald-400 whitespace-nowrap mt-1">{formatCurrency(resumenDetalle.cobrado)}</p>
+                    <p className="text-[9px] text-muted-foreground leading-tight">lo que ya le pague</p>
+                  </div>
+                  <div className="min-w-0 border-l border-teal-200 dark:border-teal-800 pl-2">
+                    <p className="text-[10px] text-muted-foreground font-medium uppercase tracking-wide leading-none">Comisiones por pagar</p>
+                    <p className="font-bold text-sm text-amber-600 dark:text-amber-400 whitespace-nowrap mt-1">{formatCurrency(resumenDetalle.pendiente)}</p>
+                    <p className="text-[9px] text-muted-foreground leading-tight">lo que falta pagar</p>
+                  </div>
                 </div>
               </div>
 
@@ -1489,7 +1500,7 @@ export default function EmpleadosPage() {
                 </div>
               )}
 
-              {/* Historial de pagos realizados */}
+              {/* Historial de pagos: una fila por pago */}
               {pagos.length === 0 ? (
                 <div className="text-center py-8 text-muted-foreground border rounded-lg border-dashed">
                   <Banknote className="h-8 w-8 mx-auto mb-2 opacity-50" />
@@ -1497,88 +1508,104 @@ export default function EmpleadosPage() {
                 </div>
               ) : (
                 <div>
-                  <h4 className="font-semibold text-foreground mb-3">Historial de Pagos</h4>
-                  <div className="space-y-2 max-h-[400px] overflow-y-auto">
-                    {pagos.map((pago: any) => {
-                      const isOpen = expandedPagoId === pago.id
-                      const pagoItems = isOpen ? getPagoItems(pago) : []
-                      return (
-                      <div key={pago.id} className="rounded-lg border bg-emerald-50/50 dark:bg-emerald-900/10 border-emerald-200 dark:border-emerald-800 overflow-hidden">
-                        <div className="p-3">
-                          <div className="flex items-center justify-between gap-2">
-                            <div className="flex items-center gap-2 min-w-0">
-                              <Banknote className="h-4 w-4 text-emerald-600 shrink-0" />
-                              <span className="font-semibold text-foreground">{formatCurrency(pago.montoPagado ?? pago.monto)}</span>
-                            </div>
-                            <span className="text-xs text-muted-foreground shrink-0">{formatDate(pago.fechaPago ?? pago.createdAt)}</span>
-                          </div>
-                          <p className="text-xs text-muted-foreground mt-1">
-                            Devengado {formatCurrency(pago.monto)} · {pago.cantidadComisiones} comisiones
-                            {(pago.periodoDesde || pago.periodoHasta) && (
-                              <> · Período {pago.periodoDesde ? formatDate(pago.periodoDesde) : '—'} al {pago.periodoHasta ? formatDate(pago.periodoHasta) : '—'}</>
-                            )}
-                            {pago.nota && <> — {pago.nota}</>}
-                          </p>
-                          {pago.montoPagado != null && Math.abs(pago.montoPagado - pago.monto) > 0.01 && (
-                            <p className="text-xs mt-0.5">
-                              {pago.montoPagado < pago.monto ? (
-                                <span className="text-amber-600">
-                                  Pago parcial — faltaron {formatCurrency(pago.monto - pago.montoPagado)}
-                                </span>
-                              ) : (
-                                <span className="text-teal-600">
-                                  Pagó {formatCurrency(pago.montoPagado - pago.monto)} de más (a cuenta)
-                                </span>
-                              )}
-                            </p>
-                          )}
-                          <div className="flex items-center gap-2 mt-2">
-                            <Button
-                              variant="outline"
-                              size="sm"
-                              className="h-7 text-xs gap-1 bg-transparent"
-                              onClick={() => setExpandedPagoId(isOpen ? null : pago.id)}
-                            >
-                              <ChevronDown className={`h-3.5 w-3.5 transition-transform ${isOpen ? 'rotate-180' : ''}`} />
-                              {isOpen ? 'Ocultar' : 'Ver detalle'}
-                            </Button>
-                            <Button
-                              variant="outline"
-                              size="sm"
-                              className="h-7 text-xs gap-1 bg-transparent"
-                              onClick={() => handlePagoPdf(pago)}
-                            >
-                              <Eye className="h-3.5 w-3.5" />
-                              PDF
-                            </Button>
-                          </div>
-                        </div>
-                        {isOpen && (
-                          <div className="border-t border-emerald-200 dark:border-emerald-800 bg-background/40 divide-y divide-border/60">
-                            {pagoItems.length === 0 ? (
-                              <p className="p-3 text-xs text-muted-foreground">No se encontraron las comisiones de este cobro.</p>
-                            ) : (
-                              pagoItems.map((c) => (
-                                <div key={c.id} className="flex items-center justify-between gap-2 px-3 py-2 text-sm">
-                                  <div className="min-w-0">
-                                    <p className="text-foreground truncate">
-                                      {c.saleNumber ? `Venta ${c.saleNumber}` : 'Venta'}{c.clientName ? ` · ${c.clientName}` : ''}
-                                    </p>
-                                    <p className="text-xs text-muted-foreground">
-                                      {formatDate(c.createdAt)} · {formatCurrency(c.saleTotal)} × {c.commissionRate}%
-                                    </p>
-                                  </div>
-                                  <span className={`font-semibold tabular-nums shrink-0 ${c.commissionAmount < 0 ? 'text-rose-600 dark:text-rose-400' : 'text-emerald-600 dark:text-emerald-400'}`}>
-                                    {formatCurrency(c.commissionAmount)}
-                                  </span>
-                                </div>
-                              ))
-                            )}
-                          </div>
-                        )}
-                      </div>
-                      )
-                    })}
+                  <h4 className="font-semibold text-foreground mb-2 text-sm">Historial de Pagos ({pagos.length})</h4>
+                  <div className="rounded-2xl border overflow-hidden">
+                    <div className="max-h-[min(360px,45vh)] overflow-auto">
+                      <table className="w-full text-xs">
+                        <thead className="bg-muted/50 sticky top-0">
+                          <tr className="[&>th]:px-2 [&>th]:py-1.5 [&>th]:font-medium [&>th]:text-muted-foreground [&>th]:whitespace-nowrap">
+                            <th className="text-left">Fecha</th>
+                            <th className="text-left">Periodo</th>
+                            <th className="text-right">Devengado</th>
+                            <th className="text-right">Pagado</th>
+                            <th className="text-center">Com.</th>
+                            <th className="text-left">Nota</th>
+                            <th className="text-right">Acciones</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y">
+                          {pagos.map((pago: any) => {
+                            const isOpen = expandedPagoId === pago.id
+                            const pagoItems = isOpen ? getPagoItems(pago) : []
+                            const pagado = pago.montoPagado ?? pago.monto
+                            const dif = pagado - pago.monto
+                            return (
+                              <React.Fragment key={pago.id}>
+                                <tr className="hover:bg-muted/30">
+                                  <td className="px-2 py-1.5 whitespace-nowrap">{formatDate(pago.fechaPago ?? pago.createdAt)}</td>
+                                  <td className="px-2 py-1.5 whitespace-nowrap text-muted-foreground">
+                                    {pago.periodoDesde || pago.periodoHasta
+                                      ? `${pago.periodoDesde ? formatDate(pago.periodoDesde) : '-'} al ${pago.periodoHasta ? formatDate(pago.periodoHasta) : '-'}`
+                                      : '-'}
+                                  </td>
+                                  <td className="px-2 py-1.5 text-right tabular-nums whitespace-nowrap">{formatCurrency(pago.monto)}</td>
+                                  <td className="px-2 py-1.5 text-right tabular-nums whitespace-nowrap font-semibold text-emerald-600 dark:text-emerald-400">
+                                    {formatCurrency(pagado)}
+                                    {Math.abs(dif) > 0.01 && (
+                                      <span className={`block text-[10px] font-normal ${dif < 0 ? 'text-amber-600' : 'text-teal-600'}`}>
+                                        {dif < 0 ? `falto ${formatCurrency(-dif)}` : `+${formatCurrency(dif)} a cuenta`}
+                                      </span>
+                                    )}
+                                  </td>
+                                  <td className="px-2 py-1.5 text-center text-muted-foreground">{pago.cantidadComisiones}</td>
+                                  <td className="px-2 py-1.5 text-muted-foreground max-w-[120px] truncate">{pago.nota || '-'}</td>
+                                  <td className="px-2 py-1.5">
+                                    <div className="flex items-center justify-end gap-1">
+                                      <Button
+                                        variant="ghost"
+                                        size="icon"
+                                        className="h-6 w-6"
+                                        title={isOpen ? 'Ocultar detalle' : 'Ver detalle'}
+                                        onClick={() => setExpandedPagoId(isOpen ? null : pago.id)}
+                                      >
+                                        <ChevronDown className={`h-3.5 w-3.5 transition-transform ${isOpen ? 'rotate-180' : ''}`} />
+                                      </Button>
+                                      <Button
+                                        variant="ghost"
+                                        size="icon"
+                                        className="h-6 w-6"
+                                        title="Comprobante PDF"
+                                        onClick={() => handlePagoPdf(pago)}
+                                      >
+                                        <Eye className="h-3.5 w-3.5" />
+                                      </Button>
+                                    </div>
+                                  </td>
+                                </tr>
+                                {isOpen && (
+                                  <tr>
+                                    <td colSpan={7} className="bg-muted/20 px-2 py-2">
+                                      {pagoItems.length === 0 ? (
+                                        <p className="text-xs text-muted-foreground">No se encontraron las comisiones de este cobro.</p>
+                                      ) : (
+                                        <div className="space-y-1">
+                                          {pagoItems.map((c) => (
+                                            <div key={c.id} className="flex items-center justify-between gap-2 text-xs">
+                                              <span className="truncate text-muted-foreground">
+                                                {formatDate(c.createdAt)} - {c.saleNumber ? c.saleNumber : 'Venta'}{c.clientName ? ` - ${c.clientName}` : ''}
+                                              </span>
+                                              <span className="shrink-0 tabular-nums">
+                                                <span className="text-muted-foreground">com. {formatCurrency(c.commissionAmount)} </span>
+                                                <span className="font-semibold text-emerald-600 dark:text-emerald-400">
+                                                  pagado {formatCurrency((c as any).pagadoEnEstePago ?? c.commissionAmount)}
+                                                </span>
+                                                {((c as any).restante ?? 0) > 0.009 && (
+                                                  <span className="text-amber-600"> falta {formatCurrency((c as any).restante)}</span>
+                                                )}
+                                              </span>
+                                            </div>
+                                          ))}
+                                        </div>
+                                      )}
+                                    </td>
+                                  </tr>
+                                )}
+                              </React.Fragment>
+                            )
+                          })}
+                        </tbody>
+                      </table>
+                    </div>
                   </div>
                 </div>
               )}
