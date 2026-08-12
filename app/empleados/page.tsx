@@ -31,6 +31,8 @@ import type { Seller, SellerCommission, EmployeeType, Order } from '@/lib/types'
 import { formatCurrency, formatDate } from '@/lib/utils/format'
 import { statusConfig } from '@/lib/order-constants'
 import { resumenComisiones } from '@/lib/utils/comisiones'
+import { calcularPago, calcularSaldo, montoSugerido } from '@/lib/utils/comision-pago'
+import { toInputDate } from '@/lib/utils/comisiones-period'
 import {
   Plus,
   Search,
@@ -99,6 +101,13 @@ export default function EmpleadosPage() {
   const [comHasta, setComHasta] = useState('')
   const [comEstado, setComEstado] = useState<'pendiente' | 'pagado' | 'todos'>('pendiente')
   const [paying, setPaying] = useState(false)
+
+  // Modal de pago: monto (puede ser mayor/menor/igual), fecha real y nota
+  const [pagoModalOpen, setPagoModalOpen] = useState(false)
+  const [pagoMonto, setPagoMonto] = useState('')
+  const [pagoFecha, setPagoFecha] = useState('')
+  const [pagoNota, setPagoNota] = useState('')
+  const [saldoAnterior, setSaldoAnterior] = useState(0)
 
   // Pedidos activos del empleado
   const [activeOrders, setActiveOrders] = useState<Order[]>([])
@@ -210,6 +219,7 @@ export default function EmpleadosPage() {
       ])
       setCommissions(data.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()))
       setPagos(pagosData)
+      setSaldoAnterior(calcularSaldo(pagosData))
     } catch (error) {
       toast.error('Error al cargar comisiones')
     } finally {
@@ -407,22 +417,41 @@ export default function EmpleadosPage() {
     }
   }
 
+  // Abre el modal de pago con el monto sugerido (devengado + deuda arrastrada) y la fecha de hoy.
   const handlePagarPeriodo = async () => {
     if (!selectedSeller) return
-    const desdeDate = comDesde ? new Date(`${comDesde}T00:00:00`) : null
-    const hastaDate = comHasta ? new Date(`${comHasta}T23:59:59.999`) : null
-    const items = commissions.filter(
-      (c) =>
-        !c.isPaid &&
-        (!desdeDate || c.createdAt >= desdeDate) &&
-        (!hastaDate || c.createdAt <= hastaDate),
-    )
-    if (items.length === 0) {
+    if (pendingInRange.length === 0) {
       toast.error('No hay comisiones pendientes en el período seleccionado')
       return
     }
-    const monto = items.reduce((s, c) => s + c.commissionAmount, 0)
-    if (!confirm(`Vas a pagar ${items.length} comisiones por ${formatCurrency(monto)}. ¿Confirmás?`)) return
+    let saldo = 0
+    try {
+      saldo = await sellersApi.getSaldoComisiones(selectedSeller.id)
+    } catch {
+      toast.error('No se pudo leer el saldo anterior; se toma 0')
+    }
+    setSaldoAnterior(saldo)
+    setPagoMonto(String(montoSugerido(pendingInRangeTotal, saldo)))
+    setPagoFecha(toInputDate(new Date()))
+    setPagoNota('')
+    setPagoModalOpen(true)
+  }
+
+  const handleConfirmarPago = async () => {
+    if (!selectedSeller) return
+    const montoPagado = Number(pagoMonto)
+    if (!Number.isFinite(montoPagado) || montoPagado < 0) {
+      toast.error('Ingresá un monto válido')
+      return
+    }
+    if (!pagoFecha) {
+      toast.error('Ingresá la fecha del pago')
+      return
+    }
+    const desdeDate = comDesde ? new Date(`${comDesde}T00:00:00`) : null
+    const hastaDate = comHasta ? new Date(`${comHasta}T23:59:59.999`) : null
+    const items = pendingInRange
+    const monto = pendingInRangeTotal
     setPaying(true)
     try {
       await sellersApi.pagarComisionesPeriodo(
@@ -430,7 +459,13 @@ export default function EmpleadosPage() {
         selectedSeller.name,
         desdeDate ?? new Date(0),
         hastaDate ?? new Date(),
+        {
+          montoPagado,
+          fechaPago: new Date(`${pagoFecha}T12:00:00`),
+          nota: pagoNota || undefined,
+        },
       )
+      setPagoModalOpen(false)
       buildComisionesPDF(selectedSeller, desdeDate, hastaDate, items, monto)
       const [updatedCommissions, pagosData] = await Promise.all([
         sellersApi.getCommissions(selectedSeller.id),
@@ -439,7 +474,14 @@ export default function EmpleadosPage() {
       setCommissions(updatedCommissions.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()))
       setPagos(pagosData)
       await loadSellers()
-      toast.success('Comisiones pagadas y PDF generado')
+      const { saldoRestante } = calcularPago(monto, saldoAnterior, montoPagado)
+      toast.success(
+        saldoRestante === 0
+          ? 'Pago registrado — sin saldo pendiente'
+          : saldoRestante > 0
+            ? `Pago registrado — queda debiendo ${formatCurrency(saldoRestante)}`
+            : `Pago registrado — adelanto a favor de ${formatCurrency(Math.abs(saldoRestante))}`,
+      )
     } catch (error: any) {
       toast.error(error?.message || 'Error al pagar comisiones')
     } finally {
@@ -1379,6 +1421,21 @@ export default function EmpleadosPage() {
               </TabsContent>
 
               <TabsContent value="cobros" className="mt-4">
+              {saldoAnterior !== 0 && (
+                <div className={`mb-3 flex items-center gap-2 text-sm rounded-2xl border px-3 py-2 ${
+                  saldoAnterior > 0
+                    ? 'border-amber-200 dark:border-amber-800 bg-amber-50/60 dark:bg-amber-900/10'
+                    : 'border-teal-200 dark:border-teal-800 bg-teal-50/60 dark:bg-teal-900/10'
+                }`}>
+                  <Banknote className={`h-4 w-4 shrink-0 ${saldoAnterior > 0 ? 'text-amber-600' : 'text-teal-600'}`} />
+                  <span className="text-foreground">
+                    {saldoAnterior > 0
+                      ? <>Se le debe <strong>{formatCurrency(saldoAnterior)}</strong> de pagos anteriores</>
+                      : <>Tiene un adelanto a favor de <strong>{formatCurrency(Math.abs(saldoAnterior))}</strong></>}
+                  </span>
+                </div>
+              )}
+
               {/* Historial de pagos realizados */}
               {pagos.length === 0 ? (
                 <div className="text-center py-8 text-muted-foreground border rounded-lg border-dashed">
@@ -1398,17 +1455,33 @@ export default function EmpleadosPage() {
                           <div className="flex items-center justify-between gap-2">
                             <div className="flex items-center gap-2 min-w-0">
                               <Banknote className="h-4 w-4 text-emerald-600 shrink-0" />
-                              <span className="font-semibold text-foreground">{formatCurrency(pago.monto)}</span>
+                              <span className="font-semibold text-foreground">{formatCurrency(pago.montoPagado ?? pago.monto)}</span>
                             </div>
-                            <span className="text-xs text-muted-foreground shrink-0">{formatDate(pago.createdAt)}</span>
+                            <span className="text-xs text-muted-foreground shrink-0">{formatDate(pago.fechaPago ?? pago.createdAt)}</span>
                           </div>
                           <p className="text-xs text-muted-foreground mt-1">
-                            {pago.cantidadComisiones} comisiones pagadas
+                            Devengado {formatCurrency(pago.monto)} · {pago.cantidadComisiones} comisiones
                             {(pago.periodoDesde || pago.periodoHasta) && (
                               <> · Período {pago.periodoDesde ? formatDate(pago.periodoDesde) : '—'} al {pago.periodoHasta ? formatDate(pago.periodoHasta) : '—'}</>
                             )}
                             {pago.nota && <> — {pago.nota}</>}
                           </p>
+                          {(pago.saldoAnterior || pago.saldoRestante) ? (
+                            <p className="text-xs mt-0.5">
+                              {pago.saldoAnterior ? (
+                                <span className="text-muted-foreground">
+                                  Saldo anterior {formatCurrency(pago.saldoAnterior)}{' '}
+                                </span>
+                              ) : null}
+                              {pago.saldoRestante > 0 ? (
+                                <span className="text-amber-600">· quedó debiendo {formatCurrency(pago.saldoRestante)}</span>
+                              ) : pago.saldoRestante < 0 ? (
+                                <span className="text-teal-600">· adelanto a favor {formatCurrency(Math.abs(pago.saldoRestante))}</span>
+                              ) : (
+                                <span className="text-teal-600">· saldado</span>
+                              )}
+                            </p>
+                          ) : null}
                           <div className="flex items-center gap-2 mt-2">
                             <Button
                               variant="outline"
@@ -1665,6 +1738,102 @@ export default function EmpleadosPage() {
           )}
         </div>
       )}
+
+      {/* Modal: Registrar pago de comisiones */}
+      <Dialog open={pagoModalOpen} onOpenChange={setPagoModalOpen}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Registrar pago{selectedSeller ? ` a ${selectedSeller.name}` : ''}</DialogTitle>
+          </DialogHeader>
+
+          <div className="space-y-3">
+            <div className="rounded-2xl border bg-muted/30 p-3 space-y-1 text-sm">
+              <div className="flex justify-between">
+                <span className="text-muted-foreground">Comisiones del período ({pendingInRange.length})</span>
+                <span className="font-semibold tabular-nums">{formatCurrency(pendingInRangeTotal)}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-muted-foreground">
+                  {saldoAnterior >= 0 ? 'Deuda anterior' : 'Adelanto a favor'}
+                </span>
+                <span className={`font-semibold tabular-nums ${saldoAnterior > 0 ? 'text-amber-600' : saldoAnterior < 0 ? 'text-teal-600' : ''}`}>
+                  {formatCurrency(Math.abs(saldoAnterior))}
+                </span>
+              </div>
+              <div className="flex justify-between border-t pt-1">
+                <span className="font-medium">Total a pagar</span>
+                <span className="font-bold tabular-nums">{formatCurrency(montoSugerido(pendingInRangeTotal, saldoAnterior))}</span>
+              </div>
+            </div>
+
+            <div>
+              <Label htmlFor="pagoMonto" className="text-xs text-muted-foreground">Monto que le pagás</Label>
+              <Input
+                id="pagoMonto"
+                type="number"
+                inputMode="decimal"
+                step="0.01"
+                min="0"
+                value={pagoMonto}
+                onChange={(e) => setPagoMonto(e.target.value)}
+                className="rounded-2xl mt-1"
+              />
+              {(() => {
+                const m = Number(pagoMonto)
+                if (!Number.isFinite(m)) return null
+                const { saldoRestante } = calcularPago(pendingInRangeTotal, saldoAnterior, m)
+                if (saldoRestante === 0) {
+                  return <p className="text-xs text-teal-600 mt-1">Queda saldado, sin deuda pendiente.</p>
+                }
+                return saldoRestante > 0 ? (
+                  <p className="text-xs text-amber-600 mt-1">
+                    Queda debiendo {formatCurrency(saldoRestante)} — se suma al próximo pago.
+                  </p>
+                ) : (
+                  <p className="text-xs text-teal-600 mt-1">
+                    Le pagás {formatCurrency(Math.abs(saldoRestante))} de más — se descuenta del próximo pago.
+                  </p>
+                )
+              })()}
+            </div>
+
+            <div>
+              <Label htmlFor="pagoFecha" className="text-xs text-muted-foreground">Fecha del pago</Label>
+              <Input
+                id="pagoFecha"
+                type="date"
+                value={pagoFecha}
+                onChange={(e) => setPagoFecha(e.target.value)}
+                className="rounded-2xl mt-1"
+              />
+              <p className="text-xs text-muted-foreground mt-1">
+                Podés poner una fecha anterior si el pago ya se hizo y no estaba registrado.
+              </p>
+            </div>
+
+            <div>
+              <Label htmlFor="pagoNota" className="text-xs text-muted-foreground">Nota (opcional)</Label>
+              <Input
+                id="pagoNota"
+                value={pagoNota}
+                onChange={(e) => setPagoNota(e.target.value)}
+                placeholder="Ej: efectivo, transferencia..."
+                className="rounded-2xl mt-1"
+              />
+            </div>
+          </div>
+
+          <DialogFooter>
+            <Button variant="outline" className="rounded-2xl" onClick={() => setPagoModalOpen(false)} disabled={paying}>
+              Cancelar
+            </Button>
+            <Button className="rounded-2xl gap-2" onClick={handleConfirmarPago} disabled={paying}>
+              {paying ? <Loader2 className="h-4 w-4 animate-spin" /> : <Banknote className="h-4 w-4" />}
+              Confirmar pago
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       {/* Modal: Cómo se calcula la comisión */}
       <Dialog open={calcModalOpen} onOpenChange={setCalcModalOpen}>

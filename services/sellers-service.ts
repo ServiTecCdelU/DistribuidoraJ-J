@@ -2,6 +2,7 @@
 import { supabase } from '@/lib/supabase'
 import type { Seller, SellerCommission } from '@/lib/types'
 import { generateReadableId } from '@/services/supabase-helpers'
+import { calcularSaldo, calcularPago } from '@/lib/utils/comision-pago'
 
 function mapSeller(d: Record<string, any>): Seller {
   return {
@@ -195,7 +196,11 @@ export interface PagoComision {
   id: string
   sellerId: string
   sellerName: string
-  monto: number
+  monto: number              // devengado del período (comisiones − devoluciones)
+  montoPagado: number        // lo que efectivamente se entregó
+  saldoAnterior: number      // deuda arrastrada al momento del pago
+  saldoRestante: number      // saldoAnterior + monto − montoPagado
+  fechaPago: Date            // fecha real del pago (puede ser retroactiva)
   cantidadComisiones: number
   createdAt: Date
   nota?: string
@@ -204,11 +209,17 @@ export interface PagoComision {
 }
 
 function mapPago(d: Record<string, any>): PagoComision {
+  const monto = Number(d.monto) || 0
   return {
     id: d.id,
     sellerId: d.seller_id,
     sellerName: d.seller_name ?? '',
-    monto: Number(d.monto) || 0,
+    monto,
+    // Pagos legacy sin monto_pagado: se asume que se pagó exactamente lo devengado.
+    montoPagado: d.monto_pagado != null ? Number(d.monto_pagado) : monto,
+    saldoAnterior: Number(d.saldo_anterior) || 0,
+    saldoRestante: Number(d.saldo_restante) || 0,
+    fechaPago: new Date(d.fecha_pago ?? d.created_at),
     cantidadComisiones: Number(d.cantidad_comisiones) || 0,
     createdAt: new Date(d.created_at),
     nota: d.nota ?? undefined,
@@ -218,17 +229,37 @@ function mapPago(d: Record<string, any>): PagoComision {
 }
 
 /**
+ * Saldo pendiente arrastrado del empleado: todo lo devengado y registrado en pagos
+ * menos todo lo efectivamente entregado. Positivo = se le debe; negativo = adelanto.
+ * Se recalcula siempre sobre todos los pagos (no incremental), para que no se
+ * desfase si se edita o borra un registro.
+ */
+export const getSaldoComisiones = async (sellerId: string): Promise<number> => {
+  const pagos = await getPagosComisiones(sellerId)
+  return calcularSaldo(pagos)
+}
+
+/**
  * Paga exactamente las comisiones PENDIENTES cuya fecha cae en [desde, hasta].
  * Registra un pago con el período pagado; a partir de ahí esas comisiones
  * quedan cubiertas (ver getCommissionsBySeller).
  */
+export interface PagoComisionInput {
+  /** Lo que efectivamente se entrega. Si se omite, se paga el devengado + saldo anterior. */
+  montoPagado?: number
+  /** Fecha real del pago. Si se omite, ahora. */
+  fechaPago?: Date
+  nota?: string
+}
+
 export const pagarComisionesPeriodo = async (
   sellerId: string,
   sellerName: string,
   desde: Date,
   hasta: Date,
-  nota?: string,
+  input: PagoComisionInput = {},
 ): Promise<PagoComision> => {
+  const { montoPagado, fechaPago, nota } = input
   const { getCommissionsBySeller } = await import('@/services/commissions-service')
   const commissions = await getCommissionsBySeller(sellerId)
   const desdeMs = desde.getTime()
@@ -243,12 +274,19 @@ export const pagarComisionesPeriodo = async (
 
   const monto = aPagar.reduce((sum, c) => sum + c.commissionAmount, 0)
 
+  const saldoAnterior = await getSaldoComisiones(sellerId)
+  const { pagado, saldoRestante } = calcularPago(monto, saldoAnterior, montoPagado)
+
   const pagoId = `pago_${sellerId}_${Date.now()}`
   const row = {
     id: pagoId,
     seller_id: sellerId,
     seller_name: sellerName,
     monto,
+    monto_pagado: pagado,
+    saldo_anterior: saldoAnterior,
+    saldo_restante: saldoRestante,
+    fecha_pago: (fechaPago ?? new Date()).toISOString(),
     cantidad_comisiones: aPagar.length,
     nota: nota || null,
     periodo_desde: desde.toISOString(),
@@ -289,6 +327,10 @@ export const resetCommissions = async (sellerId: string, sellerName: string, not
     seller_id: sellerId,
     seller_name: sellerName,
     monto,
+    monto_pagado: monto,
+    saldo_anterior: 0,
+    saldo_restante: 0,
+    fecha_pago: new Date().toISOString(),
     cantidad_comisiones: pendientes.length,
     nota: nota || null,
   }
@@ -308,6 +350,7 @@ export const getPagosComisiones = async (sellerId: string): Promise<PagoComision
     .from('pagos_comisiones')
     .select('*')
     .eq('seller_id', sellerId)
+    .order('fecha_pago', { ascending: false, nullsFirst: false })
     .order('created_at', { ascending: false })
 
   if (error) throw error

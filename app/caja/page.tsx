@@ -517,9 +517,9 @@ export default function CajaPage() {
         });
         const st = agg(periodo);
         const { data: pagos } = await supabase
-          .from("pagos_comisiones").select("monto")
-          .gte("created_at", ap.toISOString()).lte("created_at", cierreReg.toISOString());
-        const comis = (pagos || []).reduce((a: number, p: any) => a + (Number(p.monto) || 0), 0);
+          .from("pagos_comisiones").select("monto, monto_pagado")
+          .gte("fecha_pago", ap.toISOString()).lte("fecha_pago", cierreReg.toISOString());
+        const comis = (pagos || []).reduce((a: number, p: any) => a + (Number(p.monto_pagado ?? p.monto) || 0), 0);
         const esperado = (reg.initial_amount || 0) + st.efectivo - comis;
         // .eq("status","open") en el update evita doble cierre si dos pestañas reconcilian a la vez.
         await supabase.from("caja").update({
@@ -551,7 +551,7 @@ export default function CajaPage() {
       const diasConCaja = new Set((cajasRango || []).map((r: any) => dayKey(new Date(r.opened_at))));
 
       const { data: pagosRango } = await supabase
-        .from("pagos_comisiones").select("monto, created_at").gte("created_at", limite.toISOString());
+        .from("pagos_comisiones").select("monto, monto_pagado, created_at, fecha_pago").gte("fecha_pago", limite.toISOString());
 
       // Agrupar ventas con remito de días pasados (dentro del rango, sin contar hoy) por día.
       const ventasPorDia = new Map<string, any[]>();
@@ -578,8 +578,8 @@ export default function CajaPage() {
         if (periodo.length === 0) continue;
         const st = agg(periodo);
         const comis = (pagosRango || []).reduce((a: number, p: any) => {
-          const pd = new Date(p.created_at);
-          return pd >= ap && pd <= cierre ? a + (Number(p.monto) || 0) : a;
+          const pd = new Date(p.fecha_pago ?? p.created_at);
+          return pd >= ap && pd <= cierre ? a + (Number(p.monto_pagado ?? p.monto) || 0) : a;
         }, 0);
         const esperado = st.efectivo - comis; // inicial 0 (apertura automática)
         const dateStr = `${yy}${String(mm + 1).padStart(2, "0")}${String(dd).padStart(2, "0")}`;
@@ -672,10 +672,10 @@ export default function CajaPage() {
         // Cargar pagos de comisiones del día
         const { data: pagosData } = await supabase
           .from("pagos_comisiones")
-          .select("id, seller_name, monto, created_at")
-          .gte("created_at", cajaDate.toISOString());
+          .select("id, seller_name, monto, monto_pagado, created_at, fecha_pago")
+          .gte("fecha_pago", cajaDate.toISOString());
         if (!mounted) return;
-        setPagosComisiones((pagosData || []).map((p: any) => ({ id: p.id, sellerName: p.seller_name, monto: Number(p.monto) || 0, createdAt: p.created_at })));
+        setPagosComisiones((pagosData || []).map((p: any) => ({ id: p.id, sellerName: p.seller_name, monto: Number(p.monto_pagado ?? p.monto) || 0, createdAt: p.fecha_pago ?? p.created_at })));
 
         // Cargar pedidos rechazados del día (no afectan totales)
         const { data: rejData } = await supabase
@@ -747,9 +747,9 @@ export default function CajaPage() {
       // Cargar pagos de comisiones del día
       const { data: pagosData } = await supabase
         .from("pagos_comisiones")
-        .select("id, seller_name, monto, created_at")
-        .gte("created_at", cajaDate.toISOString());
-      setPagosComisiones((pagosData || []).map((p: any) => ({ id: p.id, sellerName: p.seller_name, monto: Number(p.monto) || 0, createdAt: p.created_at })));
+        .select("id, seller_name, monto, monto_pagado, created_at, fecha_pago")
+        .gte("fecha_pago", cajaDate.toISOString());
+      setPagosComisiones((pagosData || []).map((p: any) => ({ id: p.id, sellerName: p.seller_name, monto: Number(p.monto_pagado ?? p.monto) || 0, createdAt: p.fecha_pago ?? p.created_at })));
 
       const { data: rejData } = await supabase
         .from("pedidos")
@@ -1112,10 +1112,10 @@ export default function CajaPage() {
       // Cargar pagos de comisiones del día
       const { data: pagosData } = await supabase
         .from("pagos_comisiones")
-        .select("id, seller_name, monto, created_at")
-        .gte("created_at", start.toISOString())
-        .lte("created_at", end.toISOString());
-      const dayPagos = (pagosData || []).map((p: any) => ({ id: p.id, sellerName: p.seller_name, monto: Number(p.monto) || 0, createdAt: p.created_at }));
+        .select("id, seller_name, monto, monto_pagado, created_at, fecha_pago")
+        .gte("fecha_pago", start.toISOString())
+        .lte("fecha_pago", end.toISOString());
+      const dayPagos = (pagosData || []).map((p: any) => ({ id: p.id, sellerName: p.seller_name, monto: Number(p.monto_pagado ?? p.monto) || 0, createdAt: p.fecha_pago ?? p.created_at }));
 
       // Cargar pedidos rechazados del día
       const { data: rejData } = await supabase
