@@ -359,14 +359,14 @@ export default function EmpleadosPage() {
         .totbox { margin-top: 14px; padding: 10px 14px; background: #ecfdf5; border: 1px solid #a7f3d0; border-radius: 8px; display: inline-block; }
         .totbox .lbl { font-size: 11px; color: #555; }
         .totbox .val { font-size: 20px; font-weight: bold; color: #047857; }
-        .calc { width: 520px; margin-top: 8px; font-size: 12px; }
-        .calc th { background: #f1f5f9; }
-        .calc .paso-n { width: 26px; text-align: center; color: #0f766e; font-weight: bold; }
-        .calc .det { color: #666; font-size: 10px; }
+        .calc { width: 100%; margin-top: 8px; font-size: 12px; }
+        .calc th { background: #f1f5f9; text-align: center; font-size: 10px; white-space: nowrap; }
+        .calc td { text-align: right; white-space: nowrap; font-weight: bold; }
         .calc .neg { color: #b91c1c; }
-        .calc tr.sub td { background: #f8fafc; font-weight: 600; }
-        .calc tr.final td { background: #ecfdf5; font-weight: bold; font-size: 14px; border-color: #5eead4; color: #0d9488; }
-        .calc tr.pend td { background: #fffbeb; font-weight: bold; border-color: #fcd34d; color: #b45309; }
+        .calc th.final { background: #ecfdf5; color: #0d9488; }
+        .calc td.final { background: #ecfdf5; color: #0d9488; font-size: 14px; }
+        .calc th.pend { background: #fffbeb; color: #b45309; }
+        .calc td.pend { background: #fffbeb; color: #b45309; font-size: 14px; }
         td.falta { color: #b45309; font-weight: bold; }
         .footer { margin-top: 24px; font-size: 10px; color: #888; }
       </style></head><body>
@@ -387,15 +387,27 @@ export default function EmpleadosPage() {
       </table>` : ''}
       <h2>Cómo se calcula lo que se le paga</h2>
       <table class="calc">
-        <thead><tr><th class="paso-n">#</th><th>Concepto</th><th>Detalle</th><th class="num">Importe</th></tr></thead>
+        <thead>
+          <tr>
+            <th>Vendió</th>
+            <th>Devoluciones</th>
+            <th>Venta neta</th>
+            <th>Comisión ${seller.commissionRate}%</th>
+            ${conImputacion && cubiertoPrevio > 0.009 ? '<th>Ya cobrado antes</th>' : ''}
+            <th class="final">Se le paga</th>
+            ${conImputacion && totalRestante > 0.009 ? '<th class="pend">Queda por pagar</th>' : ''}
+          </tr>
+        </thead>
         <tbody>
-          <tr><td class="paso-n">1</td><td>Vendió</td><td class="det">${ventas.length} ${ventas.length === 1 ? 'venta' : 'ventas'}</td><td class="num">${formatCurrency(totalVentas)}</td></tr>
-          <tr><td class="paso-n">2</td><td>Devoluciones</td><td class="det">${devol.length ? `${devol.length} ${devol.length === 1 ? 'ajuste' : 'ajustes'}` : 'sin devoluciones'}</td><td class="num neg">− ${formatCurrency(devMonto)}</td></tr>
-          <tr class="sub"><td></td><td>Venta menos devolución</td><td class="det"></td><td class="num">${formatCurrency(ventasNetas)}</td></tr>
-          <tr><td class="paso-n">3</td><td>Comisión ${seller.commissionRate}%</td><td class="det">${seller.commissionRate}% × ${formatCurrency(ventasNetas)}</td><td class="num">${formatCurrency(comisionTotal)}</td></tr>
-          ${conImputacion && cubiertoPrevio > 0.009 ? `<tr><td class="paso-n">4</td><td>Ya cobrado antes</td><td class="det">pagos anteriores</td><td class="num neg">− ${formatCurrency(cubiertoPrevio)}</td></tr>` : ''}
-          <tr class="final"><td></td><td>Se le paga</td><td class="det"></td><td class="num">${formatCurrency(monto)}</td></tr>
-          ${conImputacion && totalRestante > 0.009 ? `<tr class="pend"><td></td><td>Queda por pagar</td><td class="det">se cobra en el próximo pago</td><td class="num">${formatCurrency(totalRestante)}</td></tr>` : ''}
+          <tr>
+            <td class="num">${formatCurrency(totalVentas)}</td>
+            <td class="num neg">− ${formatCurrency(devMonto)}</td>
+            <td class="num">${formatCurrency(ventasNetas)}</td>
+            <td class="num">${formatCurrency(comisionTotal)}</td>
+            ${conImputacion && cubiertoPrevio > 0.009 ? `<td class="num neg">− ${formatCurrency(cubiertoPrevio)}</td>` : ''}
+            <td class="num final">${formatCurrency(monto)}</td>
+            ${conImputacion && totalRestante > 0.009 ? `<td class="num pend">${formatCurrency(totalRestante)}</td>` : ''}
+          </tr>
         </tbody>
       </table>
       <div class="footer">Generado el ${stamp} — Distribuidora Patricia</div>
