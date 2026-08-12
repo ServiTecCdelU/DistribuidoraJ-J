@@ -99,9 +99,9 @@ export default function ComisionesPage() {
       ) : (
         <>
           {/* ── Filtro de período ── */}
-          <Card className="mb-4">
-            <CardContent className="p-3 flex flex-col gap-3">
-              <div className="flex flex-wrap items-center justify-center sm:justify-start gap-2">
+          <Card className="mb-3">
+            <CardContent className="p-2 flex flex-col gap-1.5">
+              <div className="flex flex-wrap items-center justify-center sm:justify-start gap-1.5">
                 <div className="flex gap-1 w-full sm:w-auto justify-center">
                   {([
                     ['month', 'Mes'],
@@ -112,7 +112,7 @@ export default function ComisionesPage() {
                       key={m}
                       size="sm"
                       variant={mode === m ? 'default' : 'outline'}
-                      className={mode === m ? 'rounded-2xl bg-teal-600 hover:bg-teal-700' : 'rounded-2xl'}
+                      className={mode === m ? 'rounded-2xl h-7 px-3 text-xs bg-teal-600 hover:bg-teal-700' : 'rounded-2xl h-7 px-3 text-xs'}
                       onClick={() => setMode(m)}
                     >
                       {label}
@@ -122,11 +122,11 @@ export default function ComisionesPage() {
 
                 {mode === 'month' && (
                   <div className="flex items-center gap-1 w-full sm:w-auto justify-center sm:ml-auto">
-                    <Button size="icon" variant="outline" className="rounded-2xl h-8 w-8" onClick={() => setAnchor(shiftMonth(anchor, -1))} aria-label="Mes anterior">
+                    <Button size="icon" variant="outline" className="rounded-2xl h-7 w-7" onClick={() => setAnchor(shiftMonth(anchor, -1))} aria-label="Mes anterior">
                       <ChevronLeft className="h-4 w-4" />
                     </Button>
-                    <span className="text-sm font-semibold capitalize min-w-[130px] text-center">{monthLabel(anchor)}</span>
-                    <Button size="icon" variant="outline" className="rounded-2xl h-8 w-8" onClick={() => setAnchor(shiftMonth(anchor, 1))} aria-label="Mes siguiente">
+                    <span className="text-xs font-semibold capitalize min-w-[110px] text-center">{monthLabel(anchor)}</span>
+                    <Button size="icon" variant="outline" className="rounded-2xl h-7 w-7" onClick={() => setAnchor(shiftMonth(anchor, 1))} aria-label="Mes siguiente">
                       <ChevronRight className="h-4 w-4" />
                     </Button>
                   </div>
@@ -134,15 +134,15 @@ export default function ComisionesPage() {
 
                 {mode === 'day' && (
                   <div className="flex items-center gap-2 w-full sm:w-auto justify-center sm:ml-auto">
-                    <Input type="date" value={day} onChange={(e) => setDay(e.target.value)} className="rounded-2xl h-8 w-[160px]" />
+                    <Input type="date" value={day} onChange={(e) => setDay(e.target.value)} className="rounded-2xl h-7 text-xs w-[150px]" />
                   </div>
                 )}
 
                 {mode === 'custom' && (
                   <div className="flex items-center gap-2 w-full sm:w-auto justify-center sm:ml-auto flex-wrap">
-                    <Input type="date" value={dateFrom} onChange={(e) => setDateFrom(e.target.value)} className="rounded-2xl h-8 w-[150px]" />
+                    <Input type="date" value={dateFrom} onChange={(e) => setDateFrom(e.target.value)} className="rounded-2xl h-7 text-xs w-[140px]" />
                     <span className="text-xs text-muted-foreground">a</span>
-                    <Input type="date" value={dateTo} onChange={(e) => setDateTo(e.target.value)} className="rounded-2xl h-8 w-[150px]" />
+                    <Input type="date" value={dateTo} onChange={(e) => setDateTo(e.target.value)} className="rounded-2xl h-7 text-xs w-[140px]" />
                   </div>
                 )}
               </div>
@@ -155,45 +155,45 @@ export default function ComisionesPage() {
           </Card>
 
           {/* ── Tarjetas resumen ── */}
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-6">
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-2 mb-4">
             <Card className="border-teal-200 dark:border-teal-800 bg-teal-50/50 dark:bg-teal-900/10">
-              <CardHeader className="pb-1 pt-4 px-4 flex flex-row items-center justify-between space-y-0">
-                <CardTitle className="text-xs font-medium text-muted-foreground leading-tight">Comisiones finales</CardTitle>
-                <TrendingUp className="h-4 w-4 text-teal-600 shrink-0" />
+              <CardHeader className="pb-0.5 pt-2.5 px-3 flex flex-row items-center justify-between space-y-0">
+                <CardTitle className="text-[11px] font-medium text-muted-foreground leading-tight">Comisiones finales</CardTitle>
+                <TrendingUp className="h-3.5 w-3.5 text-teal-600 shrink-0" />
               </CardHeader>
-              <CardContent className="pb-4 px-4">
+              <CardContent className="pb-2.5 px-3">
                 <div className="text-xs sm:text-sm md:text-base font-bold text-teal-600 dark:text-teal-400 whitespace-nowrap leading-tight">{formatPrice(total)}</div>
-                <p className="text-xs text-muted-foreground mt-0.5">Comisiones − devoluciones</p>
+                <p className="text-[10px] text-muted-foreground mt-0.5 leading-tight">Comisiones − devoluciones</p>
               </CardContent>
             </Card>
             <Card>
-              <CardHeader className="pb-1 pt-4 px-4 flex flex-row items-center justify-between space-y-0">
-                <CardTitle className="text-xs font-medium text-muted-foreground leading-tight">Pendiente</CardTitle>
-                <Clock className="h-4 w-4 text-orange-500 shrink-0" />
+              <CardHeader className="pb-0.5 pt-2.5 px-3 flex flex-row items-center justify-between space-y-0">
+                <CardTitle className="text-[11px] font-medium text-muted-foreground leading-tight">Pendiente</CardTitle>
+                <Clock className="h-3.5 w-3.5 text-orange-500 shrink-0" />
               </CardHeader>
-              <CardContent className="pb-4 px-4">
+              <CardContent className="pb-2.5 px-3">
                 <div className="text-xs sm:text-sm md:text-base font-bold text-orange-500 whitespace-nowrap leading-tight">{formatPrice(pendingTotal)}</div>
-                <p className="text-xs text-muted-foreground mt-0.5">{pendingCount} pendientes</p>
+                <p className="text-[10px] text-muted-foreground mt-0.5 leading-tight">{pendingCount} pendientes</p>
               </CardContent>
             </Card>
             <Card>
-              <CardHeader className="pb-1 pt-4 px-4 flex flex-row items-center justify-between space-y-0">
-                <CardTitle className="text-xs font-medium text-muted-foreground leading-tight">Ya cobrado</CardTitle>
-                <CheckCircle2 className="h-4 w-4 text-green-500 shrink-0" />
+              <CardHeader className="pb-0.5 pt-2.5 px-3 flex flex-row items-center justify-between space-y-0">
+                <CardTitle className="text-[11px] font-medium text-muted-foreground leading-tight">Ya cobrado</CardTitle>
+                <CheckCircle2 className="h-3.5 w-3.5 text-green-500 shrink-0" />
               </CardHeader>
-              <CardContent className="pb-4 px-4">
+              <CardContent className="pb-2.5 px-3">
                 <div className="text-xs sm:text-sm md:text-base font-bold text-green-600 whitespace-nowrap leading-tight">{formatPrice(paidTotal)}</div>
-                <p className="text-xs text-muted-foreground mt-0.5">{filtered.length - pendingCount} cobradas</p>
+                <p className="text-[10px] text-muted-foreground mt-0.5 leading-tight">{filtered.length - pendingCount} cobradas</p>
               </CardContent>
             </Card>
             <Card>
-              <CardHeader className="pb-1 pt-4 px-4 flex flex-row items-center justify-between space-y-0">
-                <CardTitle className="text-xs font-medium text-muted-foreground leading-tight">Devoluciones</CardTitle>
-                <DollarSign className="h-4 w-4 text-rose-500 shrink-0" />
+              <CardHeader className="pb-0.5 pt-2.5 px-3 flex flex-row items-center justify-between space-y-0">
+                <CardTitle className="text-[11px] font-medium text-muted-foreground leading-tight">Devoluciones</CardTitle>
+                <DollarSign className="h-3.5 w-3.5 text-rose-500 shrink-0" />
               </CardHeader>
-              <CardContent className="pb-4 px-4">
+              <CardContent className="pb-2.5 px-3">
                 <div className="text-xs sm:text-sm md:text-base font-bold text-rose-600 dark:text-rose-400 whitespace-nowrap leading-tight">{formatPrice(Math.abs(devolucionesTotal))}</div>
-                <p className="text-xs text-muted-foreground mt-0.5">{devolucionesCount} {devolucionesCount === 1 ? 'devolución' : 'devoluciones'}</p>
+                <p className="text-[10px] text-muted-foreground mt-0.5 leading-tight">{devolucionesCount} {devolucionesCount === 1 ? 'devolución' : 'devoluciones'}</p>
               </CardContent>
             </Card>
           </div>
