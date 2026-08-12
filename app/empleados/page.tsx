@@ -688,6 +688,19 @@ export default function EmpleadosPage() {
   const comisionesBrutas = resumenDetalle.brutas
   const devolucionesTotal = -resumenDetalle.devoluciones // negativo (se muestra con Math.abs)
   const comisionesFinales = resumenDetalle.finales
+  // Devoluciones/NC del período cuya venta original es de un período anterior:
+  // son comisiones que ya se le liquidaron de más y se descuentan ahora.
+  const ventaPorId = new Map(
+    commissions.filter((c) => c.commissionAmount >= 0).map((c) => [c.saleId, c]),
+  )
+  const devDeOtroPeriodo = devEntries.filter((d) => {
+    const venta = ventaPorId.get(d.saleId)
+    return !!venta && !!comDesdeDate && venta.createdAt < comDesdeDate
+  })
+  const devDeOtroPeriodoTotal = devDeOtroPeriodo.reduce(
+    (sum, d) => sum + Math.abs(d.commissionAmount),
+    0,
+  )
   const filteredCommissions = commissions.filter(
     (c) =>
       inComRange(c) &&
@@ -1396,9 +1409,9 @@ export default function EmpleadosPage() {
 
                 <div className="rounded-2xl p-2.5 bg-rose-50 dark:bg-rose-900/20 border border-rose-200 dark:border-rose-800 grid grid-cols-2 gap-2">
                   <div className="min-w-0">
-                    <p className="text-[10px] text-muted-foreground font-medium uppercase tracking-wide leading-none">Devoluciones</p>
+                    <p className="text-[10px] text-muted-foreground font-medium uppercase tracking-wide leading-none">Devoluciones y NC</p>
                     <p className="font-bold text-sm text-rose-600 dark:text-rose-400 whitespace-nowrap mt-1">{formatCurrency(Math.abs(devolucionesTotal))}</p>
-                    <p className="text-[9px] text-muted-foreground leading-tight">{devEntries.length} {devEntries.length === 1 ? 'devolucion' : 'devoluciones'}</p>
+                    <p className="text-[9px] text-muted-foreground leading-tight">{devEntries.length} {devEntries.length === 1 ? 'ajuste' : 'ajustes'} (devoluciones, NC, descuentos posteriores)</p>
                   </div>
                   <div className="min-w-0 border-l border-rose-200 dark:border-rose-800 pl-2">
                     <p className="text-[10px] text-muted-foreground font-medium uppercase tracking-wide leading-none">Comisiones finales</p>
@@ -1758,6 +1771,23 @@ export default function EmpleadosPage() {
                   </div>
                 )}
 
+                {/* Aviso: ajustes de períodos ya liquidados */}
+                {comEstado !== 'pagado' && devEntries.length > 0 && (
+                  <div className="mb-3 rounded-lg border border-rose-200 dark:border-rose-800 bg-rose-50/60 dark:bg-rose-900/10 px-3 py-2 text-sm">
+                    <p className="text-foreground">
+                      Hay {devEntries.length} {devEntries.length === 1 ? 'ajuste' : 'ajustes'} en este período por{' '}
+                      <strong className="text-rose-600 dark:text-rose-400">{formatCurrency(Math.abs(devolucionesTotal))}</strong>{' '}
+                      (devoluciones, notas de crédito y descuentos posteriores). No son pagos: restan de lo que se le debe.
+                    </p>
+                    {devDeOtroPeriodoTotal > 0 && (
+                      <p className="text-xs text-muted-foreground mt-1">
+                        {formatCurrency(devDeOtroPeriodoTotal)} corresponden a ventas de períodos anteriores ya liquidados:
+                        es comisión cobrada de más que se descuenta ahora.
+                      </p>
+                    )}
+                  </div>
+                )}
+
                 {/* Filtros */}
                 <div className="flex items-end gap-2 flex-wrap mb-3 p-3 rounded-xl border border-border/60 bg-muted/30">
                   {comModo === 'mes' ? (
@@ -1921,7 +1951,7 @@ export default function EmpleadosPage() {
                                     {commission.isPaid
                                       ? 'Pagada'
                                       : commission.estadoPago === 'devolucion'
-                                        ? 'Devolución'
+                                        ? 'Devolución/NC'
                                         : commission.estadoPago === 'parcial'
                                           ? 'Parcial'
                                           : 'Pendiente'}
