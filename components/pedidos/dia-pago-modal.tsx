@@ -48,23 +48,23 @@ export function DiaPagoModal({ open, clientName, onSave, onLater }: DiaPagoModal
 
   return (
     <Dialog open={open} onOpenChange={(o) => { if (!o && !saving) onLater() }}>
-      <DialogContent className="sm:max-w-sm rounded-2xl">
-        <DialogHeader>
-          <DialogTitle className="flex items-center gap-2 text-base">
-            <CalendarClock className="h-4 w-4 text-teal-600" />
+      <DialogContent className="sm:max-w-lg rounded-2xl p-6">
+        <DialogHeader className="space-y-2">
+          <DialogTitle className="flex items-center gap-2 text-lg">
+            <CalendarClock className="h-5 w-5 text-teal-600" />
             Falta el día de pago
           </DialogTitle>
-          <DialogDescription>
+          <DialogDescription className="text-sm leading-relaxed">
             {clientName ? <span className="font-medium text-foreground">{clientName}</span> : "Este cliente"} tiene
             cuenta corriente y no tiene un día de pago asignado. ¿Lo agregás antes de generar el remito?
           </DialogDescription>
         </DialogHeader>
 
-        <div className="grid gap-2">
+        <div className="grid gap-2 py-2">
           <Label htmlFor="diaPago" className="text-foreground">Día de pago</Label>
           <select
             id="diaPago"
-            className="flex h-10 w-full rounded-2xl border border-input bg-background px-3 py-2 text-sm"
+            className="flex h-11 w-full rounded-2xl border border-input bg-background px-3 py-2 text-sm"
             value={dia}
             onChange={(e) => setDia(e.target.value)}
             disabled={saving}
@@ -76,11 +76,11 @@ export function DiaPagoModal({ open, clientName, onSave, onLater }: DiaPagoModal
           </select>
         </div>
 
-        <div className="flex flex-col-reverse sm:flex-row sm:justify-end gap-2 pt-2">
-          <Button variant="outline" className="rounded-2xl" onClick={onLater} disabled={saving}>
+        <div className="flex flex-col-reverse sm:flex-row sm:justify-end gap-2 pt-3">
+          <Button variant="outline" className="rounded-2xl h-11 w-full sm:w-auto" onClick={onLater} disabled={saving}>
             Lo agrego después
           </Button>
-          <Button className="rounded-2xl" onClick={handleSave} disabled={!dia || saving}>
+          <Button className="rounded-2xl h-11 w-full sm:w-auto" onClick={handleSave} disabled={!dia || saving}>
             {saving ? "Guardando..." : "Guardar y generar remito"}
           </Button>
         </div>
