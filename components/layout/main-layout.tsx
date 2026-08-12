@@ -70,7 +70,7 @@ export function MainLayout({ children, title, description, allowedRoles }: MainL
     <div className="min-h-screen bg-background">
       <AppSidebar hidden={sidebarHidden} onToggle={toggleSidebar} />
       <main className={cn("min-h-screen transition-[margin] duration-300", sidebarHidden ? "lg:ml-0" : "lg:ml-[14.4rem]")}>
-        <div className="px-4 pb-6 pt-14 sm:px-6 sm:pt-14 lg:p-8">
+        <div className="px-4 pb-6 pt-3 sm:px-6 sm:pt-4 lg:p-8">
           {title && (
             <div className="relative flex items-center h-10 mb-1">
               <Button
