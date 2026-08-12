@@ -21,6 +21,7 @@ import {
   Store,
   Percent,
   Wallet,
+  Building2,
   PanelLeftClose,
   PanelLeftOpen,
 } from "lucide-react";
@@ -98,6 +99,7 @@ export function AppSidebar({ hidden, onToggle }: AppSidebarProps) {
       label: "Finanzas",
       items: [
         { href: "/gastos", label: "Gastos", icon: Wallet, roles: ["admin"] },
+        { href: "/perfil", label: "Perfil", icon: Building2, roles: ["admin"] },
       ],
     },
     {

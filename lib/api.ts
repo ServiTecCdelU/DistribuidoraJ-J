@@ -645,3 +645,23 @@ export const gastosApi = {
   deleteVariable: deleteGastoVariable,
 }
 export type { GastoFijo, GastoVariable }
+
+import {
+  getSuscripcion,
+  saveSuscripcion,
+  getPagosSuscripcion,
+  savePagoSuscripcion,
+  deletePagoSuscripcion,
+  suscripcionVacia,
+} from '@/services/suscripcion-service'
+import type { Suscripcion } from '@/services/suscripcion-service'
+
+export const suscripcionApi = {
+  get: getSuscripcion,
+  save: saveSuscripcion,
+  getPagos: getPagosSuscripcion,
+  savePago: savePagoSuscripcion,
+  deletePago: deletePagoSuscripcion,
+  vacia: suscripcionVacia,
+}
+export type { Suscripcion }
