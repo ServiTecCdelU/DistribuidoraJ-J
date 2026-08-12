@@ -325,6 +325,9 @@ export interface SellerCommission {
   isPaid: boolean;
   paidAt?: Date;
   createdAt: Date;
+  /** Parte de la comisión efectivamente cubierta por los pagos (imputación FIFO). */
+  montoImputado?: number;
+  estadoPago?: "pagado" | "parcial" | "pendiente";
 }
 
 export type ComprobanteStatus = "pending" | "approved" | "rejected";

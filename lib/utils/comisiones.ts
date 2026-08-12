@@ -6,6 +6,8 @@
 export interface ComisionLike {
   commissionAmount: number
   isPaid?: boolean
+  /** Parte cubierta por los pagos (imputación FIFO). Si falta, se deduce de isPaid. */
+  montoImputado?: number
 }
 
 export interface ResumenComisiones {
@@ -40,11 +42,11 @@ export function resumenComisiones(commissions: ComisionLike[] | undefined | null
       res.ventasCount++
     }
     res.finales += amount
-    if (c.isPaid) res.cobrado += amount
-    else {
-      res.pendiente += amount
-      res.pendienteCount++
-    }
+    // Con imputación parcial, "cobrado" es lo efectivamente cubierto por los pagos.
+    const imputado = c.montoImputado != null ? c.montoImputado : c.isPaid ? amount : 0
+    res.cobrado += imputado
+    res.pendiente += amount - imputado
+    if (!c.isPaid) res.pendienteCount++
   }
   return res
 }

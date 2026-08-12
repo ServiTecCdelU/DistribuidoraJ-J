@@ -228,6 +228,8 @@ export default function ComisionesPage() {
                         </div>
                         {c.isPaid ? (
                           <Badge className="bg-green-500 hover:bg-green-600 text-white text-xs shrink-0">Cobrada</Badge>
+                        ) : c.estadoPago === 'parcial' ? (
+                          <Badge variant="secondary" className="text-sky-700 bg-sky-50 text-xs shrink-0">Parcial</Badge>
                         ) : (
                           <Badge variant="secondary" className="text-orange-600 bg-orange-50 text-xs shrink-0">Pendiente</Badge>
                         )}
@@ -248,6 +250,9 @@ export default function ComisionesPage() {
                         <div className="px-2 py-2 text-center">
                           <p className="text-[10px] text-muted-foreground uppercase tracking-wide mb-1">Comisión</p>
                           <p className="text-sm font-bold text-green-600">{formatPrice(c.commissionAmount)}</p>
+                          {c.estadoPago === 'parcial' && (
+                            <p className="text-[10px] text-sky-700 mt-0.5">cobrado {formatPrice(c.montoImputado ?? 0)}</p>
+                          )}
                         </div>
                       </div>
                     </CardContent>
@@ -294,6 +299,8 @@ export default function ComisionesPage() {
                           <TableCell className="text-center">
                             {c.isPaid ? (
                               <Badge className="bg-green-500 hover:bg-green-600 text-white">Cobrada</Badge>
+                            ) : c.estadoPago === 'parcial' ? (
+                              <Badge variant="secondary" className="text-sky-700 bg-sky-50">Parcial</Badge>
                             ) : (
                               <Badge variant="secondary" className="text-orange-600 bg-orange-50">Pendiente</Badge>
                             )}

@@ -1,12 +1,13 @@
 import { supabase } from '@/lib/supabase'
 import type { SellerCommission } from '@/lib/types'
+import { imputarComisiones } from '@/lib/utils/comision-imputacion'
 
 /**
  * Deriva comisiones desde la tabla `ventas` (source of truth).
- * El estado pagado se determina por los pagos registrados en `pagos_comisiones`:
- * un pago con período [periodo_desde, periodo_hasta] cubre las comisiones cuya
- * fecha cae dentro de esa ventana. Pagos legacy sin período usan cutoff por
- * `created_at` (todo lo anterior o igual queda pagado).
+ * El estado de pago sale de imputar FIFO el total efectivamente pagado
+ * (`pagos_comisiones.monto_pagado`) sobre las comisiones ordenadas de la más
+ * vieja a la más nueva: las que alcanza quedan pagadas, la que se corta queda
+ * parcial y el resto pendiente. Ver `lib/utils/comision-imputacion.ts`.
  */
 export const getCommissionsBySeller = async (sellerId: string): Promise<SellerCommission[]> => {
   // Traer tasa de comisión del vendedor
@@ -33,30 +34,16 @@ export const getCommissionsBySeller = async (sellerId: string): Promise<SellerCo
     .select('*')
     .eq('seller_id', sellerId)
 
-  type PagoWindow = { desde: number | null; hasta: number | null; cutoff: number }
-  const windows: PagoWindow[] = (pagos ?? []).map((p: any) => ({
-    desde: p.periodo_desde ? new Date(p.periodo_desde).getTime() : null,
-    hasta: p.periodo_hasta ? new Date(p.periodo_hasta).getTime() : null,
-    cutoff: new Date(p.created_at).getTime(),
-  }))
-
-  // Devuelve la fecha del pago que cubre esta comisión, o null si está pendiente.
-  const coveredBy = (createdAtMs: number): number | null => {
-    for (const w of windows) {
-      if (w.desde != null && w.hasta != null) {
-        if (createdAtMs >= w.desde && createdAtMs <= w.hasta) return w.cutoff
-      } else if (createdAtMs <= w.cutoff) {
-        return w.cutoff
-      }
-    }
-    return null
-  }
+  // Total efectivamente entregado al vendedor (pagos legacy sin monto_pagado
+  // se asumen pagados por el devengado del período).
+  const totalPagado = (pagos ?? []).reduce(
+    (s: number, p: any) => s + (Number(p.monto_pagado ?? p.monto) || 0),
+    0,
+  )
 
   const ventaEntries: SellerCommission[] = ventas.map((v) => {
     const saleTotal = Number(v.total) || 0
     const commissionAmount = saleTotal * (commissionRate / 100)
-    const createdAt = new Date(v.created_at)
-    const paidAtMs = coveredBy(createdAt.getTime())
 
     return {
       id: v.id,
@@ -67,9 +54,8 @@ export const getCommissionsBySeller = async (sellerId: string): Promise<SellerCo
       saleTotal,
       commissionRate,
       commissionAmount,
-      isPaid: paidAtMs != null,
-      paidAt: paidAtMs != null ? new Date(paidAtMs) : undefined,
-      createdAt,
+      isPaid: false,
+      createdAt: new Date(v.created_at),
     }
   })
 
@@ -81,7 +67,6 @@ export const getCommissionsBySeller = async (sellerId: string): Promise<SellerCo
 
   const devEntries: SellerCommission[] = (devoluciones ?? []).map((d) => {
     const createdAt = new Date(d.created_at)
-    const paidAtMs = coveredBy(createdAt.getTime())
     return {
       id: d.id,
       sellerId,
@@ -91,15 +76,14 @@ export const getCommissionsBySeller = async (sellerId: string): Promise<SellerCo
       saleTotal: -(Number(d.total) || 0),
       commissionRate: Number(d.commission_rate) || commissionRate,
       commissionAmount: -(Number(d.commission_amount) || 0),
-      isPaid: paidAtMs != null,
-      paidAt: paidAtMs != null ? new Date(paidAtMs) : undefined,
+      isPaid: false,
       createdAt,
     }
   })
 
-  return [...ventaEntries, ...devEntries].sort(
-    (a, b) => b.createdAt.getTime() - a.createdAt.getTime(),
-  )
+  const { items } = imputarComisiones([...ventaEntries, ...devEntries], totalPagado)
+
+  return items.sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime())
 }
 
 export const getCommissionSummaryBySeller = async (sellerId: string) => {

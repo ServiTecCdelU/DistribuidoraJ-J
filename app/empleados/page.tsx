@@ -31,7 +31,7 @@ import type { Seller, SellerCommission, EmployeeType, Order } from '@/lib/types'
 import { formatCurrency, formatDate } from '@/lib/utils/format'
 import { statusConfig } from '@/lib/order-constants'
 import { resumenComisiones } from '@/lib/utils/comisiones'
-import { calcularPago, calcularSaldo, montoSugerido } from '@/lib/utils/comision-pago'
+import { comisionesDelPago } from '@/lib/utils/comision-imputacion'
 import { toInputDate } from '@/lib/utils/comisiones-period'
 import {
   Plus,
@@ -107,7 +107,6 @@ export default function EmpleadosPage() {
   const [pagoMonto, setPagoMonto] = useState('')
   const [pagoFecha, setPagoFecha] = useState('')
   const [pagoNota, setPagoNota] = useState('')
-  const [saldoAnterior, setSaldoAnterior] = useState(0)
 
   // Pedidos activos del empleado
   const [activeOrders, setActiveOrders] = useState<Order[]>([])
@@ -219,7 +218,6 @@ export default function EmpleadosPage() {
       ])
       setCommissions(data.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()))
       setPagos(pagosData)
-      setSaldoAnterior(calcularSaldo(pagosData))
     } catch (error) {
       toast.error('Error al cargar comisiones')
     } finally {
@@ -417,21 +415,15 @@ export default function EmpleadosPage() {
     }
   }
 
-  // Abre el modal de pago con el monto sugerido (devengado + deuda arrastrada) y la fecha de hoy.
-  const handlePagarPeriodo = async () => {
+  // Abre el modal de pago. El pago se imputa siempre desde la comisión más vieja,
+  // así que lo pendiente anterior al período se cubre primero.
+  const handlePagarPeriodo = () => {
     if (!selectedSeller) return
     if (pendingInRange.length === 0) {
       toast.error('No hay comisiones pendientes en el período seleccionado')
       return
     }
-    let saldo = 0
-    try {
-      saldo = await sellersApi.getSaldoComisiones(selectedSeller.id)
-    } catch {
-      toast.error('No se pudo leer el saldo anterior; se toma 0')
-    }
-    setSaldoAnterior(saldo)
-    setPagoMonto(String(montoSugerido(pendingInRangeTotal, saldo)))
+    setPagoMonto(String(Math.round((pendienteAnterior + pendingInRangeTotal) * 100) / 100))
     setPagoFecha(toInputDate(new Date()))
     setPagoNota('')
     setPagoModalOpen(true)
@@ -466,7 +458,14 @@ export default function EmpleadosPage() {
         },
       )
       setPagoModalOpen(false)
-      buildComisionesPDF(selectedSeller, desdeDate, hastaDate, items, monto)
+      // El comprobante lista solo lo que este pago alcanzó a cubrir.
+      const acumuladoAntes = pagos.reduce((sum: number, p: any) => sum + (p.montoPagado ?? p.monto ?? 0), 0)
+      const cubiertas = comisionesDelPago(
+        [...commissions].sort((a, b) => a.createdAt.getTime() - b.createdAt.getTime()),
+        acumuladoAntes,
+        montoPagado,
+      )
+      buildComisionesPDF(selectedSeller, desdeDate, hastaDate, cubiertas, montoPagado)
       const [updatedCommissions, pagosData] = await Promise.all([
         sellersApi.getCommissions(selectedSeller.id),
         sellersApi.getPagosComisiones(selectedSeller.id),
@@ -474,13 +473,14 @@ export default function EmpleadosPage() {
       setCommissions(updatedCommissions.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()))
       setPagos(pagosData)
       await loadSellers()
-      const { saldoRestante } = calcularPago(monto, saldoAnterior, montoPagado)
+      const restante = updatedCommissions.reduce(
+        (s, c) => (c.isPaid ? s : s + c.commissionAmount - (c.montoImputado ?? 0)),
+        0,
+      )
       toast.success(
-        saldoRestante === 0
-          ? 'Pago registrado — sin saldo pendiente'
-          : saldoRestante > 0
-            ? `Pago registrado — queda debiendo ${formatCurrency(saldoRestante)}`
-            : `Pago registrado — adelanto a favor de ${formatCurrency(Math.abs(saldoRestante))}`,
+        restante < 0.01
+          ? 'Pago registrado — no queda nada pendiente'
+          : `Pago registrado — queda pendiente ${formatCurrency(restante)}`,
       )
     } catch (error: any) {
       toast.error(error?.message || 'Error al pagar comisiones')
@@ -503,15 +503,27 @@ export default function EmpleadosPage() {
       toast.error('No hay comisiones pendientes en el período seleccionado')
       return
     }
-    const monto = items.reduce((s, c) => s + c.commissionAmount, 0)
+    const monto = items.reduce((s, c) => s + c.commissionAmount - (c.montoImputado ?? 0), 0)
     buildComisionesPDF(selectedSeller, desdeDate, hastaDate, items, monto)
   }
 
-  // Comisiones incluidas en un pago (se marcaron pagas con cutoff = createdAt del pago)
-  const getPagoItems = (pago: any): SellerCommission[] =>
-    commissions.filter(
-      (c) => c.isPaid && c.paidAt && Math.abs(c.paidAt.getTime() - new Date(pago.createdAt).getTime()) < 1000,
+  // Comisiones que cubrió un pago: tramo de la imputación FIFO entre lo acumulado
+  // antes de ese pago y lo acumulado después.
+  const getPagoItems = (pago: any): SellerCommission[] => {
+    const cronologicos = [...pagos].sort(
+      (a: any, b: any) => new Date(a.fechaPago ?? a.createdAt).getTime() - new Date(b.fechaPago ?? b.createdAt).getTime(),
     )
+    const idx = cronologicos.findIndex((p: any) => p.id === pago.id)
+    if (idx < 0) return []
+    const acumuladoAntes = cronologicos
+      .slice(0, idx)
+      .reduce((sum: number, p: any) => sum + (p.montoPagado ?? p.monto ?? 0), 0)
+    return comisionesDelPago(
+      [...commissions].sort((a, b) => a.createdAt.getTime() - b.createdAt.getTime()),
+      acumuladoAntes,
+      pago.montoPagado ?? pago.monto ?? 0,
+    )
+  }
 
   const handlePagoPdf = (pago: any) => {
     if (!selectedSeller) return
@@ -521,7 +533,7 @@ export default function EmpleadosPage() {
       pago.periodoDesde ?? null,
       pago.periodoHasta ?? null,
       items,
-      pago.monto,
+      pago.montoPagado ?? pago.monto,
     )
   }
 
@@ -594,7 +606,22 @@ export default function EmpleadosPage() {
       (comEstado === 'todos' || (comEstado === 'pagado' ? c.isPaid : !c.isPaid)),
   )
   const pendingInRange = commissions.filter((c) => !c.isPaid && inComRange(c))
-  const pendingInRangeTotal = pendingInRange.reduce((sum, c) => sum + c.commissionAmount, 0)
+  // Lo que falta pagar: descuenta la parte ya cubierta de las comisiones parciales.
+  const pendingInRangeTotal = pendingInRange.reduce(
+    (sum, c) => sum + c.commissionAmount - (c.montoImputado ?? 0),
+    0,
+  )
+  // Pendiente anterior al período: el pago se imputa desde lo más viejo, así que
+  // esto se cubre antes que las comisiones del rango elegido.
+  const pendienteTotal = commissions.reduce(
+    (sum, c) => (c.isPaid ? sum : sum + c.commissionAmount - (c.montoImputado ?? 0)),
+    0,
+  )
+  const pendienteAnterior = comDesdeDate
+    ? commissions
+        .filter((c) => !c.isPaid && c.createdAt < comDesdeDate)
+        .reduce((sum, c) => sum + c.commissionAmount - (c.montoImputado ?? 0), 0)
+    : 0
   // Primer día a pagar = fecha de la comisión pendiente más antigua
   const firstPendingDate = pendingCommissions.length > 0
     ? new Date(Math.min(...pendingCommissions.map((c) => c.createdAt.getTime())))
@@ -1421,17 +1448,11 @@ export default function EmpleadosPage() {
               </TabsContent>
 
               <TabsContent value="cobros" className="mt-4">
-              {saldoAnterior !== 0 && (
-                <div className={`mb-3 flex items-center gap-2 text-sm rounded-2xl border px-3 py-2 ${
-                  saldoAnterior > 0
-                    ? 'border-amber-200 dark:border-amber-800 bg-amber-50/60 dark:bg-amber-900/10'
-                    : 'border-teal-200 dark:border-teal-800 bg-teal-50/60 dark:bg-teal-900/10'
-                }`}>
-                  <Banknote className={`h-4 w-4 shrink-0 ${saldoAnterior > 0 ? 'text-amber-600' : 'text-teal-600'}`} />
+              {pendienteTotal > 0.01 && (
+                <div className="mb-3 flex items-center gap-2 text-sm rounded-2xl border border-amber-200 dark:border-amber-800 bg-amber-50/60 dark:bg-amber-900/10 px-3 py-2">
+                  <Banknote className="h-4 w-4 shrink-0 text-amber-600" />
                   <span className="text-foreground">
-                    {saldoAnterior > 0
-                      ? <>Se le debe <strong>{formatCurrency(saldoAnterior)}</strong> de pagos anteriores</>
-                      : <>Tiene un adelanto a favor de <strong>{formatCurrency(Math.abs(saldoAnterior))}</strong></>}
+                    Pendiente de pago: <strong>{formatCurrency(pendienteTotal)}</strong>
                   </span>
                 </div>
               )}
@@ -1466,22 +1487,19 @@ export default function EmpleadosPage() {
                             )}
                             {pago.nota && <> — {pago.nota}</>}
                           </p>
-                          {(pago.saldoAnterior || pago.saldoRestante) ? (
+                          {pago.montoPagado != null && Math.abs(pago.montoPagado - pago.monto) > 0.01 && (
                             <p className="text-xs mt-0.5">
-                              {pago.saldoAnterior ? (
-                                <span className="text-muted-foreground">
-                                  Saldo anterior {formatCurrency(pago.saldoAnterior)}{' '}
+                              {pago.montoPagado < pago.monto ? (
+                                <span className="text-amber-600">
+                                  Pago parcial — faltaron {formatCurrency(pago.monto - pago.montoPagado)}
                                 </span>
-                              ) : null}
-                              {pago.saldoRestante > 0 ? (
-                                <span className="text-amber-600">· quedó debiendo {formatCurrency(pago.saldoRestante)}</span>
-                              ) : pago.saldoRestante < 0 ? (
-                                <span className="text-teal-600">· adelanto a favor {formatCurrency(Math.abs(pago.saldoRestante))}</span>
                               ) : (
-                                <span className="text-teal-600">· saldado</span>
+                                <span className="text-teal-600">
+                                  Pagó {formatCurrency(pago.montoPagado - pago.monto)} de más (a cuenta)
+                                </span>
                               )}
                             </p>
-                          ) : null}
+                          )}
                           <div className="flex items-center gap-2 mt-2">
                             <Button
                               variant="outline"
@@ -1689,9 +1707,11 @@ export default function EmpleadosPage() {
                             <span className={`text-xs px-2 py-0.5 rounded-full ${
                               commission.isPaid
                                 ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400'
-                                : 'bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400'
+                                : commission.estadoPago === 'parcial'
+                                  ? 'bg-sky-100 text-sky-700 dark:bg-sky-900/30 dark:text-sky-400'
+                                  : 'bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400'
                             }`}>
-                              {commission.isPaid ? 'Pagada' : 'Pendiente'}
+                              {commission.isPaid ? 'Pagada' : commission.estadoPago === 'parcial' ? 'Parcial' : 'Pendiente'}
                             </span>
                           </div>
                           <p className="text-sm text-muted-foreground">
@@ -1699,8 +1719,8 @@ export default function EmpleadosPage() {
                           </p>
                           <p className="text-xs text-muted-foreground">
                             {formatDate(commission.createdAt)}
-                            {commission.isPaid && commission.paidAt && (
-                              <> - Pagada el {formatDate(commission.paidAt)}</>
+                            {commission.estadoPago === 'parcial' && (
+                              <> - Cobrado {formatCurrency(commission.montoImputado ?? 0)}, falta {formatCurrency(commission.commissionAmount - (commission.montoImputado ?? 0))}</>
                             )}
                           </p>
                         </div>
@@ -1748,21 +1768,19 @@ export default function EmpleadosPage() {
 
           <div className="space-y-3">
             <div className="rounded-2xl border bg-muted/30 p-3 space-y-1 text-sm">
+              {pendienteAnterior > 0 && (
+                <div className="flex justify-between">
+                  <span className="text-muted-foreground">Pendiente anterior al período</span>
+                  <span className="font-semibold tabular-nums text-amber-600">{formatCurrency(pendienteAnterior)}</span>
+                </div>
+              )}
               <div className="flex justify-between">
-                <span className="text-muted-foreground">Comisiones del período ({pendingInRange.length})</span>
+                <span className="text-muted-foreground">Pendiente del período ({pendingInRange.length})</span>
                 <span className="font-semibold tabular-nums">{formatCurrency(pendingInRangeTotal)}</span>
               </div>
-              <div className="flex justify-between">
-                <span className="text-muted-foreground">
-                  {saldoAnterior >= 0 ? 'Deuda anterior' : 'Adelanto a favor'}
-                </span>
-                <span className={`font-semibold tabular-nums ${saldoAnterior > 0 ? 'text-amber-600' : saldoAnterior < 0 ? 'text-teal-600' : ''}`}>
-                  {formatCurrency(Math.abs(saldoAnterior))}
-                </span>
-              </div>
               <div className="flex justify-between border-t pt-1">
-                <span className="font-medium">Total a pagar</span>
-                <span className="font-bold tabular-nums">{formatCurrency(montoSugerido(pendingInRangeTotal, saldoAnterior))}</span>
+                <span className="font-medium">Total pendiente</span>
+                <span className="font-bold tabular-nums">{formatCurrency(pendienteAnterior + pendingInRangeTotal)}</span>
               </div>
             </div>
 
@@ -1781,17 +1799,18 @@ export default function EmpleadosPage() {
               {(() => {
                 const m = Number(pagoMonto)
                 if (!Number.isFinite(m)) return null
-                const { saldoRestante } = calcularPago(pendingInRangeTotal, saldoAnterior, m)
-                if (saldoRestante === 0) {
-                  return <p className="text-xs text-teal-600 mt-1">Queda saldado, sin deuda pendiente.</p>
+                const restante = pendienteAnterior + pendingInRangeTotal - m
+                if (Math.abs(restante) < 0.01) {
+                  return <p className="text-xs text-teal-600 mt-1">Cubre todo lo pendiente.</p>
                 }
-                return saldoRestante > 0 ? (
+                return restante > 0 ? (
                   <p className="text-xs text-amber-600 mt-1">
-                    Queda debiendo {formatCurrency(saldoRestante)} — se suma al próximo pago.
+                    Queda pendiente {formatCurrency(restante)}. Se paga desde la comisión más vieja;
+                    la última que alcance queda parcial.
                   </p>
                 ) : (
                   <p className="text-xs text-teal-600 mt-1">
-                    Le pagás {formatCurrency(Math.abs(saldoRestante))} de más — se descuenta del próximo pago.
+                    Le pagás {formatCurrency(Math.abs(restante))} de más — queda a cuenta de comisiones futuras.
                   </p>
                 )
               })()}
