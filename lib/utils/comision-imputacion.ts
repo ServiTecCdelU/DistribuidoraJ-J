@@ -33,14 +33,16 @@ export function imputarComisiones<T extends ComisionImputable>(
   totalPagado: number,
 ): ImputacionResultado<T> {
   const orden = [...comisiones].sort((a, b) => a.createdAt.getTime() - b.createdAt.getTime())
-  let disponible = totalPagado
+
+  // Las devoluciones descuentan deuda, no se "pagan": se netean de entrada para
+  // que también cubran comisiones anteriores a la fecha de la devolución.
+  const devoluciones = orden.reduce((s, c) => s + Math.min(0, c.commissionAmount || 0), 0)
+  let disponible = totalPagado - devoluciones
 
   const imputados = orden.map((c) => {
     const monto = c.commissionAmount || 0
 
-    // Devolución: no se "paga", descuenta deuda y libera plata.
     if (monto <= 0) {
-      disponible -= monto
       return { ...c, montoImputado: monto, estadoPago: 'pagado' as EstadoPagoComision, isPaid: true }
     }
 

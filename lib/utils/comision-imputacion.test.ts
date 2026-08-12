@@ -104,6 +104,16 @@ describe('imputarComisiones', () => {
     expect(sobrante).toBe(500)
   })
 
+  it('una devolución sola cubre comisiones aunque no haya pagos', () => {
+    const { items } = imputarComisiones([c(1000, 1), c(1000, 2), c(-400, 3)], 0)
+    // La devolución descuenta deuda: cubre 400 de la comisión más vieja.
+    expect(items[0].montoImputado).toBe(400)
+    expect(items[0].estadoPago).toBe('parcial')
+    expect(items[1].estadoPago).toBe('pendiente')
+    // Neto imputado = 0: no salió plata de la caja.
+    expect(items.reduce((s, i) => s + i.montoImputado, 0)).toBe(0)
+  })
+
   it('una devolución libera plata para las comisiones siguientes', () => {
     const { items } = imputarComisiones([c(1000, 1), c(-400, 2), c(1000, 3)], 1000)
     expect(items[0].estadoPago).toBe('pagado')
