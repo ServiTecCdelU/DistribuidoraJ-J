@@ -559,7 +559,7 @@ const ProductListItem = memo(function ProductListItem({
 
           {/* Descripción */}
           <div className="flex items-center gap-2 min-w-0">
-            <p className="font-medium text-sm leading-tight truncate">{product.name}</p>
+            <p className="font-medium text-sm leading-tight line-clamp-2 lg:line-clamp-none lg:truncate">{product.name}</p>
             {ofertaActiva && (
               <Badge className="h-5 px-1.5 text-[10px] shrink-0 gap-0.5 bg-teal-100 text-teal-700 hover:bg-teal-100 border border-teal-200">
                 <Percent className="h-2.5 w-2.5" />
