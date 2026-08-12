@@ -33,7 +33,7 @@ import { formatCurrency, formatDate } from '@/lib/utils/format'
 import { statusConfig } from '@/lib/order-constants'
 import { resumenComisiones } from '@/lib/utils/comisiones'
 import { comisionesDelPago } from '@/lib/utils/comision-imputacion'
-import { toInputDate } from '@/lib/utils/comisiones-period'
+import { toInputDate, monthRange, monthLabel, shiftMonth } from '@/lib/utils/comisiones-period'
 import {
   Plus,
   Search,
@@ -57,6 +57,8 @@ import {
   Package,
   Calendar,
   ChevronDown,
+  ChevronLeft,
+  ChevronRight,
   ArrowLeft,
 } from 'lucide-react'
 import { toast } from 'sonner'
@@ -102,6 +104,9 @@ export default function EmpleadosPage() {
   const [comDesde, setComDesde] = useState('')
   const [comHasta, setComHasta] = useState('')
   const [comEstado, setComEstado] = useState<'pendiente' | 'pagado' | 'todos'>('pendiente')
+  // Por defecto se navega mes a mes, arrancando en el primer mes con comisiones pendientes.
+  const [comModo, setComModo] = useState<'mes' | 'rango'>('mes')
+  const [comMes, setComMes] = useState<Date | null>(null)
   const [paying, setPaying] = useState(false)
 
   // Modal de pago: monto (puede ser mayor/menor/igual), fecha real y nota
@@ -154,6 +159,22 @@ export default function EmpleadosPage() {
     doLoad()
     return () => { mounted = false }
   }, [])
+
+  // Modo "por mes": el rango de fechas lo maneja el mes activo.
+  // Si todavía no hay mes elegido, arranca en el primer mes con comisiones pendientes.
+  useEffect(() => {
+    if (comModo !== 'mes') return
+    if (comMes) {
+      const { from, to } = monthRange(comMes)
+      setComDesde(toInputDate(from))
+      setComHasta(toInputDate(to))
+      return
+    }
+    const pendientes = commissions.filter((c) => !c.isPaid)
+    if (pendientes.length === 0) return
+    const primero = new Date(Math.min(...pendientes.map((c) => c.createdAt.getTime())))
+    setComMes(new Date(primero.getFullYear(), primero.getMonth(), 1))
+  }, [comModo, comMes, commissions])
 
   const loadSellers = async () => {
     try {
@@ -216,6 +237,8 @@ export default function EmpleadosPage() {
     setComDesde('')
     setComHasta('')
     setComEstado('pendiente')
+    setComModo('mes')
+    setComMes(null)
     setLoadingCommissions(true)
     setLoadingOrders(true)
     try {
@@ -687,10 +710,16 @@ export default function EmpleadosPage() {
         .filter((c) => !c.isPaid && c.createdAt < comDesdeDate)
         .reduce((sum, c) => sum + c.commissionAmount - (c.montoImputado ?? 0), 0)
     : 0
-  // Primer día a pagar = fecha de la comisión pendiente más antigua
-  const firstPendingDate = pendingCommissions.length > 0
-    ? new Date(Math.min(...pendingCommissions.map((c) => c.createdAt.getTime())))
+  // Primer mes a pagar = mes de la comisión pendiente más antigua (sin filtrar por rango)
+  const todasPendientes = commissions.filter((c) => !c.isPaid)
+  const firstPendingDate = todasPendientes.length > 0
+    ? new Date(Math.min(...todasPendientes.map((c) => c.createdAt.getTime())))
     : null
+  const firstPendingMonth = firstPendingDate
+    ? new Date(firstPendingDate.getFullYear(), firstPendingDate.getMonth(), 1)
+    : null
+  const yaEnPrimerMes =
+    !!firstPendingMonth && !!comMes && comMes.getTime() === firstPendingMonth.getTime()
 
   // Pedidos activos agrupados por día y luego por cliente (más reciente primero)
   const ordersByDay = activeOrders.reduce<Record<string, { label: string; clients: Record<string, Order[]> }>>((acc, order) => {
@@ -1710,45 +1739,87 @@ export default function EmpleadosPage() {
                   </div>
                 </div>
 
-                {/* Recordatorio: primer día a pagar */}
-                {comEstado !== 'pagado' && firstPendingDate && (
+                {/* Recordatorio: primer mes a pagar */}
+                {comEstado !== 'pagado' && firstPendingMonth && (
                   <div className="mb-3 flex items-center gap-2 flex-wrap text-sm rounded-lg border border-amber-200 dark:border-amber-800 bg-amber-50/60 dark:bg-amber-900/10 px-3 py-2">
                     <Clock className="h-4 w-4 text-amber-600 dark:text-amber-400 shrink-0" />
-                    <span className="text-foreground">
-                      Primer día a pagar: <strong>{formatDate(firstPendingDate)}</strong>
+                    <span className="text-foreground capitalize">
+                      Primer mes a pagar: <strong>{monthLabel(firstPendingMonth)}</strong>
                     </span>
-                    <button
-                      type="button"
-                      onClick={() => setComDesde(firstPendingDate.toISOString().slice(0, 10))}
-                      className="text-xs font-medium text-primary hover:underline"
-                    >
-                      Usar como "Desde"
-                    </button>
+                    {!(comModo === 'mes' && yaEnPrimerMes) && (
+                      <button
+                        type="button"
+                        onClick={() => { setComModo('mes'); setComMes(firstPendingMonth) }}
+                        className="text-xs font-medium text-primary hover:underline"
+                      >
+                        Ir a ese mes
+                      </button>
+                    )}
                   </div>
                 )}
 
                 {/* Filtros */}
                 <div className="flex items-end gap-2 flex-wrap mb-3 p-3 rounded-xl border border-border/60 bg-muted/30">
-                  <div className="grid gap-1">
-                    <Label htmlFor="comDesde" className="text-xs text-muted-foreground">Desde</Label>
-                    <Input
-                      id="comDesde"
-                      type="date"
-                      value={comDesde}
-                      onChange={(e) => setComDesde(e.target.value)}
-                      className="h-9 w-[150px]"
-                    />
-                  </div>
-                  <div className="grid gap-1">
-                    <Label htmlFor="comHasta" className="text-xs text-muted-foreground">Hasta</Label>
-                    <Input
-                      id="comHasta"
-                      type="date"
-                      value={comHasta}
-                      onChange={(e) => setComHasta(e.target.value)}
-                      className="h-9 w-[150px]"
-                    />
-                  </div>
+                  {comModo === 'mes' ? (
+                    <div className="grid gap-1">
+                      <Label className="text-xs text-muted-foreground">Mes</Label>
+                      <div className="flex items-center gap-1">
+                        <Button
+                          variant="outline"
+                          size="icon"
+                          className="h-9 w-9"
+                          onClick={() => setComMes(shiftMonth(comMes ?? new Date(), -1))}
+                          aria-label="Mes anterior"
+                        >
+                          <ChevronLeft className="h-4 w-4" />
+                        </Button>
+                        <div className="h-9 min-w-[150px] px-3 flex items-center justify-center rounded-md border border-input bg-background text-sm font-medium capitalize">
+                          {monthLabel(comMes ?? new Date())}
+                        </div>
+                        <Button
+                          variant="outline"
+                          size="icon"
+                          className="h-9 w-9"
+                          onClick={() => setComMes(shiftMonth(comMes ?? new Date(), 1))}
+                          aria-label="Mes siguiente"
+                        >
+                          <ChevronRight className="h-4 w-4" />
+                        </Button>
+                      </div>
+                    </div>
+                  ) : (
+                    <>
+                      <div className="grid gap-1">
+                        <Label htmlFor="comDesde" className="text-xs text-muted-foreground">Desde</Label>
+                        <Input
+                          id="comDesde"
+                          type="date"
+                          value={comDesde}
+                          onChange={(e) => setComDesde(e.target.value)}
+                          className="h-9 w-[150px]"
+                        />
+                      </div>
+                      <div className="grid gap-1">
+                        <Label htmlFor="comHasta" className="text-xs text-muted-foreground">Hasta</Label>
+                        <Input
+                          id="comHasta"
+                          type="date"
+                          value={comHasta}
+                          onChange={(e) => setComHasta(e.target.value)}
+                          className="h-9 w-[150px]"
+                        />
+                      </div>
+                    </>
+                  )}
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="h-9"
+                    onClick={() => setComModo(comModo === 'mes' ? 'rango' : 'mes')}
+                  >
+                    <Calendar className="h-4 w-4 mr-1" />
+                    {comModo === 'mes' ? 'Usar rango' : 'Por mes'}
+                  </Button>
                   <div className="grid gap-1">
                     <Label htmlFor="comEstado" className="text-xs text-muted-foreground">Estado</Label>
                     <select
@@ -1762,12 +1833,18 @@ export default function EmpleadosPage() {
                       <option value="todos">Todas</option>
                     </select>
                   </div>
-                  {(comDesde || comHasta || comEstado !== 'pendiente') && (
+                  {(comModo !== 'mes' || !yaEnPrimerMes || comEstado !== 'pendiente') && (
                     <Button
                       variant="ghost"
                       size="sm"
                       className="h-9"
-                      onClick={() => { setComDesde(''); setComHasta(''); setComEstado('pendiente') }}
+                      onClick={() => {
+                        setComDesde('')
+                        setComHasta('')
+                        setComEstado('pendiente')
+                        setComModo('mes')
+                        setComMes(null)
+                      }}
                     >
                       <X className="h-4 w-4 mr-1" />
                       Limpiar
