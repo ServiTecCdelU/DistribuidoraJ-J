@@ -1,5 +1,19 @@
 import { describe, it, expect } from 'vitest'
-import { clasificarDeuda, diasDesde, esDiaDePago, diaDePagoInfo } from './deuda'
+import { clasificarDeuda, diasDesde, esDiaDePago, diaDePagoInfo, fechaDiaDePago } from './deuda'
+
+describe('fechaDiaDePago', () => {
+  it('suma el plazo de 7 días a la fecha de la venta', () => {
+    expect(fechaDiaDePago(new Date('2026-08-11T10:00:00'))).toEqual(new Date('2026-08-18T10:00:00'))
+  })
+
+  it('cruza fin de mes correctamente', () => {
+    expect(fechaDiaDePago(new Date('2026-08-28T10:00:00'))).toEqual(new Date('2026-09-04T10:00:00'))
+  })
+
+  it('sin fecha devuelve null', () => {
+    expect(fechaDiaDePago(null)).toBeNull()
+  })
+})
 
 const AHORA = new Date('2026-06-16T12:00:00')
 const hace = (dias: number) => new Date(AHORA.getTime() - dias * 86400000)
