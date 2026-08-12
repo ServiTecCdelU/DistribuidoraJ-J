@@ -359,18 +359,14 @@ export default function EmpleadosPage() {
         .totbox { margin-top: 14px; padding: 10px 14px; background: #ecfdf5; border: 1px solid #a7f3d0; border-radius: 8px; display: inline-block; }
         .totbox .lbl { font-size: 11px; color: #555; }
         .totbox .val { font-size: 20px; font-weight: bold; color: #047857; }
-        .pasos { margin-top: 12px; width: 420px; }
-        .paso { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; padding: 7px 10px; border-bottom: 1px solid #eee; font-size: 13px; }
-        .paso .n { display: inline-block; width: 20px; height: 20px; line-height: 20px; text-align: center; border-radius: 50%; background: #ccfbf1; color: #0f766e; font-weight: bold; font-size: 11px; margin-right: 8px; }
-        .paso .v { font-weight: bold; white-space: nowrap; }
-        .paso .neg { color: #b91c1c; }
-        .paso.sub { background: #f8fafc; font-weight: 600; }
-        .paso.final { background: #ecfdf5; border: 2px solid #5eead4; border-radius: 10px; margin-top: 8px; padding: 12px; }
-        .paso.final .lbl { font-size: 16px; font-weight: bold; }
-        .paso.final .v { font-size: 22px; color: #0d9488; }
-        .paso.pend { background: #fffbeb; border: 2px solid #fcd34d; border-radius: 10px; margin-top: 6px; padding: 10px; }
-        .paso.pend .lbl { font-size: 14px; font-weight: bold; color: #92400e; }
-        .paso.pend .v { font-size: 18px; color: #b45309; }
+        .calc { width: 520px; margin-top: 8px; font-size: 12px; }
+        .calc th { background: #f1f5f9; }
+        .calc .paso-n { width: 26px; text-align: center; color: #0f766e; font-weight: bold; }
+        .calc .det { color: #666; font-size: 10px; }
+        .calc .neg { color: #b91c1c; }
+        .calc tr.sub td { background: #f8fafc; font-weight: 600; }
+        .calc tr.final td { background: #ecfdf5; font-weight: bold; font-size: 14px; border-color: #5eead4; color: #0d9488; }
+        .calc tr.pend td { background: #fffbeb; font-weight: bold; border-color: #fcd34d; color: #b45309; }
         td.falta { color: #b45309; font-weight: bold; }
         .footer { margin-top: 24px; font-size: 10px; color: #888; }
       </style></head><body>
@@ -390,16 +386,18 @@ export default function EmpleadosPage() {
         <tbody>${rows(devol)}</tbody>
       </table>` : ''}
       <h2>Cómo se calcula lo que se le paga</h2>
-      <div class="pasos">
-        <div class="paso"><span><span class="n">1</span>Vendió</span><span class="v">${formatCurrency(totalVentas)}</span></div>
-        <div class="paso"><span><span class="n">2</span>Devoluciones</span><span class="v neg">− ${formatCurrency(devMonto)}</span></div>
-        <div class="paso sub"><span style="margin-left:28px">Venta menos devolución</span><span class="v">${formatCurrency(ventasNetas)}</span></div>
-        <div class="paso"><span><span class="n">3</span>Comisión ${seller.commissionRate}%</span><span class="v" style="font-weight:normal;color:#555;font-size:11px">${seller.commissionRate}% × ${formatCurrency(ventasNetas)}</span></div>
-        <div class="paso sub"><span style="margin-left:28px">Comisión de estas ventas</span><span class="v">${formatCurrency(comisionTotal)}</span></div>
-        ${conImputacion && cubiertoPrevio > 0.009 ? `<div class="paso"><span><span class="n">4</span>Ya cobrado antes</span><span class="v neg">− ${formatCurrency(cubiertoPrevio)}</span></div>` : ''}
-        <div class="paso final"><span class="lbl">Se le paga</span><span class="v">${formatCurrency(monto)}</span></div>
-        ${conImputacion && totalRestante > 0.009 ? `<div class="paso pend"><span class="lbl">Queda por pagar</span><span class="v">${formatCurrency(totalRestante)}</span></div>` : ''}
-      </div>
+      <table class="calc">
+        <thead><tr><th class="paso-n">#</th><th>Concepto</th><th>Detalle</th><th class="num">Importe</th></tr></thead>
+        <tbody>
+          <tr><td class="paso-n">1</td><td>Vendió</td><td class="det">${ventas.length} ${ventas.length === 1 ? 'venta' : 'ventas'}</td><td class="num">${formatCurrency(totalVentas)}</td></tr>
+          <tr><td class="paso-n">2</td><td>Devoluciones</td><td class="det">${devol.length ? `${devol.length} ${devol.length === 1 ? 'ajuste' : 'ajustes'}` : 'sin devoluciones'}</td><td class="num neg">− ${formatCurrency(devMonto)}</td></tr>
+          <tr class="sub"><td></td><td>Venta menos devolución</td><td class="det"></td><td class="num">${formatCurrency(ventasNetas)}</td></tr>
+          <tr><td class="paso-n">3</td><td>Comisión ${seller.commissionRate}%</td><td class="det">${seller.commissionRate}% × ${formatCurrency(ventasNetas)}</td><td class="num">${formatCurrency(comisionTotal)}</td></tr>
+          ${conImputacion && cubiertoPrevio > 0.009 ? `<tr><td class="paso-n">4</td><td>Ya cobrado antes</td><td class="det">pagos anteriores</td><td class="num neg">− ${formatCurrency(cubiertoPrevio)}</td></tr>` : ''}
+          <tr class="final"><td></td><td>Se le paga</td><td class="det"></td><td class="num">${formatCurrency(monto)}</td></tr>
+          ${conImputacion && totalRestante > 0.009 ? `<tr class="pend"><td></td><td>Queda por pagar</td><td class="det">se cobra en el próximo pago</td><td class="num">${formatCurrency(totalRestante)}</td></tr>` : ''}
+        </tbody>
+      </table>
       <div class="footer">Generado el ${stamp} — Distribuidora Patricia</div>
       </body></html>`
 
