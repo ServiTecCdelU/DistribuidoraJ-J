@@ -548,6 +548,17 @@ const ProductListItem = memo(function ProductListItem({
         ? "bg-teal-50/60 border-teal-200 dark:bg-teal-950/20 dark:border-teal-800"
         : "bg-card border-border",
     )}>
+      {/* En mobile la descripción va sola arriba, a lo ancho del card */}
+      <div className="lg:hidden flex items-start gap-2 mb-2">
+        <p className="flex-1 min-w-0 font-medium text-sm leading-tight break-words">{product.name}</p>
+        {ofertaActiva && (
+          <Badge className="h-5 px-1.5 text-[10px] shrink-0 gap-0.5 bg-teal-100 text-teal-700 hover:bg-teal-100 border border-teal-200">
+            <Percent className="h-2.5 w-2.5" />
+            hasta {descuento}% dto.
+          </Badge>
+        )}
+      </div>
+
       <div className="flex items-center gap-2">
         {/* Info del producto. En desktop se alinea en tabla:
             código | descripción  /  stock | u./lote */}
@@ -557,9 +568,9 @@ const ProductListItem = memo(function ProductListItem({
             {product.description || ""}
           </p>
 
-          {/* Descripción */}
-          <div className="flex items-center gap-2 min-w-0">
-            <p className="font-medium text-sm leading-tight line-clamp-2 lg:line-clamp-none lg:truncate">{product.name}</p>
+          {/* Descripción (solo desktop; en mobile va arriba) */}
+          <div className="hidden lg:flex items-center gap-2 min-w-0">
+            <p className="font-medium text-sm leading-tight truncate">{product.name}</p>
             {ofertaActiva && (
               <Badge className="h-5 px-1.5 text-[10px] shrink-0 gap-0.5 bg-teal-100 text-teal-700 hover:bg-teal-100 border border-teal-200">
                 <Percent className="h-2.5 w-2.5" />
