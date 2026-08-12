@@ -162,6 +162,12 @@ export interface VentaProductSearchResult {
 
 type VentaProductItem = VentaProductSearchResult['data'][number]
 
+// Filtro OR de búsqueda para "productos". Se incluye el id porque los productos
+// que vienen del mayorista guardan el código en el sufijo del id (prod_mp_XXXX)
+// y pueden tener codigo/code en NULL.
+export const buildVentaSearchFilter = (search: string): string =>
+  `name.ilike.%${search}%,codigo.ilike.%${search}%,code.ilike.%${search}%,id.ilike.%${search}%`
+
 // Fuente única para la venta: tabla "productos" habilitados. Incluye tanto los
 // productos que provienen del mayorista (id "prod_mp_*") como los creados a mano
 // (id "producto_*"). El rubro es productos.category — lo que el admin gestiona y
@@ -179,7 +185,7 @@ export const searchProductosParaVenta = async (params: VentaProductSearchParams)
     .order('name', { ascending: true })
 
   if (search) {
-    query = query.or(`name.ilike.%${search}%,codigo.ilike.%${search}%,code.ilike.%${search}%`)
+    query = query.or(buildVentaSearchFilter(search))
   }
   if (rubro) {
     query = query.eq('category', rubro)
