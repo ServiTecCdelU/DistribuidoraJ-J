@@ -1,9 +1,11 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { MainLayout } from '@/components/layout/main-layout'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
+import { Button } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
 import { DataTableSkeleton } from '@/components/ui/data-table-skeleton'
 import { Skeleton } from '@/components/ui/skeleton'
 import {
@@ -19,12 +21,28 @@ import { useAuth } from '@/hooks/use-auth'
 import type { SellerCommission } from '@/lib/types'
 import { formatCurrency as formatPrice, formatDate } from '@/lib/utils/format'
 import { resumenComisiones } from '@/lib/utils/comisiones'
-import { TrendingUp, Clock, CheckCircle2, DollarSign } from 'lucide-react'
+import {
+  monthRange,
+  dayRange,
+  customRange,
+  shiftMonth,
+  filterByRange,
+  monthLabel,
+  toInputDate,
+  type ComisionPeriodMode,
+  type DateRange,
+} from '@/lib/utils/comisiones-period'
+import { TrendingUp, Clock, CheckCircle2, DollarSign, ChevronLeft, ChevronRight } from 'lucide-react'
 
 export default function ComisionesPage() {
   const { user } = useAuth()
   const [commissions, setCommissions] = useState<SellerCommission[]>([])
   const [loading, setLoading] = useState(true)
+  const [mode, setMode] = useState<ComisionPeriodMode>('month')
+  const [anchor, setAnchor] = useState<Date>(() => new Date())
+  const [day, setDay] = useState<string>(() => toInputDate(new Date()))
+  const [dateFrom, setDateFrom] = useState('')
+  const [dateTo, setDateTo] = useState('')
 
   useEffect(() => {
     let mounted = true
@@ -47,8 +65,16 @@ export default function ComisionesPage() {
     return () => { mounted = false }
   }, [user?.sellerId])
 
+  const range: DateRange | null = useMemo(() => {
+    if (mode === 'month') return monthRange(anchor)
+    if (mode === 'day') return day ? dayRange(new Date(`${day}T12:00:00`)) : null
+    return customRange(dateFrom, dateTo)
+  }, [mode, anchor, day, dateFrom, dateTo])
+
+  const filtered = useMemo(() => filterByRange(commissions, range), [commissions, range])
+
   // Mismos números que ve el admin en Empleados (misma fuente: resumenComisiones).
-  const resumen = resumenComisiones(commissions)
+  const resumen = resumenComisiones(filtered)
   const total = resumen.finales // neto = comisiones finales
   const pendingTotal = resumen.pendiente
   const paidTotal = resumen.cobrado
@@ -72,6 +98,62 @@ export default function ComisionesPage() {
         </div>
       ) : (
         <>
+          {/* ── Filtro de período ── */}
+          <Card className="mb-4">
+            <CardContent className="p-3 flex flex-col gap-3">
+              <div className="flex flex-wrap items-center gap-2">
+                <div className="flex gap-1">
+                  {([
+                    ['month', 'Mes'],
+                    ['day', 'Por día'],
+                    ['custom', 'Personalizado'],
+                  ] as const).map(([m, label]) => (
+                    <Button
+                      key={m}
+                      size="sm"
+                      variant={mode === m ? 'default' : 'outline'}
+                      className={mode === m ? 'rounded-2xl bg-teal-600 hover:bg-teal-700' : 'rounded-2xl'}
+                      onClick={() => setMode(m)}
+                    >
+                      {label}
+                    </Button>
+                  ))}
+                </div>
+
+                {mode === 'month' && (
+                  <div className="flex items-center gap-1 ml-auto">
+                    <Button size="icon" variant="outline" className="rounded-2xl h-8 w-8" onClick={() => setAnchor(shiftMonth(anchor, -1))} aria-label="Mes anterior">
+                      <ChevronLeft className="h-4 w-4" />
+                    </Button>
+                    <span className="text-sm font-semibold capitalize min-w-[130px] text-center">{monthLabel(anchor)}</span>
+                    <Button size="icon" variant="outline" className="rounded-2xl h-8 w-8" onClick={() => setAnchor(shiftMonth(anchor, 1))} aria-label="Mes siguiente">
+                      <ChevronRight className="h-4 w-4" />
+                    </Button>
+                  </div>
+                )}
+
+                {mode === 'day' && (
+                  <div className="flex items-center gap-2 ml-auto">
+                    <Input type="date" value={day} onChange={(e) => setDay(e.target.value)} className="rounded-2xl h-8 w-[160px]" />
+                  </div>
+                )}
+
+                {mode === 'custom' && (
+                  <div className="flex items-center gap-2 ml-auto flex-wrap">
+                    <Input type="date" value={dateFrom} onChange={(e) => setDateFrom(e.target.value)} className="rounded-2xl h-8 w-[150px]" />
+                    <span className="text-xs text-muted-foreground">a</span>
+                    <Input type="date" value={dateTo} onChange={(e) => setDateTo(e.target.value)} className="rounded-2xl h-8 w-[150px]" />
+                  </div>
+                )}
+              </div>
+              <p className="text-xs text-muted-foreground">
+                {range
+                  ? `${formatDate(range.from)} — ${formatDate(range.to)} · ${filtered.length} registros`
+                  : `Todas las comisiones · ${filtered.length} registros`}
+              </p>
+            </CardContent>
+          </Card>
+
           {/* ── Tarjetas resumen ── */}
           <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-6">
             <Card className="border-teal-200 dark:border-teal-800 bg-teal-50/50 dark:bg-teal-900/10">
@@ -101,7 +183,7 @@ export default function ComisionesPage() {
               </CardHeader>
               <CardContent className="pb-4 px-4">
                 <div className="text-xl font-bold text-green-600 truncate">{formatPrice(paidTotal)}</div>
-                <p className="text-xs text-muted-foreground mt-0.5">{commissions.length - pendingCount} cobradas</p>
+                <p className="text-xs text-muted-foreground mt-0.5">{filtered.length - pendingCount} cobradas</p>
               </CardContent>
             </Card>
             <Card>
@@ -116,17 +198,17 @@ export default function ComisionesPage() {
             </Card>
           </div>
 
-          {commissions.length === 0 ? (
+          {filtered.length === 0 ? (
             <Card>
               <CardContent className="py-12 text-center text-muted-foreground">
-                No hay comisiones registradas
+                No hay comisiones en el período seleccionado
               </CardContent>
             </Card>
           ) : (
             <>
               {/* ── Vista mobile: cards ── */}
               <div className="flex flex-col gap-3 md:hidden">
-                {commissions.map((c) => (
+                {filtered.map((c) => (
                   <Card key={c.id} className="overflow-hidden">
                     <CardContent className="p-0">
                       {/* Cabecera de la card */}
@@ -182,7 +264,7 @@ export default function ComisionesPage() {
                       </TableRow>
                     </TableHeader>
                     <TableBody>
-                      {commissions.map((c) => (
+                      {filtered.map((c) => (
                         <TableRow key={c.id}>
                           <TableCell className="text-sm whitespace-nowrap">{formatDate(c.createdAt)}</TableCell>
                           <TableCell className="text-sm">
