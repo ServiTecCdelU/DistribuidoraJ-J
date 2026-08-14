@@ -233,15 +233,19 @@ export async function getDevolucionesTotalsBySales(
 ): Promise<Record<string, number>> {
   const ids = [...new Set(saleIds.filter(Boolean))]
   if (ids.length === 0) return {}
-  const { data } = await supabase
-    .from('devoluciones')
-    .select('sale_id, total')
-    .in('sale_id', ids)
   const map: Record<string, number> = {}
-  for (const d of data ?? []) {
-    const sid = (d as any).sale_id as string | null
-    if (!sid) continue
-    map[sid] = (map[sid] || 0) + (Number((d as any).total) || 0)
+  // Chunks: un .in() con cientos de ids arma una URL enorme y la request falla.
+  const ID_CHUNK = 100
+  for (let i = 0; i < ids.length; i += ID_CHUNK) {
+    const { data } = await supabase
+      .from('devoluciones')
+      .select('sale_id, total')
+      .in('sale_id', ids.slice(i, i + ID_CHUNK))
+    for (const d of data ?? []) {
+      const sid = (d as any).sale_id as string | null
+      if (!sid) continue
+      map[sid] = (map[sid] || 0) + (Number((d as any).total) || 0)
+    }
   }
   return map
 }

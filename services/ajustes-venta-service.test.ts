@@ -65,6 +65,19 @@ describe("getDescuentosTotalsBySales", () => {
     expect(map).toEqual({ venta_1: 1500.5, venta_2: 250 });
   });
 
+  it("parte la consulta en chunks de 100 ids y acumula los resultados", async () => {
+    const ids = Array.from({ length: 150 }, (_, i) => `venta_${i}`);
+    queues["transacciones"] = [
+      { data: [{ sale_id: "venta_5", amount: 300, description: "[DESCUENTO] #A" }], error: null },
+      { data: [{ sale_id: "venta_120", amount: 700, description: "[DESCUENTO] #B" }], error: null },
+    ];
+
+    const map = await getDescuentosTotalsBySales(ids);
+
+    expect(from).toHaveBeenCalledTimes(2);
+    expect(map).toEqual({ venta_5: 300, venta_120: 700 });
+  });
+
   it("ignora transacciones sin sale_id", async () => {
     queues["transacciones"] = [
       {

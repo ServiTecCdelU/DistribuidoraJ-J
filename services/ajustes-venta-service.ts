@@ -10,6 +10,9 @@ import { generateReadableId } from '@/services/supabase-helpers'
 import { aplicarPagoADeudas } from '@/services/payments-service'
 import { calcularComisionDescuento } from '@/lib/utils/ajuste-venta'
 
+// Máximo de ids por request (evita URLs demasiado largas en los .in())
+const ID_CHUNK = 100
+
 const round2 = (n: number): number => Math.round((n + Number.EPSILON) * 100) / 100
 
 async function getCommissionRate(sellerId?: string): Promise<number> {
@@ -199,16 +202,19 @@ export async function getDescuentosTotalsBySales(
 ): Promise<Record<string, number>> {
   const ids = [...new Set(saleIds.filter(Boolean))]
   if (ids.length === 0) return {}
-  const { data } = await supabase
-    .from('transacciones')
-    .select('sale_id, amount, description')
-    .in('sale_id', ids)
-    .like('description', '[DESCUENTO]%')
   const map: Record<string, number> = {}
-  for (const d of data ?? []) {
-    const sid = (d as any).sale_id as string | null
-    if (!sid) continue
-    map[sid] = (map[sid] || 0) + (Number((d as any).amount) || 0)
+  // Chunks: un .in() con cientos de ids arma una URL enorme y la request falla.
+  for (let i = 0; i < ids.length; i += ID_CHUNK) {
+    const { data } = await supabase
+      .from('transacciones')
+      .select('sale_id, amount, description')
+      .in('sale_id', ids.slice(i, i + ID_CHUNK))
+      .like('description', '[DESCUENTO]%')
+    for (const d of data ?? []) {
+      const sid = (d as any).sale_id as string | null
+      if (!sid) continue
+      map[sid] = (map[sid] || 0) + (Number((d as any).amount) || 0)
+    }
   }
   return map
 }
