@@ -107,21 +107,28 @@ export default function CuentaCorrientePage() {
   const SALDOS_COLS_KEY = 'cc_print_saldos_columnas'
   const [saldosDialogOpen, setSaldosDialogOpen] = useState(false)
   const [saldosCodigo, setSaldosCodigo] = useState<string>('all')
-  const [saldosOrder, setSaldosOrder] = useState<'nombre' | 'diaCobro' | 'saldo' | 'codigo'>('saldo')
+  const [saldosOrder, setSaldosOrder] = useState<'diaCobro' | 'saldo'>('diaCobro')
   const [saldosPrinting, setSaldosPrinting] = useState(false)
   const [saldosCols, setSaldosCols] = useState({
     cuit: false,
     categoria: false,
-    telefono: true,
-    direccion: true,
-    codigoVendedor: true,
+    telefono: false,
+    direccion: false,
+    codigoVendedor: false,
     diaCobro: true,
     saldo: true,
   })
   useEffect(() => {
     try {
       const raw = localStorage.getItem(SALDOS_COLS_KEY)
-      if (raw) setSaldosCols((prev) => ({ ...prev, ...JSON.parse(raw) }))
+      if (raw) {
+        const saved = JSON.parse(raw)
+        setSaldosCols((prev) => ({
+          ...prev,
+          diaCobro: saved.diaCobro ?? prev.diaCobro,
+          saldo: saved.saldo ?? prev.saldo,
+        }))
+      }
     } catch {}
   }, [])
   const toggleSaldosCol = (key: keyof typeof saldosCols) =>
@@ -949,11 +956,6 @@ ${bloques}
     list = [...list].sort((a, b) => {
       switch (saldosOrder) {
         case 'saldo': return (b.currentBalance || 0) - (a.currentBalance || 0)
-        case 'codigo': {
-          const ca = a.sellerId ? (sellerCodigoById.get(a.sellerId) || '') : ''
-          const cb = b.sellerId ? (sellerCodigoById.get(b.sellerId) || '') : ''
-          return ca.localeCompare(cb, undefined, { numeric: true }) || a.name.localeCompare(b.name)
-        }
         case 'diaCobro': {
           const orden = ['lunes', 'martes', 'miercoles', 'jueves', 'viernes', 'sabado', 'domingo']
           const ia = a.diaCobro ? orden.indexOf(a.diaCobro) : 99
@@ -3101,11 +3103,6 @@ ${renderTabla('Cuenta Mayorista', mayorista, balanceMay)}
                   <label className="text-sm font-medium text-foreground">Qué mostrar</label>
                   <div className="grid grid-cols-2 gap-2">
                     {([
-                      ['codigoVendedor', 'Cód. vendedor'],
-                      ['cuit', 'CUIT'],
-                      ['categoria', 'Categoría'],
-                      ['telefono', 'Teléfono'],
-                      ['direccion', 'Dirección'],
                       ['diaCobro', 'Día de pago'],
                       ['saldo', 'Saldo'],
                     ] as [keyof typeof saldosCols, string][]).map(([key, label]) => (
@@ -3126,10 +3123,8 @@ ${renderTabla('Cuenta Mayorista', mayorista, balanceMay)}
                     value={saldosOrder}
                     onChange={(e) => setSaldosOrder(e.target.value as typeof saldosOrder)}
                   >
-                    <option value="saldo">Saldo (mayor a menor)</option>
-                    <option value="nombre">Nombre (A-Z)</option>
                     <option value="diaCobro">Día de pago</option>
-                    <option value="codigo">Código de vendedor</option>
+                    <option value="saldo">Saldo (mayor a menor)</option>
                   </select>
                 </div>
 
