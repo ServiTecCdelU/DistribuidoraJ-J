@@ -945,7 +945,11 @@ ${bloques}
     if (saldosPrinting) return
     const esc = (s: any) => String(s ?? '').replace(/[&<>]/g, (m) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' }[m] as string))
 
-    let list = scopedDebtClients.filter((c) => (c.currentBalance || 0) > 0).filter((c) => {
+    // Solo clientes con saldo real de $1 o más (nunca 0 ni centavos residuales)
+    let list = scopedDebtClients.filter((c) => {
+      const saldo = Number(c.currentBalance)
+      return Number.isFinite(saldo) && saldo >= 1
+    }).filter((c) => {
       if (saldosCodigo === 'all') return true
       if (saldosCodigo === 'none') return !c.sellerId || !sellerCodigoById.get(c.sellerId)
       return c.sellerId ? sellerCodigoById.get(c.sellerId) === saldosCodigo : false
