@@ -131,6 +131,7 @@ export function ListaVentas({
   isAdmin = false,
   onExportData,
   devolucionesPorVenta = {},
+  descuentosPorVenta = {},
 }: ListaVentasProps) {
   const {
     searchQuery, invoiceFilter, paymentFilter, periodFilter, dateFrom, dateTo,
@@ -175,7 +176,7 @@ export function ListaVentas({
   // ─── resumen (cards) ────────────────────────────────────────────────────────
   // Suma sobre lo que está mostrado (ya filtrado por fecha/período y demás filtros).
   const resumen = useMemo(() => {
-    let total = 0, count = 0, perdida = 0, faltante = 0, rechazo = 0, nc = 0;
+    let total = 0, count = 0, perdida = 0, faltante = 0, rechazo = 0, nc = 0, desc = 0;
     for (const v of ventas as any[]) {
       if (v.rechazado) continue; // pedido rechazado sin monto
       total += Number(v.total) || 0;
@@ -185,9 +186,10 @@ export function ListaVentas({
       faltante += inc.faltante;
       rechazo += inc.rechazo;
       nc += devolucionesPorVenta[v.id] || 0;
+      desc += descuentosPorVenta[v.id] || 0;
     }
-    return { total, count, perdida, faltante, rechazo, nc };
-  }, [ventas, devolucionesPorVenta]);
+    return { total, count, perdida, faltante, rechazo, nc, desc };
+  }, [ventas, devolucionesPorVenta, descuentosPorVenta]);
 
   // Lista de ventas para el modal de incidencias (pérdidas / rechazos / notas de crédito)
   const incidenciaLista = useMemo(() => {
@@ -203,7 +205,12 @@ export function ListaVentas({
       } else if (incidenciaModal === "rechazo") {
         monto = inc.rechazo;
       } else {
-        monto = devolucionesPorVenta[v.id] || 0;
+        const dev = devolucionesPorVenta[v.id] || 0;
+        const dto = descuentosPorVenta[v.id] || 0;
+        monto = dev + dto;
+        detalle = [dev > 0.005 ? `Devolución ${fmt(dev)}` : "", dto > 0.005 ? `Descuentos ${fmt(dto)}` : ""]
+          .filter(Boolean)
+          .join(" · ");
       }
       if (monto > 0.005) {
         rows.push({
@@ -217,12 +224,12 @@ export function ListaVentas({
       }
     }
     return rows.sort((a, b) => b.monto - a.monto);
-  }, [incidenciaModal, ventas, devolucionesPorVenta]);
+  }, [incidenciaModal, ventas, devolucionesPorVenta, descuentosPorVenta]);
 
   const incidenciaMeta = {
     perdida: { titulo: "Ventas con pérdidas", color: "text-rose-600" },
     rechazo: { titulo: "Ventas con rechazos", color: "text-amber-600" },
-    nc: { titulo: "Ventas con notas de crédito", color: "text-violet-600" },
+    nc: { titulo: "Ventas con notas de crédito y descuentos", color: "text-violet-600" },
   } as const;
 
   const resumenLabel = useMemo(() => {
@@ -420,7 +427,7 @@ export function ListaVentas({
           sub={`${resumen.count} ${resumen.count === 1 ? "venta" : "ventas"} · ${resumenLabel}`}
           accent="teal"
           netoLabel="Neto (con incidencias)"
-          netoValue={fmt(resumen.total - resumen.perdida - resumen.faltante - resumen.rechazo - resumen.nc)}
+          netoValue={fmt(resumen.total - resumen.perdida - resumen.faltante - resumen.rechazo - resumen.nc - resumen.desc)}
         />
         <ResumenCard
           icon={<TrendingDown className="h-5 w-5" />}
@@ -441,8 +448,8 @@ export function ListaVentas({
         <ResumenCard
           icon={<FileText className="h-5 w-5" />}
           label="Notas de crédito"
-          value={`-${fmt(resumen.nc)}`}
-          sub="Devoluciones"
+          value={`-${fmt(resumen.nc + resumen.desc)}`}
+          sub={`Devoluciones ${fmt(resumen.nc)} · Descuentos ${fmt(resumen.desc)}`}
           accent="violet"
           onVer={() => setIncidenciaModal("nc")}
         />
@@ -680,7 +687,7 @@ export function ListaVentas({
               <div className="col-span-1 text-right">Pérdida</div>
               <div className="col-span-1 text-right">Faltante</div>
               <div className="col-span-1 text-right">Rechazo</div>
-              <div className="col-span-1 text-right">Nota Créd.</div>
+              <div className="col-span-1 text-right">N.C. / Desc.</div>
               <div className="col-span-2 text-right">Total</div>
               <div className="col-span-1 text-center">Pago</div>
               <div className="col-span-1 text-center">Acc.</div>
@@ -707,12 +714,22 @@ export function ListaVentas({
                       <Badge variant="outline" className="text-[10px] bg-red-100 text-red-700 border-red-200">Rechazado</Badge>
                     ) : (
                       <>
-                        <p className="font-bold text-sm text-foreground">{fmt(venta.total)}</p>
                         {(() => {
                           const { perdida, faltante, rechazo } = calcIncidencia(venta);
                           const nc = devolucionesPorVenta[venta.id] || 0;
+                          const dto = descuentosPorVenta[venta.id] || 0;
+                          const totalOriginal = Number(venta.total) || 0;
                           return (
                             <>
+                              {dto > 0.005 ? (
+                                <>
+                                  <p className="text-[10px] text-muted-foreground line-through">{fmt(totalOriginal)}</p>
+                                  <p className="text-[10px] text-emerald-600 font-medium">Desc: -{fmt(dto)}</p>
+                                  <p className="font-bold text-sm text-foreground">{fmt(totalOriginal - dto)}</p>
+                                </>
+                              ) : (
+                                <p className="font-bold text-sm text-foreground">{fmt(totalOriginal)}</p>
+                              )}
                               {perdida > 0.005 && <p className="text-[10px] text-rose-600 font-medium">Pérd: -{fmt(perdida)}</p>}
                               {faltante > 0.005 && <p className="text-[10px] text-orange-600 font-medium">Falt: -{fmt(faltante)}</p>}
                               {rechazo > 0.005 && <p className="text-[10px] text-amber-600 font-medium">Rech: -{fmt(rechazo)}</p>}
@@ -752,7 +769,7 @@ export function ListaVentas({
                 </div>
                 {(() => {
                   const { perdida, faltante, rechazo } = calcIncidencia(venta);
-                  const nc = devolucionesPorVenta[venta.id] || 0;
+                  const nc = (devolucionesPorVenta[venta.id] || 0) + (descuentosPorVenta[venta.id] || 0);
                   return (
                     <>
                       <div className="hidden md:flex md:col-span-1 items-center justify-end">
@@ -781,9 +798,18 @@ export function ListaVentas({
                 <div className="hidden md:flex md:col-span-2 items-center justify-end">
                   {venta.rechazado ? (
                     <Badge variant="outline" className="px-2.5 py-1 bg-red-100 text-red-700 border-red-200">Rechazado</Badge>
-                  ) : (
-                    <p className="font-bold text-foreground text-base">{fmt(venta.total)}</p>
-                  )}
+                  ) : (() => {
+                    const dto = descuentosPorVenta[venta.id] || 0;
+                    const totalOriginal = Number(venta.total) || 0;
+                    if (dto <= 0.005) return <p className="font-bold text-foreground text-base">{fmt(totalOriginal)}</p>;
+                    return (
+                      <div className="text-right leading-tight">
+                        <p className="text-[11px] text-muted-foreground line-through">{fmt(totalOriginal)}</p>
+                        <p className="text-[11px] text-emerald-600 font-medium">Desc: -{fmt(dto)}</p>
+                        <p className="font-bold text-foreground text-base">{fmt(totalOriginal - dto)}</p>
+                      </div>
+                    );
+                  })()}
                 </div>
                 <div className="hidden md:flex md:col-span-1 items-center justify-center">
                   {!venta.rechazado && (

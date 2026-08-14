@@ -146,6 +146,7 @@ import type { Devolucion, DevolucionItem } from '@/services/devoluciones-service
 import {
   registrarDescuentoVenta,
   getDescuentosBySale,
+  getDescuentosTotalsBySales,
   convertirPagoVenta,
 } from '@/services/ajustes-venta-service'
 import type { DescuentoVenta, ConversionPago, DireccionConversion } from '@/services/ajustes-venta-service'
@@ -367,6 +368,7 @@ export type { Devolucion, DevolucionItem }
 export const ajustesVentaApi = {
   registrarDescuento: registrarDescuentoVenta,
   getDescuentosBySale,
+  getDescuentosTotalsBySales,
   convertirPago: convertirPagoVenta,
 }
 

@@ -192,6 +192,27 @@ export async function getDescuentosBySale(saleId: string): Promise<DescuentoVent
   return (data ?? []).map(mapDescuento)
 }
 
+// Total descontado por venta, para un conjunto de ventas.
+// Devuelve un mapa saleId -> monto total de descuentos.
+export async function getDescuentosTotalsBySales(
+  saleIds: string[],
+): Promise<Record<string, number>> {
+  const ids = [...new Set(saleIds.filter(Boolean))]
+  if (ids.length === 0) return {}
+  const { data } = await supabase
+    .from('transacciones')
+    .select('sale_id, amount, description')
+    .in('sale_id', ids)
+    .like('description', '[DESCUENTO]%')
+  const map: Record<string, number> = {}
+  for (const d of data ?? []) {
+    const sid = (d as any).sale_id as string | null
+    if (!sid) continue
+    map[sid] = (map[sid] || 0) + (Number((d as any).amount) || 0)
+  }
+  return map
+}
+
 // ===================== CONVERSIÓN DE FORMA DE PAGO =====================
 
 export type DireccionConversion = 'aPagado' | 'aCuentaCorriente'

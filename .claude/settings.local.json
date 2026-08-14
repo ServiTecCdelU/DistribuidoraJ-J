@@ -31,7 +31,8 @@
       "Bash(ls app/api/generate-pdf/)",
       "Bash(head -60 app/api/generate-pdf/route.ts)",
       "mcp__supabase__execute_sql",
-      "Bash(awk 'NR>=1538 && NR<=1550 {printf \"%d|%s\\\\n\", NR, $0}' app/empleados/page.tsx)"
+      "Bash(awk 'NR>=1538 && NR<=1550 {printf \"%d|%s\\\\n\", NR, $0}' app/empleados/page.tsx)",
+      "PowerShell(git push *)"
     ]
   },
   "enableAllProjectMcpServers": true,

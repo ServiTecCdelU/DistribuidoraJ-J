@@ -746,11 +746,31 @@ export function ModalDetalleVenta({
             </div>
           ) : (() => {
             const totalNoEnt = noEntMontos.rotura + noEntMontos.faltante + noEntMontos.noQuiso;
+            const totalDescuentos = descuentos.reduce((acc, d) => acc + (d.monto || 0), 0);
+            const totalFinal = venta.total - totalDescuentos;
             if (totalNoEnt <= 0.005) {
+              if (totalDescuentos <= 0.005) {
+                return (
+                  <div className="flex items-center justify-between p-4 rounded-xl bg-foreground text-background">
+                    <span className="font-medium">Total</span>
+                    <span className="text-2xl font-bold">{formatearMoneda(venta.total)}</span>
+                  </div>
+                );
+              }
               return (
-                <div className="flex items-center justify-between p-4 rounded-xl bg-foreground text-background">
-                  <span className="font-medium">Total</span>
-                  <span className="text-2xl font-bold">{formatearMoneda(venta.total)}</span>
+                <div className="p-4 rounded-xl bg-foreground text-background space-y-1.5">
+                  <div className="flex items-center justify-between text-sm opacity-80">
+                    <span>Total original</span>
+                    <span className="font-semibold">{formatearMoneda(venta.total)}</span>
+                  </div>
+                  <div className="flex items-center justify-between text-sm text-emerald-300">
+                    <span>Descuentos</span>
+                    <span>-{formatearMoneda(totalDescuentos)}</span>
+                  </div>
+                  <div className="flex items-center justify-between pt-1.5 border-t border-background/20">
+                    <span className="font-medium">Total final</span>
+                    <span className="text-2xl font-bold">{formatearMoneda(totalFinal)}</span>
+                  </div>
                 </div>
               );
             }
@@ -779,9 +799,15 @@ export function ModalDetalleVenta({
                     <span>-{formatearMoneda(noEntMontos.noQuiso)}</span>
                   </div>
                 )}
+                {totalDescuentos > 0.005 && (
+                  <div className="flex items-center justify-between text-sm text-emerald-300">
+                    <span>Descuentos</span>
+                    <span>-{formatearMoneda(totalDescuentos)}</span>
+                  </div>
+                )}
                 <div className="flex items-center justify-between pt-1.5 border-t border-background/20">
                   <span className="font-medium">Cobrado</span>
-                  <span className="text-2xl font-bold">{formatearMoneda(venta.total)}</span>
+                  <span className="text-2xl font-bold">{formatearMoneda(totalFinal)}</span>
                 </div>
               </div>
             );

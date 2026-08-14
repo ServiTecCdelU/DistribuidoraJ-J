@@ -8,7 +8,7 @@ import { ModalEmitirDocumento } from "@/components/ModalEmitirDocumento";
 import { useSearchParams } from "next/navigation";
 import { useEffect, useState, useMemo, Suspense } from "react";
 import { useAuth } from "@/hooks/use-auth";
-import { clientsApi, sellersApi, devolucionesApi } from "@/lib/api";
+import { clientsApi, sellersApi, devolucionesApi, ajustesVentaApi } from "@/lib/api";
 
 function VentasInner() {
   const searchParams = useSearchParams();
@@ -18,6 +18,7 @@ function VentasInner() {
   const [clients, setClients] = useState<{ id: string; name: string; city?: string }[]>([]);
   const [sellers, setSellers] = useState<{ id: string; name: string }[]>([]);
   const [devolucionesPorVenta, setDevolucionesPorVenta] = useState<Record<string, number>>({});
+  const [descuentosPorVenta, setDescuentosPorVenta] = useState<Record<string, number>>({});
 
   // Un vendedor SOLO ve sus ventas. Si su sellerId aún no resolvió, filtrar con un
   // sentinel para no mostrar todas las ventas por error.
@@ -72,12 +73,16 @@ function VentasInner() {
   // Notas de crédito (devoluciones que registra el admin) por venta, para la columna de la lista.
   useEffect(() => {
     const ids = ventasFiltradas.map((v: any) => v.id).filter(Boolean);
-    if (ids.length === 0) { setDevolucionesPorVenta({}); return; }
+    if (ids.length === 0) { setDevolucionesPorVenta({}); setDescuentosPorVenta({}); return; }
     let activo = true;
     devolucionesApi
       .getTotalsBySales(ids)
       .then((map) => { if (activo) setDevolucionesPorVenta(map); })
       .catch(() => { if (activo) setDevolucionesPorVenta({}); });
+    ajustesVentaApi
+      .getDescuentosTotalsBySales(ids)
+      .then((map) => { if (activo) setDescuentosPorVenta(map); })
+      .catch(() => { if (activo) setDescuentosPorVenta({}); });
     return () => { activo = false; };
   }, [ventasFiltradas]);
 
@@ -103,6 +108,7 @@ function VentasInner() {
         isAdmin={user?.role === "admin"}
         onExportData={cargarVentasExport}
         devolucionesPorVenta={devolucionesPorVenta}
+        descuentosPorVenta={descuentosPorVenta}
       />
 
       <ModalDetalleVenta
