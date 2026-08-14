@@ -509,6 +509,20 @@ export function useCart(role: UserRole, userEmail?: string, externalProducts?: P
     }
   }, [paymentType, finalTotal]);
 
+  // Regla "llevando X se regala N": recalcula el regalo automático según la
+  // cantidad cargada. Solo aplica si el item no tiene descuento ni regalo cruzado.
+  const withRegaloAuto = (item: CartItem): CartItem => {
+    const { regaloMismoLleva: lleva, regaloMismoRegala: regala } = item.product;
+    if (!lleva || !regala) return item;
+    if (item.itemDiscount || item.regaloOtroCantidad) return item;
+    const porRegla = Math.floor(item.quantity / lleva) * regala;
+    const topeFijo = item.product.regaloMismoMax ?? Infinity;
+    const esMayorista = item.product.stockLocal !== undefined;
+    const topeStock = esMayorista ? Infinity : Math.max(0, item.product.stock - item.quantity);
+    const val = Math.min(porRegla, topeFijo, topeStock);
+    return val > 0 ? { ...item, regalo: val } : { ...item, regalo: undefined };
+  };
+
   // --- Cart actions ---
   const addToCart = useCallback((product: Product) => {
     setCart((prev) => {
@@ -521,10 +535,10 @@ export function useCart(role: UserRole, userEmail?: string, externalProducts?: P
           return prev;
         }
         return prev.map((item) =>
-          item.product.id === product.id ? { ...item, quantity: item.quantity + 1 } : item,
+          item.product.id === product.id ? withRegaloAuto({ ...item, quantity: item.quantity + 1 }) : item,
         );
       }
-      return [...prev, { product, quantity: 1 }];
+      return [...prev, withRegaloAuto({ product, quantity: 1 })];
     });
   }, []);
 
@@ -540,7 +554,7 @@ export function useCart(role: UserRole, userEmail?: string, externalProducts?: P
             toast.error("Stock insuficiente");
             return item;
           }
-          return { ...item, quantity: newQty };
+          return withRegaloAuto({ ...item, quantity: newQty });
         })
         .filter((item) => item.quantity > 0),
     );
@@ -555,7 +569,7 @@ export function useCart(role: UserRole, userEmail?: string, externalProducts?: P
         ? Number.MAX_SAFE_INTEGER
         : Math.max(1, item.product.stock - (item.regalo ?? 0));
       const newQty = Math.max(1, Math.min(value, maxPagable));
-      return prev.map((i) => (i.product.id === productId ? { ...i, quantity: newQty } : i));
+      return prev.map((i) => (i.product.id === productId ? withRegaloAuto({ ...i, quantity: newQty }) : i));
     });
   }, []);
 
@@ -590,9 +604,21 @@ export function useCart(role: UserRole, userEmail?: string, externalProducts?: P
   const setItemRegaloMismo = useCallback((productId: string, n: number) => {
     setCart((prev) => prev.map((item) => {
       if (item.product.id !== productId) return item;
-      const max = item.product.regaloMismoMax ?? Infinity;
+      const topeFijo = item.product.regaloMismoMax ?? Infinity;
+      // Regla "llevando X se regala N": limita el regalo según la cantidad comprada
+      const lleva = item.product.regaloMismoLleva ?? null;
+      const regala = item.product.regaloMismoRegala ?? null;
+      const topeRegla = lleva && regala ? Math.floor(item.quantity / lleva) * regala : Infinity;
+      const max = Math.min(topeFijo, topeRegla);
       let val = Math.max(0, Math.floor(n || 0));
-      if (val > max) { toast.error(`Máximo a regalar: ${max}`); val = max; }
+      if (val > max) {
+        toast.error(
+          topeRegla < topeFijo
+            ? `Llevando ${lleva} se regala ${regala}: máximo ${max} para ${item.quantity} unidades`
+            : `Máximo a regalar: ${max}`,
+        );
+        val = max === Infinity ? val : max;
+      }
       if (item.quantity + val > item.product.stock) {
         toast.error("Stock insuficiente para ese regalo");
         val = Math.max(0, item.product.stock - item.quantity);

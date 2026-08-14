@@ -150,6 +150,8 @@ export interface VentaProductSearchResult {
     descuento: number
     regaloMismo?: boolean
     regaloMismoMax?: number | null
+    regaloMismoLleva?: number | null
+    regaloMismoRegala?: number | null
     regaloOtroMax?: number | null
     regaloProductoId?: string | null
     regaloProductoNombre?: string | null
@@ -180,7 +182,7 @@ export const searchProductosParaVenta = async (params: VentaProductSearchParams)
 
   let query = supabase
     .from('productos')
-    .select('id, name, codigo, code, precio_venta, price, stock, unidades_por_bulto, se_divide_en, descuento, regalo_mismo, regalo_mismo_max, regalo_otro_max, regalo_producto_id, regalo_producto_nombre, category', { count: 'exact' })
+    .select('id, name, codigo, code, precio_venta, price, stock, unidades_por_bulto, se_divide_en, descuento, regalo_mismo, regalo_mismo_max, regalo_mismo_lleva, regalo_mismo_regala, regalo_otro_max, regalo_producto_id, regalo_producto_nombre, category', { count: 'exact' })
     .or('disabled.eq.false,disabled.is.null')
     .order('name', { ascending: true })
 
@@ -222,6 +224,8 @@ export const searchProductosParaVenta = async (params: VentaProductSearchParams)
       descuento: p.descuento != null ? Number(p.descuento) : 0,
       regaloMismo: p.regalo_mismo ?? false,
       regaloMismoMax: p.regalo_mismo_max != null ? Number(p.regalo_mismo_max) : null,
+      regaloMismoLleva: p.regalo_mismo_lleva != null ? Number(p.regalo_mismo_lleva) : null,
+      regaloMismoRegala: p.regalo_mismo_regala != null ? Number(p.regalo_mismo_regala) : null,
       regaloOtroMax: p.regalo_otro_max != null ? Number(p.regalo_otro_max) : null,
       regaloProductoId: p.regalo_producto_id ?? null,
       regaloProductoNombre: p.regalo_producto_nombre ?? null,

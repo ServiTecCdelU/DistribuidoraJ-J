@@ -354,6 +354,11 @@ export function UnifiedCart({ role, state, actions, onConfirmSale, allowDiscount
                         value={item.regalo ?? ""}
                         onChange={(e) => actions.setItemRegaloMismo(item.product.id, Number(e.target.value) || 0)}
                         className="h-7 w-16 rounded-lg border border-input bg-background px-2 text-center text-xs" />
+                      {item.product.regaloMismoLleva && item.product.regaloMismoRegala && (
+                        <span className="text-[10px] font-medium text-fuchsia-600">
+                          Promo: llevando {item.product.regaloMismoLleva} se regala {item.product.regaloMismoRegala}
+                        </span>
+                      )}
                     </div>
                   )}
                   {role !== null && item.product.regaloProductoId && (

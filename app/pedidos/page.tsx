@@ -862,6 +862,8 @@ export default function PedidosPage() {
             descuento: cfg?.descuento ?? 0,
             regaloMismo: cfg?.regaloMismo ?? false,
             regaloMismoMax: cfg?.regaloMismoMax ?? null,
+            regaloMismoLleva: cfg?.regaloMismoLleva ?? null,
+            regaloMismoRegala: cfg?.regaloMismoRegala ?? null,
             regaloOtroMax: cfg?.regaloOtroMax ?? null,
             regaloProductoId: cfg?.regaloProductoId ?? null,
             regaloProductoNombre: cfg?.regaloProductoNombre ?? null,

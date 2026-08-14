@@ -26,6 +26,8 @@ function mapRow(d: Record<string, any>): Product {
     descuento: d.descuento != null ? Number(d.descuento) : 0,
     regaloMismo: d.regalo_mismo ?? false,
     regaloMismoMax: d.regalo_mismo_max != null ? Number(d.regalo_mismo_max) : null,
+    regaloMismoLleva: d.regalo_mismo_lleva != null ? Number(d.regalo_mismo_lleva) : null,
+    regaloMismoRegala: d.regalo_mismo_regala != null ? Number(d.regalo_mismo_regala) : null,
     regaloOtroMax: d.regalo_otro_max != null ? Number(d.regalo_otro_max) : null,
     regaloProductoId: d.regalo_producto_id ?? null,
     regaloProductoNombre: d.regalo_producto_nombre ?? null,
@@ -337,6 +339,8 @@ export const updateProduct = async (
   if (updates.descuento !== undefined) mapped.descuento = updates.descuento
   if (updates.regaloMismo !== undefined) mapped.regalo_mismo = updates.regaloMismo
   if (updates.regaloMismoMax !== undefined) mapped.regalo_mismo_max = updates.regaloMismoMax
+  if (updates.regaloMismoLleva !== undefined) mapped.regalo_mismo_lleva = updates.regaloMismoLleva
+  if (updates.regaloMismoRegala !== undefined) mapped.regalo_mismo_regala = updates.regaloMismoRegala
   if (updates.regaloOtroMax !== undefined) mapped.regalo_otro_max = updates.regaloOtroMax
   if (updates.regaloProductoId !== undefined) mapped.regalo_producto_id = updates.regaloProductoId
   if (updates.regaloProductoNombre !== undefined) mapped.regalo_producto_nombre = updates.regaloProductoNombre

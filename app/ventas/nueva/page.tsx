@@ -41,6 +41,7 @@ import {
   ChevronDown,
   Percent,
   Tag,
+  Gift,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useCart } from "@/hooks/useCart";
@@ -141,6 +142,8 @@ function NuevaVentaContent({
           descuento: p.descuento ?? 0,
           regaloMismo: p.regaloMismo ?? false,
           regaloMismoMax: p.regaloMismoMax ?? null,
+          regaloMismoLleva: p.regaloMismoLleva ?? null,
+          regaloMismoRegala: p.regaloMismoRegala ?? null,
           regaloOtroMax: p.regaloOtroMax ?? null,
           regaloProductoId: p.regaloProductoId ?? null,
           regaloProductoNombre: p.regaloProductoNombre ?? null,
@@ -540,6 +543,9 @@ const ProductListItem = memo(function ProductListItem({
   const unidadesLote = unidadesPorBulto
     ? (seDivideEn && seDivideEn > 1 ? Math.floor(unidadesPorBulto / seDivideEn) : unidadesPorBulto)
     : null;
+  const lleva = product.regaloMismoLleva;
+  const regala = product.regaloMismoRegala;
+  const promoTexto = lleva && regala ? `Llevando ${lleva} se regala ${regala}` : null;
 
   return (
     <div className={cn(
@@ -597,10 +603,19 @@ const ProductListItem = memo(function ProductListItem({
             )}
           </div>
 
-          {/* Lote — columna propia en desktop */}
-          <span className="hidden lg:block text-[11px] text-muted-foreground truncate">
-            {unidadesLote ? `${unidadesLote} u./lote` : ""}
+          {/* Lote + promo — columna propia en desktop, en la misma fila que el stock */}
+          <span className="hidden lg:flex items-center gap-2 min-w-0">
+            {unidadesLote && (
+              <span className="text-[11px] text-muted-foreground shrink-0">{unidadesLote} u./lote</span>
+            )}
+            {promoTexto && (
+              <span className="flex items-center gap-1 text-[11px] font-medium text-fuchsia-600 truncate">
+                <Gift className="h-3 w-3 shrink-0" />
+                {promoTexto}
+              </span>
+            )}
           </span>
+
         </div>
 
         {/* Precio */}
@@ -646,6 +661,14 @@ const ProductListItem = memo(function ProductListItem({
           )}
         </div>
       </div>
+
+      {/* Promo — fila propia a lo ancho del card (solo mobile) */}
+      {promoTexto && (
+        <div className="lg:hidden flex items-center gap-1 mt-2 text-[11px] font-medium text-fuchsia-600">
+          <Gift className="h-3 w-3 shrink-0" />
+          {promoTexto}
+        </div>
+      )}
     </div>
   );
 });

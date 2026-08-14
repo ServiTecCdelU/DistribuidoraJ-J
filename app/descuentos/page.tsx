@@ -54,7 +54,7 @@ export default function DescuentosPage() {
 
   // Drafts por tipo
   const [dtoDraft, setDtoDraft] = useState<Record<string, string>>({});
-  const [mismoDraft, setMismoDraft] = useState<Record<string, { max: string }>>({});
+  const [mismoDraft, setMismoDraft] = useState<Record<string, { max: string; lleva: string; regala: string }>>({});
   const [comboDraft, setComboDraft] = useState<Record<string, { productoId: string | null; nombre: string; max: string }>>({});
 
   // Buscador del producto a regalar (oferta cruzada)
@@ -126,6 +126,15 @@ export default function DescuentosPage() {
     return t;
   };
 
+  // Texto descriptivo del regalo del mismo producto
+  const textoRegaloMismo = (p: Product) => {
+    const tope = p.regaloMismoMax != null ? `máx ${p.regaloMismoMax}` : "libre";
+    if (p.regaloMismoLleva && p.regaloMismoRegala) {
+      return `Regala mismo: llevando ${p.regaloMismoLleva} se regala ${p.regaloMismoRegala} (${tope})`;
+    }
+    return `Regala mismo (${tope})`;
+  };
+
   // --- Estado de cada oferta (activa / sin stock) ---
   const estadoRegaloOtro = (p: Product): "activa" | "sin_stock" | "desconocido" => {
     if (!p.regaloProductoId) return "activa";
@@ -138,7 +147,7 @@ export default function DescuentosPage() {
   const ofertasDe = (p: Product): { tipo: OfertaTipo; text: string; estado: "activa" | "sin_stock" | "desconocido" }[] => {
     const arr: { tipo: OfertaTipo; text: string; estado: "activa" | "sin_stock" | "desconocido" }[] = [];
     if (tieneDescuento(p)) arr.push({ tipo: "descuento", text: `Descuento máx ${p.descuento}%`, estado: p.stock > 0 ? "activa" : "sin_stock" });
-    if (tieneRegaloMismo(p)) arr.push({ tipo: "regalo_mismo", text: p.regaloMismoMax != null ? `Regala mismo (máx ${p.regaloMismoMax})` : `Regala mismo (libre)`, estado: p.stock > 0 ? "activa" : "sin_stock" });
+    if (tieneRegaloMismo(p)) arr.push({ tipo: "regalo_mismo", text: textoRegaloMismo(p), estado: p.stock > 0 ? "activa" : "sin_stock" });
     if (tieneRegaloOtro(p)) arr.push({ tipo: "regalo_otro", text: p.regaloOtroMax != null ? `Regala ${p.regaloProductoNombre} (máx ${p.regaloOtroMax})` : `Regala ${p.regaloProductoNombre} (libre)`, estado: estadoRegaloOtro(p) });
     return arr;
   };
@@ -149,7 +158,11 @@ export default function DescuentosPage() {
     if (tipo === "descuento") {
       setDtoDraft((prev) => ({ ...prev, [p.id]: String(p.descuento ?? "") }));
     } else if (tipo === "regalo_mismo") {
-      setMismoDraft((prev) => ({ ...prev, [p.id]: { max: p.regaloMismoMax != null ? String(p.regaloMismoMax) : "" } }));
+      setMismoDraft((prev) => ({ ...prev, [p.id]: {
+        max: p.regaloMismoMax != null ? String(p.regaloMismoMax) : "",
+        lleva: p.regaloMismoLleva != null ? String(p.regaloMismoLleva) : "",
+        regala: p.regaloMismoRegala != null ? String(p.regaloMismoRegala) : "",
+      } }));
     } else {
       setComboSearch("");
       setComboResults([]);
@@ -162,6 +175,18 @@ export default function DescuentosPage() {
   };
 
   const cerrarEdicion = () => setEditing(null);
+
+  // Editar desde el resumen: el producto puede no estar en la página actual,
+  // así que se busca por código/nombre para traerlo a la lista y abrir el panel.
+  const editarDesdeResumen = (p: Product, tipo: OfertaTipo) => {
+    const term = p.codigo || p.name;
+    if (!products.some((x) => x.id === p.id)) {
+      setSearchInput(term);
+      setSearchQuery(term);
+      setCurrentPage(1);
+    }
+    abrirEdicion(p, tipo);
+  };
 
   const patchLocal = (id: string, patch: Partial<Product>) => {
     setProducts((prev) => prev.map((x) => (x.id === id ? { ...x, ...patch } : x)));
@@ -182,12 +207,18 @@ export default function DescuentosPage() {
   };
 
   const guardarRegaloMismo = async (p: Product) => {
-    const d = mismoDraft[p.id] ?? { max: "" };
+    const d = mismoDraft[p.id] ?? { max: "", lleva: "", regala: "" };
     const max = d.max.trim() === "" ? null : Math.max(1, Math.floor(Number(d.max) || 0));
+    const lleva = d.lleva.trim() === "" ? null : Math.max(1, Math.floor(Number(d.lleva) || 0));
+    const regala = d.regala.trim() === "" ? null : Math.max(1, Math.floor(Number(d.regala) || 0));
+    if ((lleva && !regala) || (!lleva && regala)) {
+      toast.error("Completá 'llevando' y 'se regala' juntos, o dejá ambos vacíos");
+      return;
+    }
     setSavingId(p.id);
     try {
-      await productsApi.update(p.id, { regaloMismo: true, regaloMismoMax: max });
-      patchLocal(p.id, { regaloMismo: true, regaloMismoMax: max });
+      await productsApi.update(p.id, { regaloMismo: true, regaloMismoMax: max, regaloMismoLleva: lleva, regaloMismoRegala: regala });
+      patchLocal(p.id, { regaloMismo: true, regaloMismoMax: max, regaloMismoLleva: lleva, regaloMismoRegala: regala });
       toast.success(`Regalo del mismo habilitado en "${p.name}"`);
       cerrarEdicion();
       cargarOfertasActivas();
@@ -218,8 +249,8 @@ export default function DescuentosPage() {
         await productsApi.update(p.id, { descuento: 0 });
         patchLocal(p.id, { descuento: 0 });
       } else if (tipo === "regalo_mismo") {
-        await productsApi.update(p.id, { regaloMismo: false, regaloMismoMax: null });
-        patchLocal(p.id, { regaloMismo: false, regaloMismoMax: null });
+        await productsApi.update(p.id, { regaloMismo: false, regaloMismoMax: null, regaloMismoLleva: null, regaloMismoRegala: null });
+        patchLocal(p.id, { regaloMismo: false, regaloMismoMax: null, regaloMismoLleva: null, regaloMismoRegala: null });
       } else {
         await productsApi.update(p.id, { regaloProductoId: null, regaloProductoNombre: null, regaloOtroMax: null });
         patchLocal(p.id, { regaloProductoId: null, regaloProductoNombre: null, regaloOtroMax: null });
@@ -295,6 +326,14 @@ export default function DescuentosPage() {
                             : <Gift className={`h-3.5 w-3.5 shrink-0 ${o.tipo === "regalo_otro" ? "text-purple-600" : "text-fuchsia-600"}`} />}
                           <span className="text-[11px] text-muted-foreground flex-1 min-w-0 truncate">{o.text}</span>
                           <EstadoBadge estado={o.estado} />
+                          <Button
+                            variant="ghost" size="icon"
+                            className="h-6 w-6 shrink-0"
+                            title="Editar oferta"
+                            onClick={() => editarDesdeResumen(p, o.tipo)}
+                          >
+                            <Pencil className="h-3.5 w-3.5" />
+                          </Button>
                           <Button
                             variant="ghost" size="icon"
                             className="h-6 w-6 text-muted-foreground hover:text-destructive shrink-0"
@@ -399,7 +438,7 @@ export default function DescuentosPage() {
                     {tieneRegaloMismo(p) && (
                       <OfferRow
                         icon={<Gift className="h-3.5 w-3.5 text-fuchsia-600" />}
-                        text={p.regaloMismoMax != null ? `Regala mismo (máx ${p.regaloMismoMax})` : `Regala mismo (libre)`}
+                        text={textoRegaloMismo(p)}
                         estado={p.stock > 0 ? "activa" : "sin_stock"}
                         onEdit={() => abrirEdicion(p, "regalo_mismo")}
                         onRemove={() => quitarOferta(p, "regalo_mismo")}
@@ -444,17 +483,36 @@ export default function DescuentosPage() {
                       )}
 
                       {editing.tipo === "regalo_mismo" && (
-                        <div className="flex items-end gap-3 flex-wrap">
-                          <div className="flex flex-col">
-                            <span className="text-[9px] text-muted-foreground mb-0.5">máx a regalar (vacío = libre)</span>
-                            <Input type="number" min={1}
-                              value={mismoDraft[p.id]?.max ?? ""}
-                              onChange={(e) => setMismoDraft((prev) => ({ ...prev, [p.id]: { max: e.target.value } }))}
-                              className="h-8 w-28 text-center text-sm" placeholder="libre" />
+                        <div className="space-y-2">
+                          <div className="flex items-end gap-3 flex-wrap">
+                            <div className="flex flex-col">
+                              <span className="text-[9px] text-muted-foreground mb-0.5">llevando (opcional)</span>
+                              <Input type="number" min={1}
+                                value={mismoDraft[p.id]?.lleva ?? ""}
+                                onChange={(e) => setMismoDraft((prev) => ({ ...prev, [p.id]: { ...(prev[p.id] || { max: "", lleva: "", regala: "" }), lleva: e.target.value } }))}
+                                className="h-8 w-24 text-center text-sm" placeholder="ej: 10" />
+                            </div>
+                            <div className="flex flex-col">
+                              <span className="text-[9px] text-muted-foreground mb-0.5">se regala</span>
+                              <Input type="number" min={1}
+                                value={mismoDraft[p.id]?.regala ?? ""}
+                                onChange={(e) => setMismoDraft((prev) => ({ ...prev, [p.id]: { ...(prev[p.id] || { max: "", lleva: "", regala: "" }), regala: e.target.value } }))}
+                                className="h-8 w-24 text-center text-sm" placeholder="ej: 1" />
+                            </div>
+                            <div className="flex flex-col">
+                              <span className="text-[9px] text-muted-foreground mb-0.5">máx a regalar (vacío = libre)</span>
+                              <Input type="number" min={1}
+                                value={mismoDraft[p.id]?.max ?? ""}
+                                onChange={(e) => setMismoDraft((prev) => ({ ...prev, [p.id]: { ...(prev[p.id] || { max: "", lleva: "", regala: "" }), max: e.target.value } }))}
+                                className="h-8 w-28 text-center text-sm" placeholder="libre" />
+                            </div>
+                            <Button size="sm" disabled={savingId === p.id} onClick={() => guardarRegaloMismo(p)} className="h-8 gap-1 ml-auto">
+                              {savingId === p.id ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Check className="h-3.5 w-3.5" />} Guardar
+                            </Button>
                           </div>
-                          <Button size="sm" disabled={savingId === p.id} onClick={() => guardarRegaloMismo(p)} className="h-8 gap-1 ml-auto">
-                            {savingId === p.id ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Check className="h-3.5 w-3.5" />} Guardar
-                          </Button>
+                          <p className="text-[10px] text-muted-foreground">
+                            Dejá "llevando" y "se regala" vacíos para que el vendedor regale libremente (hasta el máximo).
+                          </p>
                         </div>
                       )}
 

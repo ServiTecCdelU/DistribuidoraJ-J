@@ -35,6 +35,8 @@ export interface Product {
   descuento?: number;          // % MÁXIMO de descuento que el vendedor puede aplicar; 0 = no admite
   regaloMismo?: boolean;       // permite regalar unidades del mismo producto
   regaloMismoMax?: number | null;   // tope de unidades a regalar (mismo); null = libre
+  regaloMismoLleva?: number | null;   // "llevando X" (mismo producto); null = sin regla
+  regaloMismoRegala?: number | null;  // "se regala N" cada X llevados; null = sin regla
   regaloOtroMax?: number | null;    // tope de unidades a regalar (otro); null = libre
   // Promo cruzada: "cada X comprados, regala N de OTRO producto"
   regaloProductoId?: string | null;     // id del producto que se regala
