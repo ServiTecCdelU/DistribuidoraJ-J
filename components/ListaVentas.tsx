@@ -146,7 +146,7 @@ export function ListaVentas({
   const fmtDate = formatDate;
   const fmtTime = formatTime;
 
-  const [incidenciaModal, setIncidenciaModal] = useState<"perdida" | "rechazo" | "nc" | null>(null);
+  const [incidenciaModal, setIncidenciaModal] = useState<"perdida" | "rechazo" | "nc" | "desc" | null>(null);
 
 
   const uniqueCities = useMemo(() => {
@@ -204,13 +204,10 @@ export function ListaVentas({
         detalle = `Rotura ${fmt(inc.perdida)} · Faltante ${fmt(inc.faltante)}`;
       } else if (incidenciaModal === "rechazo") {
         monto = inc.rechazo;
+      } else if (incidenciaModal === "nc") {
+        monto = devolucionesPorVenta[v.id] || 0;
       } else {
-        const dev = devolucionesPorVenta[v.id] || 0;
-        const dto = descuentosPorVenta[v.id] || 0;
-        monto = dev + dto;
-        detalle = [dev > 0.005 ? `Devolución ${fmt(dev)}` : "", dto > 0.005 ? `Descuentos ${fmt(dto)}` : ""]
-          .filter(Boolean)
-          .join(" · ");
+        monto = descuentosPorVenta[v.id] || 0;
       }
       if (monto > 0.005) {
         rows.push({
@@ -229,7 +226,8 @@ export function ListaVentas({
   const incidenciaMeta = {
     perdida: { titulo: "Ventas con pérdidas", color: "text-rose-600" },
     rechazo: { titulo: "Ventas con rechazos", color: "text-amber-600" },
-    nc: { titulo: "Ventas con notas de crédito y descuentos", color: "text-violet-600" },
+    nc: { titulo: "Ventas con notas de crédito", color: "text-violet-600" },
+    desc: { titulo: "Ventas con descuentos", color: "text-emerald-600" },
   } as const;
 
   const resumenLabel = useMemo(() => {
@@ -449,9 +447,12 @@ export function ListaVentas({
           icon={<FileText className="h-5 w-5" />}
           label="Notas de crédito"
           value={`-${fmt(resumen.nc + resumen.desc)}`}
-          sub={`Devoluciones ${fmt(resumen.nc)} · Descuentos ${fmt(resumen.desc)}`}
+          sub={`N.C. ${fmt(resumen.nc)} · Desc. ${fmt(resumen.desc)}`}
           accent="violet"
-          onVer={() => setIncidenciaModal("nc")}
+          acciones={[
+            { label: "Ver N.C.", onClick: () => setIncidenciaModal("nc") },
+            { label: "Ver Desc.", onClick: () => setIncidenciaModal("desc") },
+          ]}
         />
       </div>
 
@@ -957,7 +958,7 @@ const RESUMEN_ACCENTS: Record<string, { icon: string; value: string }> = {
   violet: { icon: "bg-violet-100 text-violet-700 dark:bg-violet-900/30 dark:text-violet-400", value: "text-violet-600 dark:text-violet-400" },
 };
 
-function ResumenCard({ icon, label, value, sub, accent, netoLabel, netoValue, onVer }: { icon: React.ReactNode; label: string; value: string; sub?: string; accent: keyof typeof RESUMEN_ACCENTS | string; netoLabel?: string; netoValue?: string; onVer?: () => void }) {
+function ResumenCard({ icon, label, value, sub, accent, netoLabel, netoValue, onVer, acciones }: { icon: React.ReactNode; label: string; value: string; sub?: string; accent: keyof typeof RESUMEN_ACCENTS | string; netoLabel?: string; netoValue?: string; onVer?: () => void; acciones?: { label: string; onClick: () => void }[] }) {
   const a = RESUMEN_ACCENTS[accent] ?? RESUMEN_ACCENTS.teal;
   return (
     <Card className="border-border/60 shadow-sm rounded-2xl">
@@ -978,6 +979,19 @@ function ResumenCard({ icon, label, value, sub, accent, netoLabel, netoValue, on
           <button onClick={onVer} className="mt-1.5 inline-flex items-center gap-1 text-[11px] font-medium text-primary hover:underline">
             <Eye className="h-3 w-3" /> Ver
           </button>
+        )}
+        {acciones && acciones.length > 0 && (
+          <div className="mt-1.5 flex flex-wrap items-center gap-x-3 gap-y-1">
+            {acciones.map((acc) => (
+              <button
+                key={acc.label}
+                onClick={acc.onClick}
+                className="inline-flex items-center gap-1 text-[11px] font-medium text-primary hover:underline"
+              >
+                <Eye className="h-3 w-3" /> {acc.label}
+              </button>
+            ))}
+          </div>
         )}
       </CardContent>
     </Card>
