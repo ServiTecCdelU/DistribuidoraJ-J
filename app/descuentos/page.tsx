@@ -55,7 +55,7 @@ export default function DescuentosPage() {
   // Drafts por tipo
   const [dtoDraft, setDtoDraft] = useState<Record<string, string>>({});
   const [mismoDraft, setMismoDraft] = useState<Record<string, { max: string; lleva: string; regala: string }>>({});
-  const [comboDraft, setComboDraft] = useState<Record<string, { productoId: string | null; nombre: string; max: string }>>({});
+  const [comboDraft, setComboDraft] = useState<Record<string, { productoId: string | null; nombre: string; max: string; lleva: string; regala: string }>>({});
 
   // Buscador del producto a regalar (oferta cruzada)
   const [comboSearch, setComboSearch] = useState("");
@@ -135,6 +135,15 @@ export default function DescuentosPage() {
     return `Regala mismo (${tope})`;
   };
 
+  // Texto descriptivo del regalo de otro producto
+  const textoRegaloOtro = (p: Product) => {
+    const tope = p.regaloOtroMax != null ? `máx ${p.regaloOtroMax}` : "libre";
+    if (p.regaloOtroLleva && p.regaloOtroRegala) {
+      return `Llevando ${p.regaloOtroLleva} se regala ${p.regaloOtroRegala}× ${p.regaloProductoNombre} (${tope})`;
+    }
+    return `Regala ${p.regaloProductoNombre} (${tope})`;
+  };
+
   // --- Estado de cada oferta (activa / sin stock) ---
   const estadoRegaloOtro = (p: Product): "activa" | "sin_stock" | "desconocido" => {
     if (!p.regaloProductoId) return "activa";
@@ -148,7 +157,7 @@ export default function DescuentosPage() {
     const arr: { tipo: OfertaTipo; text: string; estado: "activa" | "sin_stock" | "desconocido" }[] = [];
     if (tieneDescuento(p)) arr.push({ tipo: "descuento", text: `Descuento máx ${p.descuento}%`, estado: p.stock > 0 ? "activa" : "sin_stock" });
     if (tieneRegaloMismo(p)) arr.push({ tipo: "regalo_mismo", text: textoRegaloMismo(p), estado: p.stock > 0 ? "activa" : "sin_stock" });
-    if (tieneRegaloOtro(p)) arr.push({ tipo: "regalo_otro", text: p.regaloOtroMax != null ? `Regala ${p.regaloProductoNombre} (máx ${p.regaloOtroMax})` : `Regala ${p.regaloProductoNombre} (libre)`, estado: estadoRegaloOtro(p) });
+    if (tieneRegaloOtro(p)) arr.push({ tipo: "regalo_otro", text: textoRegaloOtro(p), estado: estadoRegaloOtro(p) });
     return arr;
   };
 
@@ -170,6 +179,8 @@ export default function DescuentosPage() {
         productoId: p.regaloProductoId ?? null,
         nombre: p.regaloProductoNombre ?? "",
         max: p.regaloOtroMax != null ? String(p.regaloOtroMax) : "",
+        lleva: p.regaloOtroLleva != null ? String(p.regaloOtroLleva) : "",
+        regala: p.regaloOtroRegala != null ? String(p.regaloOtroRegala) : "",
       } }));
     }
   };
@@ -230,10 +241,20 @@ export default function DescuentosPage() {
     if (!d) return;
     if (!d.productoId) { toast.error("Elegí el producto a regalar"); return; }
     const max = d.max.trim() === "" ? null : Math.max(1, Math.floor(Number(d.max) || 0));
+    const lleva = d.lleva.trim() === "" ? null : Math.max(1, Math.floor(Number(d.lleva) || 0));
+    const regala = d.regala.trim() === "" ? null : Math.max(1, Math.floor(Number(d.regala) || 0));
+    if ((lleva && !regala) || (!lleva && regala)) {
+      toast.error("Completá 'llevando' y 'se regala' juntos, o dejá ambos vacíos");
+      return;
+    }
+    const patch = {
+      regaloProductoId: d.productoId, regaloProductoNombre: d.nombre,
+      regaloOtroMax: max, regaloOtroLleva: lleva, regaloOtroRegala: regala,
+    };
     setSavingId(p.id);
     try {
-      await productsApi.update(p.id, { regaloProductoId: d.productoId, regaloProductoNombre: d.nombre, regaloOtroMax: max });
-      patchLocal(p.id, { regaloProductoId: d.productoId, regaloProductoNombre: d.nombre, regaloOtroMax: max });
+      await productsApi.update(p.id, patch);
+      patchLocal(p.id, patch);
       const b = await productsApi.getByIds([d.productoId]);
       if (b[0]) setStockB((prev) => ({ ...prev, [d.productoId!]: b[0].stock }));
       toast.success(`Combo guardado en "${p.name}"`);
@@ -252,8 +273,8 @@ export default function DescuentosPage() {
         await productsApi.update(p.id, { regaloMismo: false, regaloMismoMax: null, regaloMismoLleva: null, regaloMismoRegala: null });
         patchLocal(p.id, { regaloMismo: false, regaloMismoMax: null, regaloMismoLleva: null, regaloMismoRegala: null });
       } else {
-        await productsApi.update(p.id, { regaloProductoId: null, regaloProductoNombre: null, regaloOtroMax: null });
-        patchLocal(p.id, { regaloProductoId: null, regaloProductoNombre: null, regaloOtroMax: null });
+        await productsApi.update(p.id, { regaloProductoId: null, regaloProductoNombre: null, regaloOtroMax: null, regaloOtroLleva: null, regaloOtroRegala: null });
+        patchLocal(p.id, { regaloProductoId: null, regaloProductoNombre: null, regaloOtroMax: null, regaloOtroLleva: null, regaloOtroRegala: null });
       }
       if (editing?.id === p.id && editing.tipo === tipo) cerrarEdicion();
       toast.success("Oferta quitada");
@@ -276,7 +297,7 @@ export default function DescuentosPage() {
   };
 
   const elegirComboProducto = (pId: string, prod: Product) => {
-    setComboDraft((prev) => ({ ...prev, [pId]: { ...(prev[pId] || { max: "" }), productoId: prod.id, nombre: prod.name } }));
+    setComboDraft((prev) => ({ ...prev, [pId]: { ...(prev[pId] || { max: "", lleva: "", regala: "" }), productoId: prod.id, nombre: prod.name } }));
     setStockB((prev) => ({ ...prev, [prod.id]: prod.stock }));
     setComboSearch("");
     setComboResults([]);
@@ -447,7 +468,7 @@ export default function DescuentosPage() {
                     {tieneRegaloOtro(p) && (
                       <OfferRow
                         icon={<Gift className="h-3.5 w-3.5 text-purple-600" />}
-                        text={p.regaloOtroMax != null ? `Regala ${p.regaloProductoNombre} (máx ${p.regaloOtroMax})` : `Regala ${p.regaloProductoNombre} (libre)`}
+                        text={textoRegaloOtro(p)}
                         estado={estadoRegaloOtro(p)}
                         onEdit={() => abrirEdicion(p, "regalo_otro")}
                         onRemove={() => quitarOferta(p, "regalo_otro")}
@@ -555,16 +576,33 @@ export default function DescuentosPage() {
                           )}
                           <div className="flex items-end gap-3 flex-wrap">
                             <div className="flex flex-col">
+                              <span className="text-[9px] text-muted-foreground mb-0.5">llevando (opcional)</span>
+                              <Input type="number" min={1}
+                                value={comboDraft[p.id]?.lleva ?? ""}
+                                onChange={(e) => setComboDraft((prev) => ({ ...prev, [p.id]: { ...(prev[p.id] || { productoId: null, nombre: "", max: "", lleva: "", regala: "" }), lleva: e.target.value } }))}
+                                className="h-8 w-24 text-center text-sm" placeholder="ej: 10" />
+                            </div>
+                            <div className="flex flex-col">
+                              <span className="text-[9px] text-muted-foreground mb-0.5">se regala</span>
+                              <Input type="number" min={1}
+                                value={comboDraft[p.id]?.regala ?? ""}
+                                onChange={(e) => setComboDraft((prev) => ({ ...prev, [p.id]: { ...(prev[p.id] || { productoId: null, nombre: "", max: "", lleva: "", regala: "" }), regala: e.target.value } }))}
+                                className="h-8 w-24 text-center text-sm" placeholder="ej: 1" />
+                            </div>
+                            <div className="flex flex-col">
                               <span className="text-[9px] text-muted-foreground mb-0.5">máx a regalar (vacío = libre)</span>
                               <Input type="number" min={1}
                                 value={comboDraft[p.id]?.max ?? ""}
-                                onChange={(e) => setComboDraft((prev) => ({ ...prev, [p.id]: { ...(prev[p.id] || { productoId: null, nombre: "" }), max: e.target.value } }))}
+                                onChange={(e) => setComboDraft((prev) => ({ ...prev, [p.id]: { ...(prev[p.id] || { productoId: null, nombre: "", max: "", lleva: "", regala: "" }), max: e.target.value } }))}
                                 className="h-8 w-28 text-center text-sm" placeholder="libre" />
                             </div>
                             <Button size="sm" disabled={savingId === p.id} onClick={() => guardarRegaloOtro(p)} className="h-8 gap-1 ml-auto">
                               {savingId === p.id ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Check className="h-3.5 w-3.5" />} Guardar
                             </Button>
                           </div>
+                          <p className="text-[10px] text-muted-foreground">
+                            "Llevando" cuenta unidades de <strong>{p.name}</strong>. Vacío = el vendedor regala libremente (hasta el máximo).
+                          </p>
                         </div>
                       )}
                     </div>

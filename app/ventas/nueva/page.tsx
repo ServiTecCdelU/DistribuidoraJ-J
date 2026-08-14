@@ -145,6 +145,8 @@ function NuevaVentaContent({
           regaloMismoLleva: p.regaloMismoLleva ?? null,
           regaloMismoRegala: p.regaloMismoRegala ?? null,
           regaloOtroMax: p.regaloOtroMax ?? null,
+          regaloOtroLleva: p.regaloOtroLleva ?? null,
+          regaloOtroRegala: p.regaloOtroRegala ?? null,
           regaloProductoId: p.regaloProductoId ?? null,
           regaloProductoNombre: p.regaloProductoNombre ?? null,
           productoId: p.productoId,
@@ -545,7 +547,11 @@ const ProductListItem = memo(function ProductListItem({
     : null;
   const lleva = product.regaloMismoLleva;
   const regala = product.regaloMismoRegala;
-  const promoTexto = lleva && regala ? `Llevando ${lleva} se regala ${regala}` : null;
+  const promoTexto = lleva && regala
+    ? `Llevando ${lleva} se regala ${regala}`
+    : product.regaloOtroLleva && product.regaloOtroRegala
+      ? `Llevando ${product.regaloOtroLleva} se regala ${product.regaloOtroRegala}× ${product.regaloProductoNombre ?? "otro producto"}`
+      : null;
 
   return (
     <div className={cn(

@@ -865,6 +865,8 @@ export default function PedidosPage() {
             regaloMismoLleva: cfg?.regaloMismoLleva ?? null,
             regaloMismoRegala: cfg?.regaloMismoRegala ?? null,
             regaloOtroMax: cfg?.regaloOtroMax ?? null,
+            regaloOtroLleva: cfg?.regaloOtroLleva ?? null,
+            regaloOtroRegala: cfg?.regaloOtroRegala ?? null,
             regaloProductoId: cfg?.regaloProductoId ?? null,
             regaloProductoNombre: cfg?.regaloProductoNombre ?? null,
           },

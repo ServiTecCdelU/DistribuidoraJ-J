@@ -512,15 +512,26 @@ export function useCart(role: UserRole, userEmail?: string, externalProducts?: P
   // Regla "llevando X se regala N": recalcula el regalo automático según la
   // cantidad cargada. Solo aplica si el item no tiene descuento ni regalo cruzado.
   const withRegaloAuto = (item: CartItem): CartItem => {
-    const { regaloMismoLleva: lleva, regaloMismoRegala: regala } = item.product;
-    if (!lleva || !regala) return item;
-    if (item.itemDiscount || item.regaloOtroCantidad) return item;
-    const porRegla = Math.floor(item.quantity / lleva) * regala;
-    const topeFijo = item.product.regaloMismoMax ?? Infinity;
-    const esMayorista = item.product.stockLocal !== undefined;
-    const topeStock = esMayorista ? Infinity : Math.max(0, item.product.stock - item.quantity);
-    const val = Math.min(porRegla, topeFijo, topeStock);
-    return val > 0 ? { ...item, regalo: val } : { ...item, regalo: undefined };
+    if (item.itemDiscount) return item;
+    const p = item.product;
+
+    // Regalo del mismo producto (consume stock del propio producto)
+    if (p.regaloMismoLleva && p.regaloMismoRegala && !item.regaloOtroCantidad) {
+      const porRegla = Math.floor(item.quantity / p.regaloMismoLleva) * p.regaloMismoRegala;
+      const esMayorista = p.stockLocal !== undefined;
+      const topeStock = esMayorista ? Infinity : Math.max(0, p.stock - item.quantity);
+      const val = Math.min(porRegla, p.regaloMismoMax ?? Infinity, topeStock);
+      return val > 0 ? { ...item, regalo: val } : { ...item, regalo: undefined };
+    }
+
+    // Regalo de otro producto
+    if (p.regaloProductoId && p.regaloOtroLleva && p.regaloOtroRegala && !item.regalo) {
+      const porRegla = Math.floor(item.quantity / p.regaloOtroLleva) * p.regaloOtroRegala;
+      const val = Math.min(porRegla, p.regaloOtroMax ?? Infinity);
+      return val > 0 ? { ...item, regaloOtroCantidad: val } : { ...item, regaloOtroCantidad: undefined };
+    }
+
+    return item;
   };
 
   // --- Cart actions ---
@@ -633,9 +644,21 @@ export function useCart(role: UserRole, userEmail?: string, externalProducts?: P
   const setItemRegaloOtro = useCallback((productId: string, n: number) => {
     setCart((prev) => prev.map((item) => {
       if (item.product.id !== productId) return item;
-      const max = item.product.regaloOtroMax ?? Infinity;
+      const topeFijo = item.product.regaloOtroMax ?? Infinity;
+      // Regla "llevando X se regala N" del otro producto
+      const lleva = item.product.regaloOtroLleva ?? null;
+      const regala = item.product.regaloOtroRegala ?? null;
+      const topeRegla = lleva && regala ? Math.floor(item.quantity / lleva) * regala : Infinity;
+      const max = Math.min(topeFijo, topeRegla);
       let val = Math.max(0, Math.floor(n || 0));
-      if (val > max) { toast.error(`Máximo a regalar: ${max}`); val = max; }
+      if (val > max) {
+        toast.error(
+          topeRegla < topeFijo
+            ? `Llevando ${lleva} se regala ${regala}: máximo ${max} para ${item.quantity} unidades`
+            : `Máximo a regalar: ${max}`,
+        );
+        val = max === Infinity ? val : max;
+      }
       if (val > 0) {
         return { ...item, regaloOtroCantidad: val, itemDiscount: undefined, regalo: undefined };
       }

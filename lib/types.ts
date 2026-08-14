@@ -38,6 +38,8 @@ export interface Product {
   regaloMismoLleva?: number | null;   // "llevando X" (mismo producto); null = sin regla
   regaloMismoRegala?: number | null;  // "se regala N" cada X llevados; null = sin regla
   regaloOtroMax?: number | null;    // tope de unidades a regalar (otro); null = libre
+  regaloOtroLleva?: number | null;    // "llevando X" (del producto comprado); null = sin regla
+  regaloOtroRegala?: number | null;   // "se regala N" del otro producto cada X llevados; null = sin regla
   // Promo cruzada: "cada X comprados, regala N de OTRO producto"
   regaloProductoId?: string | null;     // id del producto que se regala
   regaloProductoNombre?: string | null; // nombre del producto regalado (cache para mostrar)
