@@ -92,9 +92,11 @@ export const createClient = async (
     seller_id: client.sellerId || null,
     codigo_externo: client.codigoExterno || null,
     dia_cobro: client.diaCobro || null,
+    cuenta_corriente_habilitada: client.cuentaCorrienteHabilitada ?? false,
   })
   return {
     ...client,
+    cuentaCorrienteHabilitada: client.cuentaCorrienteHabilitada ?? false,
     taxCategory: client.taxCategory ?? 'consumidor_final',
     currentBalance: 0,
     notes: client.notes ?? '',
