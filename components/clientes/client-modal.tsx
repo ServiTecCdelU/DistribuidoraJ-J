@@ -16,6 +16,7 @@ import { Label } from '@/components/ui/label'
 import type { Client } from '@/lib/types'
 import { formatCurrency, formatCuit, normalizeCuit } from '@/lib/utils/format'
 import { Textarea } from '@/components/ui/textarea'
+import { Switch } from '@/components/ui/switch'
 import { Loader2, User, FileText, Phone, Mail, MapPin, CreditCard, Building, StickyNote, Ban, CheckCircle2 } from 'lucide-react'
 
 interface ClientModalProps {
@@ -49,6 +50,7 @@ export function ClientModal({ open, onOpenChange, client, onSave, showCreditLimi
     sellerId: '',
     diaCobro: '',
     activo: true,
+    cuentaCorrienteHabilitada: false,
   })
 
   useEffect(() => {
@@ -67,6 +69,7 @@ export function ClientModal({ open, onOpenChange, client, onSave, showCreditLimi
         sellerId: client.sellerId || '',
         diaCobro: client.diaCobro || '',
         activo: client.activo !== false,
+        cuentaCorrienteHabilitada: client.cuentaCorrienteHabilitada === true,
       })
     } else {
       setFormData({
@@ -83,6 +86,7 @@ export function ClientModal({ open, onOpenChange, client, onSave, showCreditLimi
         sellerId: '',
         diaCobro: '',
         activo: true,
+        cuentaCorrienteHabilitada: false,
       })
     }
     setErrors({})
@@ -153,6 +157,7 @@ export function ClientModal({ open, onOpenChange, client, onSave, showCreditLimi
         codigoExterno: formData.codigoExterno.trim() || undefined,
         diaCobro: formData.diaCobro || undefined,
         activo: formData.activo,
+        cuentaCorrienteHabilitada: formData.cuentaCorrienteHabilitada,
       })
     } finally {
       setLoading(false)
@@ -295,6 +300,22 @@ export function ClientModal({ open, onOpenChange, client, onSave, showCreditLimi
                   <option value="sabado">Sábado</option>
                   <option value="domingo">Domingo</option>
                 </select>
+              </div>
+              <div className="flex items-center justify-between rounded-2xl border border-input px-4 py-3">
+                <div className="flex items-center gap-2">
+                  <CreditCard className="h-3.5 w-3.5 text-muted-foreground" />
+                  <div>
+                    <Label htmlFor="cuentaCorriente" className="text-foreground">Cuenta corriente</Label>
+                    <p className="text-xs text-muted-foreground">
+                      {formData.cuentaCorrienteHabilitada ? 'Habilitada — puede comprar a cuenta' : 'Deshabilitada — solo contado'}
+                    </p>
+                  </div>
+                </div>
+                <Switch
+                  id="cuentaCorriente"
+                  checked={formData.cuentaCorrienteHabilitada}
+                  onCheckedChange={(v) => setFormData({ ...formData, cuentaCorrienteHabilitada: v })}
+                />
               </div>
             <div className="space-y-2">
               <Label htmlFor="taxCategory" className="text-foreground flex items-center gap-2">
