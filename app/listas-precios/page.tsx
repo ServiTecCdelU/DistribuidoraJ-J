@@ -170,7 +170,7 @@ export default function ListasPreciosPage() {
         await auditApi.log({
           action: "price_list_updated",
           userId: user.id,
-          userName: user.name,
+          userName: user.name || user.email,
           description: `Actualizo lista de precios "${name}" (${discountPercent}% dto)`,
           entityType: "price_list",
           entityId: editing.id,
@@ -180,7 +180,7 @@ export default function ListasPreciosPage() {
         await auditApi.log({
           action: "price_list_updated",
           userId: user.id,
-          userName: user.name,
+          userName: user.name || user.email,
           description: `Creo lista de precios "${name}" (${discountPercent}% dto)`,
           entityType: "price_list",
         });
@@ -202,7 +202,7 @@ export default function ListasPreciosPage() {
       await auditApi.log({
         action: "price_list_updated",
         userId: user.id,
-        userName: user.name,
+        userName: user.name || user.email,
         description: `Elimino lista de precios "${list.name}"`,
         entityType: "price_list",
         entityId: list.id,

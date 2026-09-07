@@ -13,15 +13,16 @@ export const logAudit = async (entry: {
   metadata?: Record<string, any>;
 }) => {
   try {
-    const docId = await generateReadableId('auditoria', 'auditoria', entry.userName)
+    const userName = entry.userName || 'Desconocido'
+    const docId = await generateReadableId('auditoria', 'auditoria', userName)
     await supabase.from('auditoria').insert({
       id: docId,
       action: entry.action,
       user_id: entry.userId,
-      user_email: entry.userName,
+      user_email: userName,
       entity_type: entry.entityType ?? null,
       entity_id: entry.entityId ?? null,
-      details: entry.metadata ?? null,
+      details: { description: entry.description, ...entry.metadata },
     })
   } catch (error) {
     console.error("[Audit] Error logging:", error)
