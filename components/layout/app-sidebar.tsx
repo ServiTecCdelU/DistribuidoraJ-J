@@ -21,6 +21,7 @@ import {
   Store,
   Percent,
   Wallet,
+  ShieldCheck,
   PanelLeftClose,
   PanelLeftOpen,
 } from "lucide-react";
@@ -105,6 +106,7 @@ export function AppSidebar({ hidden, onToggle }: AppSidebarProps) {
       label: "Equipo & Análisis",
       items: [
         { href: "/empleados", label: "Empleados", icon: UserCheck, roles: ["admin"] },
+        { href: "/auditoria", label: "Auditoría", icon: ShieldCheck, roles: ["admin"] },
         // { href: "/reportes", label: "Reportes", icon: BarChart3, roles: ["admin"] },
       ],
     },
