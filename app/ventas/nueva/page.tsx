@@ -50,7 +50,8 @@ import { UnifiedCart } from "@/components/cart/UnifiedCart";
 import { OfflineQueueBadge } from "@/components/cart/OfflineQueueBadge";
 import { useAuth } from "@/hooks/use-auth";
 import { searchProductosParaVenta, getRubrosHabilitados } from "@/services/mayorista-service";
-import type { Product, CartItem } from "@/lib/types";
+import type { Product, CartItem, PriceList } from "@/lib/types";
+import { calculatePrice } from "@/services/price-list-service";
 
 // ─── Wrapper: espera auth antes de montar el carrito ──────────────────────────
 function NuevaVentaInner() {
@@ -412,6 +413,33 @@ function NuevaVentaContent({
           </div>
         </div>
 
+        {state.priceLists.length > 0 && (
+          <div className="flex items-center gap-2 flex-wrap">
+            <span className="text-xs shrink-0 text-muted-foreground">Lista de precios:</span>
+            <Button
+              type="button"
+              variant={!state.selectedPriceListId ? "default" : "outline"}
+              size="sm"
+              className="h-7 rounded-full px-3 text-xs"
+              onClick={() => actions.setSelectedPriceListId("")}
+            >
+              Normal
+            </Button>
+            {state.priceLists.map((l) => (
+              <Button
+                key={l.id}
+                type="button"
+                variant={state.selectedPriceListId === l.id ? "default" : "outline"}
+                size="sm"
+                className="h-7 rounded-full px-3 text-xs"
+                onClick={() => actions.setSelectedPriceListId(l.id)}
+              >
+                {l.name}
+              </Button>
+            ))}
+          </div>
+        )}
+
         {productsLoading ? (
           <div className="space-y-1">
             {[...Array(10)].map((_, i) => (
@@ -430,7 +458,7 @@ function NuevaVentaContent({
           </div>
         ) : (
           <div className="space-y-3">
-            <ProductGrid products={enabledProducts} cart={state.cart} addToCart={actions.addToCart} removeFromCart={actions.removeFromCart} updateQuantity={actions.updateQuantity} formatCurrency={actions.formatCurrency} />
+            <ProductGrid products={enabledProducts} cart={state.cart} addToCart={actions.addToCart} removeFromCart={actions.removeFromCart} updateQuantity={actions.updateQuantity} formatCurrency={actions.formatCurrency} priceList={state.selectedPriceList} />
             {/* Paginación */}
             {totalPages > 1 && (
               <div className="flex items-center justify-between pt-2">
@@ -528,7 +556,7 @@ function NuevaVentaContent({
 // ─── Sub-componentes de productos ─────────────────────────────────────────────
 
 const ProductListItem = memo(function ProductListItem({
-  product, quantity, onAdd, onRemove, onDecrement, formatCurrency,
+  product, quantity, onAdd, onRemove, onDecrement, formatCurrency, priceList,
 }: {
   product: Product;
   quantity: number;
@@ -536,12 +564,14 @@ const ProductListItem = memo(function ProductListItem({
   onRemove: (id: string) => void;
   onDecrement: (id: string, delta: number) => void;
   formatCurrency: (n: number) => string;
+  priceList: PriceList | null;
 }) {
   const seDivideEn = (product as any).seDivideEn;
   const unidadesPorBulto = (product as any).unidadesPorBulto;
   const stockLocal = product.stockLocal;
   const descuento = (product as any).descuento ?? 0;
   const ofertaActiva = descuento > 0;
+  const displayPrice = priceList ? calculatePrice(product.price, priceList, product.id) : product.price;
   const unidadesLote = unidadesPorBulto
     ? (seDivideEn && seDivideEn > 1 ? Math.floor(unidadesPorBulto / seDivideEn) : unidadesPorBulto)
     : null;
@@ -628,11 +658,11 @@ const ProductListItem = memo(function ProductListItem({
         <div className="text-right shrink-0">
           {ofertaActiva ? (
             <>
-              <p className="text-[11px] text-muted-foreground line-through leading-none">{formatCurrency(product.price)}</p>
-              <p className="font-bold text-sm text-teal-600">{formatCurrency(product.price * (1 - descuento / 100))}</p>
+              <p className="text-[11px] text-muted-foreground line-through leading-none">{formatCurrency(displayPrice)}</p>
+              <p className="font-bold text-sm text-teal-600">{formatCurrency(displayPrice * (1 - descuento / 100))}</p>
             </>
           ) : (
-            <p className="font-bold text-sm text-teal-600">{formatCurrency(product.price)}</p>
+            <p className="font-bold text-sm text-teal-600">{formatCurrency(displayPrice)}</p>
           )}
           {seDivideEn && seDivideEn > 1 && (
             <p className="text-[10px] text-muted-foreground leading-none">/ lote</p>
@@ -680,7 +710,7 @@ const ProductListItem = memo(function ProductListItem({
 });
 
 function ProductGrid({
-  products, cart, addToCart, removeFromCart, updateQuantity, formatCurrency,
+  products, cart, addToCart, removeFromCart, updateQuantity, formatCurrency, priceList,
 }: {
   products: Product[];
   cart: CartItem[];
@@ -688,6 +718,7 @@ function ProductGrid({
   removeFromCart: (id: string) => void;
   updateQuantity: (id: string, delta: number) => void;
   formatCurrency: (n: number) => string;
+  priceList: PriceList | null;
 }) {
   const cartMap = useMemo(() => {
     const map = new Map<string, number>();
@@ -706,6 +737,7 @@ function ProductGrid({
           onRemove={removeFromCart}
           onDecrement={updateQuantity}
           formatCurrency={formatCurrency}
+          priceList={priceList}
         />
       ))}
     </div>

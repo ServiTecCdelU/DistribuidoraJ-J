@@ -64,6 +64,11 @@ interface CashRegister {
   cashTotal?: number;
   creditTotal?: number;
   transferTotal?: number;
+  verified: boolean;
+  verifiedAt?: Date;
+  verifiedBy?: string;
+  verifiedAmount?: number;
+  verifiedNotes?: string;
 }
 
 // ── Helpers ──
@@ -115,6 +120,11 @@ const mapRegister = (data: any): CashRegister => ({
   cashTotal: data.cash_total,
   creditTotal: data.credit_total,
   transferTotal: data.transfer_total,
+  verified: data.verified || false,
+  verifiedAt: data.verified_at ? new Date(data.verified_at) : undefined,
+  verifiedBy: data.verified_by || undefined,
+  verifiedAmount: data.verified_amount != null ? data.verified_amount : undefined,
+  verifiedNotes: data.verified_notes || undefined,
 });
 
 // ══════════════════════ PDF DE CAJA ══════════════════════
@@ -301,6 +311,32 @@ const CajaPdfDocument = ({ register, sales, losses = [], pagos = [], rejected = 
           </View>
         )}
 
+        {/* Verificación del admin (caja diaria conciliada) */}
+        {register.verified && (
+          <View style={cajaPdfStyles.section}>
+            <Text style={cajaPdfStyles.sectionTitle}>Verificación</Text>
+            <View style={cajaPdfStyles.row}>
+              <Text style={cajaPdfStyles.label}>Contado por reparto</Text>
+              <Text style={cajaPdfStyles.value}>{formatCurrency(register.finalAmount || 0)}</Text>
+            </View>
+            <View style={cajaPdfStyles.row}>
+              <Text style={cajaPdfStyles.label}>Verificado por admin</Text>
+              <Text style={cajaPdfStyles.value}>{formatCurrency(register.verifiedAmount || 0)}</Text>
+            </View>
+            <View style={cajaPdfStyles.row}>
+              <Text style={cajaPdfStyles.label}>Verificado por</Text>
+              <Text style={cajaPdfStyles.value}>
+                {register.verifiedBy}{register.verifiedAt ? ` — ${register.verifiedAt.toLocaleDateString("es-AR")}` : ""}
+              </Text>
+            </View>
+            {register.verifiedNotes && (
+              <View style={cajaPdfStyles.notesBox}>
+                <Text style={cajaPdfStyles.notesText}>Motivo: {register.verifiedNotes}</Text>
+              </View>
+            )}
+          </View>
+        )}
+
         {/* Detalle de ventas */}
         {sales.length > 0 && (
           <View style={cajaPdfStyles.section}>
@@ -438,6 +474,14 @@ export default function CajaPage() {
   const [closingRegister, setClosingRegister] = useState<CashRegister | null>(null);
   const [closingSales, setClosingSales] = useState<Sale[] | null>(null);
 
+  // Verify register modal (admin concilia la caja de reparto → caja final)
+  const [showVerifyModal, setShowVerifyModal] = useState(false);
+  const [verifyingRegister, setVerifyingRegister] = useState<CashRegister | null>(null);
+  const [verifiedAmountInput, setVerifiedAmountInput] = useState("");
+  const [verifyNotes, setVerifyNotes] = useState("");
+  const [verifying, setVerifying] = useState(false);
+  const [verificationLog, setVerificationLog] = useState<{ id: string; verifiedAmount: number; notes?: string; verifiedBy: string; verifiedAt: Date }[]>([]);
+
   const [saving, setSaving] = useState(false);
   const [generatingPdf, setGeneratingPdf] = useState(false);
 
@@ -470,6 +514,10 @@ export default function CajaPage() {
   // - Si estamos dentro del horario y no hay caja del día, abre una nueva (06:00, inicial 0).
   // - Fuera de horario (23:00–06:00) no hay caja activa.
   // Devuelve la fila (snake_case) de la caja activa, o null si está fuera de horario.
+  // El cierre por horario (23:00) y el backfill de cajas retroactivas ya corren server-side
+  // vía cron (/api/cron/reconciliar-caja, pg_cron). Acá solo LEEMOS la caja activa de hoy y,
+  // si no existe y estamos en horario, la abrimos — sin repetir el trabajo pesado (N+1 de
+  // cierre + backfill de hasta 31 días) en cada carga de página.
   const reconciliarCajaHorario = useCallback(async (): Promise<any | null> => {
     const HORA_APERTURA = 6;
     const HORA_CIERRE = 23;
@@ -479,139 +527,14 @@ export default function CajaPage() {
     const cierreHoy = new Date(diaHoy); cierreHoy.setHours(HORA_CIERRE, 0, 0, 0);
     const dentroHorario = ahora >= aperturaHoy && ahora < cierreHoy;
 
-    const agg = (src: any[]) => {
-      let efectivo = 0, transfer = 0, credito = 0, total = 0;
-      for (const s of src) {
-        total += s.total || 0;
-        const method = (s as any).paymentMethod || "efectivo";
-        if (s.paymentType === "cash") {
-          if (method === "transferencia") transfer += s.total || 0; else efectivo += s.total || 0;
-        } else if (s.paymentType === "credit") {
-          credito += s.total || 0;
-        } else if (s.paymentType === "mixed") {
-          const cashAmt = (s as any).cashAmount || 0;
-          const creditAmt = (s as any).creditAmount || 0;
-          const ef = (s as any).efectivo_amount ?? (method !== "transferencia" ? cashAmt : 0);
-          const tr = (s as any).transferencia_amount ?? (method === "transferencia" ? cashAmt : 0);
-          efectivo += ef; transfer += tr; credito += creditAmt;
-        }
-      }
-      return { efectivo, transfer, credito, total, count: src.length };
-    };
-
     try {
-      // 1) Cerrar automáticamente cajas abiertas cuyo cierre programado (23:00 de su día) ya pasó.
-      const { data: abiertas } = await supabase
-        .from("caja").select("*").eq("status", "open").order("opened_at", { ascending: true });
-      const allSales = await salesApi.getAll();
-      for (const reg of (abiertas || [])) {
-        const ap = new Date(reg.opened_at);
-        const diaReg = new Date(ap); diaReg.setHours(0, 0, 0, 0);
-        const cierreReg = new Date(diaReg); cierreReg.setHours(HORA_CIERRE, 0, 0, 0);
-        const esDeHoy = diaReg.getTime() === diaHoy.getTime();
-        if (esDeHoy && ahora < cierreReg) continue; // caja de hoy aún en horario: sigue activa
-
-        const periodo = allSales.filter((s: any) => {
-          const d = new Date(s.createdAt);
-          return d >= ap && d <= cierreReg && Boolean(s.remitoNumber);
-        });
-        const st = agg(periodo);
-        const { data: pagos } = await supabase
-          .from("pagos_comisiones").select("monto, monto_pagado")
-          .or("anulado.is.null,anulado.eq.false")
-          .gte("fecha_pago", ap.toISOString()).lte("fecha_pago", cierreReg.toISOString());
-        const comis = (pagos || []).reduce((a: number, p: any) => a + (Number(p.monto_pagado ?? p.monto) || 0), 0);
-        const esperado = (reg.initial_amount || 0) + st.efectivo - comis;
-        // .eq("status","open") en el update evita doble cierre si dos pestañas reconcilian a la vez.
-        await supabase.from("caja").update({
-          closed_at: cierreReg.toISOString(),
-          closed_by: "Cierre automático",
-          final_amount: esperado,
-          expected_amount: esperado,
-          difference: 0,
-          status: "closed",
-          notes: "Cierre automático 23:00",
-          sales_count: st.count,
-          total_sales: st.total,
-          cash_total: st.efectivo,
-          credit_total: st.credito,
-          transfer_total: st.transfer,
-        }).eq("id", reg.id).eq("status", "open");
-      }
-
-      // 1.5) Backfill: crear cajas CERRADAS retroactivas para días pasados que tuvieron ventas
-      //      con remito pero quedaron sin caja (p.ej. fines de semana donde nadie abrió la página,
-      //      o cualquier hueco entre la última caja y hoy). Sin esto, esas ventas no aparecen en
-      //      ninguna caja del historial.
-      const LIMITE_DIAS = 31;
-      const limite = new Date(diaHoy); limite.setDate(limite.getDate() - LIMITE_DIAS);
-      const dayKey = (d: Date) => `${d.getFullYear()}-${d.getMonth()}-${d.getDate()}`;
-
-      const { data: cajasRango } = await supabase
-        .from("caja").select("opened_at").gte("opened_at", limite.toISOString());
-      const diasConCaja = new Set((cajasRango || []).map((r: any) => dayKey(new Date(r.opened_at))));
-
-      const { data: pagosRango } = await supabase
-        .from("pagos_comisiones").select("monto, monto_pagado, created_at, fecha_pago").or("anulado.is.null,anulado.eq.false").gte("fecha_pago", limite.toISOString());
-
-      // Agrupar ventas con remito de días pasados (dentro del rango, sin contar hoy) por día.
-      const ventasPorDia = new Map<string, any[]>();
-      for (const s of allSales) {
-        if (!(s as any).remitoNumber) continue;
-        const d = new Date(s.createdAt);
-        if (d < limite || d >= diaHoy) continue;
-        const dia = new Date(d); dia.setHours(0, 0, 0, 0);
-        const key = dayKey(dia);
-        if (diasConCaja.has(key)) continue;
-        if (!ventasPorDia.has(key)) ventasPorDia.set(key, []);
-        ventasPorDia.get(key)!.push(s);
-      }
-
-      for (const [key, ventasDia] of ventasPorDia) {
-        const [yy, mm, dd] = key.split("-").map(Number);
-        const dia = new Date(yy, mm, dd, 0, 0, 0, 0);
-        const ap = new Date(dia); ap.setHours(HORA_APERTURA, 0, 0, 0);
-        const cierre = new Date(dia); cierre.setHours(HORA_CIERRE, 0, 0, 0);
-        const periodo = ventasDia.filter((s: any) => {
-          const d = new Date(s.createdAt);
-          return d >= ap && d <= cierre;
-        });
-        if (periodo.length === 0) continue;
-        const st = agg(periodo);
-        const comis = (pagosRango || []).reduce((a: number, p: any) => {
-          const pd = new Date(p.fecha_pago ?? p.created_at);
-          return pd >= ap && pd <= cierre ? a + (Number(p.monto_pagado ?? p.monto) || 0) : a;
-        }, 0);
-        const esperado = st.efectivo - comis; // inicial 0 (apertura automática)
-        const dateStr = `${yy}${String(mm + 1).padStart(2, "0")}${String(dd).padStart(2, "0")}`;
-        const id = await generateReadableId("caja", "caja", dateStr);
-        await supabase.from("caja").insert({
-          id,
-          opened_at: ap.toISOString(),
-          opened_by: "Apertura automática",
-          initial_amount: 0,
-          closed_at: cierre.toISOString(),
-          closed_by: "Cierre automático",
-          final_amount: esperado,
-          expected_amount: esperado,
-          difference: 0,
-          status: "closed",
-          notes: "Cierre automático 23:00 (retroactivo)",
-          sales_count: st.count,
-          total_sales: st.total,
-          cash_total: st.efectivo,
-          credit_total: st.credito,
-          transfer_total: st.transfer,
-        });
-      }
-
-      // 2) ¿Ya hay una caja abierta de hoy? Usarla.
+      // ¿Ya hay una caja abierta de hoy? Usarla.
       const { data: deHoy } = await supabase
         .from("caja").select("*").eq("status", "open")
         .gte("opened_at", diaHoy.toISOString()).order("opened_at", { ascending: false }).limit(1);
       if (deHoy && deHoy.length) return deHoy[0];
 
-      // 3) Dentro de horario y sin caja de hoy: abrir automáticamente (06:00, inicial 0).
+      // Dentro de horario y sin caja de hoy (el cron todavía no la abrió): abrirla ahora.
       if (dentroHorario) {
         const dateStr = `${diaHoy.getFullYear()}${String(diaHoy.getMonth() + 1).padStart(2, "0")}${String(diaHoy.getDate()).padStart(2, "0")}`;
         const id = await generateReadableId("caja", "caja", dateStr);
@@ -648,44 +571,37 @@ export default function CajaPage() {
         if (!mounted) return;
         setCurrentRegister(activeRegister ? mapRegister(activeRegister) : null);
 
-        // Cargar ventas desde la fecha de apertura de la caja activa
-        const salesData = await salesApi.getAll();
-        if (!mounted) return;
         const cajaDate = activeRegister ? new Date(activeRegister.opened_at) : today;
         cajaDate.setHours(0, 0, 0, 0);
+        const now = new Date();
+
+        // Cargar ventas, pérdidas, comisiones y pedidos rechazados del día en paralelo
+        const [salesData, { data: lossData }, { data: pagosData }, { data: rejData }] = await Promise.all([
+          salesApi.getByDateRange(cajaDate, now),
+          supabase
+            .from("transacciones")
+            .select("*")
+            .like("description", "[ROTURA]%")
+            .gte("date", cajaDate.toISOString()),
+          supabase
+            .from("pagos_comisiones")
+            .select("id, seller_name, monto, monto_pagado, created_at, fecha_pago")
+            .or("anulado.is.null,anulado.eq.false")
+            .gte("fecha_pago", cajaDate.toISOString()),
+          supabase
+            .from("pedidos")
+            .select("id, client_name, remito_number, updated_at")
+            .eq("status", "rechazado")
+            .gte("updated_at", cajaDate.toISOString()),
+        ]);
+        if (!mounted) return;
+
         // Caja toma SOLO ventas con remito. Una venta sin remito es un cobro duplicado/incompleto
         // (vale el remito) y no debe sumar al efectivo del día.
-        const todaySales = salesData.filter((sale) => {
-          const dt = new Date(sale.createdAt);
-          return dt >= cajaDate && Boolean(sale.remitoNumber);
-        });
+        const todaySales = salesData.filter((sale) => Boolean(sale.remitoNumber));
         setSales(todaySales);
-
-        // Cargar pérdidas (roturas) del día
-        const { data: lossData } = await supabase
-          .from("transacciones")
-          .select("*")
-          .like("description", "[ROTURA]%")
-          .gte("date", cajaDate.toISOString());
-        if (!mounted) return;
         setLosses((lossData || []).map((l: any) => ({ id: l.id, amount: Math.abs(Number(l.amount)) || 0, description: (l.description || "").replace("[ROTURA] ", ""), date: l.date })));
-
-        // Cargar pagos de comisiones del día
-        const { data: pagosData } = await supabase
-          .from("pagos_comisiones")
-          .select("id, seller_name, monto, monto_pagado, created_at, fecha_pago")
-          .or("anulado.is.null,anulado.eq.false")
-          .gte("fecha_pago", cajaDate.toISOString());
-        if (!mounted) return;
         setPagosComisiones((pagosData || []).map((p: any) => ({ id: p.id, sellerName: p.seller_name, monto: Number(p.monto_pagado ?? p.monto) || 0, createdAt: p.fecha_pago ?? p.created_at })));
-
-        // Cargar pedidos rechazados del día (no afectan totales)
-        const { data: rejData } = await supabase
-          .from("pedidos")
-          .select("id, client_name, remito_number, updated_at")
-          .eq("status", "rechazado")
-          .gte("updated_at", cajaDate.toISOString());
-        if (!mounted) return;
         setRejectedOrders((rejData || []).map((p: any) => ({ id: p.id, clientName: p.client_name, remitoNumber: p.remito_number ?? undefined, date: p.updated_at })));
       } catch {
         if (!mounted) return;
@@ -704,61 +620,57 @@ export default function CajaPage() {
       const today = new Date();
       today.setHours(0, 0, 0, 0);
 
-      const { data: registers } = await supabase
-        .from("caja")
-        .select("*")
-        .gte("opened_at", today.toISOString())
-        .order("opened_at", { ascending: false })
-        .limit(1);
-
-      let activeRegister = registers && registers.length > 0 ? registers[0] : null;
-
-      if (!activeRegister) {
-        const { data: openRegisters } = await supabase
+      const [{ data: registers }, { data: openRegisters }] = await Promise.all([
+        supabase
+          .from("caja")
+          .select("*")
+          .gte("opened_at", today.toISOString())
+          .order("opened_at", { ascending: false })
+          .limit(1),
+        supabase
           .from("caja")
           .select("*")
           .eq("status", "open")
           .order("opened_at", { ascending: false })
-          .limit(1);
-        if (openRegisters && openRegisters.length > 0) {
-          activeRegister = openRegisters[0];
-        }
-      }
+          .limit(1),
+      ]);
+
+      const activeRegister = (registers && registers.length > 0)
+        ? registers[0]
+        : (openRegisters && openRegisters.length > 0 ? openRegisters[0] : null);
 
       if (activeRegister) {
         setCurrentRegister(mapRegister(activeRegister));
       }
 
-      const salesData = await salesApi.getAll();
       const cajaDate = activeRegister ? new Date(activeRegister.opened_at) : today;
       cajaDate.setHours(0, 0, 0, 0);
+      const now = new Date();
+
+      const [salesData, { data: lossData }, { data: pagosData }, { data: rejData }] = await Promise.all([
+        salesApi.getByDateRange(cajaDate, now),
+        supabase
+          .from("transacciones")
+          .select("*")
+          .like("description", "[ROTURA]%")
+          .gte("date", cajaDate.toISOString()),
+        supabase
+          .from("pagos_comisiones")
+          .select("id, seller_name, monto, monto_pagado, created_at, fecha_pago")
+          .or("anulado.is.null,anulado.eq.false")
+          .gte("fecha_pago", cajaDate.toISOString()),
+        supabase
+          .from("pedidos")
+          .select("id, client_name, remito_number, updated_at")
+          .eq("status", "rechazado")
+          .gte("updated_at", cajaDate.toISOString()),
+      ]);
+
       // Caja toma SOLO ventas con remito (vale el remito; sin remito = cobro duplicado/incompleto).
-      const todaySales = salesData.filter((sale) => {
-        const d = new Date(sale.createdAt);
-        return d >= cajaDate && Boolean(sale.remitoNumber);
-      });
+      const todaySales = salesData.filter((sale) => Boolean(sale.remitoNumber));
       setSales(todaySales);
-
-      const { data: lossData } = await supabase
-        .from("transacciones")
-        .select("*")
-        .like("description", "[ROTURA]%")
-        .gte("date", cajaDate.toISOString());
       setLosses((lossData || []).map((l: any) => ({ id: l.id, amount: Math.abs(Number(l.amount)) || 0, description: (l.description || "").replace("[ROTURA] ", ""), date: l.date })));
-
-      // Cargar pagos de comisiones del día
-      const { data: pagosData } = await supabase
-        .from("pagos_comisiones")
-        .select("id, seller_name, monto, monto_pagado, created_at, fecha_pago")
-        .or("anulado.is.null,anulado.eq.false")
-        .gte("fecha_pago", cajaDate.toISOString());
       setPagosComisiones((pagosData || []).map((p: any) => ({ id: p.id, sellerName: p.seller_name, monto: Number(p.monto_pagado ?? p.monto) || 0, createdAt: p.fecha_pago ?? p.created_at })));
-
-      const { data: rejData } = await supabase
-        .from("pedidos")
-        .select("id, client_name, remito_number, updated_at")
-        .eq("status", "rechazado")
-        .gte("updated_at", cajaDate.toISOString());
       setRejectedOrders((rejData || []).map((p: any) => ({ id: p.id, clientName: p.client_name, remitoNumber: p.remito_number ?? undefined, date: p.updated_at })));
     } catch {
       toast.error("Error al recargar ventas");
@@ -889,11 +801,8 @@ export default function CajaPage() {
       const end = new Date(register.openedAt);
       end.setHours(23, 59, 59, 999);
 
-      const salesData = await salesApi.getAll();
-      const daySales = salesData.filter((s) => {
-        const d = new Date(s.createdAt);
-        return d >= start && d <= end && Boolean(s.remitoNumber);
-      });
+      const salesData = await salesApi.getByDateRange(start, end);
+      const daySales = salesData.filter((s) => Boolean(s.remitoNumber));
       setSelectedSales(daySales);
 
       // Pedidos rechazados del día (mismo criterio que la caja del día: por updated_at).
@@ -992,6 +901,7 @@ export default function CajaPage() {
         openedBy: user.name || user.email,
         initialAmount: parseFloat(initialAmount),
         status: "open",
+        verified: false,
       });
       await auditApi.log({
         action: "cash_register_opened",
@@ -1077,6 +987,95 @@ export default function CajaPage() {
     }
   };
 
+  const loadVerificationLog = async (cajaId: string) => {
+    const { data } = await supabase
+      .from("caja_verificaciones")
+      .select("*")
+      .eq("caja_id", cajaId)
+      .order("verified_at", { ascending: false });
+    setVerificationLog((data || []).map((v: any) => ({
+      id: v.id,
+      verifiedAmount: Number(v.verified_amount) || 0,
+      notes: v.notes || undefined,
+      verifiedBy: v.verified_by,
+      verifiedAt: new Date(v.verified_at),
+    })));
+  };
+
+  const openVerifyModal = (reg: CashRegister) => {
+    setVerifyingRegister(reg);
+    setVerifiedAmountInput(String(reg.finalAmount ?? 0));
+    setVerifyNotes("");
+    setShowVerifyModal(true);
+    loadVerificationLog(reg.id);
+  };
+
+  const handleVerifyRegister = async () => {
+    const reg = verifyingRegister;
+    if (!reg || !user || verifiedAmountInput === "") return;
+    setVerifying(true);
+    try {
+      const monto = parseFloat(verifiedAmountInput);
+      const difiere = reg.finalAmount != null && monto !== reg.finalAmount;
+      if (difiere && !verifyNotes.trim()) {
+        toast.error("El monto verificado difiere del calculado: indicá el motivo");
+        setVerifying(false);
+        return;
+      }
+
+      const nowIso = new Date().toISOString();
+      const { error } = await supabase.from("caja").update({
+        verified: true,
+        verified_at: nowIso,
+        verified_by: user.name || user.email,
+        verified_amount: monto,
+        verified_notes: verifyNotes || "",
+      }).eq("id", reg.id);
+      if (error) throw error;
+
+      const logId = await generateReadableId("caja_verificaciones", "verif", reg.id);
+      await supabase.from("caja_verificaciones").insert({
+        id: logId,
+        caja_id: reg.id,
+        verified_amount: monto,
+        notes: verifyNotes || null,
+        verified_by: user.name || user.email,
+        verified_at: nowIso,
+      });
+
+      const updatedReg: CashRegister = {
+        ...reg,
+        verified: true,
+        verifiedAt: new Date(),
+        verifiedBy: user.name || user.email,
+        verifiedAmount: monto,
+        verifiedNotes: verifyNotes,
+      };
+      if (currentRegister?.id === reg.id) setCurrentRegister(updatedReg);
+      setHistorialRegisters((prev) => prev.map((r) => (r.id === reg.id ? updatedReg : r)));
+      if (selectedHistorial?.id === reg.id) setSelectedHistorial(updatedReg);
+
+      await auditApi.log({
+        action: "cash_register_verified",
+        userId: user.id,
+        userName: user.name || user.email,
+        description: `Verifico caja del ${formatDateShort(reg.openedAt)}. Calculado: ${formatCurrency(reg.finalAmount || 0)}, Verificado: ${formatCurrency(monto)}${verifyNotes ? ` — Motivo: ${verifyNotes}` : ""}`,
+        entityType: "caja",
+        entityId: reg.id,
+      });
+
+      toast.success("Caja verificada correctamente");
+      setShowVerifyModal(false);
+      setVerifyingRegister(null);
+      setVerifiedAmountInput("");
+      setVerifyNotes("");
+    } catch {
+      toast.error("Error al verificar la caja");
+    } finally {
+      setVerifying(false);
+    }
+  };
+
   const handleDownloadPdf = async () => {
     if (!currentRegister) return;
     setGeneratingPdf(true);
@@ -1098,11 +1097,8 @@ export default function CajaPage() {
       start.setHours(0, 0, 0, 0);
       const end = new Date(register.openedAt);
       end.setHours(23, 59, 59, 999);
-      const salesData = await salesApi.getAll();
-      const daySales = salesData.filter((s) => {
-        const d = new Date(s.createdAt);
-        return d >= start && d <= end && Boolean(s.remitoNumber);
-      });
+      const salesData = await salesApi.getByDateRange(start, end);
+      const daySales = salesData.filter((s) => Boolean(s.remitoNumber));
       // Cargar pérdidas del día
       const { data: lossData } = await supabase
         .from("transacciones")
@@ -1746,6 +1742,22 @@ export default function CajaPage() {
                       })()}
                     </CardTitle>
                     <div className="flex items-center gap-2">
+                      {selectedHistorial.status === "closed" && (
+                        selectedHistorial.verified ? (
+                          <Badge className="bg-emerald-100 text-emerald-700 hover:bg-emerald-100 border border-emerald-200">
+                            Verificada ✓
+                          </Badge>
+                        ) : (
+                          <Badge variant="outline" className="text-amber-700 border-amber-300">
+                            Pendiente de verificación
+                          </Badge>
+                        )
+                      )}
+                      {selectedHistorial.status === "closed" && (
+                        <Button variant="outline" size="sm" onClick={() => openVerifyModal(selectedHistorial)}>
+                          {selectedHistorial.verified ? "Reverificar" : "Verificar caja"}
+                        </Button>
+                      )}
                       <Button
                         variant="outline"
                         size="sm"
@@ -1822,6 +1834,25 @@ export default function CajaPage() {
                         <p className="text-sm text-muted-foreground italic">
                           Notas: {selectedHistorial.notes}
                         </p>
+                      )}
+
+                      {/* Verificación del admin */}
+                      {selectedHistorial.verified && (
+                        <div className="grid grid-cols-2 gap-3 text-sm p-3 rounded-lg bg-emerald-500/5 border border-emerald-500/20">
+                          <div>
+                            <p className="text-xs text-muted-foreground">Monto verificado</p>
+                            <p className="font-bold text-emerald-700">{formatCurrency(selectedHistorial.verifiedAmount || 0)}</p>
+                          </div>
+                          <div>
+                            <p className="text-xs text-muted-foreground">Verificado por</p>
+                            <p className="font-bold">{selectedHistorial.verifiedBy}{selectedHistorial.verifiedAt ? ` — ${formatDateShort(selectedHistorial.verifiedAt)}` : ""}</p>
+                          </div>
+                          {selectedHistorial.verifiedNotes && (
+                            <p className="col-span-2 text-sm text-muted-foreground italic">
+                              Motivo: {selectedHistorial.verifiedNotes}
+                            </p>
+                          )}
+                        </div>
                       )}
 
                       {/* Ventas del día */}
@@ -1964,6 +1995,17 @@ export default function CajaPage() {
                             </div>
                           </div>
                           <div className="flex items-center gap-2">
+                            {reg.status === "closed" && (
+                              reg.verified ? (
+                                <Badge className="bg-emerald-100 text-emerald-700 hover:bg-emerald-100 border border-emerald-200 text-[10px]">
+                                  Verificada
+                                </Badge>
+                              ) : (
+                                <Badge variant="outline" className="text-amber-700 border-amber-300 text-[10px]">
+                                  Pendiente
+                                </Badge>
+                              )
+                            )}
                             <Button
                               variant="outline"
                               size="sm"
@@ -1991,11 +2033,7 @@ export default function CajaPage() {
                                   cajaDate.setHours(0, 0, 0, 0);
                                   const nextDay = new Date(cajaDate);
                                   nextDay.setDate(nextDay.getDate() + 1);
-                                  const salesData = await salesApi.getAll();
-                                  const cajaSales = salesData.filter((s) => {
-                                    const d = new Date(s.createdAt);
-                                    return d >= cajaDate && d < nextDay;
-                                  });
+                                  const cajaSales = await salesApi.getByDateRange(cajaDate, nextDay);
                                   setClosingSales(cajaSales);
                                   setShowCloseModal(true);
                                 }}
@@ -2186,6 +2224,87 @@ export default function CajaPage() {
               >
                 {saving && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
                 Cerrar Caja
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+
+        {/* Verificar caja (admin concilia lo que armó el reparto → caja final) */}
+        <Dialog open={showVerifyModal} onOpenChange={setShowVerifyModal}>
+          <DialogContent className="sm:max-w-md">
+            <DialogHeader>
+              <DialogTitle>Verificar Caja</DialogTitle>
+            </DialogHeader>
+            <div className="space-y-4">
+              {verifyingRegister && (
+                <div className="text-sm space-y-1 p-3 rounded-lg bg-muted/50">
+                  <div className="flex justify-between">
+                    <span className="text-muted-foreground">Esperado</span>
+                    <span className="font-medium">{formatCurrency(verifyingRegister.expectedAmount || 0)}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-muted-foreground">Contado por reparto</span>
+                    <span className="font-medium">{formatCurrency(verifyingRegister.finalAmount || 0)}</span>
+                  </div>
+                </div>
+              )}
+              <div>
+                <label className="text-sm font-medium mb-1.5 block">
+                  Monto final verificado
+                </label>
+                <Input
+                  type="number"
+                  placeholder="0"
+                  value={verifiedAmountInput}
+                  onChange={(e) => setVerifiedAmountInput(e.target.value)}
+                  autoFocus
+                />
+              </div>
+              {verifyingRegister && verifiedAmountInput && parseFloat(verifiedAmountInput) !== (verifyingRegister.finalAmount || 0) && (
+                <div className="p-3 rounded-lg text-sm font-medium bg-amber-500/10 text-amber-700">
+                  Ajuste vs. lo contado por reparto: {formatCurrency(parseFloat(verifiedAmountInput) - (verifyingRegister.finalAmount || 0))}
+                </div>
+              )}
+              <div>
+                <label className="text-sm font-medium mb-1.5 block">
+                  Motivo del ajuste {verifyingRegister && verifiedAmountInput && parseFloat(verifiedAmountInput) !== (verifyingRegister.finalAmount || 0) ? "(obligatorio)" : "(opcional)"}
+                </label>
+                <Input
+                  placeholder="Ej: faltaba registrar un cobro en efectivo..."
+                  value={verifyNotes}
+                  onChange={(e) => setVerifyNotes(e.target.value)}
+                />
+              </div>
+              {verificationLog.length > 0 && (
+                <div>
+                  <p className="text-xs font-medium text-muted-foreground mb-1.5">Historial de verificaciones</p>
+                  <div className="space-y-1.5 max-h-32 overflow-y-auto">
+                    {verificationLog.map((v) => (
+                      <div key={v.id} className="text-xs p-2 rounded-lg bg-muted/50 flex items-center justify-between gap-2">
+                        <div className="min-w-0">
+                          <p className="font-medium">{formatCurrency(v.verifiedAmount)} — {v.verifiedBy}</p>
+                          {v.notes && <p className="text-muted-foreground truncate">{v.notes}</p>}
+                        </div>
+                        <span className="text-muted-foreground shrink-0">{v.verifiedAt.toLocaleDateString("es-AR")}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+            <DialogFooter>
+              <Button
+                variant="outline"
+                onClick={() => { setShowVerifyModal(false); setVerifyingRegister(null); }}
+              >
+                Cancelar
+              </Button>
+              <Button
+                onClick={handleVerifyRegister}
+                disabled={verifiedAmountInput === "" || verifying}
+              >
+                {verifying && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
+                Confirmar verificación
               </Button>
             </DialogFooter>
           </DialogContent>

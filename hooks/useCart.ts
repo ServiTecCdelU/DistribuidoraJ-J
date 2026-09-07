@@ -2,12 +2,13 @@
 "use client";
 
 import { useState, useEffect, useCallback, useMemo } from "react";
-import { clientsApi, sellersApi, ordersApi } from "@/lib/api";
+import { clientsApi, sellersApi, ordersApi, priceListApi } from "@/lib/api";
 import { getMayoristaProductos } from "@/services/mayorista-service";
 import { processSaleMayorista } from "@/services/sales-service";
 import { crearPedidoMayorista } from "@/services/pedidos-mayorista-service";
 import { submitOrderResilient } from "@/lib/offline-orders";
-import type { Product, Client, CartItem, Seller, City } from "@/lib/types";
+import { calculatePrice } from "@/services/price-list-service";
+import type { Product, Client, CartItem, Seller, City, PriceList } from "@/lib/types";
 import { toast } from "sonner";
 import { formatCurrency, normalizeCuit } from "@/lib/utils/format";
 import { effectiveDiscountMax, clampDiscount } from "@/lib/utils/discount";
@@ -33,6 +34,11 @@ export interface CartState {
   clients: Client[];
   sellers: Seller[];
   loading: boolean;
+
+  // Listas de precios
+  priceLists: PriceList[];
+  selectedPriceListId: string;
+  selectedPriceList: PriceList | null;
 
   // Cart
   cart: CartItem[];
@@ -117,6 +123,9 @@ export interface CartActions {
   setClientCuit: (v: string) => void;
   setClientTaxCategory: (v: TaxCategory) => void;
 
+  // Listas de precios
+  setSelectedPriceListId: (id: string) => void;
+
   // Seller
   setSelectedSeller: (id: string) => void;
 
@@ -176,6 +185,10 @@ export function useCart(role: UserRole, userEmail?: string, externalProducts?: P
   const [clients, setClients] = useState<Client[]>([]);
   const [sellers, setSellers] = useState<Seller[]>([]);
   const [loading, setLoading] = useState(true);
+
+  // Listas de precios
+  const [priceLists, setPriceLists] = useState<PriceList[]>([]);
+  const [selectedPriceListId, setSelectedPriceListId] = useState("");
 
   // Cart - restore from localStorage
   const [cart, setCart] = useState<CartItem[]>(() => {
@@ -239,18 +252,33 @@ export function useCart(role: UserRole, userEmail?: string, externalProducts?: P
   const [saleComplete, setSaleComplete] = useState(false);
   const [lastSaleId, setLastSaleId] = useState("");
 
+  // --- Listas de precios ---
+  const selectedPriceList = useMemo(
+    () => priceLists.find((l) => l.id === selectedPriceListId) ?? null,
+    [priceLists, selectedPriceListId],
+  );
+
+  // Carrito con el precio de la lista seleccionada aplicado (si hay alguna activa)
+  const effectiveCart = useMemo(() => {
+    if (!selectedPriceList) return cart;
+    return cart.map((item) => ({
+      ...item,
+      product: { ...item.product, price: calculatePrice(item.product.price, selectedPriceList, item.product.id) },
+    }));
+  }, [cart, selectedPriceList]);
+
   // --- Computed ---
   const cartSubtotal = useMemo(
-    () => cart.reduce((acc, item) => acc + item.product.price * item.quantity, 0),
-    [cart],
+    () => effectiveCart.reduce((acc, item) => acc + item.product.price * item.quantity, 0),
+    [effectiveCart],
   );
   const cartTotal = useMemo(
-    () => cart.reduce((acc, item) => {
+    () => effectiveCart.reduce((acc, item) => {
       const base = item.product.price * item.quantity;
       const disc = item.itemDiscount ? (base * item.itemDiscount) / 100 : 0;
       return acc + base - disc;
     }, 0),
-    [cart],
+    [effectiveCart],
   );
   const cartCount = useMemo(
     () => cart.reduce((acc, item) => acc + item.quantity, 0),
@@ -368,6 +396,15 @@ export function useCart(role: UserRole, userEmail?: string, externalProducts?: P
   useEffect(() => {
     loadData();
   }, [loadData]);
+
+  // Listas de precios (admin y vendedor)
+  useEffect(() => {
+    if (role === null) return;
+    priceListApi
+      .getAll()
+      .then((lists) => setPriceLists(lists.filter((l) => l.isActive)))
+      .catch(() => {});
+  }, [role]);
 
   // Sync external products
   useEffect(() => {
@@ -937,7 +974,7 @@ export function useCart(role: UserRole, userEmail?: string, externalProducts?: P
           clientPhone: resolvedClientPhone,
           sellerId: resolvedSellerId,
           sellerName: resolvedSellerName,
-          items: cart,
+          items: effectiveCart,
           city: selectedCity || undefined,
           address: resolvedAddress || "Direccion no especificada",
           lat: resolvedLat ?? undefined,
@@ -965,7 +1002,7 @@ export function useCart(role: UserRole, userEmail?: string, externalProducts?: P
             clientPhone: resolvedClientPhone,
             sellerId: resolvedSellerId,
             sellerName: resolvedSellerName,
-            items: cart,
+            items: effectiveCart,
             address: "Retiro en local",
             status: "pending",
             source: "direct_sale",
@@ -1008,7 +1045,7 @@ export function useCart(role: UserRole, userEmail?: string, externalProducts?: P
           clientPhone: resolvedClientPhone,
           sellerId: resolvedSellerId,
           sellerName: resolvedSellerName,
-          items: cart,
+          items: effectiveCart,
           paymentType,
           paymentMethod,
           cashAmount:
@@ -1056,7 +1093,7 @@ export function useCart(role: UserRole, userEmail?: string, externalProducts?: P
   }, [
     deliveryMethod, deliveryAddress, role, selectedClient, selectedClientData,
     clientPhone, clientName, clientAddress, selectedSeller, selectedSellerData,
-    sellerMatchName, sellers, cart, paymentType, paymentMethod, cashAmount, creditAmountInput,
+    sellerMatchName, sellers, cart, effectiveCart, paymentType, paymentMethod, cashAmount, creditAmountInput,
     finalTotal, discountValue, discountType, newAddress, dniClientId, selectedCity,
     deliveryLat, deliveryLng, selectedSavedAddress, orderNotes,
   ]);
@@ -1065,6 +1102,7 @@ export function useCart(role: UserRole, userEmail?: string, externalProducts?: P
   const resetCart = useCallback(() => {
     setCart([]);
     if (typeof window !== 'undefined') localStorage.removeItem('cart-items');
+    setSelectedPriceListId("");
     setSelectedClient("");
     setSelectedSeller("");
     setPaymentType("cash");
@@ -1168,7 +1206,8 @@ export function useCart(role: UserRole, userEmail?: string, externalProducts?: P
 
   const state: CartState = {
     products, clients, sellers, loading,
-    cart, cartTotal, cartSubtotal, cartCount, finalTotal, discountAmount,
+    priceLists, selectedPriceListId, selectedPriceList,
+    cart: effectiveCart, cartTotal, cartSubtotal, cartCount, finalTotal, discountAmount,
     lookupType, selectedClient, selectedClientData,
     dniLookup, dniLoading, dniFound, dniNotFound, dniClientId,
     clientName, clientEmail, clientPhone, clientAddress, clientDni, clientCuit, clientTaxCategory, clientCreditLimit,
@@ -1186,6 +1225,7 @@ export function useCart(role: UserRole, userEmail?: string, externalProducts?: P
     setLookupType, setSelectedClient, setDniLookup, selectClientFromSearch,
     setClientName, setClientEmail, setClientPhone, setClientAddress,
     setClientDni, setClientCuit, setClientTaxCategory,
+    setSelectedPriceListId,
     setSelectedSeller: (id: string) => {
       setSelectedSeller(id);
     },

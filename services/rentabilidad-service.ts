@@ -237,14 +237,23 @@ export const getMontoDisponibleMes = async (
     getRentabilidadMensual(year, month),
     supabase
       .from('caja')
-      .select('cash_total, transfer_total')
+      .select('cash_total, transfer_total, final_amount, verified, verified_amount')
       .gte('opened_at', start.toISOString())
       .lte('opened_at', end.toISOString()),
     supabase.from('clientes').select('current_balance').gt('current_balance', 0),
     getBalanceMayorista(),
   ])
 
-  const efectivoMes = (cajaRes.data ?? []).reduce((a, r: any) => a + (Number(r.cash_total) || 0), 0)
+  // Efectivo real: parte de cash_total (calculado por ventas) y aplica el ajuste que dejó el
+  // admin al verificar la caja (verified_amount − final_amount contado por el reparto), para
+  // que el "monto disponible" refleje la caja diaria conciliada y no solo lo teórico.
+  const efectivoMes = (cajaRes.data ?? []).reduce((a, r: any) => {
+    const base = Number(r.cash_total) || 0
+    const ajuste = r.verified && r.final_amount != null
+      ? (Number(r.verified_amount) || 0) - (Number(r.final_amount) || 0)
+      : 0
+    return a + base + ajuste
+  }, 0)
   const transferenciaMes = (cajaRes.data ?? []).reduce((a, r: any) => a + (Number(r.transfer_total) || 0), 0)
   const ctaCteClientes = (clientesRes.data ?? []).reduce((a, r: any) => a + (Number(r.current_balance) || 0), 0)
   const comisionesMes = rent.comisiones

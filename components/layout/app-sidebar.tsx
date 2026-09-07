@@ -90,6 +90,7 @@ export function AppSidebar({ hidden, onToggle }: AppSidebarProps) {
       label: "Catálogo",
       items: [
         { href: "/productos", label: "Productos", icon: Package, roles: ["admin"] },
+        { href: "/listas-precios", label: "Listas de Precios", icon: Tag, roles: ["admin"] },
         { href: "/descuentos", label: "Descuentos", icon: Percent, roles: ["admin"] },
         { href: "/clientes", label: "Clientes", icon: Users, roles: ["admin"] },
       ],

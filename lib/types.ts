@@ -239,6 +239,7 @@ export type AuditAction =
   | "order_status_changed"
   | "cash_register_opened"
   | "cash_register_closed"
+  | "cash_register_verified"
   | "payment_registered"
   | "price_list_updated";
 
@@ -265,6 +266,9 @@ export interface PriceList {
   multiplier: number;
   isActive: boolean;
   createdAt: Date;
+  // scope "all" aplica a todo el catálogo; "selected" solo a los productos en productIds
+  scope: "all" | "selected";
+  productIds: string[];
 }
 
 export interface MayoristaProducto {

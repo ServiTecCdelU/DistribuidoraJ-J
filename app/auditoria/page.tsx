@@ -44,6 +44,7 @@ const ACTION_META: Record<
   order_status_changed: { label: "Pedido actualizado", color: "bg-amber-500", icon: Truck },
   cash_register_opened: { label: "Caja abierta", color: "bg-emerald-500", icon: Banknote },
   cash_register_closed: { label: "Caja cerrada", color: "bg-red-500", icon: Banknote },
+  cash_register_verified: { label: "Caja verificada", color: "bg-teal-500", icon: Banknote },
   payment_registered: { label: "Pago registrado", color: "bg-green-500", icon: DollarSign },
   price_list_updated: { label: "Lista precios", color: "bg-purple-500", icon: DollarSign },
 };

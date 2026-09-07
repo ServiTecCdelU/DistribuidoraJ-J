@@ -58,6 +58,7 @@ interface UnifiedCartProps {
 export function UnifiedCart({ role, state, actions, onConfirmSale, allowDiscount }: UnifiedCartProps) {
   const {
     cart, cartTotal, cartSubtotal, finalTotal, discountAmount,
+    priceLists, selectedPriceListId,
     selectedClient, selectedClientData, clients, sellers,
     dniLookup, dniLoading, dniFound,
     clientName, clientEmail, clientPhone, clientAddress, clientCuit, clientTaxCategory,
@@ -236,6 +237,34 @@ export function UnifiedCart({ role, state, actions, onConfirmSale, allowDiscount
               </button>
               {i < 2 && <span className="text-muted-foreground text-xs">›</span>}
             </React.Fragment>
+          ))}
+        </div>
+      )}
+
+      {/* Selector de lista de precios (admin/vendedor) */}
+      {(role === "admin" || role === "seller") && priceLists.length > 0 && (cartStep === "products" || role === null) && (
+        <div className="flex items-center gap-2 flex-wrap">
+          <Label className="text-xs shrink-0 text-muted-foreground">Lista de precios</Label>
+          <Button
+            type="button"
+            variant={!selectedPriceListId ? "default" : "outline"}
+            size="sm"
+            className="h-7 rounded-full px-3 text-xs"
+            onClick={() => actions.setSelectedPriceListId("")}
+          >
+            Normal
+          </Button>
+          {priceLists.map((l) => (
+            <Button
+              key={l.id}
+              type="button"
+              variant={selectedPriceListId === l.id ? "default" : "outline"}
+              size="sm"
+              className="h-7 rounded-full px-3 text-xs"
+              onClick={() => actions.setSelectedPriceListId(l.id)}
+            >
+              {l.name}
+            </Button>
           ))}
         </div>
       )}
