@@ -29,10 +29,15 @@ export const logAudit = async (entry: {
   }
 }
 
-export const getAuditLog = async (maxEntries = 100): Promise<AuditEntry[]> => {
+export const getAuditLog = async (date: string, maxEntries = 500): Promise<AuditEntry[]> => {
+  const start = new Date(`${date}T00:00:00`)
+  const end = new Date(`${date}T23:59:59.999`)
+
   const { data } = await supabase
     .from('auditoria')
     .select('*')
+    .gte('created_at', start.toISOString())
+    .lte('created_at', end.toISOString())
     .order('created_at', { ascending: false })
     .limit(maxEntries)
 
