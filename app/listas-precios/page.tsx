@@ -72,6 +72,7 @@ export default function ListasPreciosPage() {
   const [scope, setScope] = useState<"all" | "selected">("all");
   const [selectedProductIds, setSelectedProductIds] = useState<string[]>([]);
   const [productSearch, setProductSearch] = useState("");
+  const [categoryFilter, setCategoryFilter] = useState<string>("");
 
   // Preview
   const [previewList, setPreviewList] = useState<PriceList | null>(null);
@@ -123,6 +124,7 @@ export default function ListasPreciosPage() {
     setScope("all");
     setSelectedProductIds([]);
     setProductSearch("");
+    setCategoryFilter("");
     setShowModal(true);
   };
 
@@ -137,6 +139,7 @@ export default function ListasPreciosPage() {
     setScope(list.scope);
     setSelectedProductIds(list.productIds);
     setProductSearch("");
+    setCategoryFilter("");
     setShowModal(true);
   };
 
@@ -410,38 +413,50 @@ export default function ListasPreciosPage() {
                     onChange={(e) => setProductSearch(e.target.value)}
                     className="mb-2"
                   />
-                  <Select
-                    value=""
-                    onValueChange={(rubro) => {
-                      const idsDelRubro = products.filter((p) => p.category === rubro).map((p) => p.id);
-                      const todosSeleccionados = idsDelRubro.every((id) => selectedProductIds.includes(id));
-                      setSelectedProductIds((prev) =>
-                        todosSeleccionados
-                          ? prev.filter((id) => !idsDelRubro.includes(id))
-                          : [...new Set([...prev, ...idsDelRubro])],
-                      );
-                    }}
-                  >
-                    <SelectTrigger className="mb-2">
-                      <SelectValue placeholder="Seleccionar por rubro..." />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {[...new Set(products.map((p) => p.category).filter(Boolean))]
-                        .sort()
-                        .map((rubro) => {
-                          const idsDelRubro = products.filter((p) => p.category === rubro).map((p) => p.id);
-                          const todosSeleccionados = idsDelRubro.every((id) => selectedProductIds.includes(id));
-                          return (
+                  <div className="flex gap-2 mb-2">
+                    <Select
+                      value={categoryFilter || "__all__"}
+                      onValueChange={(rubro) => setCategoryFilter(rubro === "__all__" ? "" : rubro)}
+                    >
+                      <SelectTrigger className="flex-1">
+                        <SelectValue placeholder="Filtrar por rubro..." />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="__all__">Todos los rubros</SelectItem>
+                        {[...new Set(products.map((p) => p.category).filter(Boolean))]
+                          .sort()
+                          .map((rubro) => (
                             <SelectItem key={rubro} value={rubro}>
-                              {todosSeleccionados ? "Quitar" : "Agregar"} rubro: {rubro} ({idsDelRubro.length})
+                              {rubro}
                             </SelectItem>
-                          );
-                        })}
-                    </SelectContent>
-                  </Select>
+                          ))}
+                      </SelectContent>
+                    </Select>
+                    {categoryFilter && (() => {
+                      const idsDelRubro = products.filter((p) => p.category === categoryFilter).map((p) => p.id);
+                      const todosSeleccionados = idsDelRubro.every((id) => selectedProductIds.includes(id));
+                      return (
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          onClick={() => {
+                            setSelectedProductIds((prev) =>
+                              todosSeleccionados
+                                ? prev.filter((id) => !idsDelRubro.includes(id))
+                                : [...new Set([...prev, ...idsDelRubro])],
+                            );
+                          }}
+                        >
+                          {todosSeleccionados ? "Quitar rubro" : `Agregar ${idsDelRubro.length}`}
+                        </Button>
+                      );
+                    })()}
+                  </div>
                   <div className="border rounded-lg max-h-[50vh] overflow-y-auto divide-y">
                     {products
                       .filter((p) => p.name.toLowerCase().includes(productSearch.toLowerCase()))
+                      .filter((p) => !categoryFilter || p.category === categoryFilter)
                       .map((p) => {
                         const checked = selectedProductIds.includes(p.id);
                         return (
@@ -462,7 +477,9 @@ export default function ListasPreciosPage() {
                           </label>
                         );
                       })}
-                    {products.filter((p) => p.name.toLowerCase().includes(productSearch.toLowerCase())).length === 0 && (
+                    {products
+                      .filter((p) => p.name.toLowerCase().includes(productSearch.toLowerCase()))
+                      .filter((p) => !categoryFilter || p.category === categoryFilter).length === 0 && (
                       <p className="text-sm text-muted-foreground text-center py-4">Sin resultados</p>
                     )}
                   </div>
