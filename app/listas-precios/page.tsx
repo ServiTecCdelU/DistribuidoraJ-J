@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
+import { Checkbox } from "@/components/ui/checkbox";
 import {
   Dialog,
   DialogContent,
@@ -37,6 +38,14 @@ import { useAuth } from "@/hooks/use-auth";
 import type { PriceList, PriceListType, Product } from "@/lib/types";
 import { calculatePrice } from "@/services/price-list-service";
 import { formatCurrency } from "@/lib/utils/format";
+import { cn } from "@/lib/utils";
+
+// El listado de mayorista puede traer productos con id duplicado (dato de origen);
+// evita el warning de key duplicada en la grilla de selección.
+const dedupeById = (items: Product[]): Product[] => {
+  const seen = new Set<string>();
+  return items.filter((p) => (seen.has(p.id) ? false : (seen.add(p.id), true)));
+};
 
 const TYPE_LABELS: Record<PriceListType, string> = {
   general: "General",
@@ -60,6 +69,9 @@ export default function ListasPreciosPage() {
   const [description, setDescription] = useState("");
   const [discountPercent, setDiscountPercent] = useState("10");
   const [isActive, setIsActive] = useState(true);
+  const [scope, setScope] = useState<"all" | "selected">("all");
+  const [selectedProductIds, setSelectedProductIds] = useState<string[]>([]);
+  const [productSearch, setProductSearch] = useState("");
 
   // Preview
   const [previewList, setPreviewList] = useState<PriceList | null>(null);
@@ -74,7 +86,7 @@ export default function ListasPreciosPage() {
         ]);
         if (!mounted) return;
         setLists(listsData);
-        setProducts(productsData);
+        setProducts(dedupeById(productsData));
       } catch (error) {
         if (!mounted) return;
         toast.error("Error al cargar listas de precios");
@@ -93,7 +105,7 @@ export default function ListasPreciosPage() {
         productsApi.getAll(),
       ]);
       setLists(listsData);
-      setProducts(productsData);
+      setProducts(dedupeById(productsData));
     } catch (error) {
       toast.error("Error al recargar listas de precios");
     } finally {
@@ -108,6 +120,9 @@ export default function ListasPreciosPage() {
     setDescription("");
     setDiscountPercent("10");
     setIsActive(true);
+    setScope("all");
+    setSelectedProductIds([]);
+    setProductSearch("");
     setShowModal(true);
   };
 
@@ -119,12 +134,21 @@ export default function ListasPreciosPage() {
     const pct = Math.round((1 - list.multiplier) * 100);
     setDiscountPercent(String(pct));
     setIsActive(list.isActive);
+    setScope(list.scope);
+    setSelectedProductIds(list.productIds);
+    setProductSearch("");
     setShowModal(true);
   };
 
   const handleSave = async () => {
     if (!name.trim() || !user) return;
     setSaving(true);
+
+    if (scope === "selected" && selectedProductIds.length === 0) {
+      toast.error("Seleccioná al menos un producto");
+      setSaving(false);
+      return;
+    }
 
     const multiplier = 1 - parseFloat(discountPercent) / 100;
     const data = {
@@ -133,6 +157,8 @@ export default function ListasPreciosPage() {
       description: description.trim(),
       multiplier: Math.max(0.01, Math.min(2, multiplier)),
       isActive,
+      scope,
+      productIds: scope === "selected" ? selectedProductIds : [],
     };
 
     try {
@@ -261,9 +287,12 @@ export default function ListasPreciosPage() {
                     </div>
                   </CardHeader>
                   <CardContent>
-                    <div className="flex items-center gap-2 mb-2">
+                    <div className="flex items-center gap-2 mb-2 flex-wrap">
                       <Badge variant="secondary">{TYPE_LABELS[list.type]}</Badge>
                       {!list.isActive && <Badge variant="outline">Inactiva</Badge>}
+                      <Badge variant="outline">
+                        {list.scope === "selected" ? `${list.productIds.length} producto${list.productIds.length === 1 ? "" : "s"}` : "Todos los productos"}
+                      </Badge>
                     </div>
                     <p className="text-3xl font-bold text-primary">-{discPct}%</p>
                     {list.description && (
@@ -286,7 +315,7 @@ export default function ListasPreciosPage() {
                                 {formatCurrency(p.price)}
                               </span>
                               <span className="font-medium">
-                                {formatCurrency(calculatePrice(p.price, list))}
+                                {formatCurrency(calculatePrice(p.price, list, p.id))}
                               </span>
                             </div>
                           </div>
@@ -307,7 +336,7 @@ export default function ListasPreciosPage() {
 
         {/* Create/Edit Modal */}
         <Dialog open={showModal} onOpenChange={setShowModal}>
-          <DialogContent className="sm:max-w-md">
+          <DialogContent className={cn("max-h-[85vh] overflow-y-auto", scope === "selected" ? "sm:max-w-2xl" : "sm:max-w-md")}>
             <DialogHeader>
               <DialogTitle>
                 {editing ? "Editar Lista" : "Nueva Lista de Precios"}
@@ -360,6 +389,85 @@ export default function ListasPreciosPage() {
                   onChange={(e) => setDescription(e.target.value)}
                 />
               </div>
+              <div>
+                <Label>Alcance</Label>
+                <Select value={scope} onValueChange={(v) => setScope(v as "all" | "selected")}>
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">Todos los productos</SelectItem>
+                    <SelectItem value="selected">Productos seleccionados</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              {scope === "selected" && (
+                <div>
+                  <Label>Productos ({selectedProductIds.length} seleccionados)</Label>
+                  <Input
+                    placeholder="Buscar producto..."
+                    value={productSearch}
+                    onChange={(e) => setProductSearch(e.target.value)}
+                    className="mb-2"
+                  />
+                  <Select
+                    value=""
+                    onValueChange={(rubro) => {
+                      const idsDelRubro = products.filter((p) => p.category === rubro).map((p) => p.id);
+                      const todosSeleccionados = idsDelRubro.every((id) => selectedProductIds.includes(id));
+                      setSelectedProductIds((prev) =>
+                        todosSeleccionados
+                          ? prev.filter((id) => !idsDelRubro.includes(id))
+                          : [...new Set([...prev, ...idsDelRubro])],
+                      );
+                    }}
+                  >
+                    <SelectTrigger className="mb-2">
+                      <SelectValue placeholder="Seleccionar por rubro..." />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {[...new Set(products.map((p) => p.category).filter(Boolean))]
+                        .sort()
+                        .map((rubro) => {
+                          const idsDelRubro = products.filter((p) => p.category === rubro).map((p) => p.id);
+                          const todosSeleccionados = idsDelRubro.every((id) => selectedProductIds.includes(id));
+                          return (
+                            <SelectItem key={rubro} value={rubro}>
+                              {todosSeleccionados ? "Quitar" : "Agregar"} rubro: {rubro} ({idsDelRubro.length})
+                            </SelectItem>
+                          );
+                        })}
+                    </SelectContent>
+                  </Select>
+                  <div className="border rounded-lg max-h-[50vh] overflow-y-auto divide-y">
+                    {products
+                      .filter((p) => p.name.toLowerCase().includes(productSearch.toLowerCase()))
+                      .map((p) => {
+                        const checked = selectedProductIds.includes(p.id);
+                        return (
+                          <label
+                            key={p.id}
+                            className="flex items-center gap-2 px-3 py-2 text-sm cursor-pointer hover:bg-muted/50"
+                          >
+                            <Checkbox
+                              checked={checked}
+                              onCheckedChange={(v) => {
+                                setSelectedProductIds((prev) =>
+                                  v ? [...prev, p.id] : prev.filter((id) => id !== p.id),
+                                );
+                              }}
+                            />
+                            <span className="flex-1 truncate">{p.name}</span>
+                            <span className="text-xs text-muted-foreground">{formatCurrency(p.price)}</span>
+                          </label>
+                        );
+                      })}
+                    {products.filter((p) => p.name.toLowerCase().includes(productSearch.toLowerCase())).length === 0 && (
+                      <p className="text-sm text-muted-foreground text-center py-4">Sin resultados</p>
+                    )}
+                  </div>
+                </div>
+              )}
             </div>
             <DialogFooter>
               <Button variant="outline" onClick={() => setShowModal(false)}>
