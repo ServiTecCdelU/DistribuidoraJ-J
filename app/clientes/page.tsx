@@ -22,7 +22,8 @@ import {
   DropdownMenuCheckboxItem,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
-import { clientsApi, sellersApi, salesApi } from '@/lib/api'
+import { clientsApi, sellersApi, salesApi, auditApi } from '@/lib/api'
+import { useAuth } from '@/hooks/use-auth'
 import {
   Select,
   SelectContent,
@@ -68,6 +69,7 @@ import { clasificarDeuda } from '@/lib/utils/deuda'
 import { downloadBase64Pdf } from '@/services/pdf-service'
 
 export default function ClientesPage() {
+  const { user } = useAuth()
   const [clients, setClients] = useState<Client[]>([])
   const [sellers, setSellers] = useState<{ id: string; name: string; codigoVendedor?: string }[]>([])
   const [loading, setLoading] = useState(true)
@@ -461,6 +463,16 @@ export default function ClientesPage() {
       const updated = await clientsApi.update(client.id, { activo: nuevoActivo })
       setClients((prev) => prev.map((c) => (c.id === updated.id ? updated : c)))
       setSelectedClient((prev) => (prev && prev.id === updated.id ? updated : prev))
+      if (user && !nuevoActivo) {
+        auditApi.log({
+          action: 'client_deleted',
+          userId: user.id,
+          userName: user.name || user.email,
+          description: `Desactivo cliente "${updated.name}"`,
+          entityType: 'client',
+          entityId: updated.id,
+        })
+      }
       toast.success(nuevoActivo ? 'Cliente activado' : 'Cliente desactivado')
     } catch {
       toast.error('Error al cambiar el estado del cliente')
@@ -518,10 +530,30 @@ export default function ClientesPage() {
       if (editingClient) {
         const updated = await clientsApi.update(editingClient.id, clientData)
         setClients(clients.map(c => c.id === editingClient.id ? updated : c))
+        if (user) {
+          auditApi.log({
+            action: 'client_updated',
+            userId: user.id,
+            userName: user.name || user.email,
+            description: `Edito cliente "${updated.name}"`,
+            entityType: 'client',
+            entityId: updated.id,
+          })
+        }
         toast.success('Cliente actualizado correctamente')
       } else {
         const newClient = await clientsApi.create(clientData)
         setClients([newClient, ...clients])
+        if (user) {
+          auditApi.log({
+            action: 'client_created',
+            userId: user.id,
+            userName: user.name || user.email,
+            description: `Creo cliente "${newClient.name}"`,
+            entityType: 'client',
+            entityId: newClient.id,
+          })
+        }
         toast.success('Cliente creado correctamente')
       }
       setModalOpen(false)

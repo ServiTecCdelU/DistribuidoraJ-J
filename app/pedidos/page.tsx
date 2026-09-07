@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { DataTableSkeleton } from "@/components/ui/data-table-skeleton";
 import { ClientModal } from "@/components/clientes/client-modal";
-import { ordersApi, salesApi, clientsApi, sellersApi, productsApi, faltantesApi, hojaRutaApi } from "@/lib/api";
+import { ordersApi, salesApi, clientsApi, sellersApi, productsApi, faltantesApi, hojaRutaApi, auditApi } from "@/lib/api";
 import type { Order, OrderStatus, Client, Seller } from "@/lib/types";
 import { Package, Filter, Loader2, ClipboardList, FileText, Eye, ArrowRightCircle, ArrowLeftCircle, Ban, TrendingUp, ChevronDown, ChevronRight, MapPin, Phone, AlertTriangle, Route } from "lucide-react";
 import { toast } from "sonner";
@@ -692,10 +692,20 @@ export default function PedidosPage() {
       if (detailOrder?.id === orderId) {
         setDetailOrder(updated);
       }
+      if (user) {
+        auditApi.log({
+          action: "order_status_changed",
+          userId: user.id,
+          userName: user.name || user.email,
+          description: `Cambio pedido de "${updated.clientName}" a estado "${newStatus}"`,
+          entityType: "order",
+          entityId: orderId,
+        });
+      }
     } catch (error) {
       toast.error("Error al actualizar estado del pedido");
     }
-  }, [orders, detailOrder]);
+  }, [orders, detailOrder, user]);
 
   const handleCompleteOrder = useCallback(async (
     adjustments: ItemAdjustment[] = [],

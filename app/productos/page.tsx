@@ -26,7 +26,8 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { productsApi, faltantesApi, type FaltantesResumen } from "@/lib/api";
+import { productsApi, faltantesApi, auditApi, type FaltantesResumen } from "@/lib/api";
+import { useAuth } from "@/hooks/use-auth";
 import { supabase } from "@/lib/supabase";
 import { generateReadableId } from "@/services/supabase-helpers";
 import { getAuthToken } from "@/services/auth-service";
@@ -136,6 +137,7 @@ export interface InventorySnapshot {
 
 export default function ProductosPage() {
   const router = useRouter();
+  const { user } = useAuth();
   const [products, setProducts] = useState<Product[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchInput, setSearchInput] = useState("");
@@ -859,6 +861,17 @@ tr.cat td{border:none}
       // Sincronizar con mayorista_productos
       await sincronizarHabilitadoEnMayorista(productToDeactivate.id, false);
 
+      if (user) {
+        auditApi.log({
+          action: "product_deleted",
+          userId: user.id,
+          userName: user.name || user.email,
+          description: `Deshabilito producto "${productToDeactivate.name}"`,
+          entityType: "product",
+          entityId: productToDeactivate.id,
+        });
+      }
+
       // Actualizar estado local
       setProducts((prev) =>
         prev.map((p) =>
@@ -960,6 +973,17 @@ tr.cat td{border:none}
           updateData,
         );
 
+        if (user) {
+          auditApi.log({
+            action: "product_updated",
+            userId: user.id,
+            userName: user.name || user.email,
+            description: `Edito producto "${editingProduct.name}"`,
+            entityType: "product",
+            entityId: editingProduct.id,
+          });
+        }
+
         // Si es mayorista, registrar movimiento en stock_movimientos (esto actualiza stock en ambas tablas)
         if (isMayorista && stockAdjustment && stockAdjustment.quantity > 0) {
           const mpId = editingProduct.id.replace("prod_", "");
@@ -1016,6 +1040,17 @@ tr.cat td{border:none}
       } else {
         const newProduct = await productsApi.create(productData);
         setProducts([...products, newProduct]);
+
+        if (user) {
+          auditApi.log({
+            action: "product_created",
+            userId: user.id,
+            userName: user.name || user.email,
+            description: `Creo producto "${newProduct.name}" (${formatCurrency(newProduct.price)})`,
+            entityType: "product",
+            entityId: newProduct.id,
+          });
+        }
 
         logStockMovement({
           productId: newProduct.id,

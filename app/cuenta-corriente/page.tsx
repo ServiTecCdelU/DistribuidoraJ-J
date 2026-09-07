@@ -33,7 +33,7 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table'
-import { cobranzasApi, clientsApi, paymentsApi, sellersApi, mayoristaCuentaApi, salesApi, faltantesApi, devolucionesApi } from '@/lib/api'
+import { cobranzasApi, clientsApi, paymentsApi, sellersApi, mayoristaCuentaApi, salesApi, faltantesApi, devolucionesApi, auditApi } from '@/lib/api'
 import type { TransaccionMayorista } from '@/services/mayorista-cuenta-service'
 import type { Faltante } from '@/services/faltantes-service'
 import type { Devolucion } from '@/services/devoluciones-service'
@@ -523,6 +523,15 @@ export default function CuentaCorrientePage() {
         description: desc,
         debtTxId: payDebtId || undefined,
         date: payFecha || undefined,
+      })
+
+      auditApi.log({
+        action: 'payment_registered',
+        userId: user.id,
+        userName: cobradorNombre,
+        description: `Registro pago de ${formatCurrency(amount)} de "${selectedClient.name}" (${methods[payMethod] || methods.otro})`,
+        entityType: 'payment',
+        entityId: txPago.id,
       })
 
       // Recibo numerado: generar PDF, guardarlo y descargarlo
