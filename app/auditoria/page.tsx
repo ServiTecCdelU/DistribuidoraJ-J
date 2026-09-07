@@ -157,7 +157,47 @@ export default function AuditoriaPage() {
         ) : (
           <Card>
             <CardContent className="p-0">
-              <div className="divide-y">
+              {/* Tabla — desktop */}
+              <div className="hidden md:block overflow-x-auto">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="border-b text-left text-xs text-muted-foreground uppercase tracking-wide">
+                      <th className="px-4 py-3 font-medium whitespace-nowrap">Fecha y hora</th>
+                      <th className="px-4 py-3 font-medium whitespace-nowrap">Acción</th>
+                      <th className="px-4 py-3 font-medium">Movimiento</th>
+                      <th className="px-4 py-3 font-medium whitespace-nowrap">Responsable</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y">
+                    {filtered.map((entry) => {
+                      const meta = ACTION_META[entry.action] || {
+                        label: entry.action,
+                        color: "bg-gray-500",
+                        icon: Shield,
+                      };
+                      const Icon = meta.icon;
+                      return (
+                        <tr key={entry.id} className="hover:bg-muted/30 transition-colors">
+                          <td className="px-4 py-3 whitespace-nowrap text-muted-foreground align-top">
+                            {formatDateTime(entry.createdAt)}
+                          </td>
+                          <td className="px-4 py-3 whitespace-nowrap align-top">
+                            <Badge variant="secondary" className="text-[10px] gap-1">
+                              <Icon className={`h-3 w-3 ${meta.color.replace("bg-", "text-")}`} />
+                              {meta.label}
+                            </Badge>
+                          </td>
+                          <td className="px-4 py-3 align-top">{entry.description}</td>
+                          <td className="px-4 py-3 whitespace-nowrap align-top">{entry.userName}</td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+
+              {/* Lista — mobile */}
+              <div className="md:hidden divide-y">
                 {filtered.map((entry) => {
                   const meta = ACTION_META[entry.action] || {
                     label: entry.action,
