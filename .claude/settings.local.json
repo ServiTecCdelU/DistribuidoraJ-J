@@ -44,7 +44,8 @@
       "Bash(echo \"EXIT_GREP=$?\")",
       "PowerShell(Get-Process *)",
       "Bash(python -)",
-      "Bash(git stash *)"
+      "Bash(git stash *)",
+      "Bash(git worktree *)"
     ]
   },
   "enableAllProjectMcpServers": true,

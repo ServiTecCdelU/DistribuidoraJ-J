@@ -44,7 +44,7 @@ import { supabase } from "@/lib/supabase";
 import { generateReadableId } from "@/services/supabase-helpers";
 import { agregarDesglose } from "@/lib/utils/caja-desglose";
 import { formatCurrency, formatTime } from "@/lib/utils/format";
-import { incidenciasCaja } from "@/lib/utils/incidencias";
+import { incidenciasVenta, incidenciasDeVentas } from "@/lib/utils/incidencias";
 import { toast } from "sonner";
 import { Document, Page as PdfPage, Text, View, StyleSheet, pdf } from "@react-pdf/renderer";
 
@@ -91,7 +91,9 @@ const formatTimeStr = (d: Date) =>
 const dayKeyOf = (d: Date) => `${d.getFullYear()}-${d.getMonth()}-${d.getDate()}`;
 
 // Pérdida (rotura + faltante) y devolución (no_quiso) de una venta.
-const calcIncidencia = (sale: any) => incidenciasCaja((sale as any)?.itemsNoEntregados);
+// Los tres motivos por separado: incidenciasCaja() fusiona rotura + faltante bajo
+// "pérdida", y el faltante no es plata perdida (la mercadería vuelve al depósito).
+const calcIncidencia = (sale: any) => incidenciasVenta((sale as any)?.itemsNoEntregados);
 
 // Venta de un cliente ubicada dentro de una caja (para el buscador por cliente).
 interface VentaClienteCaja {
@@ -817,6 +819,14 @@ export default function CajaPage() {
     return { efectivoTotal, transferTotal, cashTotal: efectivoTotal + transferTotal, creditTotal, total, count: sales.length, lossTotal, lossCount: losses.length, comisionesTotal, comisionesCount: pagosComisiones.length };
   }, [sales, losses, pagosComisiones]);
 
+  // Incidencias del día con los tres motivos separados. Se calculan desde los items no
+  // entregados de las ventas, no desde las transacciones [ROTURA]: ahí no figuran ni los
+  // faltantes ni los rechazos.
+  const todayIncidencias = useMemo(() => incidenciasDeVentas(sales as any[]), [sales]);
+
+  // Mismas incidencias para la caja abierta desde el historial.
+  const historialIncidencias = useMemo(() => incidenciasDeVentas(selectedSales as any[]), [selectedSales]);
+
 
   // Stats para el modal de cierre (puede ser caja actual o una del historial)
   const closingStats = useMemo(() => {
@@ -1301,14 +1311,25 @@ export default function CajaPage() {
                       <p className="text-[16px] sm:text-xl font-bold tabular-nums">{formatCurrency(todayStats.creditTotal)}</p>
                     </CardContent>
                   </Card>
+                  {/* Los tres motivos van separados: el faltante y el rechazo vuelven al
+                      depósito, no son plata perdida como la rotura. */}
                   <Card className="col-span-2 lg:col-span-1 border-red-500/30 bg-red-500/5">
                     <CardContent className="px-2.5 py-1 sm:p-4 text-center sm:text-left">
                       <div className="flex items-center justify-center sm:justify-start gap-1.5 sm:gap-2 mb-0.5 sm:mb-1">
                         <AlertTriangle className="h-3.5 w-3.5 sm:h-4 sm:w-4 text-red-500 shrink-0" />
-                        <span className="text-[13px] sm:text-xs text-muted-foreground truncate">Pérdidas del día</span>
+                        <span className="text-[13px] sm:text-xs text-muted-foreground truncate">Pérdida</span>
                       </div>
-                      <p className="text-[16px] sm:text-xl font-bold tabular-nums text-red-600">{todayStats.lossTotal > 0 ? `-${formatCurrency(todayStats.lossTotal)}` : formatCurrency(0)}</p>
-                      <p className="text-[12px] sm:text-xs text-muted-foreground">{todayStats.lossCount} roturas</p>
+                      <p className="text-[16px] sm:text-xl font-bold tabular-nums text-red-600">
+                        {todayIncidencias.perdida > 0.005 ? `-${formatCurrency(todayIncidencias.perdida)}` : formatCurrency(0)}
+                      </p>
+                      <div className="mt-0.5 space-y-0 text-[12px] sm:text-xs leading-tight">
+                        <p className="text-amber-600">
+                          Faltante {todayIncidencias.faltante > 0.005 ? `-${formatCurrency(todayIncidencias.faltante)}` : formatCurrency(0)}
+                        </p>
+                        <p className="text-sky-600">
+                          Rechazo {todayIncidencias.rechazo > 0.005 ? `-${formatCurrency(todayIncidencias.rechazo)}` : formatCurrency(0)}
+                        </p>
+                      </div>
                     </CardContent>
                   </Card>
                 </div>
@@ -1471,15 +1492,16 @@ export default function CajaPage() {
                                     </div>
                                     <p className="text-xs text-muted-foreground">{formatDateShort(new Date(sale.createdAt))}</p>
                                   </div>
-                                  {/* Col 3: total / pérdida / devolución / vendedor */}
+                                  {/* Col 3: total / pérdida / faltante / rechazo / vendedor */}
                                   <div className="text-right">
                                     <p className="font-semibold text-xs tabular-nums">{formatCurrency(sale.total || 0)}</p>
                                     {(() => {
-                                      const { perdida, devolucion } = calcIncidencia(sale);
+                                      const { perdida, faltante, rechazo } = calcIncidencia(sale);
                                       return (
                                         <>
                                           {perdida > 0.005 && <p className="text-[10px] text-rose-600 font-medium">Pérd -{formatCurrency(perdida)}</p>}
-                                          {devolucion > 0.005 && <p className="text-[10px] text-amber-600 font-medium">Devol -{formatCurrency(devolucion)}</p>}
+                                          {faltante > 0.005 && <p className="text-[10px] text-amber-600 font-medium">Falt -{formatCurrency(faltante)}</p>}
+                                          {rechazo > 0.005 && <p className="text-[10px] text-sky-600 font-medium">Rech -{formatCurrency(rechazo)}</p>}
                                         </>
                                       );
                                     })()}
@@ -1509,14 +1531,15 @@ export default function CajaPage() {
                         {/* DESKTOP: tabla de columnas */}
                         <div className="hidden sm:block rounded-xl border divide-y overflow-hidden">
                           {/* Encabezado */}
-                          <div className="grid grid-cols-[6rem_minmax(6rem,8rem)_minmax(0,1fr)_3.5rem_8rem_6rem_6rem_7rem] gap-x-2 px-3 py-2 bg-muted/50 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
+                          <div className="grid grid-cols-[6rem_minmax(6rem,8rem)_minmax(0,1fr)_3.5rem_8rem_5.5rem_5.5rem_5.5rem_7rem] gap-x-2 px-3 py-2 bg-muted/50 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
                             <span>Fecha</span>
                             <span>Venta</span>
                             <span>Cliente</span>
                             <span className="text-center">HR</span>
                             <span className="text-center">Forma de pago</span>
                             <span className="text-right">Pérdida</span>
-                            <span className="text-right">Devolución</span>
+                            <span className="text-right">Faltante</span>
+                            <span className="text-right">Rechazo</span>
                             <span className="text-right">Total</span>
                           </div>
                           {salesFiltradas.map((sale) => {
@@ -1526,9 +1549,9 @@ export default function CajaPage() {
                             const badgeClass = sale.paymentType === "cash"
                               ? ((sale as any).paymentMethod === "transferencia" ? "bg-violet-100 text-violet-800" : "bg-green-100 text-green-800")
                               : sale.paymentType === "credit" ? "bg-blue-100 text-blue-800" : "bg-amber-100 text-amber-800";
-                            const { perdida, devolucion } = calcIncidencia(sale);
+                            const { perdida, faltante, rechazo } = calcIncidencia(sale);
                             return (
-                              <div key={sale.id} className="grid grid-cols-[6rem_minmax(6rem,8rem)_minmax(0,1fr)_3.5rem_8rem_6rem_6rem_7rem] gap-x-2 px-3 py-2 items-center text-sm">
+                              <div key={sale.id} className="grid grid-cols-[6rem_minmax(6rem,8rem)_minmax(0,1fr)_3.5rem_8rem_5.5rem_5.5rem_5.5rem_7rem] gap-x-2 px-3 py-2 items-center text-sm">
                                 <span className="text-xs text-muted-foreground leading-tight">{formatDateShort(new Date(sale.createdAt))}<br />{formatTimeStr(new Date(sale.createdAt))}</span>
                                 <span className="text-xs text-muted-foreground truncate">{sale.saleNumber ? `#${sale.saleNumber}` : (sale.remitoNumber || "—")}</span>
                                 <span className="font-medium truncate">{sale.clientName || "Consumidor Final"}</span>
@@ -1545,14 +1568,17 @@ export default function CajaPage() {
                                   {perdida > 0.005 ? <span className="text-rose-600 font-semibold">-{formatCurrency(perdida)}</span> : <span className="text-muted-foreground/40">—</span>}
                                 </span>
                                 <span className="text-right tabular-nums">
-                                  {devolucion > 0.005 ? <span className="text-amber-600 font-semibold">-{formatCurrency(devolucion)}</span> : <span className="text-muted-foreground/40">—</span>}
+                                  {faltante > 0.005 ? <span className="text-amber-600 font-semibold">-{formatCurrency(faltante)}</span> : <span className="text-muted-foreground/40">—</span>}
+                                </span>
+                                <span className="text-right tabular-nums">
+                                  {rechazo > 0.005 ? <span className="text-sky-600 font-semibold">-{formatCurrency(rechazo)}</span> : <span className="text-muted-foreground/40">—</span>}
                                 </span>
                                 <span className="text-right font-semibold tabular-nums">{formatCurrency(sale.total || 0)}</span>
                               </div>
                             );
                           })}
                           {rejectedOrders.map((o) => (
-                            <div key={o.id} className="grid grid-cols-[6rem_minmax(6rem,8rem)_minmax(0,1fr)_3.5rem_8rem_6rem_6rem_7rem] gap-x-2 px-3 py-2 items-center text-sm">
+                            <div key={o.id} className="grid grid-cols-[6rem_minmax(6rem,8rem)_minmax(0,1fr)_3.5rem_8rem_5.5rem_5.5rem_5.5rem_7rem] gap-x-2 px-3 py-2 items-center text-sm">
                               <span className="text-xs text-muted-foreground">{formatDateShort(new Date(o.date))}</span>
                               <span className="text-xs text-muted-foreground truncate">{o.remitoNumber || "—"}</span>
                               <span className="font-medium truncate">{o.clientName || "Consumidor Final"}</span>
@@ -1761,6 +1787,25 @@ export default function CajaPage() {
                           <p className="font-bold">{formatCurrency(selectedHistorial.creditTotal || 0)}</p>
                         </div>
                       </div>
+
+                      {/* Incidencias del período, con los tres motivos separados: solo la
+                          rotura es plata perdida, el resto vuelve al depósito. */}
+                      {historialIncidencias.total > 0.005 && (
+                        <div className="grid grid-cols-3 gap-3 text-sm p-3 rounded-lg bg-muted/50">
+                          <div>
+                            <p className="text-xs text-muted-foreground">Pérdida</p>
+                            <p className="font-bold text-red-600">-{formatCurrency(historialIncidencias.perdida)}</p>
+                          </div>
+                          <div>
+                            <p className="text-xs text-muted-foreground">Faltante</p>
+                            <p className="font-bold text-amber-600">-{formatCurrency(historialIncidencias.faltante)}</p>
+                          </div>
+                          <div>
+                            <p className="text-xs text-muted-foreground">Rechazo</p>
+                            <p className="font-bold text-sky-600">-{formatCurrency(historialIncidencias.rechazo)}</p>
+                          </div>
+                        </div>
+                      )}
 
                       {/* Cierre */}
                       {selectedHistorial.status === "closed" && selectedHistorial.difference != null && (
