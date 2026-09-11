@@ -8,7 +8,8 @@
     "lint": "eslint .",
     "start": "node ./node_modules/next/dist/bin/next start",
     "test": "node ./node_modules/vitest/vitest.mjs run",
-    "test:watch": "node ./node_modules/vitest/vitest.mjs"
+    "test:watch": "node ./node_modules/vitest/vitest.mjs",
+    "health": "node scripts/run-ts.mjs scripts/health-check.ts"
   },
   "dependencies": {
     "@afipsdk/afip.js": "^1.2.2",
