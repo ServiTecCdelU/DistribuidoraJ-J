@@ -245,6 +245,8 @@ export type AuditAction =
   | "client_deleted"
   | "order_created"
   | "order_status_changed"
+  | "order_cancelled"
+  | "order_items_edited"
   | "cash_register_opened"
   | "cash_register_closed"
   | "cash_register_verified"

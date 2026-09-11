@@ -32,6 +32,7 @@ import { consolidarItems } from "@/lib/utils/items-pedido";
 import { repartirStockDisponible } from "@/lib/utils/stock-check";
 import { aplicarEdicionesRemito } from "@/lib/utils/remito-edicion";
 import { ESTADOS_INACTIVOS } from "@/lib/utils/anulacion-pedido";
+import { diffItems, describirCambios } from "@/lib/utils/diff-items";
 import { ordersToMoveAll, ordersToMoveSelected } from "@/lib/utils/order-move";
 
 // Pestaña extra (no es un estado de pedido): historial de hojas de ruta archivadas.
@@ -272,6 +273,21 @@ export default function PedidosPage() {
           if (faltantesParaRegistrar.length > 0) await faltantesApi.registrar(clienteId, faltantesParaRegistrar, order.id);
           if (enviados.length > 0) await faltantesApi.quitar(clienteId, enviados);
         } catch { /* tabla cliente_faltantes aún no creada — no bloquear el remito */ }
+      }
+
+      // Antes de pisar los items hay que dejar registrado QUÉ cambió: este update es el que
+      // borraba la evidencia de cómo un producto terminaba duplicado (ver diff-items.ts).
+      const cambiosItems = diffItems(order.items as any[], filteredItems as any[]);
+      if (cambiosItems.length > 0 && user) {
+        auditApi.log({
+          action: "order_items_edited",
+          userId: user.id,
+          userName: user.name || user.email,
+          description: `Editó el pedido de "${order.clientName}" al generar el remito: ${describirCambios(cambiosItems)}`,
+          entityType: "order",
+          entityId: order.id,
+          metadata: { remitoNumber: order.remitoNumber ?? null, cambios: cambiosItems },
+        });
       }
 
       // Trazabilidad 1 pedido = 1 remito = 1 venta: el remito se genera SOLO sobre este pedido.
@@ -597,14 +613,29 @@ export default function PedidosPage() {
 
   const handleUpdateItems = useCallback(async (orderId: string, items: Order["items"]) => {
     try {
+      const previo = orders.find((o) => o.id === orderId);
       const updated = await ordersApi.updateItems(orderId, items);
       setOrders((prev) => prev.map((o) => (o.id === orderId ? updated : o)));
       if (detailOrder?.id === orderId) setDetailOrder(updated);
+
+      const cambios = diffItems((previo?.items ?? []) as any[], items as any[]);
+      if (cambios.length > 0 && user) {
+        auditApi.log({
+          action: "order_items_edited",
+          userId: user.id,
+          userName: user.name || user.email,
+          description: `Editó el pedido de "${updated.clientName}": ${describirCambios(cambios)}`,
+          entityType: "order",
+          entityId: orderId,
+          metadata: { cambios },
+        });
+      }
+
       toast.success("Descuentos actualizados");
     } catch (error) {
       toast.error("Error al actualizar los descuentos");
     }
-  }, [detailOrder]);
+  }, [detailOrder, orders, user]);
 
   useEffect(() => {
     let active = true;
@@ -950,6 +981,20 @@ export default function PedidosPage() {
           };
         });
         supabase.from("ventas").update({ items_no_entregados: noEntregados }).eq("id", sale.id).then(() => {}).catch(() => {});
+
+        // Qué se descontó al cobrar y por qué motivo: es lo que explica la diferencia
+        // entre el remito y el detalle de la venta.
+        if (user) {
+          auditApi.log({
+            action: "order_items_edited",
+            userId: user.id,
+            userName: user.name || user.email,
+            description: `Ajustes al cobrar el pedido de "${selectedOrder.clientName}" (${sale.saleNumber}): ${noEntregados.map((i: any) => `${i.name} x${i.quantity} (${i.motivo})`).join(", ")}`,
+            entityType: "order",
+            entityId: selectedOrder.id,
+            metadata: { saleId: sale.id, remitoNumber: selectedOrder.remitoNumber ?? null, noEntregados },
+          });
+        }
       }
 
       // Registrar roturas y faltantes en transacciones usando el saleNumber

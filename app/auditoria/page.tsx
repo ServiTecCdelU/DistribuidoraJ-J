@@ -42,6 +42,8 @@ const ACTION_META: Record<
   client_deleted: { label: "Cliente eliminado", color: "bg-red-500", icon: Users },
   order_created: { label: "Pedido creado", color: "bg-sky-500", icon: Truck },
   order_status_changed: { label: "Pedido actualizado", color: "bg-amber-500", icon: Truck },
+  order_items_edited: { label: "Pedido editado", color: "bg-orange-500", icon: Truck },
+  order_cancelled: { label: "Pedido anulado", color: "bg-slate-500", icon: Truck },
   cash_register_opened: { label: "Caja abierta", color: "bg-emerald-500", icon: Banknote },
   cash_register_closed: { label: "Caja cerrada", color: "bg-red-500", icon: Banknote },
   cash_register_verified: { label: "Caja verificada", color: "bg-teal-500", icon: Banknote },
