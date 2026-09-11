@@ -32,7 +32,17 @@
       "Bash(head -60 app/api/generate-pdf/route.ts)",
       "mcp__supabase__execute_sql",
       "Bash(awk 'NR>=1538 && NR<=1550 {printf \"%d|%s\\\\n\", NR, $0}' app/empleados/page.tsx)",
-      "PowerShell(git push *)"
+      "PowerShell(git push *)",
+      "Bash(grep -n \"}, \\\\[$\\\\|deliveryMethod, deliveryAddress, role, selectedClient\" hooks/useCart.ts)",
+      "Bash(awk 'NR==2090,0{c++; print NR\": \"$0; if\\(/DialogContent>$/ && c>1\\) exit}' app/caja/page.tsx)",
+      "Bash(grep -rln \"from\\(\\\\\"caja\\\\\"\\)\\\\|from\\('caja'\\)\\\\|\\\\.from\\(\\\\`caja\\\\`\\)\" app services lib --include=\"*.ts\" --include=\"*.tsx\")",
+      "Bash(grep -n \"from\\('caja'\\)\\\\|from\\(\\\\`caja\\\\`\\)\" -B2 -A8 services/rentabilidad-service.ts)",
+      "Bash(npx tsc *)",
+      "Bash(\"./node_modules/.bin/tsc\" --noEmit)",
+      "Bash(npx vitest *)",
+      "PowerShell(Get-CimInstance *)",
+      "Bash(echo \"EXIT_GREP=$?\")",
+      "PowerShell(Get-Process *)"
     ]
   },
   "enableAllProjectMcpServers": true,

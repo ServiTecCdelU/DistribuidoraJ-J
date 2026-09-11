@@ -25,7 +25,10 @@ import { DiaPagoModal } from "@/components/pedidos/dia-pago-modal";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { statusConfig } from "@/lib/order-constants";
 import { formatCurrency as formatPrice, formatTime } from "@/lib/utils/format";
-import { salidasRemito, reconciliarCobro, reposicionEliminarRemito } from "@/lib/utils/stock-remito";
+import { salidasRemito, reconciliarCobro, reposicionEliminarRemito, aplicarAjustesAItems } from "@/lib/utils/stock-remito";
+import { consolidarItems } from "@/lib/utils/items-pedido";
+import { repartirStockDisponible } from "@/lib/utils/stock-check";
+import { aplicarEdicionesRemito } from "@/lib/utils/remito-edicion";
 import { ordersToMoveAll, ordersToMoveSelected } from "@/lib/utils/order-move";
 
 // Pestaña extra (no es un estado de pedido): historial de hojas de ruta archivadas.
@@ -228,26 +231,13 @@ export default function PedidosPage() {
     try {
       // Aplicar cantidades editadas y reemplazos por otra marca (mantiene descuento %, cambia producto/precio).
       // El descuento es un porcentaje: se preserva y se aplica sobre el nuevo precio.
-      let huboCambioCantidad = false;
-      // Aplica el % de descuento editado por el admin: setea itemDiscount si > 0, lo quita si es 0.
-      const conDescuento = (item: any): any => {
-        const d = discounts[item.productId];
-        if (d == null) return item;
-        const pct = Math.min(100, Math.max(0, Number(d) || 0));
-        const { itemDiscount: _omit, ...rest } = item;
-        return pct > 0 ? { ...rest, itemDiscount: pct } : { ...rest };
-      };
-      const replacedItems = order.items.map((i: any) => {
-        const nuevaCant = quantities[i.productId];
-        const cant = nuevaCant != null && nuevaCant !== i.quantity ? (huboCambioCantidad = true, nuevaCant) : i.quantity;
-        const r = replacements[i.productId];
-        if (!r) return conDescuento(cant !== i.quantity ? { ...i, quantity: cant } : i);
-        return conDescuento({ ...i, productId: r.productId, name: r.name, price: r.price, codigo: r.codigo, quantity: cant });
-      });
-
-      const filteredItems = excludeProductIds.length > 0
-        ? replacedItems.filter((i: any) => !excludeProductIds.includes(i.productId))
-        : replacedItems;
+      // Cantidades, descuentos, reemplazos y exclusiones en un solo paso. Deja un renglón
+      // por producto: si un reemplazo apunta a algo que ya estaba en el pedido, se suma
+      // (1 leche + otro producto cambiado por leche = 2 leches). Ver remito-edicion.ts.
+      const { items: filteredItems, huboCambioCantidad } = aplicarEdicionesRemito(
+        order.items as any[],
+        { quantities, replacements, discounts, excludeProductIds },
+      );
 
       if (filteredItems.length === 0) {
         toast.error("No quedan productos para generar el remito");
@@ -280,7 +270,7 @@ export default function PedidosPage() {
       // Trazabilidad 1 pedido = 1 remito = 1 venta: el remito se genera SOLO sobre este pedido.
       // No se consolidan ni se borran otros pedidos del cliente.
       await supabase.from("pedidos").update({ items: filteredItems }).eq("id", order.id);
-      order = { ...order, items: filteredItems };
+      order = { ...order, items: filteredItems as Order["items"] };
       setOrders((prev) => prev.map((o) => (o.id === order.id ? order : o)));
       if (detailOrder?.id === order.id) setDetailOrder(order);
 
@@ -364,8 +354,12 @@ export default function PedidosPage() {
     // Verificar stock de cada producto
     // Los items de pedidos usan IDs de mayorista_productos (mp_XXXXX)
     // pero el stock está en productos con ID prod_mp_XXXXX
-    const productIds = order.items.map((i) => i.productId).filter(Boolean);
-    const prodIds = productIds.map((id) => id.startsWith("mp_") ? `prod_${id}` : id);
+    // Un renglón por producto antes de que el admin edite cantidades o reemplace marcas:
+    // todo lo que sigue se indexa por productId y un duplicado afectaría a los dos renglones.
+    const itemsConsolidados = consolidarItems(order.items as any[]);
+
+    const productIds = itemsConsolidados.map((i: any) => i.productId).filter(Boolean);
+    const prodIds = productIds.map((id: string) => id.startsWith("mp_") ? `prod_${id}` : id);
     const stockMap = new Map<string, number>();
     if (prodIds.length > 0) {
       for (let i = 0; i < prodIds.length; i += 500) {
@@ -375,17 +369,25 @@ export default function PedidosPage() {
       }
     }
 
-    const checkItems: StockCheckItem[] = order.items.map((item) => {
+    // El stock disponible se reparte entre los renglones del mismo producto: si quedan dos
+    // (distinto precio o descuento), el segundo ve lo que deja el primero, no el total.
+    const stockPorItem = new Map<string, number>();
+    itemsConsolidados.forEach((item: any) => {
       const prodId = item.productId.startsWith("mp_") ? `prod_${item.productId}` : item.productId;
-      return {
-        productId: item.productId,
-        name: item.name,
-        quantity: item.quantity,
-        stock: stockMap.get(prodId) ?? 0,
-        price: item.price,
-        itemDiscount: (item as any).itemDiscount ?? 0,
-      };
+      stockPorItem.set(item.productId, stockMap.get(prodId) ?? 0);
     });
+
+    const checkItems: StockCheckItem[] = repartirStockDisponible(
+      itemsConsolidados as any[],
+      stockPorItem,
+    ).map((item: any) => ({
+      productId: item.productId,
+      name: item.name,
+      quantity: item.quantity,
+      stock: item.stock,
+      price: item.price,
+      itemDiscount: item.itemDiscount ?? 0,
+    }));
 
     // Siempre mostrar el modal para poder ajustar cantidades, reemplazar o excluir antes de generar
     setStockCheckItems(checkItems);
@@ -738,21 +740,12 @@ export default function PedidosPage() {
       // - rotura: se rompió → descontar stock + registrar pérdida
       // - faltante: error humano, está en stock → solo quitar del pedido
       // - no_quiere: cliente no lo quiere → quitar del pedido (stock no se tocó)
-      const adjByProduct = new Map<string, { rotura: number; faltante: number; no_quiere: number }>();
-      for (const a of adjustments) {
-        const current = adjByProduct.get(a.productId) || { rotura: 0, faltante: 0, no_quiere: 0 };
-        current[a.type === "rotura" ? "rotura" : a.type === "faltante" ? "faltante" : "no_quiere"] += a.quantity;
-        adjByProduct.set(a.productId, current);
-      }
-
-      const adjustedItems = selectedOrder.items
-        .map(item => {
-          const adj = adjByProduct.get(item.productId);
-          if (!adj) return item;
-          const totalDeduccion = adj.rotura + adj.faltante + adj.no_quiere;
-          return { ...item, quantity: item.quantity - totalDeduccion };
-        })
-        .filter(item => item.quantity > 0);
+      // La cantidad ajustada se consume renglón por renglón: si el producto está en más
+      // de una línea del pedido, descontar 10 saca 10 en total, no 10 de cada línea.
+      const adjustedItems = aplicarAjustesAItems(
+        selectedOrder.items as any[],
+        adjustments.map((a) => ({ productId: a.productId, type: a.type as any, quantity: a.quantity })),
+      );
 
       const roturasAdj = adjustments.filter(a => a.type === "rotura");
       const faltantesAdj = adjustments.filter(a => a.type === "faltante");

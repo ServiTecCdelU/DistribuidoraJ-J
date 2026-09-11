@@ -139,6 +139,10 @@ export interface Sale {
   paymentMethod?: "efectivo" | "transferencia";
   cashAmount?: number;
   creditAmount?: number;
+  // Montos efectivamente cobrados por cada medio. Pueden diferir del total de la venta
+  // cuando el cobro se ajustó (roturas, faltantes, devoluciones). La caja informa estos.
+  efectivoAmount?: number;
+  transferenciaAmount?: number;
   comprobanteTransferencia?: string;
   status: "completed" | "pending" | "listo" | "pendiente";
   invoiceNumber?: string;

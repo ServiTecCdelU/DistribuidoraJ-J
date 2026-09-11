@@ -1,6 +1,7 @@
 import { supabase } from '@/lib/supabase'
 import type { Order, OrderStatus, CartItem, City } from '@/lib/types'
 import { generateReadableId } from '@/services/supabase-helpers'
+import { consolidarItems } from '@/lib/utils/items-pedido'
 
 // Columnas livianas: todo menos los PDFs base64 (remito/boleta), que pesan cientos de KB
 // por fila. Los PDFs se bajan on-demand con getRemitoPdf / getInvoicePdf.
@@ -314,17 +315,21 @@ export const createOrder = async (data: CreateOrderInput): Promise<Order> => {
     transportista_id: null,
     transportista_name: null,
     client_request_id: data.clientRequestId ?? null,
-    items: data.items.map((item) => ({
-      productId: item.product.id,
-      name: item.product.name,
-      quantity: item.quantity,
-      price: item.product.price,
-      itemDiscount: item.itemDiscount ?? null,
-      unidadesPorBulto: item.product.unidadesPorBulto ?? null,
-      seDivideEn: item.product.seDivideEn ?? null,
-      precioUnitarioMayorista: (item.product as any).precioUnitarioMayorista ?? null,
-      ...(item.product.codigo ? { codigo: item.product.codigo } : {}),
-    })),
+    // Un renglón por producto: si el carrito llegara con el mismo producto repetido
+    // (reintento offline, merge de origen), se consolida antes de guardar.
+    items: consolidarItems(
+      data.items.map((item) => ({
+        productId: item.product.id,
+        name: item.product.name,
+        quantity: item.quantity,
+        price: item.product.price,
+        itemDiscount: item.itemDiscount ?? null,
+        unidadesPorBulto: item.product.unidadesPorBulto ?? null,
+        seDivideEn: item.product.seDivideEn ?? null,
+        precioUnitarioMayorista: (item.product as any).precioUnitarioMayorista ?? null,
+        ...(item.product.codigo ? { codigo: item.product.codigo } : {}),
+      })),
+    ),
     address: data.address,
     lat: data.lat ?? null,
     lng: data.lng ?? null,

@@ -42,6 +42,7 @@ import { useAuth } from "@/hooks/use-auth";
 import type { Sale } from "@/lib/types";
 import { supabase } from "@/lib/supabase";
 import { generateReadableId } from "@/services/supabase-helpers";
+import { agregarDesglose } from "@/lib/utils/caja-desglose";
 import { formatCurrency, formatTime } from "@/lib/utils/format";
 import { incidenciasCaja } from "@/lib/utils/incidencias";
 import { toast } from "sonner";
@@ -169,29 +170,13 @@ const cajaPdfStyles = StyleSheet.create({
 const CajaPdfDocument = ({ register, sales, losses = [], pagos = [], rejected = [] }: { register: CashRegister; sales: Sale[]; losses?: { id: string; amount: number; description: string; date: string }[]; pagos?: { id: string; sellerName: string; monto: number; createdAt: string }[]; rejected?: { id: string; clientName: string; remitoNumber?: string; date: string }[] }) => {
   const isClosed = register.status === "closed";
 
-  // Calcular desglose desde ventas si no hay datos guardados
-  let efectivoTotal = 0;
-  let transferTotal = 0;
-  let creditTotalCalc = 0;
-  let totalCalc = 0;
-  for (const s of sales) {
-    totalCalc += s.total || 0;
-    const method = (s as any).paymentMethod || "efectivo";
-    if (s.paymentType === "cash") {
-      if (method === "transferencia") transferTotal += s.total || 0;
-      else efectivoTotal += s.total || 0;
-    } else if (s.paymentType === "credit") {
-      creditTotalCalc += s.total || 0;
-    } else if (s.paymentType === "mixed") {
-      const cashAmt = (s as any).cashAmount || 0;
-      const creditAmt = (s as any).creditAmount || 0;
-      const efectivoAmt = (s as any).efectivo_amount ?? (method !== "transferencia" ? cashAmt : 0);
-      const transferenciaAmt = (s as any).transferencia_amount ?? (method === "transferencia" ? cashAmt : 0);
-      efectivoTotal += efectivoAmt;
-      transferTotal += transferenciaAmt;
-      creditTotalCalc += creditAmt;
-    }
-  }
+  // Calcular desglose desde ventas si no hay datos guardados.
+  // Se informa lo COBRADO (no el total de la venta): ver lib/utils/caja-desglose.ts
+  const agregado = agregarDesglose(sales as any[]);
+  const efectivoTotal = agregado.efectivo;
+  const transferTotal = agregado.transferencia;
+  const creditTotalCalc = agregado.credito;
+  const totalCalc = agregado.total;
 
   const cashTotal = register.cashTotal ?? efectivoTotal;
   const transferTotalFinal = register.transferTotal ?? transferTotal;
@@ -821,32 +806,11 @@ export default function CajaPage() {
   };
 
   const todayStats = useMemo(() => {
-    let efectivoTotal = 0;
-    let transferTotal = 0;
-    let creditTotal = 0;
-    let total = 0;
-
-    for (const s of sales) {
-      total += s.total || 0;
-      const method = (s as any).paymentMethod || "efectivo";
-      if (s.paymentType === "cash") {
-        if (method === "transferencia") {
-          transferTotal += s.total || 0;
-        } else {
-          efectivoTotal += s.total || 0;
-        }
-      } else if (s.paymentType === "credit") {
-        creditTotal += s.total || 0;
-      } else if (s.paymentType === "mixed") {
-        const cashAmt = (s as any).cashAmount || 0;
-        const creditAmt = (s as any).creditAmount || 0;
-        const efectivoAmt = (s as any).efectivo_amount ?? (method !== "transferencia" ? cashAmt : 0);
-        const transferenciaAmt = (s as any).transferencia_amount ?? (method === "transferencia" ? cashAmt : 0);
-        efectivoTotal += efectivoAmt;
-        transferTotal += transferenciaAmt;
-        creditTotal += creditAmt;
-      }
-    }
+    const agregado = agregarDesglose(sales as any[]);
+    const efectivoTotal = agregado.efectivo;
+    const transferTotal = agregado.transferencia;
+    const creditTotal = agregado.credito;
+    const total = agregado.total;
 
     const lossTotal = losses.reduce((acc, l) => acc + l.amount, 0);
     const comisionesTotal = pagosComisiones.reduce((acc, p) => acc + p.monto, 0);
@@ -857,26 +821,14 @@ export default function CajaPage() {
   // Stats para el modal de cierre (puede ser caja actual o una del historial)
   const closingStats = useMemo(() => {
     const src = closingSales ?? sales;
-    let efectivoTotal = 0, transferTotal = 0, creditTotal = 0, total = 0;
-    for (const s of src) {
-      total += s.total || 0;
-      const method = (s as any).paymentMethod || "efectivo";
-      if (s.paymentType === "cash") {
-        if (method === "transferencia") transferTotal += s.total || 0;
-        else efectivoTotal += s.total || 0;
-      } else if (s.paymentType === "credit") {
-        creditTotal += s.total || 0;
-      } else if (s.paymentType === "mixed") {
-        const cashAmt = (s as any).cashAmount || 0;
-        const creditAmt = (s as any).creditAmount || 0;
-        const efectivoAmt = (s as any).efectivo_amount ?? (method !== "transferencia" ? cashAmt : 0);
-        const transferenciaAmt = (s as any).transferencia_amount ?? (method === "transferencia" ? cashAmt : 0);
-        efectivoTotal += efectivoAmt;
-        transferTotal += transferenciaAmt;
-        creditTotal += creditAmt;
-      }
-    }
-    return { efectivoTotal, transferTotal, creditTotal, total, count: src.length };
+    const agregado = agregarDesglose(src as any[]);
+    return {
+      efectivoTotal: agregado.efectivo,
+      transferTotal: agregado.transferencia,
+      creditTotal: agregado.credito,
+      total: agregado.total,
+      count: src.length,
+    };
   }, [closingSales, sales]);
   const closingRegisterData = closingRegister ?? currentRegister;
   const closingExpectedCash = (closingRegisterData?.initialAmount || 0) + closingStats.efectivoTotal;

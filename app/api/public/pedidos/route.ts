@@ -4,6 +4,7 @@ import { z } from "zod";
 import { supabaseAdmin } from "@/lib/supabase-admin";
 import { rateLimit } from "@/lib/rate-limit";
 import { parseJsonBody } from "@/lib/api-validation";
+import { consolidarItems } from "@/lib/utils/items-pedido";
 
 export const runtime = "nodejs";
 
@@ -184,7 +185,8 @@ export async function POST(request: Request) {
     client_email: email || null,
     seller_id: null,
     seller_name: null,
-    items: body.items,
+    // Un renglón por producto: el body viene de la tienda pública, no se confía en él.
+    items: consolidarItems(body.items as any[]),
     city: isPickup ? null : (body.city || null),
     address: resolvedAddress,
     lat: isPickup ? null : (body.lat ?? null),

@@ -75,3 +75,49 @@ export function reconciliarCobro(
     .filter((a) => a.type === 'rotura' && a.quantity > 0)
     .map((a) => ({ productId: a.productId, cantidad: -a.quantity, motivo: a.type }))
 }
+
+export interface ItemAjustable {
+  productId: string
+  quantity: number
+  price?: number
+  [key: string]: unknown
+}
+
+/**
+ * Aplica los ajustes de cobro (rotura / faltante / no_quiere) a los items del pedido
+ * y devuelve los que efectivamente se venden.
+ *
+ * El ajuste llega POR PRODUCTO ("descontar 10 de yerba"), pero un pedido puede tener el
+ * mismo producto en más de un renglón. La cantidad se consume renglón por renglón hasta
+ * agotarse, en vez de restarse entera a cada uno: descontar 10 sobre dos renglones de 10
+ * deja uno intacto, no borra los 20.
+ *
+ * Los renglones que quedan en cero se descartan; el resto conserva todos sus campos.
+ */
+export function aplicarAjustesAItems<T extends ItemAjustable>(
+  items: T[],
+  ajustes: AjusteCobro[],
+): T[] {
+  const pendiente = new Map<string, number>()
+  for (const a of ajustes) {
+    const cant = Number(a.quantity) || 0
+    if (cant <= 0) continue
+    pendiente.set(a.productId, (pendiente.get(a.productId) ?? 0) + cant)
+  }
+  if (pendiente.size === 0) return items
+
+  const resultado: T[] = []
+  for (const item of items) {
+    const porDescontar = pendiente.get(item.productId) ?? 0
+    const cantidad = Number(item.quantity) || 0
+    if (porDescontar <= 0) {
+      if (cantidad > 0) resultado.push(item)
+      continue
+    }
+    const consumido = Math.min(porDescontar, cantidad)
+    pendiente.set(item.productId, porDescontar - consumido)
+    const restante = cantidad - consumido
+    if (restante > 0) resultado.push({ ...item, quantity: restante })
+  }
+  return resultado
+}

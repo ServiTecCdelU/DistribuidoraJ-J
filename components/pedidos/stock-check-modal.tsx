@@ -155,6 +155,13 @@ export function StockCheckModal({ open, onClose, items, onConfirm, findReplaceme
   const discOf = (id: string) => discounts[id] ?? 0;
   const setDisc = (id: string, v: number) => setDiscounts((prev) => ({ ...prev, [id]: Math.min(100, Math.max(0, v)) }));
 
+  // Unidades que el pedido ya tiene del producto elegido como reemplazo (excluyendo el
+  // renglón que se está reemplazando). Si es > 0, los dos se fusionan en un solo renglón.
+  const yaEnPedido = (destinoId: string, origenId: string) =>
+    items
+      .filter((i) => i.productId === destinoId && i.productId !== origenId)
+      .reduce((acc, i) => acc + qtyOf(i.productId), 0);
+
   // Categorías recalculadas según la cantidad editada (bajar la cantidad puede cubrir el faltante)
   const sinStock = items.filter((i) => i.stock < qtyOf(i.productId));
   const conStock = items.filter((i) => i.stock >= qtyOf(i.productId));
@@ -269,17 +276,28 @@ export function StockCheckModal({ open, onClose, items, onConfirm, findReplaceme
 
                       {/* Reemplazo elegido */}
                       {reemplazo ? (
-                        <div className="flex items-center gap-2 px-3 pb-2">
-                          <Repeat className="h-3.5 w-3.5 text-emerald-600 shrink-0" />
-                          <span className="text-xs text-emerald-700 truncate flex-1">
-                            Reemplazado por: <span className="font-semibold">{reemplazo.name}</span>
-                          </span>
-                          <button
-                            onClick={() => quitarReemplazo(item.productId)}
-                            className="text-emerald-600 hover:text-emerald-800"
-                          >
-                            <X className="h-3.5 w-3.5" />
-                          </button>
+                        <div className="px-3 pb-2 space-y-1">
+                          <div className="flex items-center gap-2">
+                            <Repeat className="h-3.5 w-3.5 text-emerald-600 shrink-0" />
+                            <span className="text-xs text-emerald-700 truncate flex-1">
+                              Reemplazado por: <span className="font-semibold">{reemplazo.name}</span>
+                            </span>
+                            <button
+                              onClick={() => quitarReemplazo(item.productId)}
+                              className="text-emerald-600 hover:text-emerald-800"
+                            >
+                              <X className="h-3.5 w-3.5" />
+                            </button>
+                          </div>
+                          {/* El producto elegido ya está en el pedido: va a quedar un solo renglón. */}
+                          {yaEnPedido(reemplazo.productId, item.productId) > 0 && (
+                            <p className="text-[11px] text-emerald-700 pl-5">
+                              Ya hay {yaEnPedido(reemplazo.productId, item.productId)} en el pedido —
+                              {" "}queda <span className="font-semibold">
+                                {yaEnPedido(reemplazo.productId, item.productId) + qtyOf(item.productId)}
+                              </span>{" "}en un solo renglón
+                            </p>
+                          )}
                         </div>
                       ) : (
                         findReplacements && (

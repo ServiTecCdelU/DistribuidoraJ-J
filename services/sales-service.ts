@@ -39,6 +39,9 @@ function mapSale(d: Record<string, any>): Sale {
     paymentMethod: d.payment_method ?? 'efectivo',
     cashAmount: d.cash_amount ? Number(d.cash_amount) : undefined,
     creditAmount: d.credit_amount ? Number(d.credit_amount) : undefined,
+    // Cero es un monto válido: solo se descarta el campo ausente o nulo.
+    efectivoAmount: d.efectivo_amount != null ? Number(d.efectivo_amount) : undefined,
+    transferenciaAmount: d.transferencia_amount != null ? Number(d.transferencia_amount) : undefined,
     comprobanteTransferencia: d.comprobante_transferencia ?? undefined,
     status: d.status ?? 'completed',
     invoiceEmitted: d.invoice_emitted ?? false,

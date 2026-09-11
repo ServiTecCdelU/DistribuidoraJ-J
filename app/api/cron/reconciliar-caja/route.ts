@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabase-admin";
+import { agregarDesglose } from "@/lib/utils/caja-desglose";
 
 // Reconciliación de caja por horario fijo 06:00–23:00 (hora Argentina, UTC-3).
 // Pensado para ser invocado por un scheduler (Supabase pg_cron vía pg_net), de modo que la
@@ -41,25 +42,27 @@ const dayKeyLocal = (utc: Date) => {
   return `${p.y}-${p.m}-${p.d}`;
 };
 
+// Nota del cierre. Si lo cobrado no coincide con lo facturado, queda asentado en la caja
+// en vez de pasar inadvertido (ver caso remito R-2026-01782).
+function notaCierre(desvio: number): string {
+  const base = "Cierre automático 23:00";
+  if (!desvio) return base;
+  const signo = desvio > 0 ? "+" : "-";
+  return `${base} — ATENCIÓN: cobrado ${signo}$${Math.abs(desvio).toLocaleString("es-AR", { minimumFractionDigits: 2 })} respecto de lo facturado`;
+}
+
+// Desglose de lo COBRADO (no del total facturado). Lógica pura en lib/utils/caja-desglose.ts,
+// compartida con la pantalla de caja para que ambas informen el mismo número.
 function agg(src: Sale[]) {
-  let efectivo = 0, transfer = 0, credito = 0, total = 0;
-  for (const s of src) {
-    const t = Number(s.total) || 0;
-    total += t;
-    const method = s.payment_method || "efectivo";
-    if (s.payment_type === "cash") {
-      if (method === "transferencia") transfer += t; else efectivo += t;
-    } else if (s.payment_type === "credit") {
-      credito += t;
-    } else if (s.payment_type === "mixed") {
-      const cashAmt = Number(s.cash_amount) || 0;
-      const creditAmt = Number(s.credit_amount) || 0;
-      const ef = s.efectivo_amount != null ? Number(s.efectivo_amount) : (method !== "transferencia" ? cashAmt : 0);
-      const tr = s.transferencia_amount != null ? Number(s.transferencia_amount) : (method === "transferencia" ? cashAmt : 0);
-      efectivo += ef; transfer += tr; credito += creditAmt;
-    }
-  }
-  return { efectivo, transfer, credito, total, count: src.length };
+  const d = agregarDesglose(src as any[]);
+  return {
+    efectivo: d.efectivo,
+    transfer: d.transferencia,
+    credito: d.credito,
+    total: d.total,
+    desvio: d.desvio,
+    count: d.count,
+  };
 }
 
 async function generarIdCaja(dateStr: string): Promise<string> {
@@ -123,7 +126,7 @@ async function reconciliar() {
       expected_amount: esperado,
       difference: 0,
       status: "closed",
-      notes: "Cierre automático 23:00",
+      notes: notaCierre(st.desvio),
       sales_count: st.count,
       total_sales: st.total,
       cash_total: st.efectivo,
@@ -173,7 +176,7 @@ async function reconciliar() {
       expected_amount: esperado,
       difference: 0,
       status: "closed",
-      notes: "Cierre automático 23:00 (retroactivo)",
+      notes: `${notaCierre(st.desvio)} (retroactivo)`,
       sales_count: st.count,
       total_sales: st.total,
       cash_total: st.efectivo,

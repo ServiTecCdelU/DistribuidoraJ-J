@@ -3,8 +3,10 @@ import {
   salidasRemito,
   reposicionEliminarRemito,
   reconciliarCobro,
+  aplicarAjustesAItems,
   type ItemRemito,
   type AjusteCobro,
+  type ItemAjustable,
 } from "../utils/stock-remito";
 
 describe("salidasRemito", () => {
@@ -88,5 +90,77 @@ describe("reconciliarCobro", () => {
     ];
     expect(reconciliarCobro(true, conCero)).toEqual([]);
     expect(reconciliarCobro(false, conCero)).toEqual([]);
+  });
+});
+
+describe("aplicarAjustesAItems", () => {
+  it("descuenta la cantidad ajustada de un item simple", () => {
+    const items: ItemAjustable[] = [{ productId: "mp_001", quantity: 10, price: 100 }];
+    const ajustes: AjusteCobro[] = [{ productId: "mp_001", type: "rotura", quantity: 4 }];
+    expect(aplicarAjustesAItems(items, ajustes)).toEqual([
+      { productId: "mp_001", quantity: 6, price: 100 },
+    ]);
+  });
+
+  // Caso real: remito R-2026-01782 (PANADERIA TIKI). La yerba figuraba en dos
+  // renglones de 10; una rotura de 10 borraba los dos (20 unidades) y dejaba
+  // $20.758,70 cobrados sin item en la venta.
+  it("con el producto duplicado descuenta el total pedido, no una vez por renglón", () => {
+    const items: ItemAjustable[] = [
+      { productId: "mp_yerba", quantity: 10, price: 2075.87 },
+      { productId: "mp_otro", quantity: 5, price: 500 },
+      { productId: "mp_yerba", quantity: 10, price: 2075.87 },
+    ];
+    const ajustes: AjusteCobro[] = [{ productId: "mp_yerba", type: "rotura", quantity: 10 }];
+    expect(aplicarAjustesAItems(items, ajustes)).toEqual([
+      { productId: "mp_otro", quantity: 5, price: 500 },
+      { productId: "mp_yerba", quantity: 10, price: 2075.87 },
+    ]);
+  });
+
+  it("consume renglones en orden hasta agotar la cantidad ajustada", () => {
+    const items: ItemAjustable[] = [
+      { productId: "mp_001", quantity: 4, price: 10 },
+      { productId: "mp_001", quantity: 9, price: 10 },
+    ];
+    const ajustes: AjusteCobro[] = [{ productId: "mp_001", type: "faltante", quantity: 6 }];
+    expect(aplicarAjustesAItems(items, ajustes)).toEqual([
+      { productId: "mp_001", quantity: 7, price: 10 },
+    ]);
+  });
+
+  it("suma los distintos motivos sobre el mismo producto", () => {
+    const items: ItemAjustable[] = [{ productId: "mp_001", quantity: 10, price: 10 }];
+    const ajustes: AjusteCobro[] = [
+      { productId: "mp_001", type: "rotura", quantity: 2 },
+      { productId: "mp_001", type: "no_quiere", quantity: 3 },
+    ];
+    expect(aplicarAjustesAItems(items, ajustes)).toEqual([
+      { productId: "mp_001", quantity: 5, price: 10 },
+    ]);
+  });
+
+  it("nunca deja cantidades negativas si el ajuste excede lo pedido", () => {
+    const items: ItemAjustable[] = [{ productId: "mp_001", quantity: 3, price: 10 }];
+    const ajustes: AjusteCobro[] = [{ productId: "mp_001", type: "rotura", quantity: 99 }];
+    expect(aplicarAjustesAItems(items, ajustes)).toEqual([]);
+  });
+
+  it("deja intactos los items sin ajuste", () => {
+    const items: ItemAjustable[] = [
+      { productId: "mp_001", quantity: 3, price: 10 },
+      { productId: "mp_002", quantity: 7, price: 20 },
+    ];
+    expect(aplicarAjustesAItems(items, [])).toEqual(items);
+  });
+
+  it("preserva los campos extra del item (nombre, código, descuento)", () => {
+    const items: ItemAjustable[] = [
+      { productId: "mp_001", quantity: 10, price: 10, name: "YERBA", codigo: "0102075", itemDiscount: 5 } as ItemAjustable,
+    ];
+    const ajustes: AjusteCobro[] = [{ productId: "mp_001", type: "rotura", quantity: 4 }];
+    expect(aplicarAjustesAItems(items, ajustes)).toEqual([
+      { productId: "mp_001", quantity: 6, price: 10, name: "YERBA", codigo: "0102075", itemDiscount: 5 },
+    ]);
   });
 });

@@ -9,6 +9,7 @@ import { supabase } from '@/lib/supabase'
 import { generateReadableId } from '@/services/supabase-helpers'
 import { aplicarPagoADeudas } from '@/services/payments-service'
 import { calcularComisionDescuento } from '@/lib/utils/ajuste-venta'
+import { camposConversionPago } from '@/lib/utils/conversion-pago'
 
 // Máximo de ids por request (evita URLs demasiado largas en los .in())
 const ID_CHUNK = 100
@@ -87,7 +88,7 @@ async function subirSaldoCliente(clientId: string, monto: number): Promise<void>
 }
 
 // Actualiza la forma de pago de la venta; reintenta sin payment_method si la columna no existe.
-async function actualizarPagoVenta(saleId: string, fields: Record<string, unknown>): Promise<void> {
+async function actualizarPagoVenta(saleId: string, fields: object): Promise<void> {
   const { error } = await supabase.from('ventas').update(fields).eq('id', saleId)
   if (error && 'payment_method' in fields) {
     const { payment_method, ...rest } = fields
@@ -268,12 +269,7 @@ export async function convertirPagoVenta(data: {
       await aplicarPagoADeudas(data.clientId, 'minorista', monto, debtTxId)
     }
 
-    await actualizarPagoVenta(data.saleId, {
-      payment_type: 'cash',
-      payment_method: metodo,
-      cash_amount: null,
-      credit_amount: null,
-    })
+    await actualizarPagoVenta(data.saleId, camposConversionPago('aPagado', monto, metodo))
 
     return { txId, reciboNumero, monto, direccion: 'aPagado', metodo, createdAt: new Date() }
   }
@@ -295,11 +291,7 @@ export async function convertirPagoVenta(data: {
     })
   }
 
-  await actualizarPagoVenta(data.saleId, {
-    payment_type: 'credit',
-    credit_amount: monto,
-    cash_amount: null,
-  })
+  await actualizarPagoVenta(data.saleId, camposConversionPago('aCuentaCorriente', monto))
 
   return { monto, direccion: 'aCuentaCorriente', createdAt: new Date() }
 }
