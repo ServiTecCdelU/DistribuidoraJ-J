@@ -96,3 +96,55 @@ describe("aplicarEdicionesRemito", () => {
     expect(aplicarEdicionesRemito(items, {}).items).toEqual(items);
   });
 });
+
+// El mismo producto a distinto precio queda en dos renglones a propósito. Editar por
+// productId afectaba a los dos; las ediciones se indexan por clave de línea.
+describe("aplicarEdicionesRemito · renglones del mismo producto a distinto precio", () => {
+  const caro = { productId: "prod_leche", name: "LECHE", price: 2000, quantity: 10 };
+  const barato = { productId: "prod_leche", name: "LECHE", price: 1800, quantity: 5 };
+
+  it("cambiar la cantidad de un renglón no toca el otro", () => {
+    const r = aplicarEdicionesRemito([caro, barato], {
+      quantities: { "prod_leche|1800|0": 2 },
+    });
+    expect(r.items).toEqual([caro, { ...barato, quantity: 2 }]);
+  });
+
+  it("el descuento se aplica solo al renglón elegido", () => {
+    const r = aplicarEdicionesRemito([caro, barato], {
+      discounts: { "prod_leche|2000|0": 10 },
+    });
+    expect(r.items[0].itemDiscount).toBe(10);
+    expect(r.items[1].itemDiscount).toBeUndefined();
+  });
+
+  it("excluir un renglón deja el otro en el remito", () => {
+    const r = aplicarEdicionesRemito([caro, barato], {
+      excludeProductIds: ["prod_leche|1800|0"],
+    });
+    expect(r.items).toEqual([caro]);
+  });
+
+  it("reemplazar un renglón no reemplaza el otro", () => {
+    const r = aplicarEdicionesRemito([caro, barato], {
+      replacements: {
+        "prod_leche|1800|0": { productId: "prod_otra", name: "OTRA MARCA", price: 1800 },
+      },
+    });
+    expect(r.items).toHaveLength(2);
+    expect(r.items[0]).toEqual(caro);
+    expect(r.items[1].productId).toBe("prod_otra");
+  });
+
+  it("sigue aceptando ediciones por productId (un renglón por producto)", () => {
+    const r = aplicarEdicionesRemito([leche(10)], { quantities: { prod_leche: 4 } });
+    expect(r.items).toEqual([leche(4)]);
+  });
+
+  it("la clave de línea tiene prioridad sobre la de producto", () => {
+    const r = aplicarEdicionesRemito([caro, barato], {
+      quantities: { prod_leche: 99, "prod_leche|1800|0": 2 },
+    });
+    expect(r.items[1].quantity).toBe(2);
+  });
+});

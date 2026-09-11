@@ -11,6 +11,8 @@ import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { AlertTriangle, CheckCircle, Package, Repeat, Loader2, X, Minus, Plus, Search } from "lucide-react";
 
+import { claveLinea } from "@/lib/utils/clave-linea";
+
 export interface StockCheckItem {
   productId: string;
   name: string;
@@ -98,13 +100,16 @@ function DiscountInput({ value, onChange }: { value: number; onChange: (v: numbe
 }
 
 export function StockCheckModal({ open, onClose, items, onConfirm, findReplacements, searchReplacements }: StockCheckModalProps) {
+  // Todo el estado se indexa por CLAVE DE LÍNEA (producto+precio+descuento), no por
+  // productId: el mismo producto puede estar en dos renglones a distinto precio y cada
+  // uno se edita por separado. Ver lib/utils/clave-linea.ts
   // Faltantes que el usuario marca para incluir igual (sabe que físicamente sí están)
   const [incluirIgual, setIncluirIgual] = React.useState<Set<string>>(new Set());
-  // Reemplazos elegidos: productId original -> opción de otra marca
+  // Reemplazos elegidos: clave de línea -> opción de otra marca
   const [replacements, setReplacements] = React.useState<Record<string, ReplacementOption>>({});
-  // Cantidades editables: productId -> cantidad
+  // Cantidades editables: clave de línea -> cantidad
   const [quantities, setQuantities] = React.useState<Record<string, number>>({});
-  // Descuentos editables por producto: productId -> porcentaje
+  // Descuentos editables: clave de línea -> porcentaje
   const [discounts, setDiscounts] = React.useState<Record<string, number>>({});
   // Panel de opciones abierto para un faltante + sus opciones cargadas
   const [openFor, setOpenFor] = React.useState<string | null>(null);
@@ -119,8 +124,8 @@ export function StockCheckModal({ open, onClose, items, onConfirm, findReplaceme
     if (open) {
       setIncluirIgual(new Set());
       setReplacements({});
-      setQuantities(Object.fromEntries(items.map((i) => [i.productId, i.quantity])));
-      setDiscounts(Object.fromEntries(items.map((i) => [i.productId, i.itemDiscount ?? 0])));
+      setQuantities(Object.fromEntries(items.map((i) => [claveLinea(i), i.quantity])));
+      setDiscounts(Object.fromEntries(items.map((i) => [claveLinea(i), i.itemDiscount ?? 0])));
       setOpenFor(null);
       setOptions([]);
       setSearchText("");
@@ -132,13 +137,13 @@ export function StockCheckModal({ open, onClose, items, onConfirm, findReplaceme
   // Debounce de la búsqueda libre para el faltante abierto
   React.useEffect(() => {
     if (!openFor || !searchReplacements) return;
-    const item = items.find((i) => i.productId === openFor);
+    const item = items.find((i) => claveLinea(i) === openFor);
     if (!item) return;
     if (searchText.trim().length < 2) { setSearchResults([]); setSearching(false); return; }
     setSearching(true);
     const handler = setTimeout(async () => {
       try {
-        const res = await searchReplacements(searchText, { ...item, quantity: qtyOf(item.productId) });
+        const res = await searchReplacements(searchText, { ...item, quantity: qtyOf(claveLinea(item)) });
         setSearchResults(res);
       } catch {
         setSearchResults([]);
@@ -150,21 +155,21 @@ export function StockCheckModal({ open, onClose, items, onConfirm, findReplaceme
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [searchText, openFor]);
 
-  const qtyOf = (id: string) => quantities[id] ?? items.find((i) => i.productId === id)?.quantity ?? 1;
+  const qtyOf = (key: string) => quantities[key] ?? items.find((i) => claveLinea(i) === key)?.quantity ?? 1;
   const setQty = (id: string, v: number) => setQuantities((prev) => ({ ...prev, [id]: Math.max(1, v) }));
   const discOf = (id: string) => discounts[id] ?? 0;
   const setDisc = (id: string, v: number) => setDiscounts((prev) => ({ ...prev, [id]: Math.min(100, Math.max(0, v)) }));
 
   // Unidades que el pedido ya tiene del producto elegido como reemplazo (excluyendo el
   // renglón que se está reemplazando). Si es > 0, los dos se fusionan en un solo renglón.
-  const yaEnPedido = (destinoId: string, origenId: string) =>
+  const yaEnPedido = (destinoId: string, origenKey: string) =>
     items
-      .filter((i) => i.productId === destinoId && i.productId !== origenId)
-      .reduce((acc, i) => acc + qtyOf(i.productId), 0);
+      .filter((i) => i.productId === destinoId && claveLinea(i) !== origenKey)
+      .reduce((acc, i) => acc + qtyOf(claveLinea(i)), 0);
 
   // Categorías recalculadas según la cantidad editada (bajar la cantidad puede cubrir el faltante)
-  const sinStock = items.filter((i) => i.stock < qtyOf(i.productId));
-  const conStock = items.filter((i) => i.stock >= qtyOf(i.productId));
+  const sinStock = items.filter((i) => i.stock < qtyOf(claveLinea(i)));
+  const conStock = items.filter((i) => i.stock >= qtyOf(claveLinea(i)));
 
   const toggleIncluir = (id: string) => {
     setIncluirIgual((prev) => {
@@ -175,18 +180,19 @@ export function StockCheckModal({ open, onClose, items, onConfirm, findReplaceme
   };
 
   const abrirReemplazo = async (item: StockCheckItem) => {
-    if (openFor === item.productId) {
+    const key = claveLinea(item);
+    if (openFor === key) {
       setOpenFor(null);
       return;
     }
-    setOpenFor(item.productId);
+    setOpenFor(key);
     setOptions([]);
     setSearchText("");
     setSearchResults([]);
     if (!findReplacements) return;
     setLoadingOpts(true);
     try {
-      const opts = await findReplacements({ ...item, quantity: qtyOf(item.productId) });
+      const opts = await findReplacements({ ...item, quantity: qtyOf(key) });
       setOptions(opts);
     } catch {
       setOptions([]);
@@ -217,8 +223,8 @@ export function StockCheckModal({ open, onClose, items, onConfirm, findReplaceme
 
   // Se excluyen los faltantes que NO se incluyen ni se reemplazan
   const excluidos = sinStock
-    .filter((i) => !incluirIgual.has(i.productId) && !replacements[i.productId])
-    .map((i) => i.productId);
+    .filter((i) => !incluirIgual.has(claveLinea(i)) && !replacements[claveLinea(i)])
+    .map((i) => claveLinea(i));
   const incluidosManual = incluirIgual.size;
   const reemplazados = Object.keys(replacements).length;
   const hayAlgoParaGenerar = conStock.length > 0 || incluidosManual > 0 || reemplazados > 0;
@@ -243,13 +249,14 @@ export function StockCheckModal({ open, onClose, items, onConfirm, findReplaceme
               </p>
               <div className="space-y-1.5">
                 {sinStock.map((item) => {
-                  const marcado = incluirIgual.has(item.productId);
-                  const reemplazo = replacements[item.productId];
-                  const abierto = openFor === item.productId;
+                  const key = claveLinea(item);
+                  const marcado = incluirIgual.has(key);
+                  const reemplazo = replacements[key];
+                  const abierto = openFor === key;
                   const verde = marcado || !!reemplazo;
                   return (
                     <div
-                      key={item.productId}
+                      key={key}
                       className={`border rounded-xl text-sm transition-colors ${
                         verde ? "bg-emerald-50 border-emerald-200" : "bg-red-50 border-red-200"
                       }`}
@@ -258,7 +265,7 @@ export function StockCheckModal({ open, onClose, items, onConfirm, findReplaceme
                         <label className="flex items-center gap-2 min-w-0 flex-1 cursor-pointer">
                           <Checkbox
                             checked={marcado}
-                            onCheckedChange={() => toggleIncluir(item.productId)}
+                            onCheckedChange={() => toggleIncluir(key)}
                             disabled={!!reemplazo}
                           />
                           <span className={`font-medium truncate ${verde ? "text-emerald-800" : "text-red-800"}`}>
@@ -266,8 +273,8 @@ export function StockCheckModal({ open, onClose, items, onConfirm, findReplaceme
                           </span>
                         </label>
                         <div className="flex items-center gap-2">
-                          <DiscountInput value={discOf(item.productId)} onChange={(v) => setDisc(item.productId, v)} />
-                          <QtyStepper value={qtyOf(item.productId)} onChange={(v) => setQty(item.productId, v)} />
+                          <DiscountInput value={discOf(key)} onChange={(v) => setDisc(key, v)} />
+                          <QtyStepper value={qtyOf(key)} onChange={(v) => setQty(key, v)} />
                           <span className={`text-[11px] whitespace-nowrap ${verde ? "text-emerald-600" : "text-red-600"}`}>
                             stock {item.stock}
                           </span>
@@ -283,18 +290,18 @@ export function StockCheckModal({ open, onClose, items, onConfirm, findReplaceme
                               Reemplazado por: <span className="font-semibold">{reemplazo.name}</span>
                             </span>
                             <button
-                              onClick={() => quitarReemplazo(item.productId)}
+                              onClick={() => quitarReemplazo(key)}
                               className="text-emerald-600 hover:text-emerald-800"
                             >
                               <X className="h-3.5 w-3.5" />
                             </button>
                           </div>
                           {/* El producto elegido ya está en el pedido: va a quedar un solo renglón. */}
-                          {yaEnPedido(reemplazo.productId, item.productId) > 0 && (
+                          {yaEnPedido(reemplazo.productId, key) > 0 && (
                             <p className="text-[11px] text-emerald-700 pl-5">
-                              Ya hay {yaEnPedido(reemplazo.productId, item.productId)} en el pedido —
+                              Ya hay {yaEnPedido(reemplazo.productId, key)} en el pedido —
                               {" "}queda <span className="font-semibold">
-                                {yaEnPedido(reemplazo.productId, item.productId) + qtyOf(item.productId)}
+                                {yaEnPedido(reemplazo.productId, key) + qtyOf(key)}
                               </span>{" "}en un solo renglón
                             </p>
                           )}
@@ -344,7 +351,7 @@ export function StockCheckModal({ open, onClose, items, onConfirm, findReplaceme
                                       {searchResults.map((opt) => (
                                         <button
                                           key={opt.productId}
-                                          onClick={() => elegirReemplazo(item.productId, opt)}
+                                          onClick={() => elegirReemplazo(key, opt)}
                                           className="w-full flex items-center justify-between gap-2 px-3 py-2 text-left hover:bg-cyan-50"
                                         >
                                           <span className="text-xs font-medium text-gray-800 truncate">{opt.name}</span>
@@ -369,7 +376,7 @@ export function StockCheckModal({ open, onClose, items, onConfirm, findReplaceme
                                     {options.map((opt) => (
                                       <button
                                         key={opt.productId}
-                                        onClick={() => elegirReemplazo(item.productId, opt)}
+                                        onClick={() => elegirReemplazo(key, opt)}
                                         className="w-full flex items-center justify-between gap-2 px-3 py-2 text-left hover:bg-cyan-50"
                                       >
                                         <span className="text-xs font-medium text-gray-800 truncate">{opt.name}</span>
@@ -403,16 +410,19 @@ export function StockCheckModal({ open, onClose, items, onConfirm, findReplaceme
                 Con stock ({conStock.length})
               </p>
               <div className="space-y-1.5">
-                {conStock.map((item) => (
-                  <div key={item.productId} className="flex items-center justify-between gap-2 px-3 py-2 bg-green-50 border border-green-200 rounded-xl text-sm">
-                    <span className="font-medium text-green-800 truncate flex-1">{item.name}</span>
-                    <div className="flex items-center gap-2">
-                      <DiscountInput value={discOf(item.productId)} onChange={(v) => setDisc(item.productId, v)} />
-                      <QtyStepper value={qtyOf(item.productId)} onChange={(v) => setQty(item.productId, v)} />
-                      <span className="text-[11px] text-green-600 whitespace-nowrap">stock {item.stock}</span>
+                {conStock.map((item) => {
+                  const key = claveLinea(item);
+                  return (
+                    <div key={key} className="flex items-center justify-between gap-2 px-3 py-2 bg-green-50 border border-green-200 rounded-xl text-sm">
+                      <span className="font-medium text-green-800 truncate flex-1">{item.name}</span>
+                      <div className="flex items-center gap-2">
+                        <DiscountInput value={discOf(key)} onChange={(v) => setDisc(key, v)} />
+                        <QtyStepper value={qtyOf(key)} onChange={(v) => setQty(key, v)} />
+                        <span className="text-[11px] text-green-600 whitespace-nowrap">stock {item.stock}</span>
+                      </div>
                     </div>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
             </div>
           )}

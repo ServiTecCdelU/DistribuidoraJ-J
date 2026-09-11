@@ -33,6 +33,7 @@ import { repartirStockDisponible } from "@/lib/utils/stock-check";
 import { aplicarEdicionesRemito } from "@/lib/utils/remito-edicion";
 import { ESTADOS_INACTIVOS } from "@/lib/utils/anulacion-pedido";
 import { diffItems, describirCambios } from "@/lib/utils/diff-items";
+import { claveLinea } from "@/lib/utils/clave-linea";
 import { ordersToMoveAll, ordersToMoveSelected } from "@/lib/utils/order-move";
 
 // Pestaña extra (no es un estado de pedido): historial de hojas de ruta archivadas.
@@ -256,13 +257,20 @@ export default function PedidosPage() {
       // y quitar del historial lo que sí se le envía en este remito.
       const clienteId = order.clientId;
       if (clienteId) {
-        const faltantesParaRegistrar = order.items
-          .filter((i: any) => excludeProductIds.includes(i.productId))
-          .map((i: any) => ({ productId: i.productId, name: i.name, quantity: quantities[i.productId] ?? i.quantity }));
+        // Las exclusiones y ediciones vienen identificadas por línea (producto+precio+
+        // descuento); se acepta también el productId por compatibilidad.
+        const estaExcluido = (i: any) =>
+          excludeProductIds.includes(claveLinea(i)) || excludeProductIds.includes(i.productId);
+        const cantidadEditada = (i: any) =>
+          quantities[claveLinea(i)] ?? quantities[i.productId] ?? i.quantity;
+
+        const faltantesParaRegistrar = consolidarItems(order.items as any[])
+          .filter(estaExcluido)
+          .map((i: any) => ({ productId: i.productId, name: i.name, quantity: cantidadEditada(i) }));
         // Incluir tanto los IDs post-reemplazo como los IDs originales para limpiar faltantes
         // aunque el producto A haya sido reemplazado por B (A faltante sigue en la tabla si solo se quita B).
-        const originalIdsNoExcluidos = order.items
-          .filter((i: any) => !excludeProductIds.includes(i.productId))
+        const originalIdsNoExcluidos = consolidarItems(order.items as any[])
+          .filter((i: any) => !estaExcluido(i))
           .map((i: any) => i.productId)
           .filter(Boolean);
         const enviados = [...new Set([
