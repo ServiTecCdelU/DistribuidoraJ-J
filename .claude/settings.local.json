@@ -42,7 +42,9 @@
       "Bash(npx vitest *)",
       "PowerShell(Get-CimInstance *)",
       "Bash(echo \"EXIT_GREP=$?\")",
-      "PowerShell(Get-Process *)"
+      "PowerShell(Get-Process *)",
+      "Bash(python -)",
+      "Bash(git stash *)"
     ]
   },
   "enableAllProjectMcpServers": true,

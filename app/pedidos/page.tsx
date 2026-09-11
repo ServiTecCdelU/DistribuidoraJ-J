@@ -9,13 +9,14 @@ import { DataTableSkeleton } from "@/components/ui/data-table-skeleton";
 import { ClientModal } from "@/components/clientes/client-modal";
 import { ordersApi, salesApi, clientsApi, sellersApi, productsApi, faltantesApi, hojaRutaApi, auditApi } from "@/lib/api";
 import type { Order, OrderStatus, Client, Seller } from "@/lib/types";
-import { Package, Filter, Loader2, ClipboardList, FileText, Eye, ArrowRightCircle, ArrowLeftCircle, Ban, TrendingUp, ChevronDown, ChevronRight, MapPin, Phone, AlertTriangle, Route } from "lucide-react";
+import { Package, Filter, Loader2, ClipboardList, FileText, Eye, ArrowRightCircle, ArrowLeftCircle, Ban, TrendingUp, ChevronDown, ChevronRight, MapPin, Phone, AlertTriangle, Route, XCircle } from "lucide-react";
 import { toast } from "sonner";
 import { useAuth } from "@/hooks/use-auth";
 import { useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabase";
 import { OrdersFilters } from "@/components/pedidos/orders-filters";
 import { HojasRutaPanel } from "@/components/pedidos/hojas-ruta-panel";
+import { AnuladosPanel } from "@/components/pedidos/anulados-panel";
 
 import { OrderDetailModal } from "@/components/pedidos/order-detail-modal";
 import { PaymentModal, type ItemAdjustment } from "@/components/pedidos/payment-modal";
@@ -23,16 +24,19 @@ import { SuccessModal } from "@/components/pedidos/success-modal";
 import { StockCheckModal, type StockCheckItem, type ReplacementOption } from "@/components/pedidos/stock-check-modal";
 import { DiaPagoModal } from "@/components/pedidos/dia-pago-modal";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
+import { Textarea } from "@/components/ui/textarea";
 import { statusConfig } from "@/lib/order-constants";
 import { formatCurrency as formatPrice, formatTime } from "@/lib/utils/format";
 import { salidasRemito, reconciliarCobro, reposicionEliminarRemito, aplicarAjustesAItems } from "@/lib/utils/stock-remito";
 import { consolidarItems } from "@/lib/utils/items-pedido";
 import { repartirStockDisponible } from "@/lib/utils/stock-check";
 import { aplicarEdicionesRemito } from "@/lib/utils/remito-edicion";
+import { ESTADOS_INACTIVOS } from "@/lib/utils/anulacion-pedido";
 import { ordersToMoveAll, ordersToMoveSelected } from "@/lib/utils/order-move";
 
 // Pestaña extra (no es un estado de pedido): historial de hojas de ruta archivadas.
 const HOJAS_RUTA_TAB = "hojas-ruta";
+const ANULADOS_TAB = "anulados";
 
 export const generateOrderNumber = (date: Date, index: number) => {
   const d = new Date(date);
@@ -84,6 +88,7 @@ export default function PedidosPage() {
   // Filtros
   const [filterStatus, setFilterStatus] = useState<string>("pending");
   const isHojasRutaTab = filterStatus === HOJAS_RUTA_TAB;
+  const isAnuladosTab = filterStatus === ANULADOS_TAB;
   const [filterClient, setFilterClient] = useState<string>("");
   const [filterSeller, setFilterSeller] = useState<string>("");
   const [filterTransportista, setFilterTransportista] = useState<string>("");
@@ -113,6 +118,8 @@ export default function PedidosPage() {
   const [heldOrderIds, setHeldOrderIds] = useState<Set<string>>(new Set());
   // Confirmación de eliminación de pedido(s)
   const [pendingDelete, setPendingDelete] = useState<{ ids: string[]; label: string } | null>(null);
+  // Motivo de anulación: obligatorio. Es el dato que se perdía al eliminar el pedido.
+  const [cancelReason, setCancelReason] = useState("");
 
   const toggleHeldOrder = useCallback((orderId: string, clientName: string) => {
     let willHold = false;
@@ -511,35 +518,59 @@ export default function PedidosPage() {
 
   const confirmDelete = useCallback(async () => {
     if (!pendingDelete) return;
-    const { ids, label } = pendingDelete;
+    const { ids } = pendingDelete;
+    const motivo = cancelReason.trim();
+    if (!motivo) {
+      toast.error("Indicá el motivo de la anulación");
+      return;
+    }
+    const responsable = user?.name || user?.email || "Sistema";
     try {
       // Reponer el stock de los pedidos que ya lo tenían descontado (remito generado): al
-      // eliminarse, la mercadería vuelve al depósito. Queda registrado en el historial del producto.
-      const toDelete = orders.filter((o) => ids.includes(o.id));
+      // anularse, la mercadería vuelve al depósito. Queda registrado en el historial del producto.
+      const toCancel = orders.filter((o) => ids.includes(o.id));
       const { registrarMovimiento } = await import("@/services/stock-service");
-      for (const o of toDelete) {
+      for (const o of toCancel) {
         const reposiciones = reposicionEliminarRemito(o.stockDescontado === true, o.items as any[]);
         for (const mov of reposiciones) {
           await registrarMovimiento({
             productoId: mov.productId,
             tipo: "ajuste",
             cantidad: mov.cantidad, // entrada: vuelve al stock
-            referencia: `Eliminación pedido ${o.remitoNumber ?? ""} — ${o.clientName ?? ""}`.trim(),
+            referencia: `Anulación pedido ${o.remitoNumber ?? ""} — ${o.clientName ?? ""}`.trim(),
           });
         }
       }
-      await Promise.all(ids.map((id) => ordersApi.deleteOrder(id)));
-      setOrders((prev) => prev.filter((o) => !ids.includes(o.id)));
+      // El pedido NO se borra: queda anulado con responsable, fecha y motivo.
+      const anulados = await Promise.all(
+        ids.map((id) => ordersApi.cancelOrder(id, responsable, motivo)),
+      );
+      setOrders((prev) => prev.map((o) => anulados.find((a) => a.id === o.id) ?? o));
       setHeldOrderIds((prev) => { const n = new Set(prev); ids.forEach((id) => n.delete(id)); return n; });
       setActiveModal(null);
       setDetailOrder(null);
-      toast.success(ids.length > 1 ? "Pedidos eliminados" : "Pedido eliminado");
-    } catch {
-      toast.error("No se pudo eliminar el pedido");
+
+      if (user) {
+        for (const o of toCancel) {
+          auditApi.log({
+            action: "order_cancelled",
+            userId: user.id,
+            userName: responsable,
+            description: `Anuló el pedido de "${o.clientName ?? "cliente"}"${o.remitoNumber ? ` (${o.remitoNumber})` : ""} — ${motivo}`,
+            entityType: "order",
+            entityId: o.id,
+          });
+        }
+      }
+
+      toast.success(ids.length > 1 ? "Pedidos anulados — stock repuesto" : "Pedido anulado — stock repuesto");
+    } catch (error: any) {
+      toast.error(error?.message || "No se pudo anular el pedido");
     } finally {
       setPendingDelete(null);
+      setCancelReason("");
     }
-  }, [pendingDelete, orders]);
+  }, [pendingDelete, orders, cancelReason, user]);
 
   // handleGenerateInvoice — deshabilitado temporalmente
   const handleGenerateInvoice = useCallback(async (_order: Order) => {}, []);
@@ -602,7 +633,7 @@ export default function PedidosPage() {
         order.remitoPdfBase64 = undefined;
         order.invoicePdfBase64 = undefined;
         setOrders((prev) => {
-          if (order.status === "completed" || order.status === "rechazado") {
+          if (ESTADOS_INACTIVOS.includes(order.status as any)) {
             return prev.filter((o) => o.id !== order.id);
           }
           const exists = prev.some((o) => o.id === order.id);
@@ -1138,7 +1169,7 @@ export default function PedidosPage() {
         return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
       };
       const activos = orders.filter((o) => {
-        if (o.status === "completed" || o.status === "rechazado") return false;
+        if (ESTADOS_INACTIVOS.includes(o.status as any)) return false;
         if (filterStatus !== "all" && o.status !== filterStatus) return false;
         if (filterClient && o.clientId !== filterClient) return false;
         if (filterSeller && o.sellerId !== filterSeller) return false;
@@ -1354,7 +1385,7 @@ tfoot td{border-top:2px solid #1f4e78;background:#f2f2f2;font-weight:700;font-si
     searchQuery,
   ]);
 
-  const activeOrders = useMemo(() => orders.filter((o) => o.status !== "completed" && o.status !== "rechazado"), [orders]);
+  const activeOrders = useMemo(() => orders.filter((o) => !ESTADOS_INACTIVOS.includes(o.status as any)), [orders]);
 
   const filteredOrders = useMemo(() => {
     // Completados van a Ventas — no aparecen en Pedidos
@@ -1901,10 +1932,13 @@ tbody tr:nth-child(even){background:#fafafa}
         sellers={uniqueSellers}
         transportistas={transportistas}
         orders={activeOrders}
-        extraTabs={[{ value: HOJAS_RUTA_TAB, label: "Hojas de Ruta", icon: Route }]}
-        hideSearch={isHojasRutaTab}
+        extraTabs={[
+          { value: HOJAS_RUTA_TAB, label: "Hojas de Ruta", icon: Route },
+          { value: ANULADOS_TAB, label: "Anulados", icon: XCircle },
+        ]}
+        hideSearch={isHojasRutaTab || isAnuladosTab}
       >
-        {!isHojasRutaTab && (<>
+        {!isHojasRutaTab && !isAnuladosTab && (<>
         {hasActiveFilters && (
           <Button
             variant="ghost"
@@ -2004,6 +2038,8 @@ tbody tr:nth-child(even){background:#fafafa}
 
       {isHojasRutaTab ? (
         <HojasRutaPanel />
+      ) : isAnuladosTab ? (
+        <AnuladosPanel />
       ) : loading ? (
         <DataTableSkeleton columns={5} rows={5} />
       ) : filteredOrders.length === 0 ? (
@@ -2301,14 +2337,33 @@ tbody tr:nth-child(even){background:#fafafa}
 
       <ConfirmDialog
         open={!!pendingDelete}
-        onOpenChange={(o) => !o && setPendingDelete(null)}
-        title="Eliminar pedido"
-        description={`¿Eliminar el pedido de ${pendingDelete?.label ?? ""}? Se borra de la base de datos y no se puede deshacer.`}
-        confirmText="Eliminar"
-        cancelText="Cancelar"
+        onOpenChange={(o) => { if (!o) { setPendingDelete(null); setCancelReason(""); } }}
+        title="Anular pedido"
+        description={`El pedido de ${pendingDelete?.label ?? ""} queda registrado como anulado y la mercadería vuelve al stock. No se borra: podés consultarlo en la solapa Anulados.`}
+        confirmText="Anular pedido"
+        cancelText="Volver"
         variant="destructive"
+        confirmDisabled={!cancelReason.trim()}
         onConfirm={confirmDelete}
-      />
+      >
+        <div className="space-y-1.5">
+          <label htmlFor="motivo-anulacion" className="text-sm font-medium text-slate-700">
+            Motivo de la anulación
+          </label>
+          <Textarea
+            id="motivo-anulacion"
+            value={cancelReason}
+            onChange={(e) => setCancelReason(e.target.value)}
+            placeholder="Ej: cargado dos veces por error"
+            className="rounded-2xl resize-none"
+            rows={2}
+            autoFocus
+          />
+          {!cancelReason.trim() && (
+            <p className="text-[11px] text-slate-500">Escribí el motivo para poder anular.</p>
+          )}
+        </div>
+      </ConfirmDialog>
 
       <StockCheckModal
         open={stockCheckOpen}

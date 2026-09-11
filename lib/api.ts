@@ -80,7 +80,8 @@ import {
   markOrderStockDescontado,
   saveBoletaToOrder,
   updateCheckedItems,
-  deleteOrder,
+  cancelOrder,
+  getCancelledOrders,
   deleteRemitoFromOrder,
   setClientOrdersHeld,
   setOrderHeld,
@@ -442,8 +443,12 @@ export const ordersApi = {
   async updateCheckedItems(id: string, checkedItems: string[]): Promise<void> {
     return updateCheckedItems(id, checkedItems)
   },
-  async deleteOrder(id: string): Promise<void> {
-    return deleteOrder(id)
+  // Los pedidos no se borran: se anulan y quedan en la lista de anulados.
+  async cancelOrder(id: string, responsable: string, motivo: string): Promise<Order> {
+    return cancelOrder(id, responsable, motivo)
+  },
+  async getCancelled(): Promise<Order[]> {
+    return getCancelledOrders()
   },
   async deleteRemito(id: string): Promise<Order> {
     return deleteRemitoFromOrder(id)

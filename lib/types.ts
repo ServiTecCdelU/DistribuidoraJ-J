@@ -210,9 +210,13 @@ export interface Order {
   discountType?: "percent" | "fixed";
   createdAt: Date;
   updatedAt: Date;
+  // Anulación: el pedido no se borra, queda con el registro de quién, cuándo y por qué.
+  anuladoAt?: Date;
+  anuladoPor?: string;
+  anuladoMotivo?: string;
 }
 
-export type OrderStatus = "pending" | "preparation" | "delivery" | "completed" | "rechazado";
+export type OrderStatus = "pending" | "preparation" | "delivery" | "completed" | "rechazado" | "anulado";
 
 export interface Seller {
   id: string;

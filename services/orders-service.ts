@@ -2,6 +2,7 @@ import { supabase } from '@/lib/supabase'
 import type { Order, OrderStatus, CartItem, City } from '@/lib/types'
 import { generateReadableId } from '@/services/supabase-helpers'
 import { consolidarItems } from '@/lib/utils/items-pedido'
+import { camposAnulacion, puedeAnularse, type EstadoPedido } from '@/lib/utils/anulacion-pedido'
 
 // Columnas livianas: todo menos los PDFs base64 (remito/boleta), que pesan cientos de KB
 // por fila. Los PDFs se bajan on-demand con getRemitoPdf / getInvoicePdf.
@@ -42,6 +43,9 @@ export function mapOrder(d: Record<string, any>): Order {
     discountType: d.discount_type ?? undefined,
     createdAt: new Date(d.created_at),
     updatedAt: new Date(d.updated_at ?? d.created_at),
+    anuladoAt: d.anulado_at ? new Date(d.anulado_at) : undefined,
+    anuladoPor: d.anulado_por ?? undefined,
+    anuladoMotivo: d.anulado_motivo ?? undefined,
   }
 }
 
@@ -183,9 +187,46 @@ export const removeTransportista = async (id: string): Promise<Order> => {
   return mapOrder(data)
 }
 
-export const deleteOrder = async (id: string): Promise<void> => {
-  const { error } = await supabase.from('pedidos').delete().eq('id', id)
+// Anula un pedido. NO se borra: queda con status 'anulado' y el registro de quién lo anuló,
+// cuándo y por qué, visible en la lista de anulados. La reposición de stock la hace el
+// caller (page.tsx) antes de llamar acá, igual que hacía al eliminar.
+export const cancelOrder = async (
+  id: string,
+  responsable: string,
+  motivo: string,
+): Promise<Order> => {
+  const estadoActual = await supabase
+    .from('pedidos')
+    .select('status')
+    .eq('id', id)
+    .single()
+
+  if (!estadoActual.data) throw new Error('Order not found')
+
+  const permitido = puedeAnularse(estadoActual.data.status as EstadoPedido)
+  if (!permitido.ok) throw new Error(permitido.motivo)
+
+  const { data, error } = await supabase
+    .from('pedidos')
+    .update(camposAnulacion(responsable, motivo))
+    .eq('id', id)
+    .select()
+    .single()
+
   if (error) throw error
+  if (!data) throw new Error('Order not found')
+  return mapOrder(data)
+}
+
+/** Pedidos anulados, del más reciente al más viejo. */
+export const getCancelledOrders = async (): Promise<Order[]> => {
+  const { data } = await supabase
+    .from('pedidos')
+    .select(`${LIGHT_COLUMNS}, anulado_at, anulado_por, anulado_motivo`)
+    .eq('status', 'anulado')
+    .order('anulado_at', { ascending: false })
+
+  return (data ?? []).map(mapOrder)
 }
 
 // Borra el remito de un pedido (numero + PDF) para poder regenerarlo.

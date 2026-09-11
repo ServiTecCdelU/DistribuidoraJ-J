@@ -1,6 +1,6 @@
 // lib/order-constants.ts
 import type { OrderStatus } from "@/types";
-import { Clock, Box, Truck, CheckCircle, Ban } from "lucide-react";
+import { Clock, Box, Truck, CheckCircle, Ban, XCircle } from "lucide-react";
 
 export const statusConfig: Record<
   OrderStatus,
@@ -52,6 +52,16 @@ export const statusConfig: Record<
     bgColor: "bg-red-50",
     borderColor: "border-red-200",
     icon: Ban,
+  },
+  // Anulado ≠ rechazado: el rechazo lo decide el cliente, la anulación corrige un error
+  // de carga. Se diferencian visualmente (slate) para no confundirlos en la lista.
+  anulado: {
+    label: "Anulado",
+    color: "text-slate-700",
+    dotColor: "bg-slate-500",
+    bgColor: "bg-slate-50",
+    borderColor: "border-slate-200",
+    icon: XCircle,
   },
 };
 

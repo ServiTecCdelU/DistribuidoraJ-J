@@ -21,6 +21,8 @@ interface ConfirmDialogProps {
   onConfirm: () => void
   variant?: 'default' | 'destructive'
   confirmDisabled?: boolean
+  /** Contenido extra entre la descripción y los botones (ej. pedir un motivo). */
+  children?: React.ReactNode
 }
 
 export function ConfirmDialog({
@@ -33,6 +35,7 @@ export function ConfirmDialog({
   onConfirm,
   variant = 'default',
   confirmDisabled = false,
+  children,
 }: ConfirmDialogProps) {
   return (
     <AlertDialog open={open} onOpenChange={onOpenChange}>
@@ -41,6 +44,7 @@ export function ConfirmDialog({
           <AlertDialogTitle>{title}</AlertDialogTitle>
           <AlertDialogDescription>{description}</AlertDialogDescription>
         </AlertDialogHeader>
+        {children}
         <AlertDialogFooter>
           <AlertDialogCancel>{cancelText}</AlertDialogCancel>
           <AlertDialogAction
