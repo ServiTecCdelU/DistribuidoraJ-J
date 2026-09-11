@@ -1,4 +1,5 @@
 import { supabase } from '@/lib/supabase'
+import { paginarTodo } from '@/lib/utils/paginar'
 import type { StockMovimiento } from '@/lib/types'
 
 function mapMovimiento(d: Record<string, any>): StockMovimiento {
@@ -118,15 +119,20 @@ export interface ProductoARevisar {
  * registrado como stock_anterior + cantidad < 0.
  */
 export const getProductosARevisar = async (): Promise<ProductoARevisar[]> => {
-  // Candidatos: salidas que quedaron clampeadas en 0.
-  const { data: movs } = await supabase
-    .from('stock_movimientos')
-    .select('mayorista_producto_id, cantidad, stock_anterior, stock_posterior, motivo, created_at')
-    .eq('stock_posterior', 0)
-    .lt('cantidad', 0)
-    .order('created_at', { ascending: false })
+  // Candidatos: salidas que quedaron clampeadas en 0. Paginado: hay 3573 movimientos que
+  // cumplen la condición, sin esto se revisaban solo los 1000 más recientes.
+  const movs = await paginarTodo<Record<string, any>>((desde, hasta) =>
+    supabase
+      .from('stock_movimientos')
+      .select('mayorista_producto_id, cantidad, stock_anterior, stock_posterior, motivo, created_at')
+      .eq('stock_posterior', 0)
+      .lt('cantidad', 0)
+      .order('created_at', { ascending: false })
+      .order('id', { ascending: true }) // desempate: sin orden único la paginación repite filas
+      .range(desde, hasta),
+  )
 
-  if (!movs || movs.length === 0) return []
+  if (movs.length === 0) return []
 
   // Solo los que realmente intentaron descontar más de lo que había.
   const irregulares = movs.filter(

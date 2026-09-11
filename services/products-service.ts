@@ -1,4 +1,5 @@
 import { supabase } from '@/lib/supabase'
+import { paginarTodo } from '@/lib/utils/paginar'
 import type { Product } from '@/lib/types'
 import { generateReadableId } from '@/services/supabase-helpers'
 
@@ -42,21 +43,16 @@ export function invalidateProductsCache(): void {
 }
 
 export const getProducts = async (_forceRefresh = false): Promise<Product[]> => {
-  const all: any[] = []
-  const PAGE = 1000
-  let from = 0
-  while (true) {
-    const { data, error } = await supabase
+  const all = await paginarTodo<Record<string, any>>((desde, hasta) =>
+    supabase
       .from('productos')
       .select('*')
       .order('created_at', { ascending: false })
-      .range(from, from + PAGE - 1)
-    if (error) throw error
-    if (!data || data.length === 0) break
-    all.push(...data)
-    if (data.length < PAGE) break
-    from += PAGE
-  }
+      // Desempate por id: 155 productos comparten created_at (importación en lote) y sin
+      // un orden único la paginación repite unas filas y saltea otras.
+      .order('id', { ascending: true })
+      .range(desde, hasta),
+  )
   return all.map(mapRow)
 }
 

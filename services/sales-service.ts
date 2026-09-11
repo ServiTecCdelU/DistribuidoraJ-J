@@ -1,5 +1,6 @@
 // services/sales-service.ts
 import { supabase } from '@/lib/supabase'
+import { paginarTodo } from '@/lib/utils/paginar'
 import type { CartItem, Sale } from '@/lib/types'
 import { generateReadableId, slugify } from '@/services/supabase-helpers'
 
@@ -68,12 +69,18 @@ function mapSale(d: Record<string, any>): Sale {
 }
 
 export const getSales = async (): Promise<Sale[]> => {
-  const { data } = await supabase
-    .from('ventas')
-    .select('*')
-    .order('created_at', { ascending: false })
+  // Paginado: sin esto devolvía 1000 ventas de 1685 y las páginas de Clientes y Reportes
+  // calculaban sobre datos incompletos sin ningún aviso.
+  const data = await paginarTodo<Record<string, any>>((desde, hasta) =>
+    supabase
+      .from('ventas')
+      .select('*')
+      .order('created_at', { ascending: false })
+      .order('id', { ascending: true }) // desempate: sin orden único la paginación repite filas
+      .range(desde, hasta),
+  )
 
-  return (data ?? []).map(mapSale)
+  return data.map(mapSale)
 }
 
 export const getSalesBySeller = async (sellerId: string): Promise<Sale[]> => {

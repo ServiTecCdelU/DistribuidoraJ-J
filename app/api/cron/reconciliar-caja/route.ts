@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabase-admin";
 import { agregarDesglose } from "@/lib/utils/caja-desglose";
+import { paginarTodo } from "@/lib/utils/paginar";
 
 // Reconciliación de caja por horario fijo 06:00–23:00 (hora Argentina, UTC-3).
 // Pensado para ser invocado por un scheduler (Supabase pg_cron vía pg_net), de modo que la
@@ -94,13 +95,18 @@ async function reconciliar() {
 
   const limite = utcFromLocal(hoy.y, hoy.m, hoy.d - LIMITE_DIAS, 0);
 
-  // Ventas con remito del rango (solo estas suman a la caja).
-  const { data: ventasRaw } = await supabaseAdmin
-    .from("ventas")
-    .select("created_at,total,payment_type,payment_method,cash_amount,credit_amount,efectivo_amount,transferencia_amount,remito_number")
-    .not("remito_number", "is", null)
-    .gte("created_at", limite.toISOString());
-  const ventas = (ventasRaw || []) as Sale[];
+  // Ventas con remito del rango (solo estas suman a la caja). Paginado: sin esto PostgREST
+  // corta en 1000 filas sin avisar y las cajas cerrarían con totales incompletos.
+  const ventas = await paginarTodo<Sale>((desde, hasta) =>
+    supabaseAdmin
+      .from("ventas")
+      .select("created_at,total,payment_type,payment_method,cash_amount,credit_amount,efectivo_amount,transferencia_amount,remito_number")
+      .not("remito_number", "is", null)
+      .gte("created_at", limite.toISOString())
+      .order("created_at", { ascending: true })
+      .order("id", { ascending: true }) // desempate: sin orden único la paginación repite filas
+      .range(desde, hasta),
+  );
 
   // 1) Cerrar cajas abiertas cuyo cierre (23:00 de su día) ya pasó.
   const { data: abiertas } = await supabaseAdmin

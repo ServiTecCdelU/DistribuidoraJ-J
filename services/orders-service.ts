@@ -1,4 +1,5 @@
 import { supabase } from '@/lib/supabase'
+import { paginarTodo } from '@/lib/utils/paginar'
 import type { Order, OrderStatus, CartItem, City } from '@/lib/types'
 import { generateReadableId } from '@/services/supabase-helpers'
 import { consolidarItems } from '@/lib/utils/items-pedido'
@@ -50,12 +51,17 @@ export function mapOrder(d: Record<string, any>): Order {
 }
 
 export const getOrders = async (): Promise<Order[]> => {
-  const { data } = await supabase
-    .from('pedidos')
-    .select('*')
-    .order('created_at', { ascending: false })
+  // Paginado: sin esto devolvía 1000 pedidos de 1739 y el resto no aparecía en ningún lado.
+  const data = await paginarTodo<Record<string, any>>((desde, hasta) =>
+    supabase
+      .from('pedidos')
+      .select('*')
+      .order('created_at', { ascending: false })
+      .order('id', { ascending: true }) // desempate: sin orden único la paginación repite filas
+      .range(desde, hasta),
+  )
 
-  return (data ?? []).map(mapOrder)
+  return data.map(mapOrder)
 }
 
 // Pedidos activos para la página de Pedidos: sin completados/rechazados y SIN los
