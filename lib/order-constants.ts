@@ -1,5 +1,5 @@
 // lib/order-constants.ts
-import type { OrderStatus } from "@/types";
+import type { OrderStatus } from "@/lib/types";
 import { Clock, Box, Truck, CheckCircle, Ban, XCircle } from "lucide-react";
 
 export const statusConfig: Record<
