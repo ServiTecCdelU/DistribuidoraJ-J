@@ -1069,8 +1069,10 @@ ${bloques}
     const c = selectedClient
     const esc = (s: string) => String(s ?? '').replace(/[&<>]/g, (ch) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' }[ch] as string))
 
-    const minorista = ordenarLibroMayor(clientTransactions.filter((t) => (t.cuenta ?? 'minorista') === 'minorista'))
-    const mayorista = ordenarLibroMayor(clientTransactions.filter((t) => t.cuenta === 'mayorista'))
+    // Los movimientos anulados no forman parte del extracto (igual que en la tabla en pantalla).
+    const vigentes = clientTransactions.filter((t) => !t.anulado)
+    const minorista = ordenarLibroMayor(vigentes.filter((t) => (t.cuenta ?? 'minorista') === 'minorista'))
+    const mayorista = ordenarLibroMayor(vigentes.filter((t) => t.cuenta === 'mayorista'))
 
     const salesById = new Map(clientSales.map((s) => [s.id, s]))
     const balanceMin = c.currentBalance
