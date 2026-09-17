@@ -45,7 +45,8 @@
       "PowerShell(Get-Process *)",
       "Bash(python -)",
       "Bash(git stash *)",
-      "Bash(git worktree *)"
+      "Bash(git worktree *)",
+      "PowerShell(node ./node_modules/vitest/vitest.mjs run services/devoluciones-service.test.ts 2>&1 | Select-Object -Last 30)"
     ]
   },
   "enableAllProjectMcpServers": true,

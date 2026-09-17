@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import {
   Dialog,
   DialogContent,
@@ -41,6 +41,7 @@ export function ModalDevolucion({ abierto, venta, onCerrar, onRegistrada }: Moda
   const [montoLibre, setMontoLibre] = useState<number>(0);
   const [nota, setNota] = useState("");
   const [destinoSaldo, setDestinoSaldo] = useState<"cuenta_corriente" | "solo_nota">("cuenta_corriente");
+  const [ccHabilitada, setCcHabilitada] = useState(true);
 
   // Inicializar filas cuando se abre con una venta nueva
   const ventaId = venta?.id ?? null;
@@ -65,6 +66,28 @@ export function ModalDevolucion({ abierto, venta, onCerrar, onRegistrada }: Moda
   }
 
   const tieneCliente = !!venta?.clientId;
+
+  // Clientes de contado (sin cta cte habilitada): la nota de crédito va en efectivo.
+  // No puede quedar a favor en cuenta corriente porque nunca se compensaría.
+  useEffect(() => {
+    if (!abierto || !venta?.clientId) {
+      setCcHabilitada(true);
+      return;
+    }
+    let vigente = true;
+    clientsApi
+      .getById(venta.clientId)
+      .then((cli) => {
+        if (!vigente) return;
+        const habilitada = cli?.cuentaCorrienteHabilitada !== false;
+        setCcHabilitada(habilitada);
+        if (!habilitada) setDestinoSaldo("solo_nota");
+      })
+      .catch(() => {});
+    return () => {
+      vigente = false;
+    };
+  }, [abierto, venta?.clientId]);
 
   const total = useMemo(
     () => (modo === "productos" ? filas.reduce((acc, f) => acc + f.precioUnit * f.cantidad, 0) : montoLibre),
@@ -318,12 +341,13 @@ export function ModalDevolucion({ abierto, venta, onCerrar, onRegistrada }: Moda
               <div className="flex items-center gap-2">
                 <button
                   type="button"
+                  disabled={!ccHabilitada}
                   onClick={() => setDestinoSaldo("cuenta_corriente")}
                   className={`flex-1 text-xs font-medium py-2 rounded-xl border transition-colors ${
                     destinoSaldo === "cuenta_corriente"
                       ? "bg-teal-50 border-teal-300 text-teal-700"
                       : "border-border text-muted-foreground hover:bg-muted"
-                  }`}
+                  } ${!ccHabilitada ? "opacity-40 cursor-not-allowed hover:bg-transparent" : ""}`}
                 >
                   A favor en C.C.
                 </button>
@@ -339,7 +363,12 @@ export function ModalDevolucion({ abierto, venta, onCerrar, onRegistrada }: Moda
                   Devuelto en efectivo
                 </button>
               </div>
-              {destinoSaldo === "solo_nota" && (
+              {!ccHabilitada && (
+                <p className="text-[11px] text-amber-600 px-1 mt-1">
+                  Cliente de contado (sin cuenta corriente): la devolución es en efectivo.
+                </p>
+              )}
+              {ccHabilitada && destinoSaldo === "solo_nota" && (
                 <p className="text-[11px] text-muted-foreground px-1 mt-1">
                   Se guarda como nota, pero no es a favor. No modifica la cuenta corriente del cliente.
                 </p>

@@ -59,7 +59,11 @@ describe("registrarDevolucion", () => {
     registrarMovimientoMock.mockClear();
     recomputarSaldosDeudasMock.mockClear();
     queues.devoluciones = [{ count: 0 }];
-    queues.clientes = [{ data: { current_balance: 1000 } }];
+    // 1ra consulta: flag de cta cte; 2da: saldo actual
+    queues.clientes = [
+      { data: { cuenta_corriente_habilitada: true } },
+      { data: { current_balance: 1000 } },
+    ];
     queues.transacciones = [{ data: null }];
   });
 
@@ -126,6 +130,26 @@ describe("registrarDevolucion", () => {
     expect(dev.total).toBe(1500);
     expect(dev.affectsBalance).toBe(false);
     expect(inserts.transacciones).toBeUndefined();
+  });
+
+  it("cliente sin cuenta corriente habilitada: la nota de crédito no genera saldo a favor", async () => {
+    queues.clientes = [{ data: { cuenta_corriente_habilitada: false } }];
+
+    const dev = await registrarDevolucion({
+      saleId: "venta_1",
+      saleNumber: "100",
+      clientId: "cliente_contado",
+      clientName: "Kiosco Matias",
+      sellerId: "vendedor_1",
+      monto: 4000,
+      note: "Producto vencido",
+      affectsBalance: true,
+    });
+
+    expect(dev.total).toBe(4000);
+    expect(dev.affectsBalance).toBe(false);
+    expect(inserts.transacciones).toBeUndefined();
+    expect(inserts.devoluciones?.[0].affects_balance).toBe(false);
   });
 
   it("lanza error si no hay productos ni monto", async () => {

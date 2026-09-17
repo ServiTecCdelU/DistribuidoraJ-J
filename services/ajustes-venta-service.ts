@@ -125,7 +125,18 @@ export async function registrarDescuentoVenta(data: {
 }): Promise<DescuentoVenta> {
   const monto = round2(data.monto)
   if (!(monto > 0)) throw new Error('El descuento debe ser mayor a 0')
-  const affectsBalance = data.affectsBalance !== false
+  // Clientes de contado (sin cuenta corriente habilitada): el descuento se devuelve
+  // en efectivo, nunca como saldo a favor en cta cte (quedaba crédito fantasma).
+  let ccHabilitada = true
+  if (data.clientId) {
+    const { data: cli } = await supabase
+      .from('clientes')
+      .select('cuenta_corriente_habilitada')
+      .eq('id', data.clientId)
+      .single()
+    ccHabilitada = cli?.cuenta_corriente_habilitada !== false
+  }
+  const affectsBalance = data.affectsBalance !== false && ccHabilitada
 
   const commissionRate = await getCommissionRate(data.sellerId)
   const commissionAmount = calcularComisionDescuento(monto, commissionRate)

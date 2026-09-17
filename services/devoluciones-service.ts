@@ -79,7 +79,20 @@ export async function registrarDevolucion(data: {
   }
 
   const total = items.length > 0 ? items.reduce((acc, i) => acc + i.price * i.quantity, 0) : montoLibre
-  const affectsBalance = data.affectsBalance !== false
+
+  // Clientes de contado (sin cuenta corriente habilitada): la nota de crédito se
+  // devuelve en efectivo. Nunca debe generar saldo a favor en cta cte, porque no
+  // hay venta futura en CC donde compensarlo (quedaba como crédito fantasma).
+  let ccHabilitada = true
+  if (data.clientId) {
+    const { data: cli } = await supabase
+      .from('clientes')
+      .select('cuenta_corriente_habilitada')
+      .eq('id', data.clientId)
+      .single()
+    ccHabilitada = cli?.cuenta_corriente_habilitada !== false
+  }
+  const affectsBalance = data.affectsBalance !== false && ccHabilitada
 
   // Tasa de comisión del vendedor (para descontar lo que se le había generado)
   let commissionRate = 0
