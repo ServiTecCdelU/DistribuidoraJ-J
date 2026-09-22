@@ -100,7 +100,7 @@ import {
   getClientesActividad,
   getDeudoresAntiguedad,
 } from '@/services/dashboard-service'
-import { logAudit, getAuditLog } from '@/services/audit-service'
+import { logAudit, getAuditLog, searchAuditLog, getAuditOrdersInfo } from '@/services/audit-service'
 import {
   getPriceLists,
   createPriceList,
@@ -543,6 +543,8 @@ export const dashboardApi = {
 export const auditApi = {
   log: logAudit,
   getAll: getAuditLog,
+  search: searchAuditLog,
+  getOrdersInfo: getAuditOrdersInfo,
 }
 
 export const priceListApi = {

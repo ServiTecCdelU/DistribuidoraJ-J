@@ -15,9 +15,9 @@ const movimientoSchema = z.object({
 
 export async function POST(
   req: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
-  const productId = params.id
+  const productId = (await params).id
   const mayoristId = productId.replace(/^prod_/, '')
 
   const parsed = await parseJsonBody(req, movimientoSchema)

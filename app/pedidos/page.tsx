@@ -32,7 +32,7 @@ import { consolidarItems } from "@/lib/utils/items-pedido";
 import { repartirStockDisponible } from "@/lib/utils/stock-check";
 import { aplicarEdicionesRemito } from "@/lib/utils/remito-edicion";
 import { ESTADOS_INACTIVOS } from "@/lib/utils/anulacion-pedido";
-import { diffItems, describirCambios } from "@/lib/utils/diff-items";
+import { diffItems, describirCambios, notaFaltantes, faltantesDeCambios } from "@/lib/utils/diff-items";
 import { claveLinea } from "@/lib/utils/clave-linea";
 import { ordersToMoveAll, ordersToMoveSelected } from "@/lib/utils/order-move";
 
@@ -298,10 +298,37 @@ export default function PedidosPage() {
         });
       }
 
+      // Si el remito sale con faltantes, el transportista tiene que enterarse: queda como
+      // nota del pedido (se ve en reparto) y con su propio registro en la auditoría.
+      const nota = notaFaltantes(cambiosItems);
+      const notasPedido = nota
+        ? [order.notes?.replace(/FALTANTES EN LA CARGA:[^\n]*/g, "").trim(), nota]
+            .filter(Boolean)
+            .join("\n")
+        : order.notes;
+      if (nota && user) {
+        auditApi.log({
+          action: "order_items_edited",
+          userId: user.id,
+          userName: user.name || user.email,
+          description: `Remito de "${order.clientName}" generado con faltantes — ${nota}`,
+          entityType: "order",
+          entityId: order.id,
+          metadata: {
+            remitoNumber: order.remitoNumber ?? null,
+            faltantes: faltantesDeCambios(cambiosItems),
+            nota,
+          },
+        });
+      }
+
       // Trazabilidad 1 pedido = 1 remito = 1 venta: el remito se genera SOLO sobre este pedido.
       // No se consolidan ni se borran otros pedidos del cliente.
-      await supabase.from("pedidos").update({ items: filteredItems }).eq("id", order.id);
-      order = { ...order, items: filteredItems as Order["items"] };
+      await supabase
+        .from("pedidos")
+        .update({ items: filteredItems, ...(nota ? { notes: notasPedido } : {}) })
+        .eq("id", order.id);
+      order = { ...order, items: filteredItems as Order["items"], notes: notasPedido };
       setOrders((prev) => prev.map((o) => (o.id === order.id ? order : o)));
       if (detailOrder?.id === order.id) setDetailOrder(order);
 

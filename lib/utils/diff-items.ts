@@ -83,6 +83,32 @@ export function diffItems(antes: ItemDiff[], despues: ItemDiff[]): Cambio[] {
   return cambios
 }
 
+/** Cambios que implican que al cliente le va MENOS mercadería de la que pidió. */
+export function faltantesDeCambios(cambios: Cambio[]): Cambio[] {
+  return cambios.filter(
+    (c) =>
+      c.tipo === 'quitado' ||
+      (c.tipo === 'cantidad' && (c.despues ?? 0) < (c.antes ?? 0)),
+  )
+}
+
+/**
+ * Nota para el transportista cuando el remito sale con faltantes.
+ * Se guarda en el pedido para que se vea en reparto y queda en la auditoría.
+ */
+export function notaFaltantes(cambios: Cambio[]): string {
+  const faltantes = faltantesDeCambios(cambios)
+  if (faltantes.length === 0) return ''
+  const detalle = faltantes
+    .map((c) =>
+      c.tipo === 'quitado'
+        ? `${c.name} (no se envía, pidió ${c.antes})`
+        : `${c.name} (${c.despues} de ${c.antes})`,
+    )
+    .join('; ')
+  return `FALTANTES EN LA CARGA: ${detalle}`
+}
+
 function textoCambio(c: Cambio): string {
   switch (c.tipo) {
     case 'agregado':

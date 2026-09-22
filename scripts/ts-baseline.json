@@ -1,5 +1,4 @@
 {
-  ".next/dev/types/validator.ts": 1,
   "app/api/facturacion/comprobantes/route.ts": 2,
   "app/api/generate-pdf/route.ts": 1,
   "app/empleados/page.tsx": 1,
