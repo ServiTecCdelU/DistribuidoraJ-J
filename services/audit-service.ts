@@ -112,6 +112,7 @@ export interface AuditOrderInfo {
   remitoNumber?: string
   status?: string
   saleId?: string
+  saleNumber?: string
   notes?: string
   createdAt?: Date
 }
@@ -124,6 +125,17 @@ export const getAuditOrdersInfo = async (ids: string[]): Promise<Record<string, 
     .select('id, client_name, remito_number, status, sale_id, notes, created_at')
     .in('id', ids)
 
+  // Si el pedido ya se cobró, el número de venta es lo que busca el operador.
+  const saleIds = (data ?? []).map((d) => d.sale_id).filter(Boolean)
+  const numerosVenta: Record<string, string> = {}
+  if (saleIds.length > 0) {
+    const { data: ventas } = await supabase
+      .from('ventas')
+      .select('id, sale_number')
+      .in('id', saleIds)
+    for (const v of ventas ?? []) numerosVenta[v.id] = v.sale_number ?? ''
+  }
+
   const mapa: Record<string, AuditOrderInfo> = {}
   for (const d of data ?? []) {
     mapa[d.id] = {
@@ -132,6 +144,7 @@ export const getAuditOrdersInfo = async (ids: string[]): Promise<Record<string, 
       remitoNumber: d.remito_number ?? undefined,
       status: d.status ?? undefined,
       saleId: d.sale_id ?? undefined,
+      saleNumber: d.sale_id ? numerosVenta[d.sale_id] || undefined : undefined,
       notes: d.notes ?? undefined,
       createdAt: d.created_at ? new Date(d.created_at) : undefined,
     }

@@ -26,7 +26,8 @@ import {
   DollarSign,
 } from "lucide-react";
 import { auditApi } from "@/lib/api";
-import type { AuditEntry, AuditAction } from "@/lib/types";
+import type { AuditEntry, AuditAction, OrderStatus } from "@/lib/types";
+import { statusConfig } from "@/lib/order-constants";
 import type { AuditOrderInfo } from "@/services/audit-service";
 import { agruparPorPedido, textoNovedad } from "@/lib/utils/audit-pedidos";
 import { Button } from "@/components/ui/button";
@@ -245,6 +246,9 @@ export default function AuditoriaPage() {
               const remito = info?.remitoNumber || g.remitoNumber;
               const saleId = info?.saleId || g.saleId;
               const abierto = expandidos.has(g.orderId) || grupos.length === 1;
+              const estado = info?.status
+                ? statusConfig[info.status as OrderStatus]
+                : undefined;
               return (
                 <Card key={g.orderId} className="rounded-2xl overflow-hidden">
                   <CardHeader
@@ -264,6 +268,32 @@ export default function AuditoriaPage() {
                             </Badge>
                           )}
                         </CardTitle>
+                        <div className="flex items-center gap-2 flex-wrap mt-1.5">
+                          <Badge variant="outline" className="text-[10px] font-mono">
+                            Pedido {g.orderId}
+                          </Badge>
+                          {estado && (
+                            <Badge
+                              variant="outline"
+                              className={`text-[10px] ${estado.color} ${estado.bgColor} ${estado.borderColor}`}
+                            >
+                              {estado.label}
+                            </Badge>
+                          )}
+                          {info?.saleNumber ? (
+                            <Badge className="text-[10px] bg-emerald-600 hover:bg-emerald-600">
+                              Venta {info.saleNumber}
+                            </Badge>
+                          ) : saleId ? (
+                            <Badge className="text-[10px] bg-emerald-600 hover:bg-emerald-600">
+                              Pasó a ventas
+                            </Badge>
+                          ) : (
+                            <Badge variant="outline" className="text-[10px] text-muted-foreground">
+                              Sin cobrar
+                            </Badge>
+                          )}
+                        </div>
                         <p className="text-xs text-muted-foreground mt-1">
                           {g.entries.length} movimiento{g.entries.length === 1 ? "" : "s"} ·{" "}
                           {formatDateTime(g.ultima)}
