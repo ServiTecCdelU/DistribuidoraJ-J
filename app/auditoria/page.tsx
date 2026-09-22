@@ -59,6 +59,7 @@ export default function AuditoriaPage() {
   const [search, setSearch] = useState("");
   const [actionFilter, setActionFilter] = useState("all");
   const [selectedDate, setSelectedDate] = useState("");
+  const [dateTo, setDateTo] = useState("");
 
   useEffect(() => {
     if (!selectedDate) {
@@ -69,7 +70,7 @@ export default function AuditoriaPage() {
     const loadData = async () => {
       setLoading(true);
       try {
-        const data = await auditApi.getAll(selectedDate);
+        const data = await auditApi.getAll(selectedDate, dateTo || undefined);
         if (!mounted) return;
         setEntries(data);
       } catch (error) {
@@ -82,7 +83,7 @@ export default function AuditoriaPage() {
     };
     loadData();
     return () => { mounted = false; };
-  }, [selectedDate]);
+  }, [selectedDate, dateTo]);
 
   const filtered = useMemo(() => {
     return entries.filter((e) => {
@@ -120,12 +121,25 @@ export default function AuditoriaPage() {
         <Card>
           <CardContent className="p-4">
             <div className="flex flex-col sm:flex-row gap-3">
-              <Input
-                type="date"
-                value={selectedDate}
-                onChange={(e) => setSelectedDate(e.target.value)}
-                className="w-full sm:w-[200px]"
-              />
+              <div className="flex items-center gap-2">
+                <Input
+                  type="date"
+                  value={selectedDate}
+                  onChange={(e) => setSelectedDate(e.target.value)}
+                  className="w-full sm:w-[160px]"
+                  title="Desde"
+                />
+                <span className="text-muted-foreground text-sm">a</span>
+                <Input
+                  type="date"
+                  value={dateTo}
+                  min={selectedDate || undefined}
+                  onChange={(e) => setDateTo(e.target.value)}
+                  className="w-full sm:w-[160px]"
+                  disabled={!selectedDate}
+                  title="Hasta (opcional)"
+                />
+              </div>
               <div className="relative flex-1">
                 <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
                 <Input
@@ -159,7 +173,7 @@ export default function AuditoriaPage() {
               <Shield className="h-12 w-12 text-muted-foreground mb-4" />
               <h3 className="text-lg font-semibold mb-1">Seleccioná una fecha</h3>
               <p className="text-muted-foreground text-sm">
-                Elegí un día para consultar los movimientos de auditoría de esa fecha
+                Elegí un día, o un rango "desde / hasta", para consultar los movimientos de auditoría
               </p>
             </CardContent>
           </Card>

@@ -29,9 +29,14 @@ export const logAudit = async (entry: {
   }
 }
 
-export const getAuditLog = async (date: string, maxEntries = 500): Promise<AuditEntry[]> => {
-  const start = new Date(`${date}T00:00:00`)
-  const end = new Date(`${date}T23:59:59.999`)
+export const getAuditLog = async (
+  date: string,
+  dateTo?: string,
+  maxEntries = 1000,
+): Promise<AuditEntry[]> => {
+  const [from, to] = dateTo && dateTo < date ? [dateTo, date] : [date, dateTo || date]
+  const start = new Date(`${from}T00:00:00`)
+  const end = new Date(`${to}T23:59:59.999`)
 
   const { data } = await supabase
     .from('auditoria')

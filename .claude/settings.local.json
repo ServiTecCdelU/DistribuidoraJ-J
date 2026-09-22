@@ -46,7 +46,9 @@
       "Bash(python -)",
       "Bash(git stash *)",
       "Bash(git worktree *)",
-      "PowerShell(node ./node_modules/vitest/vitest.mjs run services/devoluciones-service.test.ts 2>&1 | Select-Object -Last 30)"
+      "PowerShell(node ./node_modules/vitest/vitest.mjs run services/devoluciones-service.test.ts 2>&1 | Select-Object -Last 30)",
+      "PowerShell(node scripts/diag-marcela-n1361.js 2>&1 | Select-Object -Skip 2 -First 60)",
+      "PowerShell(node scripts/fix-marcela-saldo-fantasma.js 2>&1 | Select-Object -Skip 2)"
     ]
   },
   "enableAllProjectMcpServers": true,
