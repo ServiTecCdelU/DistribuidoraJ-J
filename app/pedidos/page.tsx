@@ -2215,6 +2215,9 @@ tbody tr:nth-child(even){background:#fafafa}
                             <th className="px-4 py-2 text-left">Cliente</th>
                             <th className="px-4 py-2 text-left w-36">Vendedor</th>
                             <th className="px-4 py-2 text-left">Dirección</th>
+                            {filterStatus === "delivery" && (
+                              <th className="px-4 py-2 text-center w-28">Hoja de ruta</th>
+                            )}
                             <th className="px-4 py-2 text-center w-32">Deuda</th>
                             <th className="px-4 py-2 text-center w-36">Estado</th>
                           </tr>
@@ -2278,6 +2281,21 @@ tbody tr:nth-child(even){background:#fafafa}
                                   </p>
                                   {displayOrder.city && <p className="text-[10px] text-muted-foreground/70">{displayOrder.city}</p>}
                                 </td>
+                                {filterStatus === "delivery" && (
+                                  <td className="px-4 py-2.5 text-center">
+                                    {(() => {
+                                      // Un cliente puede tener varios pedidos y salir en hojas distintas.
+                                      const hojas = [...new Set(clientOrders.map((o) => o.hojaRutaNumber).filter(Boolean))];
+                                      return hojas.length > 0 ? (
+                                        <span className="inline-flex items-center rounded-full bg-teal-50 border border-teal-200 px-2 py-0.5 text-xs font-semibold text-teal-700">
+                                          HR {hojas.join(" / ")}
+                                        </span>
+                                      ) : (
+                                        <span className="text-[10px] text-muted-foreground italic">Sin hoja</span>
+                                      );
+                                    })()}
+                                  </td>
+                                )}
                                 <td className="px-4 py-2.5 text-center">
                                   {deuda > 0 ? (
                                     <div>
@@ -2367,6 +2385,12 @@ tbody tr:nth-child(even){background:#fafafa}
                                 {codigo && <span>({codigo}) · </span>}
                                 {mergedItems.length} {mergedItems.length === 1 ? "producto" : "productos"} · {totalUnidades} u.
                                 {clientOrders.length > 1 && ` · ${clientOrders.length} pedidos`}
+                                {(() => {
+                                  const hojas = [...new Set(clientOrders.map((o) => o.hojaRutaNumber).filter(Boolean))];
+                                  return hojas.length > 0 ? (
+                                    <span className="text-teal-700 font-semibold"> · HR {hojas.join(" / ")}</span>
+                                  ) : null;
+                                })()}
                                 {notas.length > 0 && <span className="text-amber-700 italic"> · 📝 {notas.join(" · ")}</span>}
                               </p>
                             </div>

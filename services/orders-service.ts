@@ -10,7 +10,7 @@ import { camposAnulacion, puedeAnularse, type EstadoPedido } from '@/lib/utils/a
 const LIGHT_COLUMNS =
   'id, sale_id, client_id, client_name, client_phone, client_email, seller_id, seller_name, ' +
   'transportista_id, transportista_name, source, items, status, city, address, lat, lng, delivery_method, ' +
-  'remito_number, stock_descontado, invoice_number, checked_items, held, notes, discount, discount_type, created_at, updated_at'
+  'remito_number, hoja_ruta_number, stock_descontado, invoice_number, checked_items, held, notes, discount, discount_type, created_at, updated_at'
 
 export function mapOrder(d: Record<string, any>): Order {
   return {
@@ -34,6 +34,7 @@ export function mapOrder(d: Record<string, any>): Order {
     deliveryMethod: d.delivery_method ?? undefined,
     remitoNumber: d.remito_number ?? undefined,
     remitoPdfBase64: d.remito_pdf_base64 ?? undefined,
+    hojaRutaNumber: d.hoja_ruta_number ?? undefined,
     stockDescontado: d.stock_descontado ?? false,
     invoiceNumber: d.invoice_number ?? undefined,
     invoicePdfBase64: d.invoice_pdf_base64 ?? undefined,
