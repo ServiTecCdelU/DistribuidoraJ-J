@@ -179,6 +179,21 @@ export const assignTransportista = async (id: string, transportistaId: string, t
   return mapOrder(data)
 }
 
+export const assignSeller = async (id: string, sellerId: string, sellerName: string): Promise<Order> => {
+  const { data } = await supabase
+    .from('pedidos')
+    .update({
+      seller_id: sellerId,
+      seller_name: sellerName,
+    })
+    .eq('id', id)
+    .select()
+    .single()
+
+  if (!data) throw new Error('Order not found')
+  return mapOrder(data)
+}
+
 export const removeTransportista = async (id: string): Promise<Order> => {
   const { data } = await supabase
     .from('pedidos')

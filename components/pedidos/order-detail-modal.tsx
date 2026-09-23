@@ -79,6 +79,7 @@ interface OrderDetailModalProps {
   onGenerateInvoice?: (order: Order) => Promise<void>;
   onAssignTransportista?: (orderId: string, transportistaId: string, transportistaName: string) => void;
   onRemoveTransportista?: (orderId: string) => void;
+  onAssignSeller?: (orderId: string, sellerId: string, sellerName: string) => void;
   sellers?: Seller[];
   generatingDoc?: boolean;
   userRole?: string;
@@ -99,6 +100,7 @@ export function OrderDetailModal({
   onGenerateInvoice,
   onAssignTransportista,
   onRemoveTransportista,
+  onAssignSeller,
   sellers = [],
   userRole,
   onHacerPedido,
@@ -109,10 +111,16 @@ export function OrderDetailModal({
   const router = useRouter();
   const [selectedTransportista, setSelectedTransportista] = useState<string>("");
   const [showTransportistaSelect, setShowTransportistaSelect] = useState(false);
+  const [showSellerSelect, setShowSellerSelect] = useState(false);
+  const [selectedSeller, setSelectedSeller] = useState<string>("");
 
   // Autoseleccionar si hay un solo transportista
   const transportistasFiltered = useMemo(
     () => sellers.filter((s) => s.employeeType === "transportista" || s.employeeType === "ambos"),
+    [sellers]
+  );
+  const vendedoresFiltered = useMemo(
+    () => sellers.filter((s) => s.employeeType === "vendedor" || s.employeeType === "ambos"),
     [sellers]
   );
   useEffect(() => {
@@ -131,7 +139,7 @@ export function OrderDetailModal({
 
   const puedeEditarDesc = userRole === "admin" && order?.status === "pending" && !!onUpdateItems;
 
-  useEffect(() => { setShowProducts(false); }, [order?.id]);
+  useEffect(() => { setShowProducts(false); setShowSellerSelect(false); setSelectedSeller(""); }, [order?.id]);
   useEffect(() => {
     const initDesc: Record<number, number> = {};
     const initQty: Record<number, number> = {};
@@ -187,6 +195,16 @@ export function OrderDetailModal({
       onAssignTransportista(order.id, t.id, t.name);
       setShowTransportistaSelect(false);
       setSelectedTransportista("");
+    }
+  };
+
+  const handleAssignSeller = () => {
+    if (!selectedSeller || !onAssignSeller) return;
+    const s = vendedoresFiltered.find((v) => v.id === selectedSeller);
+    if (s) {
+      onAssignSeller(order.id, s.id, s.name);
+      setShowSellerSelect(false);
+      setSelectedSeller("");
     }
   };
 
@@ -304,11 +322,44 @@ export function OrderDetailModal({
                   </td>
                 </tr>
                 <tr className="border-b border-gray-100">
-                  <td className="px-3 py-2 bg-gray-50 text-[11px] font-semibold text-gray-500 uppercase whitespace-nowrap">
+                  <td className="px-3 py-2 bg-gray-50 text-[11px] font-semibold text-gray-500 uppercase whitespace-nowrap align-top">
                     Vendedor
                   </td>
-                  <td className="px-3 py-2 font-medium text-gray-900 text-sm truncate max-w-0">
-                    {order.sellerName || <span className="text-gray-400 italic text-xs">Sin asignar</span>}
+                  <td className="px-3 py-2 font-medium text-gray-900 text-sm">
+                    {showSellerSelect ? (
+                      <div className="flex items-center gap-1.5">
+                        <Select value={selectedSeller} onValueChange={setSelectedSeller}>
+                          <SelectTrigger className="h-8 text-xs">
+                            <SelectValue placeholder="Elegir vendedor" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {vendedoresFiltered.map((s) => (
+                              <SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                        <Button size="sm" className="h-8 px-2 text-xs shrink-0" disabled={!selectedSeller} onClick={handleAssignSeller}>
+                          Guardar
+                        </Button>
+                        <Button size="sm" variant="ghost" className="h-8 px-2 text-xs shrink-0" onClick={() => { setShowSellerSelect(false); setSelectedSeller(""); }}>
+                          Cancelar
+                        </Button>
+                      </div>
+                    ) : (
+                      <div className="flex items-center gap-2 min-w-0">
+                        <span className="truncate">
+                          {order.sellerName || <span className="text-gray-400 italic text-xs">Sin asignar</span>}
+                        </span>
+                        {onAssignSeller && userRole === "admin" && !readOnly && (
+                          <button
+                            className="text-[11px] text-primary font-medium shrink-0 hover:underline"
+                            onClick={() => setShowSellerSelect(true)}
+                          >
+                            Cambiar
+                          </button>
+                        )}
+                      </div>
+                    )}
                   </td>
                 </tr>
                 <tr className="border-b border-gray-100">

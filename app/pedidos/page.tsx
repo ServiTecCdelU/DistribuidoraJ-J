@@ -706,6 +706,17 @@ export default function PedidosPage() {
     }
   }, [detailOrder]);
 
+  const handleAssignSeller = useCallback(async (orderId: string, sellerId: string, sellerName: string) => {
+    try {
+      const updated = await ordersApi.assignSeller(orderId, sellerId, sellerName);
+      setOrders((prev) => prev.map((o) => (o.id === orderId ? updated : o)));
+      if (detailOrder?.id === orderId) setDetailOrder(updated);
+      toast.success("Vendedor actualizado");
+    } catch (error) {
+      toast.error("Error al cambiar el vendedor");
+    }
+  }, [detailOrder]);
+
   const handleUpdateItems = useCallback(async (orderId: string, items: Order["items"]) => {
     try {
       const previo = orders.find((o) => o.id === orderId);
@@ -2494,6 +2505,7 @@ tbody tr:nth-child(even){background:#fafafa}
         onGenerateInvoice={handleGenerateInvoice}
         onAssignTransportista={handleAssignTransportista}
         onRemoveTransportista={handleRemoveTransportista}
+        onAssignSeller={handleAssignSeller}
         sellers={sellers}
         userRole={user?.role}
         onHacerPedido={undefined}

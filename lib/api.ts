@@ -76,6 +76,7 @@ import {
   createOrder,
   assignTransportista,
   removeTransportista,
+  assignSeller,
   saveRemitoToOrder,
   markOrderStockDescontado,
   saveBoletaToOrder,
@@ -431,6 +432,9 @@ export const ordersApi = {
   },
   async removeTransportista(id: string): Promise<Order> {
     return removeTransportista(id)
+  },
+  async assignSeller(id: string, sellerId: string, sellerName: string): Promise<Order> {
+    return assignSeller(id, sellerId, sellerName)
   },
   async saveRemitoToOrder(id: string, remitoNumber: string, remitoPdfBase64: string): Promise<Order> {
     return saveRemitoToOrder(id, remitoNumber, remitoPdfBase64)
