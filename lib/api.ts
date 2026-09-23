@@ -113,6 +113,7 @@ import {
 } from '@/services/transfer-config-service'
 import type { TransferConfig } from '@/services/transfer-config-service'
 import { assignHojaRuta, saveHojaRuta, getHojasRuta, getHojaRutaHtml } from '@/services/hoja-ruta-service'
+import { registrarRemitoAnulado, getRemitosAnulados, type RemitoAnulado } from '@/services/remitos-anulados-service'
 import type { HojaRuta } from '@/services/hoja-ruta-service'
 import {
   getClientsBySeller,
@@ -567,6 +568,12 @@ export const hojaRutaApi = {
   getHtml: getHojaRutaHtml,
 }
 export type { HojaRuta }
+
+export const remitosAnuladosApi = {
+  log: registrarRemitoAnulado,
+  getAll: getRemitosAnulados,
+}
+export type { RemitoAnulado }
 
 export const cobranzasApi = {
   async getClientsBySeller(sellerId: string) {

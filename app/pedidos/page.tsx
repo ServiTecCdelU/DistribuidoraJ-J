@@ -7,9 +7,9 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { DataTableSkeleton } from "@/components/ui/data-table-skeleton";
 import { ClientModal } from "@/components/clientes/client-modal";
-import { ordersApi, salesApi, clientsApi, sellersApi, productsApi, faltantesApi, hojaRutaApi, auditApi } from "@/lib/api";
+import { ordersApi, salesApi, clientsApi, sellersApi, productsApi, faltantesApi, hojaRutaApi, auditApi, remitosAnuladosApi } from "@/lib/api";
 import type { Order, OrderStatus, Client, Seller } from "@/lib/types";
-import { Package, Filter, Loader2, ClipboardList, FileText, Eye, ArrowRightCircle, ArrowLeftCircle, Ban, TrendingUp, ChevronDown, ChevronRight, MapPin, Phone, AlertTriangle, Route, XCircle } from "lucide-react";
+import { Package, Filter, Loader2, ClipboardList, FileText, Eye, ArrowRightCircle, ArrowLeftCircle, Ban, TrendingUp, ChevronDown, ChevronRight, MapPin, Phone, AlertTriangle, Route, XCircle, FileX } from "lucide-react";
 import { toast } from "sonner";
 import { useAuth } from "@/hooks/use-auth";
 import { useRouter } from "next/navigation";
@@ -17,6 +17,7 @@ import { supabase } from "@/lib/supabase";
 import { OrdersFilters } from "@/components/pedidos/orders-filters";
 import { HojasRutaPanel } from "@/components/pedidos/hojas-ruta-panel";
 import { AnuladosPanel } from "@/components/pedidos/anulados-panel";
+import { RemitosAnuladosPanel } from "@/components/pedidos/remitos-anulados-panel";
 
 import { OrderDetailModal } from "@/components/pedidos/order-detail-modal";
 import { PaymentModal, type ItemAdjustment } from "@/components/pedidos/payment-modal";
@@ -39,6 +40,7 @@ import { ordersToMoveAll, ordersToMoveSelected } from "@/lib/utils/order-move";
 // Pestaña extra (no es un estado de pedido): historial de hojas de ruta archivadas.
 const HOJAS_RUTA_TAB = "hojas-ruta";
 const ANULADOS_TAB = "anulados";
+const REMITOS_ANULADOS_TAB = "remitos-anulados";
 
 export const generateOrderNumber = (date: Date, index: number) => {
   const d = new Date(date);
@@ -91,6 +93,7 @@ export default function PedidosPage() {
   const [filterStatus, setFilterStatus] = useState<string>("pending");
   const isHojasRutaTab = filterStatus === HOJAS_RUTA_TAB;
   const isAnuladosTab = filterStatus === ANULADOS_TAB;
+  const isRemitosAnuladosTab = filterStatus === REMITOS_ANULADOS_TAB;
   const [filterClient, setFilterClient] = useState<string>("");
   const [filterSeller, setFilterSeller] = useState<string>("");
   const [filterTransportista, setFilterTransportista] = useState<string>("");
@@ -120,6 +123,8 @@ export default function PedidosPage() {
   const [heldOrderIds, setHeldOrderIds] = useState<Set<string>>(new Set());
   // Confirmación de eliminación de pedido(s)
   const [pendingDelete, setPendingDelete] = useState<{ ids: string[]; label: string } | null>(null);
+  const [pendingDeleteRemito, setPendingDeleteRemito] = useState<Order | null>(null);
+  const [remitoDeleteNota, setRemitoDeleteNota] = useState("");
   // Motivo de anulación: obligatorio. Es el dato que se perdía al eliminar el pedido.
   const [cancelReason, setCancelReason] = useState("");
 
@@ -561,7 +566,17 @@ export default function PedidosPage() {
     setPendingDelete({ ids: [order.id], label: order.clientName || "este cliente" });
   }, []);
 
+  // Eliminar el remito libera el número (al regenerarlo se quema uno NUEVO), así que se pide
+  // motivo antes de borrar y queda registrado en la solapa "Remitos Anulados".
   const handleDeleteRemito = useCallback(async (order: Order) => {
+    setPendingDeleteRemito(order);
+    setRemitoDeleteNota("");
+  }, []);
+
+  const confirmDeleteRemito = useCallback(async () => {
+    const order = pendingDeleteRemito;
+    const nota = remitoDeleteNota.trim();
+    if (!order || !nota) return;
     try {
       // Si el stock ya se había descontado al generar el remito, reponerlo: eliminar el remito
       // revierte la salida. Al regenerar se vuelve a descontar con las cantidades correctas.
@@ -578,28 +593,39 @@ export default function PedidosPage() {
         }
       }
       const updated = await ordersApi.deleteRemito(order.id);
-      // Eliminar el remito libera el número: al regenerarlo se quema uno NUEVO y la hoja de
-      // ruta ya impresa queda con el número viejo. Tiene que quedar registrado quién lo hizo.
       if (user) {
         auditApi.log({
           action: "order_items_edited",
           userId: user.id,
           userName: user.name || user.email,
-          description: `Eliminó el remito ${order.remitoNumber ?? "(sin número)"} del pedido de "${order.clientName}" — al regenerarlo se le asigna un número nuevo`,
+          description: `Eliminó el remito ${order.remitoNumber ?? "(sin número)"} del pedido de "${order.clientName}" — ${nota}`,
           entityType: "order",
           entityId: order.id,
-          metadata: { remitoEliminado: order.remitoNumber ?? null, stockRepuesto: order.stockDescontado === true },
+          metadata: { remitoEliminado: order.remitoNumber ?? null, stockRepuesto: order.stockDescontado === true, nota },
         });
+        remitosAnuladosApi
+          .log({
+            orderId: order.id,
+            clientName: order.clientName,
+            remitoNumber: order.remitoNumber,
+            nota,
+            stockRepuesto: order.stockDescontado === true,
+            userId: user.id,
+            userName: user.name || user.email,
+          })
+          .catch(() => {});
       }
       setOrders((prev) => prev.map((o) => (o.id === order.id ? updated : o)));
       if (detailOrder?.id === order.id) setDetailOrder(updated);
       toast.success("Remito eliminado — stock repuesto, podés generarlo de nuevo");
+      setPendingDeleteRemito(null);
+      setRemitoDeleteNota("");
       // Confirmar contra la BD para que no quede mostrándose en el listado de carga
       loadData();
     } catch {
       toast.error("Error al eliminar el remito");
     }
-  }, [detailOrder, loadData, user]);
+  }, [pendingDeleteRemito, remitoDeleteNota, detailOrder, loadData, user]);
 
   const confirmDelete = useCallback(async () => {
     if (!pendingDelete) return;
@@ -2049,10 +2075,11 @@ tbody tr:nth-child(even){background:#fafafa}
         extraTabs={[
           { value: HOJAS_RUTA_TAB, label: "Hojas de Ruta", icon: Route },
           { value: ANULADOS_TAB, label: "Anulados", icon: XCircle },
+          { value: REMITOS_ANULADOS_TAB, label: "Remitos Anulados", icon: FileX },
         ]}
-        hideSearch={isHojasRutaTab || isAnuladosTab}
+        hideSearch={isHojasRutaTab || isAnuladosTab || isRemitosAnuladosTab}
       >
-        {!isHojasRutaTab && !isAnuladosTab && (<>
+        {!isHojasRutaTab && !isAnuladosTab && !isRemitosAnuladosTab && (<>
         {hasActiveFilters && (
           <Button
             variant="ghost"
@@ -2154,6 +2181,8 @@ tbody tr:nth-child(even){background:#fafafa}
         <HojasRutaPanel />
       ) : isAnuladosTab ? (
         <AnuladosPanel />
+      ) : isRemitosAnuladosTab ? (
+        <RemitosAnuladosPanel />
       ) : loading ? (
         <DataTableSkeleton columns={5} rows={5} />
       ) : filteredOrders.length === 0 ? (
@@ -2499,6 +2528,36 @@ tbody tr:nth-child(even){background:#fafafa}
           />
           {!cancelReason.trim() && (
             <p className="text-[11px] text-slate-500">Escribí el motivo para poder anular.</p>
+          )}
+        </div>
+      </ConfirmDialog>
+
+      <ConfirmDialog
+        open={!!pendingDeleteRemito}
+        onOpenChange={(o) => { if (!o) { setPendingDeleteRemito(null); setRemitoDeleteNota(""); } }}
+        title="Eliminar remito"
+        description={`El remito ${pendingDeleteRemito?.remitoNumber ?? ""} de ${pendingDeleteRemito?.clientName ?? ""} se elimina y el stock vuelve a entrar. Al generarlo de nuevo se le asigna un número NUEVO. Queda registrado en la solapa Remitos Anulados.`}
+        confirmText="Eliminar remito"
+        cancelText="Volver"
+        variant="destructive"
+        confirmDisabled={!remitoDeleteNota.trim()}
+        onConfirm={confirmDeleteRemito}
+      >
+        <div className="space-y-1.5">
+          <label htmlFor="nota-eliminacion-remito" className="text-sm font-medium text-slate-700">
+            Nota
+          </label>
+          <Textarea
+            id="nota-eliminacion-remito"
+            value={remitoDeleteNota}
+            onChange={(e) => setRemitoDeleteNota(e.target.value)}
+            placeholder="Ej: se cargó mal la cantidad, hay que regenerarlo"
+            className="rounded-2xl resize-none"
+            rows={2}
+            autoFocus
+          />
+          {!remitoDeleteNota.trim() && (
+            <p className="text-[11px] text-slate-500">Escribí la nota para poder eliminar el remito.</p>
           )}
         </div>
       </ConfirmDialog>
