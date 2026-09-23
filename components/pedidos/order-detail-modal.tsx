@@ -120,7 +120,7 @@ export function OrderDetailModal({
     [sellers]
   );
   const vendedoresFiltered = useMemo(
-    () => sellers.filter((s) => s.employeeType === "vendedor" || s.employeeType === "ambos"),
+    () => sellers.filter((s) => s.employeeType === "vendedor" || s.employeeType === "ambos" || s.employeeType === "vendedor_cobrador"),
     [sellers]
   );
   useEffect(() => {
