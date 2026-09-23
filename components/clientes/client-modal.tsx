@@ -150,6 +150,10 @@ export function ClientModal({ open, onOpenChange, client, onSave, showCreditLimi
     
     setLoading(true)
     try {
+      const addressChanged = client && client.address !== formData.address
+      const addresses = addressChanged && client?.addresses && client.addresses.length > 0
+        ? client.addresses.map((a, i) => (i === 0 ? { ...a, address: formData.address } : a))
+        : undefined
       await onSave({
         ...formData,
         cuit: formatCuit(formData.cuit),
@@ -158,6 +162,7 @@ export function ClientModal({ open, onOpenChange, client, onSave, showCreditLimi
         diaCobro: formData.diaCobro || undefined,
         activo: formData.activo,
         cuentaCorrienteHabilitada: formData.cuentaCorrienteHabilitada,
+        ...(addresses ? { addresses } : {}),
       })
     } finally {
       setLoading(false)
