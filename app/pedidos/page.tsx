@@ -335,6 +335,7 @@ export default function PedidosPage() {
       // Si el pedido ya tiene remito, regenerar conservando el MISMO número (no quemar uno nuevo).
       // Si no, pedir un número único y consecutivo (función atómica en Postgres).
       let remitoNumber = order.remitoNumber;
+      const remitoPrevio = order.remitoNumber;
       if (!remitoNumber) {
         const { data, error: remitoErr } = await supabase.rpc("next_remito_number");
         if (remitoErr || !data) {
@@ -342,6 +343,26 @@ export default function PedidosPage() {
           return;
         }
         remitoNumber = data;
+      }
+
+      // Quién y cuándo le asignó (o le cambió) el número de remito al pedido. Sin esto no
+      // se podía explicar que la hoja de ruta impresa quedara con un remito que ya no existe.
+      if (user) {
+        auditApi.log({
+          action: "order_items_edited",
+          userId: user.id,
+          userName: user.name || user.email,
+          description: remitoPrevio
+            ? `Regeneró el remito ${remitoPrevio} del pedido de "${order.clientName}" (mismo número)`
+            : `Generó el remito ${remitoNumber} del pedido de "${order.clientName}"`,
+          entityType: "order",
+          entityId: order.id,
+          metadata: {
+            remitoNumber,
+            remitoPrevio: remitoPrevio ?? null,
+            remitoNuevo: remitoPrevio ? null : remitoNumber,
+          },
+        });
       }
 
       const total = calculateOrderTotal(order);
@@ -557,6 +578,19 @@ export default function PedidosPage() {
         }
       }
       const updated = await ordersApi.deleteRemito(order.id);
+      // Eliminar el remito libera el número: al regenerarlo se quema uno NUEVO y la hoja de
+      // ruta ya impresa queda con el número viejo. Tiene que quedar registrado quién lo hizo.
+      if (user) {
+        auditApi.log({
+          action: "order_items_edited",
+          userId: user.id,
+          userName: user.name || user.email,
+          description: `Eliminó el remito ${order.remitoNumber ?? "(sin número)"} del pedido de "${order.clientName}" — al regenerarlo se le asigna un número nuevo`,
+          entityType: "order",
+          entityId: order.id,
+          metadata: { remitoEliminado: order.remitoNumber ?? null, stockRepuesto: order.stockDescontado === true },
+        });
+      }
       setOrders((prev) => prev.map((o) => (o.id === order.id ? updated : o)));
       if (detailOrder?.id === order.id) setDetailOrder(updated);
       toast.success("Remito eliminado — stock repuesto, podés generarlo de nuevo");
@@ -565,7 +599,7 @@ export default function PedidosPage() {
     } catch {
       toast.error("Error al eliminar el remito");
     }
-  }, [detailOrder, loadData]);
+  }, [detailOrder, loadData, user]);
 
   const confirmDelete = useCallback(async () => {
     if (!pendingDelete) return;

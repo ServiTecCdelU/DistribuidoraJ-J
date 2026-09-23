@@ -1,5 +1,11 @@
 import { describe, it, expect } from "vitest";
-import { agruparPorPedido, clienteDeDescripcion, textoNovedad } from "./audit-pedidos";
+import {
+  agruparPorPedido,
+  clienteDeDescripcion,
+  textoNovedad,
+  remitoEnFingerprint,
+  numeroDePedido,
+} from "./audit-pedidos";
 import type { AuditEntry } from "@/lib/types";
 
 const entrada = (over: Partial<AuditEntry> & { id: string; createdAt: Date }): AuditEntry => ({
@@ -86,6 +92,33 @@ describe("agruparPorPedido", () => {
     expect(grupo.novedades).toHaveLength(2);
     expect(textoNovedad(grupo.novedades[0])).toBe("Faltante: QUESO HOLANDA: 5.8 de 6");
     expect(textoNovedad(grupo.novedades[1])).toBe("No entregado: SALAME MILAN x2 (rotura)");
+  });
+});
+
+describe("numeroDePedido", () => {
+  it("acorta el id al número final", () => {
+    expect(numeroDePedido("pedido_kioscomarcela_8")).toBe("n°8");
+  });
+
+  it("deja el id entero si no termina en número", () => {
+    expect(numeroDePedido("pedido-raro")).toBe("pedido-raro");
+  });
+});
+
+describe("remitoEnFingerprint", () => {
+  const fp =
+    "pedido_bartolobar_13:R-2026-01852:39657|pedido_kioscomarcela_8:R-2026-01865:31255|pedido_kioscohuei_5:R-2026-01866:41431";
+
+  it("devuelve el remito con el que el pedido salió impreso en la hoja", () => {
+    expect(remitoEnFingerprint(fp, "pedido_kioscomarcela_8")).toBe("R-2026-01865");
+  });
+
+  it("devuelve undefined si el pedido no está en la hoja", () => {
+    expect(remitoEnFingerprint(fp, "pedido_otro_1")).toBeUndefined();
+  });
+
+  it("tolera hojas viejas sin fingerprint", () => {
+    expect(remitoEnFingerprint(undefined, "pedido_kioscomarcela_8")).toBeUndefined();
   });
 });
 

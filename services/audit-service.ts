@@ -2,6 +2,7 @@
 import { supabase } from '@/lib/supabase'
 import type { AuditAction, AuditEntry } from '@/lib/types'
 import { generateReadableId } from '@/services/supabase-helpers'
+import { remitoEnFingerprint } from '@/lib/utils/audit-pedidos'
 
 export const logAudit = async (entry: {
   action: AuditAction;
@@ -115,6 +116,15 @@ export interface AuditOrderInfo {
   saleNumber?: string
   notes?: string
   createdAt?: Date
+  hojasRuta?: AuditHojaRuta[]
+}
+
+export interface AuditHojaRuta {
+  numero: string
+  fechaReparto: string
+  createdAt?: Date
+  /** Remito con el que el pedido salió impreso en esa hoja. */
+  remitoEnHoja?: string
 }
 
 /** Datos de cabecera de los pedidos referenciados por la auditoría (cliente, remito, venta). */
@@ -136,9 +146,30 @@ export const getAuditOrdersInfo = async (ids: string[]): Promise<Record<string, 
     for (const v of ventas ?? []) numerosVenta[v.id] = v.sale_number ?? ''
   }
 
+  // Hojas de ruta en las que salió cada pedido (y con qué remito se imprimió).
+  const hojasPorPedido: Record<string, AuditHojaRuta[]> = {}
+  const { data: hojas } = await supabase
+    .from('hojas_ruta')
+    .select('numero, fecha_reparto, created_at, pedido_ids, fingerprint')
+    .or(ids.map((id) => `pedido_ids.cs.{"${id}"}`).join(','))
+    .order('created_at', { ascending: false })
+
+  for (const h of hojas ?? []) {
+    for (const pedidoId of (h.pedido_ids ?? []) as string[]) {
+      if (!ids.includes(pedidoId)) continue
+      ;(hojasPorPedido[pedidoId] ??= []).push({
+        numero: String(h.numero),
+        fechaReparto: h.fecha_reparto,
+        createdAt: h.created_at ? new Date(h.created_at) : undefined,
+        remitoEnHoja: remitoEnFingerprint(h.fingerprint ?? undefined, pedidoId),
+      })
+    }
+  }
+
   const mapa: Record<string, AuditOrderInfo> = {}
   for (const d of data ?? []) {
     mapa[d.id] = {
+      hojasRuta: hojasPorPedido[d.id] ?? [],
       id: d.id,
       clientName: d.client_name ?? undefined,
       remitoNumber: d.remito_number ?? undefined,

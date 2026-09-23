@@ -29,7 +29,7 @@ import { auditApi } from "@/lib/api";
 import type { AuditEntry, AuditAction, OrderStatus } from "@/lib/types";
 import { statusConfig } from "@/lib/order-constants";
 import type { AuditOrderInfo } from "@/services/audit-service";
-import { agruparPorPedido, textoNovedad } from "@/lib/utils/audit-pedidos";
+import { agruparPorPedido, textoNovedad, numeroDePedido } from "@/lib/utils/audit-pedidos";
 import { Button } from "@/components/ui/button";
 import Link from "next/link";
 
@@ -257,21 +257,17 @@ export default function AuditoriaPage() {
                   >
                     <div className="flex items-start justify-between gap-3 flex-wrap">
                       <div className="min-w-0">
-                        <CardTitle className="text-base flex items-center gap-2 flex-wrap">
-                          <Truck className="h-4 w-4 text-teal-600" />
-                          <span>Pedido</span>
-                          <span className="text-muted-foreground">·</span>
+                        <CardTitle className="text-sm font-semibold flex items-center gap-x-2 gap-y-1 flex-wrap">
+                          <Truck className="h-4 w-4 text-teal-600 shrink-0" />
                           <span className="truncate">{cliente}</span>
+                          <span className="text-muted-foreground font-normal">
+                            Pedido {numeroDePedido(g.orderId)}
+                          </span>
                           {remito && (
                             <Badge variant="secondary" className="text-[10px]">
-                              Remito {remito}
+                              {remito}
                             </Badge>
                           )}
-                        </CardTitle>
-                        <div className="flex items-center gap-2 flex-wrap mt-1.5">
-                          <Badge variant="outline" className="text-[10px] font-mono">
-                            Pedido {g.orderId}
-                          </Badge>
                           {estado && (
                             <Badge
                               variant="outline"
@@ -293,11 +289,10 @@ export default function AuditoriaPage() {
                               Sin cobrar
                             </Badge>
                           )}
-                        </div>
-                        <p className="text-xs text-muted-foreground mt-1">
-                          {g.entries.length} movimiento{g.entries.length === 1 ? "" : "s"} ·{" "}
-                          {formatDateTime(g.ultima)}
-                        </p>
+                          <span className="text-xs text-muted-foreground font-normal">
+                            {g.entries.length} mov · {formatDateTime(g.ultima)}
+                          </span>
+                        </CardTitle>
                       </div>
                       <div className="flex items-center gap-2">
                         {saleId && (
@@ -354,6 +349,36 @@ export default function AuditoriaPage() {
                                 <span>{textoNovedad(n)}</span>
                               </li>
                             ))}
+                          </ul>
+                        </div>
+                      )}
+
+                      {(info?.hojasRuta?.length ?? 0) > 0 && (
+                        <div className="rounded-2xl bg-muted/40 p-3">
+                          <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground mb-2">
+                            Hojas de ruta
+                          </p>
+                          <ul className="space-y-1 text-sm">
+                            {info!.hojasRuta!.map((h) => {
+                              const distinto =
+                                h.remitoEnHoja && remito && h.remitoEnHoja !== remito;
+                              return (
+                                <li key={`${h.numero}-${h.fechaReparto}`} className="flex flex-wrap gap-x-2">
+                                  <span className="font-medium">HR {h.numero}</span>
+                                  <span className="text-muted-foreground">
+                                    reparto {h.fechaReparto}
+                                    {h.createdAt ? ` · impresa ${formatDateTime(h.createdAt)}` : ""}
+                                  </span>
+                                  {h.remitoEnHoja && (
+                                    <span className={distinto ? "text-red-600 font-medium" : "text-muted-foreground"}>
+                                      {distinto
+                                        ? `⚠ en el papel figura ${h.remitoEnHoja}, el pedido hoy tiene ${remito}`
+                                        : `remito ${h.remitoEnHoja}`}
+                                    </span>
+                                  )}
+                                </li>
+                              );
+                            })}
                           </ul>
                         </div>
                       )}

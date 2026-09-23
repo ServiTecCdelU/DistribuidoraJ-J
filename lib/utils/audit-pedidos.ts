@@ -26,6 +26,27 @@ export interface GrupoPedido {
   ultima: Date
 }
 
+/** `pedido_kioscomarcela_8` → `n°8`; si el id no termina en número, se muestra entero. */
+export function numeroDePedido(orderId: string): string {
+  const m = orderId.match(/_(\d+)$/)
+  return m ? `n°${m[1]}` : orderId
+}
+
+/**
+ * El fingerprint de una hoja de ruta guarda, por pedido, el remito con el que se
+ * imprimió: `pedido_x:R-2026-01865:31255|pedido_y:...`. Sirve para detectar que al
+ * pedido le reasignaron el remito DESPUÉS de imprimir la hoja (el papel quedó con
+ * un número que ya no existe en el sistema).
+ */
+export function remitoEnFingerprint(fingerprint: string | undefined, pedidoId: string): string | undefined {
+  if (!fingerprint) return undefined
+  for (const parte of fingerprint.split('|')) {
+    const [id, remito] = parte.split(':')
+    if (id === pedidoId) return remito || undefined
+  }
+  return undefined
+}
+
 /** `Pedido de "BIBIANA LUSIMA"` / `pedido de "BIBIANA LUSIMA"` → BIBIANA LUSIMA */
 export function clienteDeDescripcion(description: string): string | undefined {
   const m = description.match(/"([^"]+)"/)
