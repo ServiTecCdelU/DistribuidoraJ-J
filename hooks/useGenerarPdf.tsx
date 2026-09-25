@@ -663,16 +663,7 @@ const guiaStyles = StyleSheet.create({
     paddingTop: 2,
     fontSize: 9,
   },
-  pieFijo: {
-    marginTop: "auto",
-    borderTop: "0.5px solid #999",
-    paddingTop: 3,
-    fontSize: 7,
-    color: "#444",
-  },
-  pieLeyenda: { textAlign: "center", marginBottom: 6 },
-  pieServitec: { textAlign: "center", marginTop: 5, fontSize: 6, color: "#888" },
-  pieFirma: { flexDirection: "row", justifyContent: "space-between" },
+  pieServitec: { textAlign: "center", marginTop: 6, fontSize: 7, color: "#555" },
 });
 
 /** Trunca descripción a maxLen caracteres para evitar salto de línea. */
@@ -862,17 +853,9 @@ const GuiaCopia = ({
       )}
 
 
-      <View style={guiaStyles.pieFijo}>
-        <Text style={guiaStyles.pieLeyenda}>
-          Documento no válido como factura · Revise la mercadería al recibirla
-        </Text>
-        <View style={guiaStyles.pieFirma}>
-          <Text>Recibí conforme: ______________________</Text>
-          <Text>Aclaración / DNI: ______________________</Text>
-          <Text>Página {pageNum} de {totalPages}</Text>
-        </View>
+      {isLast && (
         <Text style={guiaStyles.pieServitec}>Servitec - Sistemas de Gestion - 3442646670</Text>
-      </View>
+      )}
     </>
   );
 };
