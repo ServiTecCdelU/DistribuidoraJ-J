@@ -50,6 +50,20 @@ sin productos, sin stock, sin comisión, sin remito.
 - Al tener `saldo > 0` aparece en el selector **Imputar a** de "Registrar pago", así que se le
   puede pagar puntualmente. Se ordena por su fecha como el resto de los movimientos.
 
+## Nota de crédito / débito manual (botones "Nota de crédito" y "Nota de débito" — solo admin)
+
+Modal `components/cuenta-corriente/modal-nota-cc.tsx`. Movimientos **sin venta asociada**, cuenta minorista.
+
+- **Crédito** (baja el saldo, usa `devolucionesApi.registrar` sin `saleId`; genera recibo DEV-xxxxx):
+  - *Productos*: buscador (`productsApi.search`), cantidad y precio editables, destino stock/pérdida por ítem.
+  - *Descuento*: % sobre un importe base (`montoDescuento`, `lib/utils/nota-credito.ts`).
+  - *Monto $*: devolución de un importe libre.
+  - Cliente sin cta cte habilitada: el servicio no toca el saldo (se devuelve en efectivo).
+  - Sin vendedor → no afecta comisiones.
+- **Débito** (sube el saldo): `paymentsApi.registerNotaDebito` → transacción `debt` con tag
+  `[NOTA_DEBITO]` (`lib/utils/nota-debito.ts`), `saldo = amount`, pagable/imputable como cualquier boleta.
+  Concepto "Nota de débito" en la tabla.
+
 ## Cuenta con el Mayorista (proveedor) — tabla `transacciones_mayorista`
 
 Servicio: `services/mayorista-cuenta-service.ts` (API: `mayoristaCuentaApi`).

@@ -3,6 +3,7 @@ import type { Transaction } from '@/lib/types'
 import { generateReadableId } from '@/services/supabase-helpers'
 import { imputarADeuda, imputarFIFO, recomputarSaldos } from '@/lib/utils/saldo-imputacion'
 import { descripcionDeudaAnterior } from '@/lib/utils/deuda-anterior'
+import { descripcionNotaDebito } from '@/lib/utils/nota-debito'
 
 // Baja el saldo de las deudas (remitos/ventas) del cliente.
 // - Con debtTxId: imputa el pago a ESA deuda puntual.
@@ -171,6 +172,8 @@ export const registerDeudaAnterior = async (data: {
   date?: string
   notes?: string
   file?: File
+  /** Descripción ya armada (ej. nota de débito); por defecto lleva el tag de deuda anterior */
+  description?: string
 }): Promise<Transaction> => {
   const { data: client } = await supabase
     .from('clientes')
@@ -190,7 +193,7 @@ export const registerDeudaAnterior = async (data: {
     fotoUrl = supabase.storage.from('comprobantes').getPublicUrl(path).data.publicUrl
   }
 
-  const description = descripcionDeudaAnterior(data.notes)
+  const description = data.description ?? descripcionDeudaAnterior(data.notes)
   const clientName = (client as any)?.name || 'deuda'
   const docId = await generateReadableId('transacciones', 'transaccion', clientName)
   const fecha = data.date ? new Date(`${data.date}T12:00:00`) : new Date()
@@ -237,6 +240,21 @@ export const registerDeudaAnterior = async (data: {
     fotoUrl,
   }
 }
+
+/**
+ * Nota de débito: cargo manual a la cuenta minorista, sin venta ni remito.
+ * Sube el saldo y queda como deuda pagable (con su propio saldo pendiente).
+ */
+export const registerNotaDebito = async (data: {
+  clientId: string
+  amount: number
+  motivo?: string
+}): Promise<Transaction> =>
+  registerDeudaAnterior({
+    clientId: data.clientId,
+    amount: data.amount,
+    description: descripcionNotaDebito(data.motivo),
+  })
 
 /**
  * Devuelve el número de recibo de una transacción de pago. Si todavía no tiene

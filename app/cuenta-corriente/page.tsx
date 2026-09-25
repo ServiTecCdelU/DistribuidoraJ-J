@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState, useCallback, useMemo } from 'react'
+import { useEffect, useState, useCallback, useMemo, useRef } from 'react'
 import { MainLayout } from '@/components/layout/main-layout'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
@@ -43,6 +43,7 @@ import { downloadBase64Pdf } from '@/services/pdf-service'
 import { useAuth } from '@/hooks/use-auth'
 import type { Client, ComprobantePago, DebtClassification, Sale, Seller, Transaction } from '@/lib/types'
 import { MovimientoDeudaCard, MOVIMIENTO_GRID } from '@/components/cuenta-corriente/movimiento-deuda-card'
+import { ModalNotaCC, type TipoNotaCC } from '@/components/cuenta-corriente/modal-nota-cc'
 import { DEUDA_ANT_CONCEPTO, esDeudaAnterior } from '@/lib/utils/deuda-anterior'
 import { formatCurrency, formatDate } from '@/lib/utils/format'
 import { clasificarDeuda, diasDesde, esDiaDePago, diaDePagoInfo } from '@/lib/utils/deuda'
@@ -172,6 +173,11 @@ export default function CuentaCorrientePage() {
   const [deudaFecha, setDeudaFecha] = useState(() => new Date().toISOString().slice(0, 10))
   const [deudaNotas, setDeudaNotas] = useState('')
   const [deudaFoto, setDeudaFoto] = useState<File | null>(null)
+
+  // Nota de crédito / débito manual (sin venta asociada)
+  const [notaCC, setNotaCC] = useState<TipoNotaCC | null>(null)
+  const ultimoTipoNotaCC = useRef<TipoNotaCC>('credito')
+  if (notaCC) ultimoTipoNotaCC.current = notaCC
 
   // Registrar pago manual (mayorista)
   const [payMayoristaDialog, setPayMayoristaDialog] = useState(false)
@@ -643,6 +649,27 @@ export default function CuentaCorrientePage() {
       toast.error(err.message || 'Error al registrar la deuda')
     } finally {
       setProcessing(false)
+    }
+  }
+
+  // Tras registrar una nota de crédito/débito: refrescar saldo, movimientos y devoluciones
+  const handleNotaRegistrada = async () => {
+    if (!selectedClient) return
+    try {
+      const [fresco, txs, devols] = await Promise.all([
+        clientsApi.getById(selectedClient.id),
+        clientsApi.getTransactions(selectedClient.id),
+        devolucionesApi.getByClient(selectedClient.id),
+      ])
+      if (fresco) {
+        const nuevoSaldo = fresco.currentBalance
+        setSelectedClient((prev) => (prev ? { ...prev, currentBalance: nuevoSaldo } : prev))
+        setDebtClients((prev) => prev.map((c) => (c.id === selectedClient.id ? { ...c, currentBalance: nuevoSaldo } : c)))
+      }
+      setClientTransactions(txs)
+      setClientDevoluciones(devols)
+    } catch {
+      toast.error('Nota registrada, pero no se pudo refrescar la cuenta')
     }
   }
 
@@ -1681,6 +1708,25 @@ ${renderTabla('Cuenta Mayorista', mayorista, balanceMay)}
                   Registrar deuda
                 </Button>
                 )}
+                {canManage && (
+                <>
+                <Button
+                  className="gap-2 rounded-xl bg-amber-600 hover:bg-amber-700 text-white"
+                  onClick={() => setNotaCC('credito')}
+                >
+                  <RotateCcw className="h-4 w-4" />
+                  Nota de crédito
+                </Button>
+                <Button
+                  variant="outline"
+                  className="gap-2 rounded-xl border-red-300 text-red-700 hover:bg-red-50"
+                  onClick={() => setNotaCC('debito')}
+                >
+                  <ArrowUpCircle className="h-4 w-4" />
+                  Nota de débito
+                </Button>
+                </>
+                )}
                 <Button
                   variant="outline"
                   className="gap-2 rounded-xl"
@@ -1713,7 +1759,7 @@ ${renderTabla('Cuenta Mayorista', mayorista, balanceMay)}
                         const sale = tx.saleId ? salesById.get(tx.saleId) : undefined
                         const devolsSale = sale
                           ? clientDevoluciones.filter((d) => d.saleId === sale.id)
-                          : []
+                          : clientDevoluciones.filter((d) => !d.saleId)
                         return (
                           <MovimientoDeudaCard
                             key={tx.id}
@@ -1962,6 +2008,15 @@ ${renderTabla('Cuenta Mayorista', mayorista, balanceMay)}
             </DialogFooter>
           </DialogContent>
         </Dialog>
+
+        {/* Nota de crédito / débito manual */}
+        <ModalNotaCC
+          abierto={notaCC !== null}
+          tipoInicial={ultimoTipoNotaCC.current}
+          cliente={selectedClient}
+          onCerrar={() => setNotaCC(null)}
+          onRegistrada={handleNotaRegistrada}
+        />
 
         {/* Dialog Registrar deuda anterior */}
         <Dialog open={deudaDialog} onOpenChange={(open) => { if (!open) { setDeudaDialog(false); setDeudaAmount(''); setDeudaNotas(''); setDeudaFoto(null); setDeudaFecha(new Date().toISOString().slice(0, 10)) } }}>

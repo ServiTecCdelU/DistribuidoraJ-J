@@ -14,6 +14,7 @@ import { diaDePagoInfo, type EstadoDiaPago } from '@/lib/utils/deuda'
 import { SALDO_EPSILON } from '@/lib/utils/saldo-imputacion'
 import { parseDescuentoDescripcion } from '@/lib/utils/ajuste-venta'
 import { DEUDA_ANT_CONCEPTO, esDeudaAnterior, notaDeudaAnterior } from '@/lib/utils/deuda-anterior'
+import { NOTA_DEBITO_CONCEPTO, esNotaDebito, motivoNotaDebito } from '@/lib/utils/nota-debito'
 import type { ComprobantePago, Sale, Transaction } from '@/lib/types'
 import type { Devolucion } from '@/services/devoluciones-service'
 import { supabase } from '@/lib/supabase'
@@ -283,6 +284,8 @@ export function MovimientoDeudaCard({
   // Deuda vieja cargada a mano (venta anterior al sistema): sin productos ni incidencias
   const isDeudaAnt = !isPayment && esDeudaAnterior(tx.description)
   const deudaAntNota = notaDeudaAnterior(tx.description)
+  // Nota de débito manual: cargo sin venta ni remito
+  const isNotaDeb = !isPayment && esNotaDebito(tx.description)
   // Devolución vinculada a este movimiento (match por monto dentro de la venta)
   const devMatch = isDevolucion
     ? (devoluciones.find((d) => Math.abs(d.total - tx.amount) < 0.01) ?? devoluciones[0])
@@ -333,7 +336,7 @@ export function MovimientoDeudaCard({
   })()
 
   // Concepto y Descripción separados (igual que el PDF)
-  const concepto = isRechazo ? 'Rechazo' : isDevolucion ? 'Devolución' : isPayment ? 'Pago' : isDeudaAnt ? DEUDA_ANT_CONCEPTO : 'Venta'
+  const concepto = isRechazo ? 'Rechazo' : isDevolucion ? 'Devolución' : isPayment ? 'Pago' : isDeudaAnt ? DEUDA_ANT_CONCEPTO : isNotaDeb ? NOTA_DEBITO_CONCEPTO : 'Venta'
   const rechazoRecibo = isRechazo ? ((tx.description ?? '').match(/\[RECHAZO\]\s*(\S+)/)?.[1] ?? '') : ''
   // Pago "simple" (efectivo/transferencia/otro registrado a mano) — a diferencia de
   // descuento/devolución/rechazo que tienen su propio formato de descripción.
@@ -355,6 +358,7 @@ export function MovimientoDeudaCard({
 
   const descripcionMov = (() => {
     if (isDeudaAnt) return deudaAntNota || 'Deuda anterior'
+    if (isNotaDeb) return motivoNotaDebito(tx.description) || 'Nota de débito'
     if (isRechazo) return `Rechazo de productos${rechazoRecibo ? ` · ${rechazoRecibo}` : ''}`
     if (isDevolucion) return devMatch?.reciboNumero || sale?.remitoNumber || ''
     if (isDescuento) return `Descuento${sale?.saleNumber ? ` · Venta ${sale.saleNumber}` : ''}${descuento.motivo ? ` · ${descuento.motivo}` : ''}`
@@ -545,7 +549,7 @@ export function MovimientoDeudaCard({
 
             {/* Incidencias: cantidad de ítems no entregados/devueltos (solo aplica a ventas) */}
             <span className={`text-xs text-center tabular-nums font-medium ${tieneNoEntregados ? 'text-amber-600' : 'text-muted-foreground'}`}>
-              {isPayment || isDeudaAnt ? '' : noEntregadosUnified.length}
+              {isPayment || isDeudaAnt || isNotaDeb ? '' : noEntregadosUnified.length}
             </span>
 
             {/* Cobrador */}
