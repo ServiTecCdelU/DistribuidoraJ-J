@@ -156,6 +156,8 @@ export function ModalNotaCC({ abierto, tipoInicial, cliente, onCerrar, onRegistr
     const dev = await devolucionesApi.registrar({
       clientId: cliente.id,
       clientName: cliente.name,
+      sellerId: cliente.sellerId,
+      sellerName: (cliente as Client & { sellerName?: string }).sellerName,
       items,
       monto: modo === 'productos' ? undefined : totalCredito,
       note: descripcionCredito(),
@@ -332,7 +334,7 @@ export function ModalNotaCC({ abierto, tipoInicial, cliente, onCerrar, onRegistr
                       }`}
                     >
                       <Trash2 className="h-3.5 w-3.5" />
-                      Pérdida
+                      No vuelve a stock
                     </button>
                   </div>
                 </div>
@@ -406,7 +408,7 @@ export function ModalNotaCC({ abierto, tipoInicial, cliente, onCerrar, onRegistr
           </div>
           <p className="text-[11px] text-muted-foreground px-1">
             {esCredito
-              ? 'Baja el saldo de la cuenta corriente. Los productos "vuelve a stock" se reponen al depósito.'
+              ? 'Baja el saldo de la cuenta corriente y la comisión del vendedor asignado. Los productos "vuelve a stock" se reponen al depósito.'
               : 'Sube el saldo de la cuenta corriente como una deuda pendiente de pago.'}
           </p>
 
