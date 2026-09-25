@@ -11,7 +11,7 @@ import { calculatePrice } from "@/services/price-list-service";
 import type { Product, Client, CartItem, Seller, City, PriceList } from "@/lib/types";
 import { toast } from "sonner";
 import { formatCurrency, normalizeCuit } from "@/lib/utils/format";
-import { effectiveDiscountMax, clampDiscount } from "@/lib/utils/discount";
+import { effectiveDiscountMax, clampDiscount, initialItemDiscount } from "@/lib/utils/discount";
 
 export type UserRole = "admin" | "seller" | null;
 
@@ -586,9 +586,12 @@ export function useCart(role: UserRole, userEmail?: string, externalProducts?: P
           item.product.id === product.id ? withRegaloAuto({ ...item, quantity: item.quantity + 1 }) : item,
         );
       }
-      return [...prev, withRegaloAuto({ product, quantity: 1 })];
+      // Producto en oferta: entra con el % de oferta ya aplicado (el que se ve en
+      // el listado). El vendedor puede bajarlo o cambiarlo por regalo en el carrito.
+      const itemDiscount = role ? initialItemDiscount(product.descuento, sellerMaxDiscount) : undefined;
+      return [...prev, withRegaloAuto({ product, quantity: 1, itemDiscount })];
     });
-  }, []);
+  }, [role, sellerMaxDiscount]);
 
   const updateQuantity = useCallback((productId: string, delta: number) => {
     setCart((prev) =>

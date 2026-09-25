@@ -16,6 +16,20 @@ export function effectiveDiscountMax(
   return Math.min(productMax, sellerCap);
 }
 
+/**
+ * Descuento que se pre-aplica al agregar un producto en oferta al carrito:
+ * el % configurado en el producto, recortado al tope del vendedor.
+ * undefined si el producto no tiene oferta (o el tope resultante es 0).
+ */
+export function initialItemDiscount(
+  productDescuento: number | undefined,
+  sellerMaxDiscount: number | undefined | null,
+): number | undefined {
+  if (!productDescuento || productDescuento <= 0) return undefined;
+  const value = clampDiscount(productDescuento, effectiveDiscountMax(productDescuento, sellerMaxDiscount));
+  return value > 0 ? value : undefined;
+}
+
 /** Recorta un descuento al rango [0, max]. */
 export function clampDiscount(discount: number, max: number): number {
   return Math.max(0, Math.min(max, discount));

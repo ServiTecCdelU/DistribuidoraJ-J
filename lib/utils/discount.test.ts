@@ -1,5 +1,24 @@
 import { describe, it, expect } from "vitest";
-import { effectiveDiscountMax, clampDiscount } from "./discount";
+import { effectiveDiscountMax, clampDiscount, initialItemDiscount } from "./discount";
+
+describe("initialItemDiscount", () => {
+  it("pre-aplica el % de oferta del producto", () => {
+    expect(initialItemDiscount(15, undefined)).toBe(15);
+  });
+
+  it("recorta al tope del vendedor", () => {
+    expect(initialItemDiscount(15, 6)).toBe(6);
+  });
+
+  it("sin oferta no aplica descuento", () => {
+    expect(initialItemDiscount(0, 10)).toBeUndefined();
+    expect(initialItemDiscount(undefined, undefined)).toBeUndefined();
+  });
+
+  it("tope de vendedor 0 no aplica descuento", () => {
+    expect(initialItemDiscount(20, 0)).toBeUndefined();
+  });
+});
 
 describe("effectiveDiscountMax", () => {
   it("sin tope de producto ni de vendedor permite hasta 100%", () => {
