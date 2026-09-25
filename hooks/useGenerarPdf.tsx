@@ -1415,7 +1415,6 @@ const ReciboDevolucionCopia = ({ data, copia }: { data: ReciboDevolucionData; co
           <Text style={devStyles.colCant}>{it.quantity}</Text>
           <Text style={devStyles.colDesc}>
             {it.name}
-            {it.destino === "perdida" ? <Text style={devStyles.perdidaTag}>  (pérdida)</Text> : null}
           </Text>
           <Text style={devStyles.colSub}>{formatCurrency(it.price * it.quantity)}</Text>
         </View>

@@ -82,7 +82,7 @@ export function ModalNotaCC({ abierto, tipoInicial, cliente, onCerrar, onRegistr
     return monto
   }, [modo, filas, baseDescuento, porcentaje, monto])
 
-  const total = tipo === 'debito' ? monto : totalCredito
+  const total = totalCredito
   const hayAlgo = total > 0
 
   const agregarProducto = (p: Product) => {
@@ -129,10 +129,18 @@ export function ModalNotaCC({ abierto, tipoInicial, cliente, onCerrar, onRegistr
     return base ? `${detalle} — ${base}` : detalle
   }
 
+  const descripcionDebito = (): string => {
+    const base = nota.trim()
+    let detalle = ''
+    if (modo === 'productos') detalle = filas.filter((f) => f.quantity > 0).map((f) => `${f.quantity}x ${f.name}`).join(', ')
+    if (modo === 'descuento') detalle = `Descuento ${porcentaje}% sobre ${formatCurrency(baseDescuento)}`
+    return [detalle, base].filter(Boolean).join(' — ')
+  }
+
   const registrarDebito = async () => {
     if (!cliente) return
-    await paymentsApi.registerNotaDebito({ clientId: cliente.id, amount: monto, motivo: nota })
-    toast.success(`Nota de débito de ${formatCurrency(monto)} registrada`)
+    await paymentsApi.registerNotaDebito({ clientId: cliente.id, amount: totalCredito, motivo: descripcionDebito() })
+    toast.success(`Nota de débito de ${formatCurrency(totalCredito)} registrada`)
   }
 
   const registrarCredito = async () => {
@@ -238,8 +246,7 @@ export function ModalNotaCC({ abierto, tipoInicial, cliente, onCerrar, onRegistr
             </button>
           </div>
 
-          {esCredito && (
-            <div className="flex items-center gap-2 p-1 rounded-xl bg-muted/50">
+          <div className="flex items-center gap-2 p-1 rounded-xl bg-muted/50">
               <button type="button" onClick={() => setModo('productos')} className={`${TAB_BASE} ${modo === 'productos' ? TAB_ON : TAB_OFF}`}>
                 <Package className="h-4 w-4" />
                 Productos
@@ -252,10 +259,9 @@ export function ModalNotaCC({ abierto, tipoInicial, cliente, onCerrar, onRegistr
                 <DollarSign className="h-4 w-4" />
                 Monto $
               </button>
-            </div>
-          )}
+          </div>
 
-          {esCredito && modo === 'productos' && (
+          {modo === 'productos' && (
             <div className="space-y-2">
               <div className="relative">
                 <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
@@ -315,6 +321,7 @@ export function ModalNotaCC({ abierto, tipoInicial, cliente, onCerrar, onRegistr
                     />
                     <span className="ml-auto text-sm font-semibold tabular-nums">{formatCurrency(f.price * f.quantity)}</span>
                   </div>
+                  {esCredito && (
                   <div className="flex items-center gap-2 mt-3">
                     <button
                       type="button"
@@ -337,15 +344,16 @@ export function ModalNotaCC({ abierto, tipoInicial, cliente, onCerrar, onRegistr
                       No vuelve a stock
                     </button>
                   </div>
+                  )}
                 </div>
               ))}
               {filas.length === 0 && (
-                <p className="text-sm text-muted-foreground py-3 text-center">Buscá y agregá los productos devueltos.</p>
+                <p className="text-sm text-muted-foreground py-3 text-center">Buscá y agregá los productos.</p>
               )}
             </div>
           )}
 
-          {esCredito && modo === 'descuento' && (
+          {modo === 'descuento' && (
             <div className="grid grid-cols-2 gap-3">
               <div>
                 <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider mb-1.5">Importe base</p>
@@ -373,7 +381,7 @@ export function ModalNotaCC({ abierto, tipoInicial, cliente, onCerrar, onRegistr
             </div>
           )}
 
-          {(!esCredito || modo === 'monto') && (
+          {modo === 'monto' && (
             <div>
               <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider mb-1.5">
                 {esCredito ? 'Monto a devolver' : 'Monto a cargar'}
