@@ -1454,6 +1454,7 @@ const ReciboDevolucionCopia = ({ data, copia }: { data: ReciboDevolucionData; co
       {/* Footer */}
       <View style={reciboStyles.footer}>
         <Text>{data.reciboNumero}</Text>
+        <Text>ServiTec - SISTEMA DE GESTION - +54 9 3442 646670</Text>
         <Text>{copia}</Text>
       </View>
     </>
