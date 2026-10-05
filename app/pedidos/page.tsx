@@ -718,8 +718,14 @@ export default function PedidosPage() {
   }, [detailOrder]);
 
   const handleUpdateItems = useCallback(async (orderId: string, items: Order["items"]) => {
+    const previo = orders.find((o) => o.id === orderId);
+    if (previo?.remitoNumber) {
+      toast.error(
+        `Este pedido ya tiene el remito ${previo.remitoNumber} generado. Para modificar los productos hay que eliminar el remito primero (vuelve a entrar el stock y se pierde el número).`
+      );
+      return;
+    }
     try {
-      const previo = orders.find((o) => o.id === orderId);
       const updated = await ordersApi.updateItems(orderId, items);
       setOrders((prev) => prev.map((o) => (o.id === orderId ? updated : o)));
       if (detailOrder?.id === orderId) setDetailOrder(updated);

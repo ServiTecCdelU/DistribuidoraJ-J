@@ -137,7 +137,7 @@ export function OrderDetailModal({
   const [qtyItems, setQtyItems] = useState<Record<number, number>>({});
   const [guardandoDesc, setGuardandoDesc] = useState(false);
 
-  const puedeEditarDesc = userRole === "admin" && order?.status === "pending" && !!onUpdateItems;
+  const puedeEditarDesc = userRole === "admin" && order?.status === "pending" && !order?.remitoNumber && !!onUpdateItems;
 
   useEffect(() => { setShowProducts(false); setShowSellerSelect(false); setSelectedSeller(""); }, [order?.id]);
   useEffect(() => {
