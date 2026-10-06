@@ -249,12 +249,24 @@ export const registerNotaDebito = async (data: {
   clientId: string
   amount: number
   motivo?: string
-}): Promise<Transaction> =>
-  registerDeudaAnterior({
+}): Promise<Transaction> => {
+  // Mismo criterio que la nota de crédito (registrarDevolucion): un cliente sin
+  // cuenta corriente habilitada no debe acumular deuda manual en cta cte.
+  const { data: cli } = await supabase
+    .from('clientes')
+    .select('cuenta_corriente_habilitada')
+    .eq('id', data.clientId)
+    .single()
+  if (cli?.cuenta_corriente_habilitada === false) {
+    throw new Error('Este cliente tiene la cuenta corriente deshabilitada: no se puede cargar una nota de débito')
+  }
+
+  return registerDeudaAnterior({
     clientId: data.clientId,
     amount: data.amount,
     description: descripcionNotaDebito(data.motivo),
   })
+}
 
 /**
  * Devuelve el número de recibo de una transacción de pago. Si todavía no tiene
