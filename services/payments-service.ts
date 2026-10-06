@@ -243,22 +243,50 @@ export const registerDeudaAnterior = async (data: {
 
 /**
  * Nota de débito: cargo manual a la cuenta minorista, sin venta ni remito.
- * Sube el saldo y queda como deuda pagable (con su propio saldo pendiente).
+ * En clientes con CC habilitada sube el saldo y queda como deuda pagable (con su
+ * propio saldo pendiente). En clientes sin CC habilitada (contado), queda registrada
+ * y visible en el extracto pero con afecta_saldo=false: no sube el saldo ni genera
+ * una deuda pagable — mismo criterio que la nota de crédito (registrarDevolucion).
  */
 export const registerNotaDebito = async (data: {
   clientId: string
   amount: number
   motivo?: string
 }): Promise<Transaction> => {
-  // Mismo criterio que la nota de crédito (registrarDevolucion): un cliente sin
-  // cuenta corriente habilitada no debe acumular deuda manual en cta cte.
   const { data: cli } = await supabase
     .from('clientes')
-    .select('cuenta_corriente_habilitada')
+    .select('cuenta_corriente_habilitada, name, current_balance')
     .eq('id', data.clientId)
     .single()
+
   if (cli?.cuenta_corriente_habilitada === false) {
-    throw new Error('Este cliente tiene la cuenta corriente deshabilitada: no se puede cargar una nota de débito')
+    const description = descripcionNotaDebito(data.motivo)
+    const clientName = cli?.name || 'deuda'
+    const docId = await generateReadableId('transacciones', 'transaccion', clientName)
+    const fecha = new Date()
+    const row: Record<string, unknown> = {
+      id: docId,
+      client_id: data.clientId,
+      type: 'debt',
+      amount: data.amount,
+      description,
+      date: fecha.toISOString(),
+      cuenta: 'minorista',
+      afecta_saldo: false,
+    }
+    const { error } = await supabase.from('transacciones').insert(row)
+    if (error) throw new Error(`Error registrando la nota de débito: ${error.message}`)
+
+    return {
+      id: docId,
+      clientId: data.clientId,
+      type: 'debt',
+      amount: data.amount,
+      description,
+      date: fecha,
+      cuenta: 'minorista',
+      afectaSaldo: false,
+    }
   }
 
   return registerDeudaAnterior({
