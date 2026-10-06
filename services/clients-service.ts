@@ -180,5 +180,6 @@ export const getClientTransactions = async (clientId: string): Promise<Transacti
     anuladoMotivo: d.anulado_motivo ?? undefined,
     anuladoBy: d.anulado_by ?? undefined,
     anuladoAt: d.anulado_at ? new Date(d.anulado_at) : undefined,
+    afectaSaldo: d.afecta_saldo ?? true,
   }))
 }

@@ -107,6 +107,8 @@ export interface Transaction {
   anuladoMotivo?: string;
   anuladoBy?: string;
   anuladoAt?: Date;
+  /** false = se registra pero no suma/resta del saldo acumulado ni totales (ej. devolución de cliente sin CC habilitada) */
+  afectaSaldo?: boolean;
 }
 
 export interface CartItem {

@@ -145,23 +145,29 @@ export async function registrarDevolucion(data: {
     }
   }
 
-  // 2. Cuenta corriente del cliente: baja el saldo (devolución = crédito a favor)
-  if (affectsBalance && data.clientId && total > 0) {
-    const { data: cr } = await supabase
-      .from('clientes')
-      .select('current_balance')
-      .eq('id', data.clientId)
-      .single()
-    if (cr) {
-      await supabase
+  // 2. Cuenta corriente del cliente: registra siempre el movimiento (se ve en el
+  // extracto), pero solo baja current_balance y recalcula saldos por-boleta si
+  // affectsBalance es true. Clientes sin CC habilitada: queda con afecta_saldo
+  // false, visible en la tabla pero sin tocar saldo ni totales.
+  if (data.clientId && total > 0) {
+    if (affectsBalance) {
+      const { data: cr } = await supabase
         .from('clientes')
-        .update({ current_balance: (Number(cr.current_balance) || 0) - total })
+        .select('current_balance')
         .eq('id', data.clientId)
+        .single()
+      if (cr) {
+        await supabase
+          .from('clientes')
+          .update({ current_balance: (Number(cr.current_balance) || 0) - total })
+          .eq('id', data.clientId)
+      }
     }
+
     // Deuda (remito) de esta venta: la devolución se imputa a ESA boleta.
     // Si no se encuentra, queda sin debt_id y el replay la imputa FIFO.
     let debtTxId: string | undefined
-    if (data.saleId) {
+    if (affectsBalance && data.saleId) {
       const { data: deudaVenta } = await supabase
         .from('transacciones')
         .select('id')
@@ -185,6 +191,7 @@ export async function registrarDevolucion(data: {
       date: new Date().toISOString(),
       cuenta: 'minorista',
       sale_id: data.saleId ?? null,
+      afecta_saldo: affectsBalance,
     }
     if (debtTxId) row.debt_id = debtTxId
     const { error: insErr } = await supabase.from('transacciones').insert(row)
@@ -194,13 +201,15 @@ export async function registrarDevolucion(data: {
       await supabase.from('transacciones').insert(row)
     }
 
-    // Recalcular el detalle por-boleta con la devolución ya persistida, para que
-    // Σ saldos coincida con current_balance. Replay holístico (misma fuente de
-    // verdad que los pagos): imputa a la boleta de la venta si hay debt_id.
-    try {
-      await recomputarSaldosDeudas(data.clientId, 'minorista')
-    } catch {
-      // Si la columna saldo no existe, el balance global ya quedó corregido
+    if (affectsBalance) {
+      // Recalcular el detalle por-boleta con la devolución ya persistida, para que
+      // Σ saldos coincida con current_balance. Replay holístico (misma fuente de
+      // verdad que los pagos): imputa a la boleta de la venta si hay debt_id.
+      try {
+        await recomputarSaldosDeudas(data.clientId, 'minorista')
+      } catch {
+        // Si la columna saldo no existe, el balance global ya quedó corregido
+      }
     }
   }
 

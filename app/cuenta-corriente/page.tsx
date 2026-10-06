@@ -1110,8 +1110,8 @@ ${bloques}
 
     const renderTabla = (titulo: string, movs: Transaction[], balance: number) => {
       if (movs.length === 0 && balance <= 0) return ''
-      const totalEntregado = movs.filter((t) => t.type === 'debt').reduce((s, t) => s + t.amount, 0)
-      const totalPagado = movs.filter((t) => t.type === 'payment').reduce((s, t) => s + t.amount, 0)
+      const totalEntregado = movs.filter((t) => t.type === 'debt' && t.afectaSaldo !== false).reduce((s, t) => s + t.amount, 0)
+      const totalPagado = movs.filter((t) => t.type === 'payment' && t.afectaSaldo !== false).reduce((s, t) => s + t.amount, 0)
       const diferencia = totalEntregado - totalPagado
       const fmtSaldo = (v: number) => (v < 0 ? `A favor ${formatCurrency(-v)}` : formatCurrency(v))
       const clsSaldo = (v: number) => (v > 0 ? 'deuda' : v < 0 ? 'ok' : '')
@@ -1120,7 +1120,7 @@ ${bloques}
       let saldoAcum = 0
       const rows = cronologico.map((t) => {
         const esDeuda = t.type === 'debt'
-        saldoAcum += esDeuda ? t.amount : -t.amount
+        if (t.afectaSaldo !== false) saldoAcum += esDeuda ? t.amount : -t.amount
         const entregado = esDeuda ? `<span class="m-deuda">${formatCurrency(t.amount)}</span>` : ''
         const pagado = esDeuda ? '' : `<span class="m-pago">${formatCurrency(t.amount)}</span>`
         const concepto = esDeuda ? 'Venta' : 'Pago'
@@ -1539,12 +1539,14 @@ ${renderTabla('Cuenta Mayorista', mayorista, balanceMay)}
     const txMinoristaOrdenado = [...txMinorista].sort((a, b) => a.date.getTime() - b.date.getTime())
     let saldoCorrido = 0
     const movimientosConSaldo = txMinoristaOrdenado.map((tx) => {
-      // Los pagos anulados no modifican el saldo (se conservan en el historial, no se restan/suman).
-      if (!tx.anulado) saldoCorrido += tx.type === 'debt' ? tx.amount : -tx.amount
+      // Los pagos anulados y los movimientos con afecta_saldo=false (ej. devolución de
+      // cliente sin CC habilitada) no modifican el saldo: se conservan en el historial,
+      // visibles, pero no se restan/suman.
+      if (!tx.anulado && tx.afectaSaldo !== false) saldoCorrido += tx.type === 'debt' ? tx.amount : -tx.amount
       return { tx, saldoAcum: saldoCorrido }
     })
-    const totalDebe = txMinorista.filter((t) => t.type === 'debt' && !t.anulado).reduce((a, t) => a + t.amount, 0)
-    const totalHaber = txMinorista.filter((t) => t.type !== 'debt' && !t.anulado).reduce((a, t) => a + t.amount, 0)
+    const totalDebe = txMinorista.filter((t) => t.type === 'debt' && !t.anulado && t.afectaSaldo !== false).reduce((a, t) => a + t.amount, 0)
+    const totalHaber = txMinorista.filter((t) => t.type !== 'debt' && !t.anulado && t.afectaSaldo !== false).reduce((a, t) => a + t.amount, 0)
 
     // Deudas (remitos/ventas) con saldo pendiente, para imputar pagos
     const deudasPendientes = txMinorista

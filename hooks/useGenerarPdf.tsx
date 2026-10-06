@@ -1363,6 +1363,10 @@ export interface ReciboDevolucionData {
   total: number;
   saldoAnterior?: number;
   saldoNuevo?: number;
+  /** 'debito' = nota de débito (sube el saldo); por defecto devolución/crédito */
+  tipo?: "credito" | "debito";
+  /** Nota de débito sin productos: motivo/detalle del cargo */
+  detalle?: string;
 }
 
 const devStyles = StyleSheet.create({
@@ -1373,20 +1377,22 @@ const devStyles = StyleSheet.create({
   colSub: { width: "30%", fontSize: 7.5, textAlign: "right" },
   headTxt: { fontSize: 6.5, color: "#777", fontWeight: "bold" },
   perdidaTag: { fontSize: 6, color: "#b45309" },
+  textoNegro: { color: "#000" },
 });
 
 const ReciboDevolucionCopia = ({ data, copia }: { data: ReciboDevolucionData; copia: string }) => {
   const clientName = data.clientName || "Consumidor Final";
+  const esDebito = data.tipo === "debito";
   return (
     <>
       {/* Header */}
       <View style={reciboStyles.header}>
         <View>
           <Text style={reciboStyles.brandName}>Distribuidora J&J</Text>
-          <Text style={reciboStyles.brandSub}>Comprobante de devolución — no válido como factura</Text>
+          <Text style={reciboStyles.brandSub}>{esDebito ? "Nota de débito" : "Comprobante de devolución"} — no válido como factura</Text>
         </View>
         <View style={reciboStyles.headerRight}>
-          <Text style={reciboStyles.reciboTitle}>RECIBO DE DEVOLUCIÓN</Text>
+          <Text style={reciboStyles.reciboTitle}>{esDebito ? "NOTA DE DÉBITO" : "RECIBO DE DEVOLUCIÓN"}</Text>
           <Text style={reciboStyles.reciboNro}><Text style={reciboStyles.bold}>N° </Text>{data.reciboNumero}</Text>
           <Text style={reciboStyles.reciboFecha}>{safeFormatDate(data.fecha)}  {safeFormatTime(data.fecha)}</Text>
           <Text style={reciboStyles.copiaLabel}>{copia}</Text>
@@ -1407,9 +1413,16 @@ const ReciboDevolucionCopia = ({ data, copia }: { data: ReciboDevolucionData; co
       {/* Productos devueltos */}
       <View style={devStyles.itemsHead}>
         <Text style={[devStyles.colCant, devStyles.headTxt]}>Cant.</Text>
-        <Text style={[devStyles.colDesc, devStyles.headTxt]}>Producto devuelto</Text>
+        <Text style={[devStyles.colDesc, devStyles.headTxt]}>{esDebito ? "Concepto" : "Producto devuelto"}</Text>
         <Text style={[devStyles.colSub, devStyles.headTxt]}>Subtotal</Text>
       </View>
+      {data.items.length === 0 && (
+        <View style={devStyles.itemRow}>
+          <Text style={devStyles.colCant}>1</Text>
+          <Text style={devStyles.colDesc}>{data.detalle || (esDebito ? "Nota de débito" : "Nota de crédito")}</Text>
+          <Text style={devStyles.colSub}>{formatCurrency(data.total)}</Text>
+        </View>
+      )}
       {data.items.map((it, i) => (
         <View key={i} style={devStyles.itemRow}>
           <Text style={devStyles.colCant}>{it.quantity}</Text>
@@ -1422,7 +1435,7 @@ const ReciboDevolucionCopia = ({ data, copia }: { data: ReciboDevolucionData; co
 
       {/* Monto total devuelto */}
       <View style={reciboStyles.montoBox}>
-        <Text style={reciboStyles.montoLabel}>Total devuelto</Text>
+        <Text style={reciboStyles.montoLabel}>{esDebito ? "Total cargado" : "Total devuelto"}</Text>
         <Text style={reciboStyles.montoValue}>{formatCurrency(data.total)}</Text>
       </View>
 
@@ -1434,8 +1447,8 @@ const ReciboDevolucionCopia = ({ data, copia }: { data: ReciboDevolucionData; co
             <Text style={reciboStyles.saldoValue}>{formatCurrency(data.saldoAnterior)}</Text>
           </View>
           <View style={reciboStyles.saldoCell}>
-            <Text style={reciboStyles.saldoLabel}>Esta devolución</Text>
-            <Text style={reciboStyles.saldoValue}>-{formatCurrency(data.total)}</Text>
+            <Text style={reciboStyles.saldoLabel}>{esDebito ? "Esta nota de débito" : "Esta devolución"}</Text>
+            <Text style={reciboStyles.saldoValue}>{esDebito ? "+" : "-"}{formatCurrency(data.total)}</Text>
           </View>
           <View style={reciboStyles.saldoCellFinal}>
             <Text style={reciboStyles.saldoLabel}>Saldo actual</Text>
@@ -1447,12 +1460,12 @@ const ReciboDevolucionCopia = ({ data, copia }: { data: ReciboDevolucionData; co
       {/* Firma */}
       <View style={reciboStyles.firma}>
         <View style={reciboStyles.firmaBox}>
-          <Text style={reciboStyles.firmaLabel}>Firma y aclaración — Conforme devolución</Text>
+          <Text style={[reciboStyles.firmaLabel, devStyles.textoNegro]}>Firma y aclaración — Conforme</Text>
         </View>
       </View>
 
       {/* Footer */}
-      <View style={reciboStyles.footer}>
+      <View style={[reciboStyles.footer, devStyles.textoNegro]}>
         <Text>{data.reciboNumero}</Text>
         <Text>ServiTec - SISTEMA DE GESTION - +54 9 3442 646670</Text>
         <Text>{copia}</Text>
