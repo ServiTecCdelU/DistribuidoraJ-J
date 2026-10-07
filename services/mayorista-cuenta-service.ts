@@ -1,5 +1,6 @@
 import { supabase } from '@/lib/supabase'
 import { generateReadableId } from '@/services/supabase-helpers'
+import { calcularSaldosBoletas, descripcionPagoMayorista, type MetodoPagoMayorista } from '@/lib/utils/imputacion-mayorista'
 
 export type Distribucion = 1 | 2
 
@@ -73,46 +74,77 @@ export const addDeudaMayorista = async (data: {
   return { ...row, type: 'debt', date: new Date(dateIso), distribucion: data.distribucion }
 }
 
-export const pagarBoleta = async (data: {
-  debtId: string
+// Recalcula el saldo de todas las boletas de una distribución a partir de sus pagos
+// (imputados a boleta + pagos por monto FIFO). Solo actualiza las que cambiaron.
+export const recomputarSaldosMayorista = async (distribucion: Distribucion): Promise<Map<string, number>> => {
+  const { data, error } = await supabase
+    .from('transacciones_mayorista')
+    .select('id, type, amount, date, saldo, debt_id')
+    .eq('distribucion', distribucion)
+  if (error) throw new Error('No se pudieron leer los movimientos')
+  const rows = data ?? []
+  const saldos = calcularSaldosBoletas(
+    rows.map((r) => ({ id: r.id, type: r.type, amount: Number(r.amount) || 0, date: r.date, debtId: r.debt_id }))
+  )
+  const cambios = rows.filter(
+    (r) => r.type === 'debt' && Math.abs((Number(r.saldo) || 0) - (saldos.get(r.id) ?? 0)) > 0.004
+  )
+  for (const r of cambios) {
+    const { error: updErr } = await supabase
+      .from('transacciones_mayorista')
+      .update({ saldo: saldos.get(r.id) ?? 0 })
+      .eq('id', r.id)
+    if (updErr) throw new Error('Error actualizando saldo de boleta')
+  }
+  return saldos
+}
+
+// Registra un pago al mayorista. Sin debtId es un pago por monto (cubre boletas FIFO);
+// con debtId se imputa a esa boleta. Devuelve el pago y los saldos recalculados.
+export const registrarPagoMayorista = async (data: {
   amount: number
-  description?: string
-}): Promise<TransaccionMayorista> => {
-  // Leer saldo actual de la boleta (y su distribución, que hereda el pago)
-  const { data: debtRow, error: readErr } = await supabase
-    .from('transacciones_mayorista')
-    .select('saldo, description, distribucion')
-    .eq('id', data.debtId)
-    .single()
-  if (readErr || !debtRow) throw new Error('Boleta no encontrada')
+  distribucion: Distribucion
+  date?: string   // 'YYYY-MM-DD' o ISO; default hoy
+  metodo: MetodoPagoMayorista
+  referencia?: string
+  notas?: string
+  debtId?: string
+}): Promise<{ pago: TransaccionMayorista; saldos: Map<string, number> }> => {
+  if (!(data.amount > 0)) throw new Error('Monto inválido')
+  let boleta: string | undefined
+  if (data.debtId) {
+    const { data: debtRow, error: readErr } = await supabase
+      .from('transacciones_mayorista')
+      .select('description, distribucion')
+      .eq('id', data.debtId)
+      .single()
+    if (readErr || !debtRow) throw new Error('Boleta no encontrada')
+    if ((Number(debtRow.distribucion) === 2 ? 2 : 1) !== data.distribucion) {
+      throw new Error('La boleta es de otra distribución')
+    }
+    boleta = debtRow.description || undefined
+  }
 
-  const saldoActual = Number(debtRow.saldo) || 0
-  if (data.amount > saldoActual) throw new Error('El monto supera el saldo de la boleta')
-  const distribucion: Distribucion = Number(debtRow.distribucion) === 2 ? 2 : 1
-
-  // Decrementar saldo
-  const nuevoSaldo = Math.max(0, saldoActual - data.amount)
-  const { error: updErr } = await supabase
-    .from('transacciones_mayorista')
-    .update({ saldo: nuevoSaldo })
-    .eq('id', data.debtId)
-  if (updErr) throw new Error('Error actualizando saldo')
-
-  // Registrar pago
+  const dateIso = data.date
+    ? new Date(/^\d{4}-\d{2}-\d{2}$/.test(data.date) ? `${data.date}T12:00:00` : data.date).toISOString()
+    : new Date().toISOString()
   const docId = await generateReadableId('transacciones_mayorista', 'txmay', 'pago')
-  const desc = data.description || `Pago boleta ${debtRow.description || data.debtId}`
   const row = {
     id: docId,
     type: 'payment',
     amount: data.amount,
-    description: desc,
-    date: new Date().toISOString(),
-    debt_id: data.debtId,
-    distribucion,
+    description: descripcionPagoMayorista({ metodo: data.metodo, referencia: data.referencia, notas: data.notas, boleta }),
+    date: dateIso,
+    debt_id: data.debtId ?? null,
+    distribucion: data.distribucion,
   }
   const { error: insErr } = await supabase.from('transacciones_mayorista').insert(row)
   if (insErr) throw insErr
-  return { ...row, type: 'payment', date: new Date(), debtId: data.debtId, distribucion }
+  const saldos = await recomputarSaldosMayorista(data.distribucion)
+  return {
+    pago: { ...row, type: 'payment', date: new Date(dateIso), debtId: data.debtId, distribucion: data.distribucion },
+    saldos,
+  }
 }
 
 // Mantener por compatibilidad con cargar pago manual
@@ -136,48 +168,32 @@ export const addPagoMayorista = async (data: {
 }
 
 // Elimina un movimiento (deuda o pago) cargado por error.
-// - Deuda: solo si NO tiene pagos aplicados (saldo intacto), para no dejar pagos huérfanos.
-// - Pago: restaura el saldo de la boleta a la que se había imputado.
+// - Deuda: solo si NO tiene pagos imputados a ella (para no dejar pagos huérfanos);
+//   los pagos por monto que la cubrían se redistribuyen FIFO al recalcular.
+// - Pago: se borra y se recalculan los saldos de las boletas.
 // El balance se recalcula solo (es Σ deudas − Σ pagos).
 export const deleteTransaccionMayorista = async (id: string): Promise<void> => {
   const { data: tx, error } = await supabase
     .from('transacciones_mayorista')
-    .select('id, type, amount, saldo, debt_id')
+    .select('id, type, amount, saldo, debt_id, distribucion')
     .eq('id', id)
     .single()
   if (error || !tx) throw new Error('Movimiento no encontrado')
 
   if (tx.type === 'debt') {
-    const amount = Number(tx.amount) || 0
-    const saldo = tx.saldo != null ? Number(tx.saldo) : amount
     const { data: pagos } = await supabase
       .from('transacciones_mayorista')
       .select('id')
       .eq('debt_id', id)
       .limit(1)
-    if ((pagos && pagos.length > 0) || saldo < amount) {
-      throw new Error('La deuda tiene pagos aplicados. Eliminá primero los pagos.')
+    if (pagos && pagos.length > 0) {
+      throw new Error('La boleta tiene pagos imputados. Eliminá primero esos pagos.')
     }
-    const { error: delErr } = await supabase.from('transacciones_mayorista').delete().eq('id', id)
-    if (delErr) throw delErr
-    return
   }
 
-  // Pago: devolver el saldo a la boleta imputada antes de borrar.
-  if (tx.debt_id) {
-    const { data: debt } = await supabase
-      .from('transacciones_mayorista')
-      .select('saldo, amount')
-      .eq('id', tx.debt_id)
-      .single()
-    if (debt) {
-      const cap = Number(debt.amount) || 0
-      const nuevo = Math.min(cap, (Number(debt.saldo) || 0) + (Number(tx.amount) || 0))
-      await supabase.from('transacciones_mayorista').update({ saldo: nuevo }).eq('id', tx.debt_id)
-    }
-  }
   const { error: delErr } = await supabase.from('transacciones_mayorista').delete().eq('id', id)
   if (delErr) throw delErr
+  await recomputarSaldosMayorista(Number(tx.distribucion) === 2 ? 2 : 1)
 }
 
 export const getBalanceMayorista = async (distribucion?: Distribucion): Promise<number> => {

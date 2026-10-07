@@ -76,12 +76,17 @@ cada una con su balance, sus boletas y sus pagos independientes.
 - `addDeuda({ amount, distribucion, description?, boleta?, date? })` — **Registrar deuda** (botón).
   Carga en la sub-pestaña activa. La boleta se guarda en `description` como `Boleta <nro>`;
   `date` admite `YYYY-MM-DD` (mediodía local para evitar desfase).
-- `pagarBoleta({ debtId, amount, description? })` — paga una boleta puntual y baja su `saldo`.
-  El pago **hereda la distribución de la boleta**.
+- `registrarPago({ amount, distribucion, date?, metodo, referencia?, notas?, debtId? })` — diálogo
+  **Registrar pago** con dos modos: **Por monto** (default, sin `debtId`: cubre boletas FIFO, la más
+  vieja primero; el excedente queda a favor) o **A una boleta** (`debtId`). Campos: fecha de pago,
+  medio (efectivo/transferencia/cheque/otro), monto, N° de comprobante, notas. Muestra vista previa de
+  qué boletas cancela/parcializa. Click en el badge "Debe" de una boleta abre el diálogo en modo boleta.
+- Saldos de boletas = **replay holístico** (`calcularSaldosBoletas`, `lib/utils/imputacion-mayorista.ts`):
+  primero pagos imputados a su boleta (excedente → FIFO), luego pagos por monto FIFO.
+  `recomputarSaldosMayorista(distribucion)` persiste los saldos tras cada pago o eliminación.
 - `eliminar(id)` (`deleteTransaccionMayorista`) — borra un movimiento cargado por error (botón papelera
-  en la tabla). Una **deuda** solo se borra si no tiene pagos aplicados (saldo intacto), para no dejar
-  pagos huérfanos; un **pago** restaura el `saldo` de la boleta a la que se había imputado. El balance
-  se recalcula solo (Σ deudas − Σ pagos). Confirmación con diálogo.
+  en la tabla). Una **deuda** solo se borra si no tiene pagos imputados a ella; un **pago** se borra y
+  se recalculan los saldos. Balance = Σ deudas − Σ pagos. Confirmación con diálogo.
 - `addPago({ amount, distribucion, description? })` — pago genérico (legacy).
 - Balance = Σ deudas − Σ pagos, **por distribución**.
 - Import de remito (`RemitoImportModal`) detecta la distribución del destinatario

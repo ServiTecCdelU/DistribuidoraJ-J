@@ -45,6 +45,7 @@ import type { Client, ComprobantePago, DebtClassification, Sale, Seller, Transac
 import { MovimientoDeudaCard, MOVIMIENTO_GRID } from '@/components/cuenta-corriente/movimiento-deuda-card'
 import { ModalNotaCC, type TipoNotaCC } from '@/components/cuenta-corriente/modal-nota-cc'
 import { DEUDA_ANT_CONCEPTO, esDeudaAnterior } from '@/lib/utils/deuda-anterior'
+import { calcularSaldosBoletas, METODOS_PAGO_MAYORISTA, type MetodoPagoMayorista } from '@/lib/utils/imputacion-mayorista'
 import { formatCurrency, formatDate } from '@/lib/utils/format'
 import { clasificarDeuda, diasDesde, esDiaDePago, diaDePagoInfo } from '@/lib/utils/deuda'
 import {
@@ -700,30 +701,79 @@ export default function CuentaCorrientePage() {
     } finally { setMayProcessing(false) }
   }
 
-  // Mayorista proveedor — registrar pago a boleta específica
+  // Mayorista proveedor — registrar pago (por monto FIFO o a una boleta puntual)
   const [maySelectedDebt, setMaySelectedDebt] = useState<TransaccionMayorista | null>(null)
+  const [mayPagoModo, setMayPagoModo] = useState<'monto' | 'boleta'>('monto')
+  const [mayPagoMetodo, setMayPagoMetodo] = useState<MetodoPagoMayorista>('transferencia')
+  const [mayPagoRef, setMayPagoRef] = useState('')
 
-  const handleMayPagarBoleta = async () => {
-    if (!maySelectedDebt || !canManage) return
+  const mayBoletasPendientes = useMemo(
+    () => mayTxsDist
+      .filter((tx) => tx.type === 'debt' && (tx.saldo ?? tx.amount) > 0)
+      .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime()),
+    [mayTxsDist]
+  )
+
+  // Vista previa: qué boletas cubre el pago (FIFO o la boleta elegida)
+  const mayPagoPreview = useMemo(() => {
+    const amount = parseFloat(mayAmount)
+    if (!mayPagoDialog || isNaN(amount) || amount <= 0) return null
+    if (mayPagoModo === 'boleta' && !maySelectedDebt) return null
+    const despues = calcularSaldosBoletas([
+      ...mayTxsDist,
+      { id: '~nuevo', type: 'payment', amount, date: new Date(8.64e15), debtId: mayPagoModo === 'boleta' ? maySelectedDebt?.id : undefined },
+    ])
+    const afectadas = mayBoletasPendientes
+      .map((tx) => ({ tx, antes: tx.saldo ?? tx.amount, despues: despues.get(tx.id) ?? 0 }))
+      .filter((r) => r.despues < r.antes - 0.004)
+    const pendienteTotal = mayBoletasPendientes.reduce((acc, tx) => acc + (tx.saldo ?? tx.amount), 0)
+    return { afectadas, aFavor: Math.max(0, amount - pendienteTotal) }
+  }, [mayPagoDialog, mayAmount, mayPagoModo, maySelectedDebt, mayTxsDist, mayBoletasPendientes])
+
+  const abrirPagoMayorista = (debt?: TransaccionMayorista) => {
+    const d = new Date()
+    setMayDate(new Date(d.getTime() - d.getTimezoneOffset() * 60000).toISOString().slice(0, 10))
+    setMayPagoModo(debt ? 'boleta' : 'monto')
+    setMaySelectedDebt(debt ?? null)
+    setMayAmount(debt ? String(debt.saldo ?? debt.amount) : '')
+    setMayPagoMetodo('transferencia')
+    setMayPagoRef('')
+    setMayDesc('')
+    setMayPagoDialog(true)
+  }
+
+  // Los saldos de boletas se recalculan en el servicio: recargar la lista completa
+  const recargarMayorista = async () => {
+    try {
+      setMayTxs(await mayoristaCuentaApi.getTransacciones())
+    } catch {
+      toast.error('No se pudo refrescar la cuenta del mayorista')
+    }
+  }
+
+  const handleMayRegistrarPago = async () => {
+    if (!canManage) return
     const amount = parseFloat(mayAmount)
     if (isNaN(amount) || amount <= 0) { toast.error('Ingresá un monto válido'); return }
-    const saldo = maySelectedDebt.saldo ?? 0
-    if (amount > saldo) { toast.error('El monto no puede superar el saldo de la boleta'); return }
+    if (mayPagoModo === 'boleta' && !maySelectedDebt) { toast.error('Elegí la boleta a pagar'); return }
     setMayProcessing(true)
     try {
-      const tx = await mayoristaCuentaApi.pagarBoleta({ debtId: maySelectedDebt.id, amount, description: mayDesc || undefined })
-      // Actualizar saldo de la boleta en la lista local
-      setMayTxs((prev) => {
-        const updated = prev.map((t) =>
-          t.id === maySelectedDebt.id ? { ...t, saldo: Math.max(0, (t.saldo ?? 0) - amount) } : t
-        )
-        return [tx, ...updated]
+      await mayoristaCuentaApi.registrarPago({
+        amount,
+        distribucion: mayDist,
+        date: mayDate || undefined,
+        metodo: mayPagoMetodo,
+        referencia: mayPagoRef || undefined,
+        notas: mayDesc || undefined,
+        debtId: mayPagoModo === 'boleta' ? maySelectedDebt?.id : undefined,
       })
+      await recargarMayorista()
       setMayBalance((prev) => prev - amount)
       setMayPagoDialog(false)
       setMaySelectedDebt(null)
       setMayAmount('')
       setMayDesc('')
+      setMayPagoRef('')
       toast.success(`Pago de ${formatCurrency(amount)} registrado`)
     } catch (err: any) {
       toast.error(err.message || 'Error al registrar pago')
@@ -739,16 +789,7 @@ export default function CuentaCorrientePage() {
     setMayDeleting(true)
     try {
       await mayoristaCuentaApi.eliminar(tx.id)
-      setMayTxs((prev) => {
-        let next = prev.filter((t) => t.id !== tx.id)
-        // Si era un pago imputado a una boleta, restaurar el saldo de esa boleta en la lista.
-        if (tx.type === 'payment' && tx.debtId) {
-          next = next.map((t) =>
-            t.id === tx.debtId ? { ...t, saldo: Math.min(t.amount, (t.saldo ?? 0) + tx.amount) } : t
-          )
-        }
-        return next
-      })
+      await recargarMayorista()
       setMayBalance((prev) => (tx.type === 'debt' ? prev - tx.amount : prev + tx.amount))
       setMayTxToDelete(null)
       toast.success('Movimiento eliminado')
@@ -2851,8 +2892,7 @@ ${renderTabla('Cuenta Mayorista', mayorista, balanceMay)}
                 <Button
                   className="gap-2 rounded-xl bg-green-600 hover:bg-green-700"
                   size="sm"
-                  onClick={() => { setMaySelectedDebt(null); setMayAmount(''); setMayDesc(''); setMayPagoDialog(true) }}
-                  disabled={mayBalanceDist <= 0}
+                  onClick={() => abrirPagoMayorista()}
                 >
                   <ArrowDownCircle className="h-4 w-4" />
                   Registrar pago
@@ -2891,12 +2931,7 @@ ${renderTabla('Cuenta Mayorista', mayorista, balanceMay)}
                             {tx.type === 'debt' ? (
                               (tx.saldo ?? tx.amount) > 0 ? (
                                 <Badge variant="secondary" className="text-red-600 bg-red-50 text-[10px] cursor-pointer hover:bg-red-100"
-                                  onClick={() => {
-                                    setMaySelectedDebt(tx)
-                                    setMayAmount(String(tx.saldo ?? tx.amount))
-                                    setMayDesc('')
-                                    setMayPagoDialog(true)
-                                  }}
+                                  onClick={() => abrirPagoMayorista(tx)}
                                 >
                                   Debe {formatCurrency(tx.saldo ?? tx.amount)}
                                 </Badge>
@@ -2998,77 +3033,138 @@ ${renderTabla('Cuenta Mayorista', mayorista, balanceMay)}
             </DialogContent>
           </Dialog>
 
-          {/* Dialog pago mayorista — selector de boleta */}
+          {/* Dialog pago mayorista — por monto (FIFO) o a una boleta */}
           <Dialog open={mayPagoDialog} onOpenChange={(open) => { if (!open) { setMayPagoDialog(false); setMaySelectedDebt(null) } }}>
-            <DialogContent className="sm:max-w-md">
+            <DialogContent className="sm:max-w-lg max-h-[90vh] overflow-y-auto">
               <DialogHeader>
-                <DialogTitle>Registrar pago a mayorista</DialogTitle>
+                <DialogTitle>Registrar pago — Distribución {mayDist}</DialogTitle>
                 <DialogDescription>
-                  {maySelectedDebt
-                    ? `Boleta: ${maySelectedDebt.description} — Saldo: ${formatCurrency(maySelectedDebt.saldo ?? 0)}`
-                    : 'Seleccioná una boleta para pagar'}
+                  Deuda actual: <span className="font-semibold text-red-600">{formatCurrency(mayBalanceDist)}</span>
                 </DialogDescription>
               </DialogHeader>
-              {!maySelectedDebt ? (
-                <div className="space-y-2 max-h-[300px] overflow-y-auto">
-                  {mayTxsDist.filter((tx) => tx.type === 'debt' && (tx.saldo ?? tx.amount) > 0).length === 0 ? (
-                    <p className="text-sm text-muted-foreground text-center py-4">No hay boletas pendientes</p>
-                  ) : (
-                    mayTxsDist.filter((tx) => tx.type === 'debt' && (tx.saldo ?? tx.amount) > 0).map((tx) => (
-                      <div
-                        key={tx.id}
-                        className="flex items-center justify-between p-3 rounded-xl border cursor-pointer hover:bg-muted/50 transition-colors"
-                        onClick={() => {
+              <div className="space-y-4">
+                <div className="grid grid-cols-2 gap-1 rounded-2xl bg-muted p-1">
+                  {([['monto', 'Por monto'], ['boleta', 'A una boleta']] as const).map(([modo, label]) => (
+                    <button
+                      key={modo}
+                      type="button"
+                      onClick={() => {
+                        setMayPagoModo(modo)
+                        if (modo === 'monto') setMaySelectedDebt(null)
+                      }}
+                      className={`rounded-xl py-1.5 text-sm font-medium transition-colors ${mayPagoModo === modo ? 'bg-background shadow-sm text-teal-700' : 'text-muted-foreground hover:text-foreground'}`}
+                    >
+                      {label}
+                    </button>
+                  ))}
+                </div>
+
+                {mayPagoModo === 'boleta' && (
+                  <div className="space-y-2">
+                    <Label>Boleta</Label>
+                    {mayBoletasPendientes.length === 0 ? (
+                      <p className="text-sm text-muted-foreground">No hay boletas pendientes</p>
+                    ) : (
+                      <Select
+                        value={maySelectedDebt?.id ?? ''}
+                        onValueChange={(id) => {
+                          const tx = mayBoletasPendientes.find((t) => t.id === id) ?? null
                           setMaySelectedDebt(tx)
-                          setMayAmount(String(tx.saldo ?? tx.amount))
-                          setMayDesc('')
+                          if (tx) setMayAmount(String(tx.saldo ?? tx.amount))
                         }}
                       >
-                        <div className="min-w-0 flex-1">
-                          <p className="text-sm font-medium truncate">{tx.description}</p>
-                          <p className="text-xs text-muted-foreground">{formatDate(tx.date)}</p>
-                        </div>
-                        <span className="text-sm font-bold text-red-600 shrink-0 ml-3">
-                          {formatCurrency(tx.saldo ?? tx.amount)}
-                        </span>
-                      </div>
-                    ))
+                        <SelectTrigger className="rounded-xl"><SelectValue placeholder="Elegí la boleta" /></SelectTrigger>
+                        <SelectContent>
+                          {mayBoletasPendientes.map((tx) => (
+                            <SelectItem key={tx.id} value={tx.id}>
+                              {formatDate(tx.date)} · {tx.description} · {formatCurrency(tx.saldo ?? tx.amount)}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    )}
+                  </div>
+                )}
+
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="space-y-2">
+                    <Label>Fecha de pago</Label>
+                    <Input type="date" value={mayDate} onChange={(e) => setMayDate(e.target.value)} className="rounded-lg" />
+                  </div>
+                  <div className="space-y-2">
+                    <Label>Medio de pago</Label>
+                    <Select value={mayPagoMetodo} onValueChange={(v) => setMayPagoMetodo(v as MetodoPagoMayorista)}>
+                      <SelectTrigger className="rounded-lg"><SelectValue /></SelectTrigger>
+                      <SelectContent>
+                        {Object.entries(METODOS_PAGO_MAYORISTA).map(([k, label]) => (
+                          <SelectItem key={k} value={k}>{label}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </div>
+
+                <div className="space-y-2">
+                  <Label>Monto</Label>
+                  <div className="relative">
+                    <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground font-medium">$</span>
+                    <Input
+                      type="number" min="0" step="0.01"
+                      value={mayAmount} onChange={(e) => setMayAmount(e.target.value)}
+                      className="pl-7" placeholder="0" autoFocus
+                    />
+                  </div>
+                  {mayPagoModo === 'boleta' && maySelectedDebt && (
+                    <Button type="button" variant="outline" size="sm" className="text-xs" onClick={() => setMayAmount(String(maySelectedDebt.saldo ?? maySelectedDebt.amount))}>
+                      Pagar boleta completa ({formatCurrency(maySelectedDebt.saldo ?? maySelectedDebt.amount)})
+                    </Button>
+                  )}
+                  {mayPagoModo === 'monto' && mayBalanceDist > 0 && (
+                    <Button type="button" variant="outline" size="sm" className="text-xs" onClick={() => setMayAmount(String(Math.round(mayBalanceDist * 100) / 100))}>
+                      Pagar todo ({formatCurrency(mayBalanceDist)})
+                    </Button>
                   )}
                 </div>
-              ) : (
-                <div className="space-y-4">
-                  <div className="space-y-2">
-                    <Label>Monto</Label>
-                    <div className="relative">
-                      <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground font-medium">$</span>
-                      <Input
-                        type="number" min="0" max={maySelectedDebt.saldo ?? 0} step="0.01"
-                        value={mayAmount} onChange={(e) => setMayAmount(e.target.value)}
-                        className="pl-7" placeholder="0" autoFocus
-                      />
-                    </div>
-                    <Button type="button" variant="outline" size="sm" className="text-xs" onClick={() => setMayAmount(String(maySelectedDebt.saldo ?? 0))}>
-                      Pagar todo ({formatCurrency(maySelectedDebt.saldo ?? 0)})
-                    </Button>
-                  </div>
-                  <div className="space-y-2">
-                    <Label>Descripción (opcional)</Label>
-                    <Textarea placeholder="Ej: Transferencia bancaria" value={mayDesc} onChange={(e) => setMayDesc(e.target.value)} rows={2} />
-                  </div>
+
+                <div className="space-y-2">
+                  <Label>N° de comprobante / referencia (opcional)</Label>
+                  <Input value={mayPagoRef} onChange={(e) => setMayPagoRef(e.target.value)} placeholder="Ej: N° de transferencia o cheque" className="rounded-lg" />
                 </div>
-              )}
-              <DialogFooter>
-                {maySelectedDebt ? (
-                  <>
-                    <Button variant="outline" onClick={() => setMaySelectedDebt(null)}>Volver</Button>
-                    <Button className="bg-green-600 hover:bg-green-700" onClick={handleMayPagarBoleta} disabled={mayProcessing || !mayAmount || parseFloat(mayAmount) <= 0}>
-                      {mayProcessing && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
-                      Registrar pago
-                    </Button>
-                  </>
-                ) : (
-                  <Button variant="outline" onClick={() => setMayPagoDialog(false)}>Cerrar</Button>
+                <div className="space-y-2">
+                  <Label>Notas (opcional)</Label>
+                  <Textarea value={mayDesc} onChange={(e) => setMayDesc(e.target.value)} rows={2} />
+                </div>
+
+                {mayPagoPreview && (mayPagoPreview.afectadas.length > 0 || mayPagoPreview.aFavor > 0) && (
+                  <div className="rounded-2xl border bg-muted/40 p-3 space-y-1.5">
+                    <p className="text-xs font-semibold text-muted-foreground">Este pago cubre</p>
+                    {mayPagoPreview.afectadas.map(({ tx, antes, despues }) => (
+                      <div key={tx.id} className="flex items-center justify-between gap-2 text-xs">
+                        <span className="truncate">{formatDate(tx.date)} · {tx.description}</span>
+                        <span className={`shrink-0 font-medium tabular-nums ${despues <= 0 ? 'text-green-600' : 'text-amber-600'}`}>
+                          {despues <= 0 ? `Cancela ${formatCurrency(antes)}` : `Parcial ${formatCurrency(antes - despues)} · resta ${formatCurrency(despues)}`}
+                        </span>
+                      </div>
+                    ))}
+                    {mayPagoPreview.aFavor > 0 && (
+                      <div className="flex items-center justify-between text-xs">
+                        <span>Saldo a favor</span>
+                        <span className="font-medium text-teal-700 tabular-nums">{formatCurrency(mayPagoPreview.aFavor)}</span>
+                      </div>
+                    )}
+                  </div>
                 )}
+              </div>
+              <DialogFooter>
+                <Button variant="outline" onClick={() => setMayPagoDialog(false)}>Cancelar</Button>
+                <Button
+                  className="bg-green-600 hover:bg-green-700"
+                  onClick={handleMayRegistrarPago}
+                  disabled={mayProcessing || !mayAmount || parseFloat(mayAmount) <= 0 || (mayPagoModo === 'boleta' && !maySelectedDebt)}
+                >
+                  {mayProcessing && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
+                  Registrar pago
+                </Button>
               </DialogFooter>
             </DialogContent>
           </Dialog>
