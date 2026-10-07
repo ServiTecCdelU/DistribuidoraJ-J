@@ -45,7 +45,7 @@ import { formatDate, formatTime, formatCurrency } from "@/lib/utils/format";
 import { incidenciasVenta } from "@/lib/utils/incidencias";
 import { toDate } from "@/services/supabase-helpers";
 import { toast } from "sonner";
-import { useMemo, useState, useCallback, useEffect } from "react";
+import { useMemo, useState, useCallback, useEffect, type KeyboardEvent } from "react";
 import {
   Dialog,
   DialogContent,
@@ -272,9 +272,9 @@ export function ListaVentas({
     }
   };
 
-  // Rango personalizado: las fechas se editan en estado local y se aplican recién con
-  // "Aplicar" (o Enter). Si se aplicaran en cada cambio, cada día/mes que se toca
-  // disparaba una consulta al servidor y recargaba la lista.
+  // Día específico / mes específico / rango personalizado: las fechas se editan en
+  // estado local y se aplican recién con "Aplicar" (o Enter). Si se aplicaran en cada
+  // cambio, cada día/mes que se toca disparaba una consulta al servidor y recargaba la lista.
   const [rangoDesde, setRangoDesde] = useState(dateFrom);
   const [rangoHasta, setRangoHasta] = useState(dateTo);
   useEffect(() => { setRangoDesde(dateFrom); setRangoHasta(dateTo); }, [dateFrom, dateTo]);
@@ -283,6 +283,12 @@ export function ListaVentas({
     if (!rangoPendiente) return;
     onCambiarFiltros({ periodFilter: "custom", dateFrom: rangoDesde, dateTo: rangoHasta });
   };
+  const aplicarConEnter = (e: KeyboardEvent) => { if (e.key === "Enter") aplicarRango(); };
+  const botonAplicar = (
+    <Button size="sm" className="h-9" onClick={aplicarRango} disabled={!rangoPendiente}>
+      Aplicar
+    </Button>
+  );
 
   // Buscador: el texto se escribe en estado local y la búsqueda se dispara al presionar
   // Enter (o la lupa). Evita la consulta al servidor + re-render en cada tecla, que trababa
@@ -534,38 +540,45 @@ export function ListaVentas({
             </Select>
 
             {periodMode === "day" && (
-              <Input
-                type="date"
-                value={dateFrom}
-                onChange={(e) => { const v = e.target.value; onCambiarFiltros({ periodFilter: "custom", dateFrom: v, dateTo: v }); }}
-                className="h-9 w-[160px] bg-background"
-              />
+              <div className="flex items-center gap-2">
+                <Input
+                  type="date"
+                  value={rangoDesde}
+                  onChange={(e) => { const v = e.target.value; setRangoDesde(v); setRangoHasta(v); }}
+                  onKeyDown={aplicarConEnter}
+                  className="h-9 w-[160px] bg-background"
+                />
+                {botonAplicar}
+              </div>
             )}
 
             {periodMode === "specificMonth" && (
-              <Input
-                type="month"
-                value={dateFrom ? dateFrom.slice(0, 7) : ""}
-                onChange={(e) => {
-                  const ym = e.target.value;
-                  if (!ym) { onCambiarFiltros({ periodFilter: "custom", dateFrom: "", dateTo: "" }); return; }
-                  const [y, m] = ym.split("-").map(Number);
-                  const last = new Date(y, m, 0).getDate();
-                  onCambiarFiltros({ periodFilter: "custom", dateFrom: `${ym}-01`, dateTo: `${ym}-${String(last).padStart(2, "0")}` });
-                }}
-                className="h-9 w-[160px] bg-background"
-              />
+              <div className="flex items-center gap-2">
+                <Input
+                  type="month"
+                  value={rangoDesde ? rangoDesde.slice(0, 7) : ""}
+                  onChange={(e) => {
+                    const ym = e.target.value;
+                    if (!ym) { setRangoDesde(""); setRangoHasta(""); return; }
+                    const [y, m] = ym.split("-").map(Number);
+                    const last = new Date(y, m, 0).getDate();
+                    setRangoDesde(`${ym}-01`);
+                    setRangoHasta(`${ym}-${String(last).padStart(2, "0")}`);
+                  }}
+                  onKeyDown={aplicarConEnter}
+                  className="h-9 w-[160px] bg-background"
+                />
+                {botonAplicar}
+              </div>
             )}
 
             {periodMode === "custom" && (
               <div className="flex items-center gap-2">
                 <span className="text-xs font-medium text-muted-foreground">Desde</span>
-                <Input type="date" value={rangoDesde} onChange={(e) => setRangoDesde(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter") aplicarRango(); }} className="h-9 w-[150px] bg-background" />
+                <Input type="date" value={rangoDesde} onChange={(e) => setRangoDesde(e.target.value)} onKeyDown={aplicarConEnter} className="h-9 w-[150px] bg-background" />
                 <span className="text-xs font-medium text-muted-foreground">Hasta</span>
-                <Input type="date" value={rangoHasta} onChange={(e) => setRangoHasta(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter") aplicarRango(); }} className="h-9 w-[150px] bg-background" />
-                <Button size="sm" className="h-9" onClick={aplicarRango} disabled={!rangoPendiente}>
-                  Aplicar
-                </Button>
+                <Input type="date" value={rangoHasta} onChange={(e) => setRangoHasta(e.target.value)} onKeyDown={aplicarConEnter} className="h-9 w-[150px] bg-background" />
+                {botonAplicar}
               </div>
             )}
 
