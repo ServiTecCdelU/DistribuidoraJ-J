@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { periodRange } from "./ventas-period";
+import { periodRange, ventasEqFilters } from "./ventas-period";
 
 // Fecha fija para resultados determinísticos: jueves 11/06/2026 14:30 local.
 const NOW = new Date(2026, 5, 11, 14, 30, 0);
@@ -56,5 +56,26 @@ describe("periodRange", () => {
 
   it("'custom' sin fechas no aplica límites", () => {
     expect(periodRange("custom", "", "", NOW)).toEqual({ from: null, to: null });
+  });
+});
+
+describe("ventasEqFilters", () => {
+  it("sin filtros no agrega condiciones", () => {
+    expect(ventasEqFilters({})).toEqual([]);
+  });
+
+  it("filtra por el vendedor elegido en el servidor", () => {
+    expect(ventasEqFilters({ sellerId: "v1" })).toEqual([["seller_id", "v1"]]);
+  });
+
+  it("el vendedor forzado (vista del vendedor) tiene prioridad sobre el elegido", () => {
+    expect(ventasEqFilters({ forcedSellerId: "propio", sellerId: "otro" })).toEqual([["seller_id", "propio"]]);
+  });
+
+  it("combina vendedor y cliente", () => {
+    expect(ventasEqFilters({ sellerId: "v1", clientId: "c1" })).toEqual([
+      ["seller_id", "v1"],
+      ["client_id", "c1"],
+    ]);
   });
 });

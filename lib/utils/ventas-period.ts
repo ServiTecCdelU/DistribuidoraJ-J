@@ -26,3 +26,19 @@ export function periodRange(
 
   return { from, to };
 }
+
+// Filtros por igualdad que se aplican en el servidor (vendedor / cliente).
+// Deben ir en la consulta y no en el cliente: la consulta tiene un tope de filas,
+// y filtrar después del tope deja afuera ventas viejas del vendedor/cliente.
+// `forcedSellerId` (vista del propio vendedor) tiene prioridad sobre el filtro elegido.
+export function ventasEqFilters(opts: {
+  forcedSellerId?: string;
+  sellerId?: string;
+  clientId?: string;
+}): Array<[column: "seller_id" | "client_id", value: string]> {
+  const filters: Array<["seller_id" | "client_id", string]> = [];
+  const sellerId = opts.forcedSellerId || opts.sellerId;
+  if (sellerId) filters.push(["seller_id", sellerId]);
+  if (opts.clientId) filters.push(["client_id", opts.clientId]);
+  return filters;
+}

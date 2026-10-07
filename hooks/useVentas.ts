@@ -6,7 +6,7 @@ import { savePdfToDatabase, downloadBase64Pdf } from "@/services/pdf-service";
 import { toast } from "sonner";
 import { getAuthToken } from "@/services/auth-service";
 import { formatCurrencyDecimals, formatDateTime } from "@/lib/utils/format";
-import { periodRange } from "@/lib/utils/ventas-period";
+import { periodRange, ventasEqFilters } from "@/lib/utils/ventas-period";
 
 // Helper para nombre de archivo: N°{numero}_{nombre_cliente}.pdf
 function buildDocFilename(tipo: "boleta" | "remito", numero: string | undefined, clientName?: string): string {
@@ -252,9 +252,15 @@ export function useVentas(filterBySellerId?: string, clientCityMap?: Record<stri
         .order("created_at", { ascending: false })
         .limit(1000);
 
-      if (filterBySellerId) {
-        q = q.eq("seller_id", filterBySellerId);
-        pq = pq.eq("seller_id", filterBySellerId);
+      // Vendedor/cliente se filtran en el servidor: si se filtraran después del
+      // .limit(), quedarían afuera las ventas más viejas y los totales darían de menos.
+      for (const [col, val] of ventasEqFilters({
+        forcedSellerId: filterBySellerId,
+        sellerId: filtros.sellerId,
+        clientId: filtros.clientId,
+      })) {
+        q = q.eq(col, val);
+        pq = pq.eq(col, val);
       }
 
       // Solo ventas con remito: las que no tienen no se muestran en el historial.
@@ -287,7 +293,7 @@ export function useVentas(filterBySellerId?: string, clientCityMap?: Record<stri
     } finally {
       setCargando(false);
     }
-  }, [filterBySellerId, enabled, debouncedSearch, filtros.periodFilter, filtros.dateFrom, filtros.dateTo]);
+  }, [filterBySellerId, enabled, debouncedSearch, filtros.periodFilter, filtros.dateFrom, filtros.dateTo, filtros.sellerId, filtros.clientId]);
 
   // Trae ventas de un período arbitrario desde el servidor (para exportar a Excel),
   // sin depender de lo que esté cargado en pantalla. Columnas mínimas para que sea liviano.
