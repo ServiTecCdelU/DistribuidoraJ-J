@@ -7,6 +7,7 @@ import { toast } from "sonner";
 import { getAuthToken } from "@/services/auth-service";
 import { formatCurrencyDecimals, formatDateTime } from "@/lib/utils/format";
 import { periodRange, ventasEqFilters } from "@/lib/utils/ventas-period";
+import { fetchAllPages } from "@/lib/utils/fetch-all-pages";
 
 // Helper para nombre de archivo: N°{numero}_{nombre_cliente}.pdf
 function buildDocFilename(tipo: "boleta" | "remito", numero: string | undefined, clientName?: string): string {
@@ -238,52 +239,48 @@ export function useVentas(filterBySellerId?: string, clientCityMap?: Record<stri
       // Con texto de búsqueda (>=2 chars) busca en TODAS las ventas, sin límite de
       // fecha. Sin búsqueda, trae solo el período seleccionado (por defecto, hoy).
       const hasSearch = debouncedSearch.length >= 2;
-
-      let q = supabase
-        .from("ventas")
-        .select(VENTA_LIST_COLS)
-        .order("created_at", { ascending: false })
-        .limit(1000);
-
-      let pq = supabase
-        .from("pedidos")
-        .select(PEDIDO_RECHAZADO_COLS)
-        .eq("status", "rechazado")
-        .order("created_at", { ascending: false })
-        .limit(1000);
-
-      // Vendedor/cliente se filtran en el servidor: si se filtraran después del
-      // .limit(), quedarían afuera las ventas más viejas y los totales darían de menos.
-      for (const [col, val] of ventasEqFilters({
+      const eqFilters = ventasEqFilters({
         forcedSellerId: filterBySellerId,
         sellerId: filtros.sellerId,
         clientId: filtros.clientId,
-      })) {
-        q = q.eq(col, val);
-        pq = pq.eq(col, val);
-      }
+      });
+      const { from: desde, to: hasta } = hasSearch
+        ? { from: null, to: null }
+        : periodRange(filtros.periodFilter, filtros.dateFrom, filtros.dateTo);
 
-      // Solo ventas con remito: las que no tienen no se muestran en el historial.
-      q = q.not("remito_number", "is", null);
-      pq = pq.not("remito_number", "is", null);
+      // Aplica a ventas y a pedidos rechazados los mismos filtros de servidor.
+      // Vendedor/cliente van acá (no en el cliente) para que la paginación traiga
+      // todas sus ventas; orden created_at + id para que las páginas sean estables.
+      const aplicarFiltros = (q: any, searchCols: string[]) => {
+        for (const [col, val] of eqFilters) q = q.eq(col, val);
+        // Solo ventas con remito: las que no tienen no se muestran en el historial.
+        q = q.not("remito_number", "is", null);
+        if (hasSearch) {
+          const like = `%${debouncedSearch}%`;
+          q = q.or(searchCols.map((c) => `${c}.ilike.${like}`).join(","));
+        }
+        if (desde) q = q.gte("created_at", desde);
+        if (hasta) q = q.lte("created_at", hasta);
+        return q
+          .order("created_at", { ascending: false })
+          .order("id", { ascending: false });
+      };
 
-      if (hasSearch) {
-        const like = `%${debouncedSearch}%`;
-        q = q.or(
-          `client_name.ilike.${like},seller_name.ilike.${like},sale_number.ilike.${like},remito_number.ilike.${like},invoice_number.ilike.${like},hoja_ruta_number.ilike.${like}`,
-        );
-        pq = pq.or(
-          `client_name.ilike.${like},remito_number.ilike.${like},hoja_ruta_number.ilike.${like}`,
-        );
-      } else {
-        const { from, to } = periodRange(filtros.periodFilter, filtros.dateFrom, filtros.dateTo);
-        if (from) { q = q.gte("created_at", from); pq = pq.gte("created_at", from); }
-        if (to) { q = q.lte("created_at", to); pq = pq.lte("created_at", to); }
-      }
-
-      const [{ data }, { data: rechazados }] = await Promise.all([q, pq]);
-      const ventasList = (data ?? []).map(mapVenta);
-      const rechazadosList = (rechazados ?? []).map(mapPedidoRechazado);
+      const [data, rechazados] = await Promise.all([
+        fetchAllPages<any>((from, to) =>
+          aplicarFiltros(supabase.from("ventas").select(VENTA_LIST_COLS), [
+            "client_name", "seller_name", "sale_number", "remito_number", "invoice_number", "hoja_ruta_number",
+          ]).range(from, to),
+        ),
+        fetchAllPages<any>((from, to) =>
+          aplicarFiltros(
+            supabase.from("pedidos").select(PEDIDO_RECHAZADO_COLS).eq("status", "rechazado"),
+            ["client_name", "remito_number", "hoja_ruta_number"],
+          ).range(from, to),
+        ),
+      ]);
+      const ventasList = data.map(mapVenta);
+      const rechazadosList = rechazados.map(mapPedidoRechazado);
       const merged = [...ventasList, ...rechazadosList].sort(
         (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime(),
       );
@@ -302,18 +299,21 @@ export function useVentas(filterBySellerId?: string, clientCityMap?: Record<stri
     from?: string,
     to?: string,
   ): Promise<Venta[]> => {
-    let q = supabase
-      .from("ventas")
-      .select("sale_number,created_at,client_name,seller_name,total,payment_type,payment_method")
-      .order("created_at", { ascending: false })
-      .limit(5000);
-    if (filterBySellerId) q = q.eq("seller_id", filterBySellerId);
-    q = q.not("remito_number", "is", null);
     const range = periodRange(period, from, to);
-    if (range.from) q = q.gte("created_at", range.from);
-    if (range.to) q = q.lte("created_at", range.to);
-    const { data } = await q;
-    return (data ?? []).map(mapVenta);
+    const data = await fetchAllPages<any>((desde, hasta) => {
+      let q = supabase
+        .from("ventas")
+        .select("sale_number,created_at,client_name,seller_name,total,payment_type,payment_method")
+        .not("remito_number", "is", null);
+      if (filterBySellerId) q = q.eq("seller_id", filterBySellerId);
+      if (range.from) q = q.gte("created_at", range.from);
+      if (range.to) q = q.lte("created_at", range.to);
+      return q
+        .order("created_at", { ascending: false })
+        .order("id", { ascending: false })
+        .range(desde, hasta);
+    });
+    return data.map(mapVenta);
   }, [filterBySellerId]);
 
   useEffect(() => {
