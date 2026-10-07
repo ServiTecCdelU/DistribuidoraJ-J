@@ -231,10 +231,16 @@ export function ListaVentas({
   } as const;
 
   const resumenLabel = useMemo(() => {
-    if (searchQuery) return "Resultados de búsqueda";
-    if (dateFrom || dateTo) return `${dateFrom || "inicio"} a ${dateTo || "hoy"}`;
-    return periodLabels[periodFilter] || "Todas";
-  }, [searchQuery, dateFrom, dateTo, periodFilter]);
+    let base: string;
+    if (searchQuery) base = "Resultados de búsqueda";
+    else if (dateFrom || dateTo) base = `${dateFrom || "inicio"} a ${dateTo || "hoy"}`;
+    else base = periodLabels[periodFilter] || "Todas";
+    if (sellerId) {
+      const nombreVendedor = sellers.find((s) => s.id === sellerId)?.name || "Vendedor";
+      base += ` · ${nombreVendedor}`;
+    }
+    return base;
+  }, [searchQuery, dateFrom, dateTo, periodFilter, sellerId, sellers]);
 
   // ─── paginación ───────────────────────────────────────────────────────────
   const [pageSize, setPageSize] = useState(20);
