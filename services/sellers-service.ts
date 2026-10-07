@@ -2,6 +2,7 @@
 import { supabase } from '@/lib/supabase'
 import type { Seller, SellerCommission } from '@/lib/types'
 import { generateReadableId } from '@/services/supabase-helpers'
+import { resumenVentasPendientes } from '@/lib/utils/comisiones'
 
 function mapSeller(d: Record<string, any>): Seller {
   return {
@@ -21,6 +22,21 @@ function mapSeller(d: Record<string, any>): Seller {
   }
 }
 
+// Totales pendientes derivados de las comisiones (ventas − devoluciones no pagadas).
+// Guarda también el bruto y las devoluciones para explicar la diferencia con Ventas.
+function withTotalesPendientes(seller: Seller, commissions: SellerCommission[]): Seller {
+  const ventas = resumenVentasPendientes(commissions)
+  return {
+    ...seller,
+    totalSales: ventas.neto,
+    ventasBrutas: ventas.brutas,
+    devolucionesTotal: ventas.devoluciones,
+    totalCommission: commissions
+      .filter((c) => !c.isPaid)
+      .reduce((sum, c) => sum + c.commissionAmount - (c.montoImputado ?? 0), 0),
+  }
+}
+
 // mapCommission removido — comisiones se derivan de ventas via commissions-service
 
 export const getSellers = async (): Promise<Seller[]> => {
@@ -37,12 +53,7 @@ export const getSellers = async (): Promise<Seller[]> => {
   return Promise.all(
     sellers.map(async (s) => {
       const commissions = await getCommissionsBySeller(s.id)
-      const pendientes = commissions.filter((c) => !c.isPaid)
-      return {
-        ...s,
-        totalSales: pendientes.reduce((sum, c) => sum + c.saleTotal, 0),
-        totalCommission: pendientes.reduce((sum, c) => sum + c.commissionAmount - (c.montoImputado ?? 0), 0),
-      }
+      return withTotalesPendientes(s, commissions)
     }),
   )
 }
@@ -82,12 +93,7 @@ export const getSellerById = async (id: string): Promise<Seller | undefined> => 
   if (!data) return undefined
   const seller = mapSeller(data)
   const { getCommissionsBySeller } = await import('@/services/commissions-service')
-  const pendientes = (await getCommissionsBySeller(seller.id)).filter((c) => !c.isPaid)
-  return {
-    ...seller,
-    totalSales: pendientes.reduce((sum, c) => sum + c.saleTotal, 0),
-    totalCommission: pendientes.reduce((sum, c) => sum + c.commissionAmount - (c.montoImputado ?? 0), 0),
-  }
+  return withTotalesPendientes(seller, await getCommissionsBySeller(seller.id))
 }
 
 export const createSeller = async (

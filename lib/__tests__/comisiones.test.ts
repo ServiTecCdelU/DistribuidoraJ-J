@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { resumenComisiones, type ComisionLike } from "../utils/comisiones";
+import { resumenComisiones, resumenVentasPendientes, type ComisionLike } from "../utils/comisiones";
 
 const comisiones: ComisionLike[] = [
   { commissionAmount: 100, isPaid: true },   // venta cobrada
@@ -48,5 +48,29 @@ describe("resumenComisiones", () => {
   it("lista vacía o nula devuelve ceros", () => {
     expect(resumenComisiones([]).finales).toBe(0);
     expect(resumenComisiones(undefined).finales).toBe(0);
+  });
+});
+
+describe("resumenVentasPendientes", () => {
+  it("separa ventas brutas y devoluciones, y el neto las descuenta", () => {
+    const r = resumenVentasPendientes([
+      { saleTotal: 1000 },
+      { saleTotal: 500 },
+      { saleTotal: -200 },
+    ]);
+    expect(r).toEqual({ brutas: 1500, devoluciones: 200, neto: 1300 });
+  });
+
+  it("ignora las ventas ya pagadas", () => {
+    const r = resumenVentasPendientes([
+      { saleTotal: 1000, isPaid: true },
+      { saleTotal: 300 },
+      { saleTotal: -50, isPaid: true },
+    ]);
+    expect(r).toEqual({ brutas: 300, devoluciones: 0, neto: 300 });
+  });
+
+  it("lista vacía o nula da todo en cero", () => {
+    expect(resumenVentasPendientes(null)).toEqual({ brutas: 0, devoluciones: 0, neto: 0 });
   });
 });

@@ -234,6 +234,10 @@ export interface Seller {
   maxDiscount?: number;
   isActive: boolean;
   totalSales: number;
+  /** Ventas pendientes sin descontar devoluciones (totalSales = ventasBrutas − devolucionesTotal). */
+  ventasBrutas?: number;
+  /** Devoluciones pendientes descontadas de totalSales. */
+  devolucionesTotal?: number;
   totalCommission: number;
   createdAt: Date;
 }

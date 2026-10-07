@@ -50,3 +50,26 @@ export function resumenComisiones(commissions: ComisionLike[] | undefined | null
   }
   return res
 }
+
+// Monto de ventas pendientes de liquidar de un vendedor (lo que muestra Empleados).
+// Las devoluciones vienen con saleTotal < 0 y se descuentan: neto = brutas − devoluciones.
+// Se separan para poder explicar la diferencia con Ventas, que muestra el bruto.
+export interface ResumenVentasPendientes {
+  brutas: number        // suma de saleTotal de ventas no pagadas
+  devoluciones: number  // magnitud (positiva) de las devoluciones no pagadas
+  neto: number          // brutas − devoluciones
+}
+
+export function resumenVentasPendientes(
+  commissions: { saleTotal: number; isPaid?: boolean }[] | undefined | null,
+): ResumenVentasPendientes {
+  let brutas = 0
+  let devoluciones = 0
+  for (const c of commissions ?? []) {
+    if (c.isPaid) continue
+    const total = c.saleTotal || 0
+    if (total < 0) devoluciones += -total
+    else brutas += total
+  }
+  return { brutas, devoluciones, neto: brutas - devoluciones }
+}

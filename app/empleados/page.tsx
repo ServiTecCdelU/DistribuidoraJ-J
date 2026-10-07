@@ -79,6 +79,17 @@ const EMPLOYEE_TYPE_BADGE: Record<EmployeeType, string> = {
   vendedor_cobrador: 'bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400 border border-amber-200 dark:border-amber-800',
 }
 
+// Explica por qué el total de ventas difiere del de la pantalla Ventas: acá se
+// descuentan las devoluciones. Solo se muestra si hubo devoluciones.
+function DetalleDevoluciones({ brutas, devoluciones }: { brutas?: number; devoluciones?: number }) {
+  if (!devoluciones || devoluciones <= 0) return null
+  return (
+    <p className="text-[11px] text-muted-foreground tabular-nums leading-tight">
+      Descuenta devoluciones: {formatCurrency(brutas ?? 0)} − {formatCurrency(devoluciones)}
+    </p>
+  )
+}
+
 export default function EmpleadosPage() {
   const { user } = useAuth()
   const [sellers, setSellers] = useState<Seller[]>([])
@@ -666,6 +677,8 @@ export default function EmpleadosPage() {
   // Stats
   const activeSellers = sellers.filter(s => s.isActive).length
   const totalSales = sellers.reduce((sum, s) => sum + (s.totalSales || 0), 0)
+  const totalVentasBrutas = sellers.reduce((sum, s) => sum + (s.ventasBrutas ?? s.totalSales ?? 0), 0)
+  const totalDevoluciones = sellers.reduce((sum, s) => sum + (s.devolucionesTotal || 0), 0)
   const totalCommissions = sellers.reduce((sum, s) => sum + (s.totalCommission || 0), 0)
 
   // Filtro de comisiones (rango + estado) para la lista del detalle
@@ -776,6 +789,7 @@ export default function EmpleadosPage() {
               <div>
                 <p className="text-sm text-muted-foreground">Ventas Totales</p>
                 <p className="text-2xl font-bold text-foreground">{formatCurrency(totalSales)}</p>
+                <DetalleDevoluciones brutas={totalVentasBrutas} devoluciones={totalDevoluciones} />
               </div>
             </div>
           </CardContent>
@@ -984,6 +998,7 @@ export default function EmpleadosPage() {
                             <span className="font-medium text-foreground">
                               {formatCurrency(seller.totalSales || 0)}
                             </span>
+                            <DetalleDevoluciones brutas={seller.ventasBrutas} devoluciones={seller.devolucionesTotal} />
                           </td>
                           <td className="p-4 text-right">
                             <span className="font-medium text-emerald-600 dark:text-emerald-400">
@@ -1134,6 +1149,7 @@ export default function EmpleadosPage() {
                             </p>
                           </div>
                         </div>
+                        <DetalleDevoluciones brutas={seller.ventasBrutas} devoluciones={seller.devolucionesTotal} />
 
                         {/* Quick Actions */}
                         <div className="flex gap-1.5">
