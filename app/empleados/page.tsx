@@ -44,7 +44,6 @@ import {
   Phone,
   Mail,
   Users,
-  TrendingUp,
   DollarSign,
   X,
   CheckCircle,
@@ -765,48 +764,43 @@ export default function EmpleadosPage() {
     <MainLayout allowedRoles={['admin']} title="Empleados" description="Gestiona tu equipo de vendedores y transportistas">
       {!detailModalOpen && (
       <>
-      {/* Stats Cards - Solo visible en desktop */}
-      <div className="hidden lg:grid grid-cols-3 gap-4 mb-6">
-        <Card className="bg-gradient-to-br from-primary/5 to-primary/10 border-primary/20">
-          <CardContent className="p-4">
-            <div className="flex items-center gap-3">
-              <div className="p-2 rounded-lg bg-primary/10">
-                <Users className="h-5 w-5 text-primary" />
-              </div>
-              <div>
-                <p className="text-sm text-muted-foreground">Empleados Activos</p>
-                <p className="text-2xl font-bold text-foreground">{activeSellers}</p>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-        <Card className="bg-gradient-to-br from-amber-500/5 to-amber-500/10 border-amber-500/20">
-          <CardContent className="p-4">
-            <div className="flex items-center gap-3">
-              <div className="p-2 rounded-lg bg-amber-500/10">
-                <TrendingUp className="h-5 w-5 text-amber-600 dark:text-amber-400" />
-              </div>
-              <div>
-                <p className="text-sm text-muted-foreground">Ventas Totales</p>
-                <p className="text-2xl font-bold text-foreground">{formatCurrency(totalSales)}</p>
-                <DetalleDevoluciones brutas={totalVentasBrutas} devoluciones={totalDevoluciones} />
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-        <Card className="bg-gradient-to-br from-rose-500/5 to-rose-500/10 border-rose-500/20">
-          <CardContent className="p-4">
-            <div className="flex items-center gap-3">
-              <div className="p-2 rounded-lg bg-rose-500/10">
-                <DollarSign className="h-5 w-5 text-rose-600 dark:text-rose-400" />
-              </div>
-              <div>
-                <p className="text-sm text-muted-foreground">Comisiones Totales</p>
-                <p className="text-2xl font-bold text-foreground">{formatCurrency(totalCommissions)}</p>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
+      {/* Stats Cards - Solo visible en desktop. 2 tarjetas, mismo estilo que el detalle:
+          devoluciones/NC como subtitulo de ventas para explicar el neto. */}
+      <div className="hidden lg:grid grid-cols-2 gap-3 mb-6">
+        <div className="rounded-2xl p-4 bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 grid grid-cols-2 gap-3">
+          <div className="min-w-0">
+            <p className="text-xs text-muted-foreground font-medium uppercase tracking-wide leading-none">Ventas totales</p>
+            <p className="font-bold text-lg text-foreground whitespace-nowrap mt-1.5">{formatCurrency(totalSales)}</p>
+            {totalDevoluciones > 0 ? (
+              <>
+                <p className="text-[11px] text-muted-foreground leading-tight">{formatCurrency(totalVentasBrutas)} en ventas</p>
+                <p className="text-[11px] text-rose-600 dark:text-rose-400 leading-tight mt-0.5">
+                  − {formatCurrency(totalDevoluciones)} en devoluciones y NC
+                </p>
+              </>
+            ) : (
+              <p className="text-[11px] text-muted-foreground leading-tight">sin devoluciones</p>
+            )}
+          </div>
+          <div className="min-w-0 border-l border-amber-200 dark:border-amber-800 pl-3">
+            <p className="text-xs text-muted-foreground font-medium uppercase tracking-wide leading-none">Comisiones totales</p>
+            <p className="font-bold text-lg text-emerald-600 dark:text-emerald-400 whitespace-nowrap mt-1.5">{formatCurrency(totalCommissions)}</p>
+            <p className="text-[11px] text-muted-foreground leading-tight">lo que falta pagar</p>
+          </div>
+        </div>
+
+        <div className="rounded-2xl p-4 bg-teal-50 dark:bg-teal-900/20 border border-teal-200 dark:border-teal-800 grid grid-cols-2 gap-3">
+          <div className="min-w-0">
+            <p className="text-xs text-muted-foreground font-medium uppercase tracking-wide leading-none">Empleados activos</p>
+            <p className="font-bold text-lg text-teal-600 dark:text-teal-400 whitespace-nowrap mt-1.5">{activeSellers}</p>
+            <p className="text-[11px] text-muted-foreground leading-tight">de {sellers.length} empleados</p>
+          </div>
+          <div className="min-w-0 border-l border-teal-200 dark:border-teal-800 pl-3">
+            <p className="text-xs text-muted-foreground font-medium uppercase tracking-wide leading-none">Inactivos</p>
+            <p className="font-bold text-lg text-muted-foreground whitespace-nowrap mt-1.5">{sellers.length - activeSellers}</p>
+            <p className="text-[11px] text-muted-foreground leading-tight">dados de baja</p>
+          </div>
+        </div>
       </div>
 
       {/* Header Actions - Desktop */}
