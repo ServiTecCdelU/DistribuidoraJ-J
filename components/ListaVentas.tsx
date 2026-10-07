@@ -272,6 +272,18 @@ export function ListaVentas({
     }
   };
 
+  // Rango personalizado: las fechas se editan en estado local y se aplican recién con
+  // "Aplicar" (o Enter). Si se aplicaran en cada cambio, cada día/mes que se toca
+  // disparaba una consulta al servidor y recargaba la lista.
+  const [rangoDesde, setRangoDesde] = useState(dateFrom);
+  const [rangoHasta, setRangoHasta] = useState(dateTo);
+  useEffect(() => { setRangoDesde(dateFrom); setRangoHasta(dateTo); }, [dateFrom, dateTo]);
+  const rangoPendiente = rangoDesde !== dateFrom || rangoHasta !== dateTo;
+  const aplicarRango = () => {
+    if (!rangoPendiente) return;
+    onCambiarFiltros({ periodFilter: "custom", dateFrom: rangoDesde, dateTo: rangoHasta });
+  };
+
   // Buscador: el texto se escribe en estado local y la búsqueda se dispara al presionar
   // Enter (o la lupa). Evita la consulta al servidor + re-render en cada tecla, que trababa
   // la escritura.
@@ -548,9 +560,12 @@ export function ListaVentas({
             {periodMode === "custom" && (
               <div className="flex items-center gap-2">
                 <span className="text-xs font-medium text-muted-foreground">Desde</span>
-                <Input type="date" value={dateFrom} onChange={(e) => onCambiarFiltros({ periodFilter: "custom", dateFrom: e.target.value })} className="h-9 w-[150px] bg-background" />
+                <Input type="date" value={rangoDesde} onChange={(e) => setRangoDesde(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter") aplicarRango(); }} className="h-9 w-[150px] bg-background" />
                 <span className="text-xs font-medium text-muted-foreground">Hasta</span>
-                <Input type="date" value={dateTo} onChange={(e) => onCambiarFiltros({ periodFilter: "custom", dateTo: e.target.value })} className="h-9 w-[150px] bg-background" />
+                <Input type="date" value={rangoHasta} onChange={(e) => setRangoHasta(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter") aplicarRango(); }} className="h-9 w-[150px] bg-background" />
+                <Button size="sm" className="h-9" onClick={aplicarRango} disabled={!rangoPendiente}>
+                  Aplicar
+                </Button>
               </div>
             )}
 
