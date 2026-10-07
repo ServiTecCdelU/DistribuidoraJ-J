@@ -1408,44 +1408,43 @@ export default function EmpleadosPage() {
                 )}
               </div>
 
-              {/* Stats: 3 tarjetas, dos metricas por tarjeta */}
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
-                <div className="rounded-2xl p-2.5 bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 grid grid-cols-2 gap-2">
+              {/* Stats: 2 tarjetas, dos metricas por tarjeta. Devoluciones/NC van como
+                  subtitulo de ventas y comisiones para explicar el neto. */}
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
+                <div className="rounded-2xl p-4 bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 grid grid-cols-2 gap-3">
                   <div className="min-w-0">
-                    <p className="text-[10px] text-muted-foreground font-medium uppercase tracking-wide leading-none">Ventas totales</p>
-                    <p className="font-bold text-sm text-foreground whitespace-nowrap mt-1">{formatCurrency(allSalesTotal)}</p>
-                    <p className="text-[9px] text-muted-foreground leading-tight">{ventaEntries.length} ventas</p>
+                    <p className="text-xs text-muted-foreground font-medium uppercase tracking-wide leading-none">Ventas totales</p>
+                    <p className="font-bold text-base lg:text-lg text-foreground whitespace-nowrap mt-1.5">{formatCurrency(allSalesTotal)}</p>
+                    <p className="text-[11px] text-muted-foreground leading-tight">{ventaEntries.length} ventas</p>
+                    {devEntries.length > 0 && (
+                      <p className="text-[11px] text-rose-600 dark:text-rose-400 leading-tight mt-0.5">
+                        − {formatCurrency(Math.abs(devolucionesTotal))} en devoluciones y NC ({devEntries.length} {devEntries.length === 1 ? 'ajuste' : 'ajustes'})
+                      </p>
+                    )}
                   </div>
-                  <div className="min-w-0 border-l border-amber-200 dark:border-amber-800 pl-2">
-                    <p className="text-[10px] text-muted-foreground font-medium uppercase tracking-wide leading-none">Comisiones totales</p>
-                    <p className="font-bold text-sm text-emerald-600 dark:text-emerald-400 whitespace-nowrap mt-1">{formatCurrency(comisionesBrutas)}</p>
-                    <p className="text-[9px] text-muted-foreground leading-tight">sin restar devoluciones</p>
+                  <div className="min-w-0 border-l border-amber-200 dark:border-amber-800 pl-3">
+                    <p className="text-xs text-muted-foreground font-medium uppercase tracking-wide leading-none">Comisiones totales</p>
+                    <p className="font-bold text-base lg:text-lg text-emerald-600 dark:text-emerald-400 whitespace-nowrap mt-1.5">{formatCurrency(comisionesBrutas)}</p>
+                    {devEntries.length > 0 ? (
+                      <p className="text-[11px] text-muted-foreground leading-tight">
+                        Finales <span className="font-semibold text-teal-600 dark:text-teal-400">{formatCurrency(comisionesFinales)}</span> (menos devoluciones)
+                      </p>
+                    ) : (
+                      <p className="text-[11px] text-muted-foreground leading-tight">sin devoluciones</p>
+                    )}
                   </div>
                 </div>
 
-                <div className="rounded-2xl p-2.5 bg-rose-50 dark:bg-rose-900/20 border border-rose-200 dark:border-rose-800 grid grid-cols-2 gap-2">
+                <div className="rounded-2xl p-4 bg-teal-50 dark:bg-teal-900/20 border border-teal-200 dark:border-teal-800 grid grid-cols-2 gap-3">
                   <div className="min-w-0">
-                    <p className="text-[10px] text-muted-foreground font-medium uppercase tracking-wide leading-none">Devoluciones y NC</p>
-                    <p className="font-bold text-sm text-rose-600 dark:text-rose-400 whitespace-nowrap mt-1">{formatCurrency(Math.abs(devolucionesTotal))}</p>
-                    <p className="text-[9px] text-muted-foreground leading-tight">{devEntries.length} {devEntries.length === 1 ? 'ajuste' : 'ajustes'} (devoluciones, NC, descuentos posteriores)</p>
+                    <p className="text-xs text-muted-foreground font-medium uppercase tracking-wide leading-none">Comisiones pagadas</p>
+                    <p className="font-bold text-base lg:text-lg text-emerald-600 dark:text-emerald-400 whitespace-nowrap mt-1.5">{formatCurrency(resumenDetalle.cobrado)}</p>
+                    <p className="text-[11px] text-muted-foreground leading-tight">lo que ya le pague</p>
                   </div>
-                  <div className="min-w-0 border-l border-rose-200 dark:border-rose-800 pl-2">
-                    <p className="text-[10px] text-muted-foreground font-medium uppercase tracking-wide leading-none">Comisiones finales</p>
-                    <p className="font-bold text-sm text-teal-600 dark:text-teal-400 whitespace-nowrap mt-1">{formatCurrency(comisionesFinales)}</p>
-                    <p className="text-[9px] text-muted-foreground leading-tight">comisiones menos devoluciones</p>
-                  </div>
-                </div>
-
-                <div className="rounded-2xl p-2.5 bg-teal-50 dark:bg-teal-900/20 border border-teal-200 dark:border-teal-800 grid grid-cols-2 gap-2">
-                  <div className="min-w-0">
-                    <p className="text-[10px] text-muted-foreground font-medium uppercase tracking-wide leading-none">Comisiones pagadas</p>
-                    <p className="font-bold text-sm text-emerald-600 dark:text-emerald-400 whitespace-nowrap mt-1">{formatCurrency(resumenDetalle.cobrado)}</p>
-                    <p className="text-[9px] text-muted-foreground leading-tight">lo que ya le pague</p>
-                  </div>
-                  <div className="min-w-0 border-l border-teal-200 dark:border-teal-800 pl-2">
-                    <p className="text-[10px] text-muted-foreground font-medium uppercase tracking-wide leading-none">Comisiones por pagar</p>
-                    <p className="font-bold text-sm text-amber-600 dark:text-amber-400 whitespace-nowrap mt-1">{formatCurrency(resumenDetalle.pendiente)}</p>
-                    <p className="text-[9px] text-muted-foreground leading-tight">lo que falta pagar</p>
+                  <div className="min-w-0 border-l border-teal-200 dark:border-teal-800 pl-3">
+                    <p className="text-xs text-muted-foreground font-medium uppercase tracking-wide leading-none">Comisiones por pagar</p>
+                    <p className="font-bold text-base lg:text-lg text-amber-600 dark:text-amber-400 whitespace-nowrap mt-1.5">{formatCurrency(resumenDetalle.pendiente)}</p>
+                    <p className="text-[11px] text-muted-foreground leading-tight">lo que falta pagar</p>
                   </div>
                 </div>
               </div>
