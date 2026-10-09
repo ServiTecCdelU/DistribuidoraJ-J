@@ -80,6 +80,13 @@ const EMPLOYEE_TYPE_BADGE: Record<EmployeeType, string> = {
 
 // Explica por qué el total de ventas difiere del de la pantalla Ventas: acá se
 // descuentan las devoluciones. Solo se muestra si hubo devoluciones.
+// Acepta coma o punto como separador decimal (ej: "1,7" → "1.7")
+const sanitizePct = (value: string) => value.replace(',', '.').replace(/[^0-9.]/g, '').replace(/(\..*)\./g, '$1')
+const parsePct = (value: string | number) => {
+  const n = parseFloat(String(value).replace(',', '.'))
+  return Number.isFinite(n) ? Math.min(100, Math.max(0, n)) : 0
+}
+
 function DetalleDevoluciones({ brutas, devoluciones }: { brutas?: number; devoluciones?: number }) {
   if (!devoluciones || devoluciones <= 0) return null
   return (
@@ -144,9 +151,9 @@ export default function EmpleadosPage() {
     isVendedor: true,
     isTransportista: false,
     isCobrador: false,
-    commissionRate: 10,
+    commissionRate: 10 as string | number,
     transportistaCommissionRate: 10,
-    maxDiscount: 6,
+    maxDiscount: 6 as string | number,
     isActive: true,
   })
   const [saving, setSaving] = useState(false)
@@ -316,8 +323,8 @@ export default function EmpleadosPage() {
       phone: formData.phone,
       codigoVendedor: formData.codigoVendedor.trim() || undefined,
       employeeType,
-      commissionRate: formData.isVendedor ? formData.commissionRate : 0,
-      maxDiscount: formData.maxDiscount,
+      commissionRate: formData.isVendedor ? parsePct(formData.commissionRate) : 0,
+      maxDiscount: parsePct(formData.maxDiscount),
       isActive: formData.isActive,
     }
     try {
@@ -1234,13 +1241,11 @@ export default function EmpleadosPage() {
                     {formData.isVendedor && (
                       <div className="flex items-center gap-1.5">
                         <Input
-                          type="number"
-                          min="0"
-                          max="100"
-                          step="0.5"
+                          type="text"
+                          inputMode="decimal"
                           value={formData.commissionRate}
                           onFocus={(e) => e.target.select()}
-                          onChange={(e) => setFormData({ ...formData, commissionRate: Number(e.target.value) })}
+                          onChange={(e) => setFormData({ ...formData, commissionRate: sanitizePct(e.target.value) })}
                           className="h-8 w-20 text-sm text-center"
                         />
                         <span className="text-sm text-muted-foreground">%</span>
@@ -1292,13 +1297,11 @@ export default function EmpleadosPage() {
                   <div className="flex items-center gap-1.5">
                     <Input
                       id="maxDiscount"
-                      type="number"
-                      min="0"
-                      max="100"
-                      step="0.5"
+                      type="text"
+                      inputMode="decimal"
                       value={formData.maxDiscount}
                       onFocus={(e) => e.target.select()}
-                      onChange={(e) => setFormData({ ...formData, maxDiscount: Number(e.target.value) })}
+                      onChange={(e) => setFormData({ ...formData, maxDiscount: sanitizePct(e.target.value) })}
                       className="h-8 w-24 text-sm text-center"
                     />
                     <span className="text-sm text-muted-foreground">% máximo de descuento que puede aplicar en sus ventas</span>
