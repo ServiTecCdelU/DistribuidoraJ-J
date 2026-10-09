@@ -200,8 +200,8 @@ export function PaymentModal({
 
   const isValid = () => {
     const soloRoturas = adjustmentsList.length > 0 && adjustmentsList.every(a => a.type === "rotura");
-    if (total <= 0 && !soloRoturas) return false;
-    if (total <= 0 && soloRoturas) return true;
+    // Pedido sin cargo (total original $0): se completa sin ingresar montos
+    if (total <= 0) return originalTotal <= 0 || soloRoturas;
     if (!cubierto) return false;
     if (cuentaCorriente > 0 && !selectedClientId && !order.clientId) return false;
     if (cuentaCorriente > 0 && !ccHabilitada) return false;
