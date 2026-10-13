@@ -47,6 +47,7 @@ import {
   getSellerCommissions,
   getSellers,
   updateSeller,
+  replaceSeller,
   resetCommissions,
   getPagosComisiones,
 } from '@/services/sellers-service'
@@ -305,6 +306,12 @@ export const sellersApi = {
   },
   async update(id: string, updates: Partial<Seller>): Promise<Seller> {
     return updateSeller(id, updates)
+  },
+  async replace(
+    oldId: string,
+    seller: Omit<Seller, 'id' | 'createdAt' | 'totalSales' | 'totalCommission'>
+  ): Promise<{ nuevo: Seller; anterior: Seller }> {
+    return replaceSeller(oldId, seller)
   },
   async delete(id: string): Promise<void> {
     return deleteSeller(id)

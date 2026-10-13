@@ -74,6 +74,12 @@ export default function EmpleadosPage() {
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false)
   const [sellerToDelete, setSellerToDelete] = useState<Seller | null>(null)
 
+  // Reemplazo de empleado (cambio de nombre = posible persona distinta)
+  const [replaceDialogOpen, setReplaceDialogOpen] = useState(false)
+  const [replaceCtx, setReplaceCtx] = useState<{ payload: Record<string, any>; oldSeller: Seller } | null>(null)
+  const [replacePending, setReplacePending] = useState<{ count: number; total: number } | null>(null)
+  const [replacing, setReplacing] = useState(false)
+
   // Detail modal state
   const [detailModalOpen, setDetailModalOpen] = useState(false)
   const [selectedSeller, setSelectedSeller] = useState<Seller | null>(null)
@@ -216,6 +222,24 @@ export default function EmpleadosPage() {
     }
     try {
       if (editingSeller) {
+        const nombreCambio =
+          formData.name.trim().toLowerCase() !== editingSeller.name.trim().toLowerCase()
+        if (nombreCambio) {
+          setReplaceCtx({ payload, oldSeller: editingSeller })
+          setReplacePending(null)
+          setReplaceDialogOpen(true)
+          try {
+            const coms = await sellersApi.getCommissions(editingSeller.id)
+            const pend = coms.filter(c => !c.isPaid)
+            setReplacePending({
+              count: pend.length,
+              total: pend.reduce((sum, c) => sum + c.commissionAmount, 0),
+            })
+          } catch {
+            setReplacePending({ count: 0, total: 0 })
+          }
+          return
+        }
         const updated = await sellersApi.update(editingSeller.id, payload)
         setSellers(sellers.map(s => s.id === editingSeller.id ? updated : s))
         toast.success('Empleado actualizado correctamente')
@@ -229,6 +253,42 @@ export default function EmpleadosPage() {
       toast.error('Error al guardar empleado')
     } finally {
       setSaving(false)
+    }
+  }
+
+  // Misma persona: solo se corrige el nombre, el historial sigue en el mismo registro
+  const handleRenameOnly = async () => {
+    if (!replaceCtx) return
+    setReplacing(true)
+    try {
+      const updated = await sellersApi.update(replaceCtx.oldSeller.id, replaceCtx.payload)
+      setSellers(sellers.map(s => s.id === replaceCtx.oldSeller.id ? updated : s))
+      toast.success('Nombre actualizado')
+      setReplaceDialogOpen(false)
+      setModalOpen(false)
+      setReplaceCtx(null)
+    } catch (error) {
+      toast.error('Error al guardar empleado')
+    } finally {
+      setReplacing(false)
+    }
+  }
+
+  // Persona distinta: empleado nuevo desde cero y el anterior queda inactivo
+  const handleReplaceSeller = async () => {
+    if (!replaceCtx) return
+    setReplacing(true)
+    try {
+      const { nuevo } = await sellersApi.replace(replaceCtx.oldSeller.id, replaceCtx.payload as any)
+      await loadSellers()
+      toast.success(`${nuevo.name} creado — ${replaceCtx.oldSeller.name} quedo inactivo`)
+      setReplaceDialogOpen(false)
+      setModalOpen(false)
+      setReplaceCtx(null)
+    } catch (error: any) {
+      toast.error(error?.message || 'Error al reemplazar empleado')
+    } finally {
+      setReplacing(false)
     }
   }
 
@@ -1075,6 +1135,77 @@ export default function EmpleadosPage() {
               </div>
             </div>
           )}
+        </DialogContent>
+      </Dialog>
+
+      {/* Reemplazo de Empleado */}
+      <Dialog open={replaceDialogOpen} onOpenChange={(o) => { if (!replacing) setReplaceDialogOpen(o) }}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Cambiaste el nombre del empleado</DialogTitle>
+          </DialogHeader>
+          {replaceCtx && (
+            <div className="space-y-4 py-2">
+              <div className="rounded-2xl border border-border/60 p-3 text-sm space-y-1">
+                <p className="text-muted-foreground">
+                  De <span className="font-medium text-foreground">{replaceCtx.oldSeller.name}</span>
+                </p>
+                <p className="text-muted-foreground">
+                  A <span className="font-medium text-foreground">{replaceCtx.payload.name}</span>
+                </p>
+              </div>
+
+              <p className="text-sm text-muted-foreground">
+                Si es otra persona, conviene crear un empleado nuevo: las comisiones, cobranzas y
+                totales del anterior quedan en su propio registro y no se mezclan.
+              </p>
+
+              {replacePending && replacePending.count > 0 && (
+                <div className="rounded-2xl border border-amber-200 dark:border-amber-800 bg-amber-50 dark:bg-amber-900/20 p-3 text-sm">
+                  <p className="font-medium text-amber-800 dark:text-amber-300">
+                    {replaceCtx.oldSeller.name} tiene {replacePending.count} comisiones pendientes por {formatCurrency(replacePending.total)}
+                  </p>
+                  <p className="text-xs text-amber-700 dark:text-amber-400 mt-1">
+                    Quedan en su registro para que se las pagues. El empleado nuevo arranca en cero.
+                  </p>
+                </div>
+              )}
+
+              <div className="rounded-2xl border border-border/60 bg-muted/30 p-3 text-xs text-muted-foreground">
+                El empleado nuevo se crea con los datos que cargaste: {replaceCtx.payload.email || 'sin email'} · {replaceCtx.payload.phone || 'sin telefono'} · {EMPLOYEE_TYPE_LABELS[replaceCtx.payload.employeeType as EmployeeType]}
+                {replaceCtx.oldSeller.email && replaceCtx.payload.email &&
+                  replaceCtx.oldSeller.email.toLowerCase() === String(replaceCtx.payload.email).toLowerCase() &&
+                  ' · el acceso con ese email pasa al empleado nuevo'}
+              </div>
+            </div>
+          )}
+          <DialogFooter className="flex-col sm:flex-col gap-2">
+            <Button
+              className="w-full"
+              onClick={handleReplaceSeller}
+              disabled={replacing}
+            >
+              {replacing ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Plus className="h-4 w-4 mr-2" />}
+              Crear empleado nuevo y desactivar el anterior
+            </Button>
+            <Button
+              variant="outline"
+              className="w-full bg-transparent"
+              onClick={handleRenameOnly}
+              disabled={replacing}
+            >
+              <Pencil className="h-4 w-4 mr-2" />
+              Es la misma persona, solo corregir el nombre
+            </Button>
+            <Button
+              variant="ghost"
+              className="w-full"
+              onClick={() => setReplaceDialogOpen(false)}
+              disabled={replacing}
+            >
+              Cancelar
+            </Button>
+          </DialogFooter>
         </DialogContent>
       </Dialog>
 
