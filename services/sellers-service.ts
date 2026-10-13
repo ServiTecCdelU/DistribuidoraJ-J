@@ -127,8 +127,8 @@ export const createSeller = async (
 export const updateSeller = async (id: string, updates: Partial<Seller>): Promise<Seller> => {
   const mapped: Record<string, any> = {}
   if (updates.name !== undefined) mapped.name = updates.name
-  if (updates.email !== undefined) mapped.email = updates.email
-  if (updates.phone !== undefined) mapped.phone = updates.phone
+  if (updates.email !== undefined) mapped.email = updates.email || null
+  if (updates.phone !== undefined) mapped.phone = updates.phone || null
   if (updates.employeeType !== undefined) mapped.employee_type = updates.employeeType
   if (updates.commissionRate !== undefined) mapped.commission_rate = updates.commissionRate
   if (updates.transportistaCommissionRate !== undefined) mapped.transportista_commission_rate = updates.transportistaCommissionRate
@@ -160,6 +160,41 @@ export const updateSeller = async (id: string, updates: Partial<Seller>): Promis
   }
 
   return updated
+}
+
+/**
+ * Reemplazo de empleado: crea un registro nuevo con los datos del formulario y
+ * desactiva el anterior, para que el historial (ventas, pedidos, comisiones,
+ * cobranzas) quede atado al vendedor que realmente lo generó.
+ * El email del empleado saliente se libera porque el login busca el vendedor por
+ * email — si queda duplicado, el usuario podría vincularse al registro viejo.
+ */
+export const replaceSeller = async (
+  oldId: string,
+  seller: Omit<Seller, 'id' | 'createdAt' | 'totalSales' | 'totalCommission'>
+): Promise<{ nuevo: Seller; anterior: Seller }> => {
+  const previo = await getSellerById(oldId)
+  if (!previo) throw new Error('Empleado anterior no encontrado')
+
+  const nuevo = await createSeller(seller)
+
+  const mismoEmail = !!previo.email && !!seller.email && previo.email.toLowerCase() === seller.email.toLowerCase()
+
+  await supabase
+    .from('vendedores')
+    .update({ is_active: false, email: mismoEmail ? null : previo.email || null })
+    .eq('id', oldId)
+
+  // Si el reemplazo usa el mismo email, repuntar el usuario de acceso al nuevo registro
+  if (mismoEmail) {
+    await supabase
+      .from('usuarios')
+      .update({ seller_id: nuevo.id, name: seller.name, employee_type: seller.employeeType })
+      .eq('seller_id', oldId)
+  }
+
+  const anterior = await getSellerById(oldId)
+  return { nuevo, anterior: anterior ?? { ...previo, isActive: false } }
 }
 
 export const deleteSeller = async (id: string): Promise<void> => {
