@@ -8,6 +8,7 @@ import { Button } from '@/components/ui/button'
 import { ArrowLeft } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import type { UserRole } from '@/lib/types'
+import { AvisoPago } from './aviso-pago'
 
 const SIDEBAR_HIDDEN_KEY = 'sidebarHidden'
 
@@ -68,6 +69,7 @@ export function MainLayout({ children, title, description, allowedRoles }: MainL
 
   return (
     <div className="min-h-screen bg-background">
+      {user?.role === 'admin' && <AvisoPago />}
       <AppSidebar hidden={sidebarHidden} onToggle={toggleSidebar} />
       <main className={cn("min-h-screen transition-[margin] duration-300", sidebarHidden ? "lg:ml-0" : "lg:ml-[14.4rem]")}>
         <div className="px-4 pb-6 pt-3 sm:px-6 sm:pt-4 lg:p-8">
