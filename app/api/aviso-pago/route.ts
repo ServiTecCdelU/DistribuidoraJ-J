@@ -9,7 +9,7 @@ import { leerDeuda } from "@/lib/utils/aviso-pago";
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-const URL_POR_DEFECTO = "https://servitec-demo.vercel.app/api/externo/estado-pago";
+const URL_POR_DEFECTO = "https://www.servitec.net.ar/distribuidora/api/externo/estado-pago";
 
 export async function GET(request: Request) {
   const auth = await requireAuth(request, { roles: ["admin"] });
