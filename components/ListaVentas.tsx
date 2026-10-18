@@ -290,11 +290,19 @@ export function ListaVentas({
     </Button>
   );
 
-  // Buscador: el texto se escribe en estado local y la búsqueda se dispara al presionar
-  // Enter (o la lupa). Evita la consulta al servidor + re-render en cada tecla, que trababa
-  // la escritura.
+  // Buscador: el texto se escribe en estado local y la búsqueda se dispara sola al dejar
+  // de tipear (o al presionar Enter / la lupa). Evita la consulta al servidor + re-render
+  // en cada tecla, que trababa la escritura.
   const [localSearch, setLocalSearch] = useState(searchQuery);
-  useEffect(() => { setLocalSearch(searchQuery); }, [searchQuery]);
+  useEffect(() => {
+    setLocalSearch((prev) => (prev.trim() === searchQuery ? prev : searchQuery));
+  }, [searchQuery]);
+  useEffect(() => {
+    const texto = localSearch.trim();
+    if (texto === searchQuery) return;
+    const t = setTimeout(() => onCambiarFiltros({ searchQuery: texto }), 300);
+    return () => clearTimeout(t);
+  }, [localSearch]); // eslint-disable-line react-hooks/exhaustive-deps
   const ejecutarBusqueda = () => onCambiarFiltros({ searchQuery: localSearch.trim() });
   const limpiarBusqueda = () => { setLocalSearch(""); onCambiarFiltros({ searchQuery: "" }); };
 
@@ -490,7 +498,7 @@ export function ListaVentas({
                 <Search className="h-4 w-4" />
               </button>
               <Input
-                placeholder="Buscar por cliente, vendedor, producto, remito, hoja de ruta o N°... (Enter para buscar)"
+                placeholder="Buscar por cliente, vendedor, producto, dirección, remito, hoja de ruta o N°..."
                 value={localSearch}
                 onChange={(e) => setLocalSearch(e.target.value)}
                 onKeyDown={(e) => { if (e.key === "Enter") ejecutarBusqueda(); }}
