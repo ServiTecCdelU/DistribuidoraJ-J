@@ -8,7 +8,7 @@ import { getAuthToken } from "@/services/auth-service";
 import { formatCurrencyDecimals, formatDateTime } from "@/lib/utils/format";
 import { periodRange, ventasEqFilters } from "@/lib/utils/ventas-period";
 import { fetchAllPages } from "@/lib/utils/fetch-all-pages";
-import { buildFiltroBusqueda, tokenizarBusqueda, variantesProductId, ventaCoincide } from "@/lib/utils/ventas-search";
+import { normalizarBusqueda, tokenizarBusqueda, ventaCoincide } from "@/lib/utils/ventas-search";
 
 // Helper para nombre de archivo: N°{numero}_{nombre_cliente}.pdf
 function buildDocFilename(tipo: "boleta" | "remito", numero: string | undefined, clientName?: string): string {
@@ -240,16 +240,9 @@ export function useVentas(filterBySellerId?: string, clientCityMap?: Record<stri
       // Con texto de búsqueda (>=2 chars) busca en TODAS las ventas, sin límite de
       // fecha. Sin búsqueda, trae solo el período seleccionado (por defecto, hoy).
       const hasSearch = debouncedSearch.length >= 2;
-      const tokens = hasSearch ? tokenizarBusqueda(debouncedSearch) : [];
-      // Productos cuyo nombre/código contiene todas las palabras: se buscan las
-      // ventas que los incluyan (items es JSON, no se puede filtrar por texto).
-      let productIds: string[] = [];
-      if (tokens.length > 0) {
-        let pq = supabase.from("productos").select("id");
-        for (const t of tokens) pq = pq.or(`name.ilike.%${t}%,id.ilike.%${t}%`);
-        const { data: prods } = await pq.limit(40);
-        productIds = (prods || []).flatMap((p: any) => variantesProductId(p.id));
-      }
+      // `busqueda` es una columna generada en ventas/pedidos: cliente, vendedor, dirección,
+      // números y nombres de productos, en minúsculas y sin tildes. Cada palabra debe aparecer.
+      const tokens = hasSearch ? tokenizarBusqueda(normalizarBusqueda(debouncedSearch)) : [];
       const eqFilters = ventasEqFilters({
         forcedSellerId: filterBySellerId,
         sellerId: filtros.sellerId,
@@ -262,11 +255,11 @@ export function useVentas(filterBySellerId?: string, clientCityMap?: Record<stri
       // Aplica a ventas y a pedidos rechazados los mismos filtros de servidor.
       // Vendedor/cliente van acá (no en el cliente) para que la paginación traiga
       // todas sus ventas; orden created_at + id para que las páginas sean estables.
-      const aplicarFiltros = (q: any, searchCols: string[]) => {
+      const aplicarFiltros = (q: any) => {
         for (const [col, val] of eqFilters) q = q.eq(col, val);
         // Solo ventas con remito: las que no tienen no se muestran en el historial.
         q = q.not("remito_number", "is", null);
-        if (tokens.length > 0) q = q.or(buildFiltroBusqueda(tokens, searchCols, productIds));
+        for (const t of tokens) q = q.ilike("busqueda", `%${t}%`);
         if (desde) q = q.gte("created_at", desde);
         if (hasta) q = q.lte("created_at", hasta);
         return q
@@ -276,15 +269,11 @@ export function useVentas(filterBySellerId?: string, clientCityMap?: Record<stri
 
       const [data, rechazados] = await Promise.all([
         fetchAllPages<any>((from, to) =>
-          aplicarFiltros(supabase.from("ventas").select(VENTA_LIST_COLS), [
-            "client_name", "seller_name", "sale_number", "remito_number", "invoice_number", "hoja_ruta_number",
-            "client_address", "delivery_address", "client_cuit", "client_phone",
-          ]).range(from, to),
+          aplicarFiltros(supabase.from("ventas").select(VENTA_LIST_COLS)).range(from, to),
         ),
         fetchAllPages<any>((from, to) =>
           aplicarFiltros(
             supabase.from("pedidos").select(PEDIDO_RECHAZADO_COLS).eq("status", "rechazado"),
-            ["client_name", "seller_name", "remito_number", "hoja_ruta_number", "address", "client_phone"],
           ).range(from, to),
         ),
       ]);

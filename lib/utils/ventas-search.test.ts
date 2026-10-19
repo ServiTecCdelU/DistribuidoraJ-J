@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { buildFiltroBusqueda, tokenizarBusqueda, variantesProductId, ventaCoincide } from "./ventas-search";
+import { normalizarBusqueda, tokenizarBusqueda, ventaCoincide } from "./ventas-search";
 
 describe("tokenizarBusqueda", () => {
   it("separa por espacios y quita caracteres que rompen el filtro", () => {
@@ -7,23 +7,9 @@ describe("tokenizarBusqueda", () => {
   });
 });
 
-describe("buildFiltroBusqueda", () => {
-  it("una palabra: or plano sobre las columnas", () => {
-    expect(buildFiltroBusqueda(["zapata"], ["client_name", "seller_name"])).toBe(
-      "client_name.ilike.%zapata%,seller_name.ilike.%zapata%",
-    );
-  });
-
-  it("varias palabras: todas deben coincidir, más los productos", () => {
-    expect(buildFiltroBusqueda(["joaquin", "zapata"], ["client_name"], ["mp_1"])).toBe(
-      'and(or(client_name.ilike.%joaquin%),or(client_name.ilike.%zapata%)),items.cs.[{"productId":"mp_1"}]',
-    );
-  });
-});
-
-describe("variantesProductId", () => {
-  it("incluye el id mayorista sin prefijo prod_", () => {
-    expect(variantesProductId("prod_mp_123")).toEqual(["prod_mp_123", "mp_123"]);
+describe("normalizarBusqueda", () => {
+  it("pasa a minúsculas y quita tildes y eñes", () => {
+    expect(normalizarBusqueda("Concepción MAÑANITA")).toBe("concepcion mananita");
   });
 });
 
