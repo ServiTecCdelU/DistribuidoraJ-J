@@ -361,6 +361,30 @@ export function UnifiedCart({ role, state, actions, onConfirmSale, allowDiscount
                       />
                     )}
                   </div>
+                  {/* Regalo libre del admin: N de las unidades cargadas van gratis */}
+                  {role === "admin" && (
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <span className="text-[10px] sm:text-xs text-muted-foreground">Regalar:</span>
+                      <input type="number" min={0} max={item.quantity} placeholder="0"
+                        value={item.regaladas ?? ""}
+                        onChange={(e) => actions.setItemRegaladas(item.product.id, Number(e.target.value) || 0)}
+                        className="h-7 w-16 rounded-lg border border-input bg-background px-2 text-center text-xs" />
+                      <span className="text-[10px] sm:text-xs text-muted-foreground">de {item.quantity}</span>
+                      {item.regaladas !== item.quantity && (
+                        <button type="button"
+                          onClick={() => actions.setItemRegaladas(item.product.id, item.quantity)}
+                          className="text-[10px] sm:text-xs font-medium text-fuchsia-600 hover:underline">
+                          Regalar todo
+                        </button>
+                      )}
+                      {(item.regaladas ?? 0) > 0 && (
+                        <span className="flex items-center gap-1 text-[10px] font-medium text-fuchsia-600">
+                          <Sparkles className="h-2.5 w-2.5" />
+                          {item.regaladas} de regalo · paga {item.quantity - (item.regaladas ?? 0)}
+                        </span>
+                      )}
+                    </div>
+                  )}
                   {/* Promo: unidades de regalo (paga {quantity}, lleva {quantity + regalo}) */}
                   {regalo > 0 && (
                     <div className="flex items-center gap-1 text-[10px] font-medium text-fuchsia-600">

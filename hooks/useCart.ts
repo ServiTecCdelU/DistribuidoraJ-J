@@ -109,6 +109,7 @@ export interface CartActions {
   setItemDiscount: (productId: string, discount: number) => void;
   setItemRegaloMismo: (productId: string, n: number) => void;
   setItemRegaloOtro: (productId: string, n: number) => void;
+  setItemRegaladas: (productId: string, n: number) => void;
 
   // Client
   setLookupType: (type: LookupType) => void;
@@ -546,9 +547,24 @@ export function useCart(role: UserRole, userEmail?: string, externalProducts?: P
     }
   }, [paymentType, finalTotal]);
 
+  // Regalo del admin: N de las unidades cargadas van gratis. Se expresa como
+  // descuento exacto N/cantidad para que pedidos, remito y ventas lo cobren igual.
+  const conRegaladas = (item: CartItem, n: number): CartItem => {
+    const val = Math.max(0, Math.min(Math.floor(n || 0), item.quantity));
+    if (val <= 0) return { ...item, regaladas: undefined, itemDiscount: undefined };
+    return {
+      ...item,
+      regaladas: val,
+      itemDiscount: (val / item.quantity) * 100,
+      regalo: undefined,
+      regaloOtroCantidad: undefined,
+    };
+  };
+
   // Regla "llevando X se regala N": recalcula el regalo automático según la
   // cantidad cargada. Solo aplica si el item no tiene descuento ni regalo cruzado.
   const withRegaloAuto = (item: CartItem): CartItem => {
+    if (item.regaladas) return conRegaladas(item, item.regaladas);
     if (item.itemDiscount) return item;
     const p = item.product;
 
@@ -646,9 +662,9 @@ export function useCart(role: UserRole, userEmail?: string, externalProducts?: P
       }
       const clamped = clampDiscount(discount, max);
       if (clamped > 0) {
-        return { ...item, itemDiscount: clamped, regalo: undefined, regaloOtroCantidad: undefined };
+        return { ...item, itemDiscount: clamped, regalo: undefined, regaloOtroCantidad: undefined, regaladas: undefined };
       }
-      return { ...item, itemDiscount: undefined };
+      return { ...item, itemDiscount: undefined, regaladas: undefined };
     }));
   }, [sellerMaxDiscount]);
 
@@ -675,7 +691,7 @@ export function useCart(role: UserRole, userEmail?: string, externalProducts?: P
         val = Math.max(0, item.product.stock - item.quantity);
       }
       if (val > 0) {
-        return { ...item, regalo: val, itemDiscount: undefined, regaloOtroCantidad: undefined };
+        return { ...item, regalo: val, itemDiscount: undefined, regaloOtroCantidad: undefined, regaladas: undefined };
       }
       return { ...item, regalo: undefined };
     }));
@@ -700,11 +716,20 @@ export function useCart(role: UserRole, userEmail?: string, externalProducts?: P
         val = max === Infinity ? val : max;
       }
       if (val > 0) {
-        return { ...item, regaloOtroCantidad: val, itemDiscount: undefined, regalo: undefined };
+        return { ...item, regaloOtroCantidad: val, itemDiscount: undefined, regalo: undefined, regaladas: undefined };
       }
       return { ...item, regaloOtroCantidad: undefined };
     }));
   }, []);
+
+  const setItemRegaladas = useCallback((productId: string, n: number) => {
+    if (role !== "admin") return;
+    setCart((prev) => prev.map((item) => {
+      if (item.product.id !== productId) return item;
+      if (n > item.quantity) toast.error(`Máximo a regalar: ${item.quantity}`);
+      return conRegaladas(item, n);
+    }));
+  }, [role]);
 
   // --- Payment actions ---
   const handleCashAmountChange = useCallback(
@@ -1224,7 +1249,7 @@ export function useCart(role: UserRole, userEmail?: string, externalProducts?: P
   };
 
   const actions: CartActions = {
-    addToCart, updateQuantity, setQuantityDirect, removeFromCart, setItemDiscount, setItemRegaloMismo, setItemRegaloOtro,
+    addToCart, updateQuantity, setQuantityDirect, removeFromCart, setItemDiscount, setItemRegaloMismo, setItemRegaloOtro, setItemRegaladas,
     setLookupType, setSelectedClient, setDniLookup, selectClientFromSearch,
     setClientName, setClientEmail, setClientPhone, setClientAddress,
     setClientDni, setClientCuit, setClientTaxCategory,
