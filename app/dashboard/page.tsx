@@ -122,6 +122,8 @@ function DayTooltip({ active, payload }: any) {
 // Paleta teal/cyan para la torta (los colores del service se ignoran en la vista)
 const RUBRO_COLORS = ['#0f766e', '#0d9488', '#14b8a6', '#2dd4bf', '#0891b2', '#06b6d4', '#22d3ee', '#67e8f9']
 
+type DashboardTab = 'ventas' | 'finanzas' | 'productos' | 'cobranza' | 'operacion'
+
 function waLink(phone: string | undefined, msg: string): string {
   const digits = (phone ?? '').replace(/\D/g, '')
   return `https://wa.me/${digits}?text=${encodeURIComponent(msg)}`
@@ -155,6 +157,7 @@ export default function DashboardPage() {
 
   const [deudorQuery, setDeudorQuery] = useState('')
   const [inactivoQuery, setInactivoQuery] = useState('')
+  const [tab, setTab] = useState<DashboardTab>('ventas')
 
   const [aliasModalOpen, setAliasModalOpen] = useState(false)
   const [aliasConfig, setAliasConfig] = useState<TransferConfig>({ alias: '', titular: '', banco: '' })
@@ -250,6 +253,14 @@ export default function DashboardPage() {
     ]
   }, [stats, deudores, pendingOrders, lowStockProducts])
 
+  const tabs: { id: DashboardTab; label: string; icon: React.ElementType; count?: number }[] = [
+    { id: 'ventas', label: 'Ventas', icon: TrendingUp },
+    { id: 'finanzas', label: 'Finanzas', icon: Wallet },
+    { id: 'productos', label: 'Productos', icon: Package },
+    { id: 'cobranza', label: 'Cobranza', icon: CreditCard, count: deudores.length },
+    { id: 'operacion', label: 'Operación', icon: Truck, count: pendingOrders.length + lowStockProducts.length },
+  ]
+
   if (loading) {
     return (
       <MainLayout allowedRoles={['admin']} title="Dashboard" description="Resumen ejecutivo y operación diaria">
@@ -259,7 +270,9 @@ export default function DashboardPage() {
             <div className="grid grid-cols-2 lg:grid-cols-5 gap-3">
               {Array.from({ length: 5 }).map((_, i) => <Skeleton key={i} className="h-28 rounded-2xl" />)}
             </div>
-            <Skeleton className="h-28 rounded-2xl" />
+            <div className="flex gap-1.5">
+              {Array.from({ length: 5 }).map((_, i) => <Skeleton key={i} className="h-8 w-24 rounded-2xl shrink-0" />)}
+            </div>
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-3 sm:gap-4">
               <Skeleton className="h-64 rounded-2xl lg:col-span-2" />
               <Skeleton className="h-64 rounded-2xl" />
@@ -339,6 +352,33 @@ export default function DashboardPage() {
             })}
           </section>
 
+          {/* Pestañas */}
+          <nav className="flex gap-1.5 overflow-x-auto pb-1 -mx-1 px-1">
+            {tabs.map((t) => {
+              const Icon = t.icon
+              const active = tab === t.id
+              return (
+                <button
+                  key={t.id}
+                  type="button"
+                  onClick={() => setTab(t.id)}
+                  className={`inline-flex items-center gap-1.5 whitespace-nowrap rounded-2xl border px-3 py-2 text-xs font-medium transition-all ${active ? 'bg-teal-600 text-white border-teal-600 shadow-sm' : 'bg-white text-slate-600 border-border/50 hover:bg-teal-50 hover:text-teal-700'}`}
+                >
+                  <Icon className="h-3.5 w-3.5" /> {t.label}
+                  {!!t.count && (
+                    <span className={`ml-0.5 rounded-full px-1.5 text-[10px] font-semibold leading-4 tabular-nums ${active ? 'bg-white/20 text-white' : 'bg-rose-100 text-rose-700'}`}>{t.count}</span>
+                  )}
+                </button>
+              )
+            })}
+          </nav>
+
+          {tab === 'finanzas' && (<>
+          {!montoDisponible && (
+            <Card className="border-border/40 bg-white shadow-sm rounded-2xl">
+              <CardContent className="p-3 sm:p-4"><p className="text-xs text-muted-foreground text-center py-8">Sin datos.</p></CardContent>
+            </Card>
+          )}
           {/* Monto disponible (rentabilidad del mes) */}
           {montoDisponible && (
             <Card className="border-border/40 bg-white shadow-sm rounded-2xl overflow-hidden">
@@ -423,7 +463,9 @@ export default function DashboardPage() {
               </div>
             </Card>
           )}
+          </>)}
 
+          {tab === 'ventas' && (<>
           {/* Ventas: mensual + diario */}
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-3 sm:gap-4">
             <Card className="lg:col-span-2 border-border/40 bg-white shadow-sm rounded-2xl">
@@ -596,7 +638,9 @@ export default function DashboardPage() {
               </CardContent>
             </Card>
           </div>
+          </>)}
 
+          {tab === 'productos' && (<>
           {/* Productos: top + distribución */}
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-3 sm:gap-4">
             <Card className="lg:col-span-2 border-border/40 bg-white shadow-sm rounded-2xl">
@@ -669,7 +713,9 @@ export default function DashboardPage() {
               </CardContent>
             </Card>
           </div>
+          </>)}
 
+          {tab === 'cobranza' && (<>
           {/* Cobranza + Oportunidades de venta */}
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-3 sm:gap-4">
             {/* Deudores por antigüedad */}
@@ -757,7 +803,9 @@ export default function DashboardPage() {
               </CardContent>
             </Card>
           </div>
+          </>)}
 
+          {tab === 'operacion' && (<>
           {/* Stock bajo + Pedidos pendientes */}
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-3 sm:gap-4">
             <Card className="border-border/40 bg-white shadow-sm rounded-2xl">
@@ -823,6 +871,7 @@ export default function DashboardPage() {
               </CardContent>
             </Card>
           </div>
+          </>)}
 
         </div>
       </div>
