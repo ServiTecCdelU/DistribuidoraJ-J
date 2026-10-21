@@ -3426,6 +3426,9 @@ ${renderTabla('Cuenta Mayorista', mayorista, balanceMay)}
                         <TableRow key={comp.id}>
                           <TableCell className="font-medium min-w-[9rem] whitespace-normal break-words" title={comp.notes ? `${comp.clientName} — ${comp.notes}` : comp.clientName}>
                             {comp.clientName || 'Cliente'}
+                            {comp.imputadoA && (
+                              <p className="text-xs font-normal text-teal-700 dark:text-teal-400">{comp.imputadoA}</p>
+                            )}
                           </TableCell>
                           <TableCell className="text-xs text-muted-foreground whitespace-nowrap">{formatDate(comp.createdAt)}</TableCell>
                           <TableCell className="text-xs text-muted-foreground">{comp.sellerName || comp.reviewedBy || '—'}</TableCell>

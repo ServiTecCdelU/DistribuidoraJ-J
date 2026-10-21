@@ -209,10 +209,53 @@ export const getComprobantes = async (filters?: {
 
     const { data, error } = await query
     if (error) return []
-    return (data ?? []).map(mapComprobante)
+    return await adjuntarImputacion((data ?? []).map(mapComprobante))
   } catch {
     return []
   }
+}
+
+// Para los cobros de cobrador pendientes de verificación: resuelve qué factura pagan
+// (pago.debt_id → deuda.sale_id → venta.remito_number). Pago sin debt_id = "A cuenta".
+async function adjuntarImputacion(comps: ComprobantePago[]): Promise<ComprobantePago[]> {
+  const txIds = comps
+    .filter((c) => c.viaCobrador && !c.autorizado && c.status === 'approved' && c.transactionId)
+    .map((c) => c.transactionId as string)
+  if (txIds.length === 0) return comps
+
+  const { data: pagos } = await supabase.from('transacciones').select('id, debt_id').in('id', txIds)
+  const debtIds = [...new Set((pagos ?? []).map((p: any) => p.debt_id).filter(Boolean))]
+  const { data: deudas } = debtIds.length
+    ? await supabase.from('transacciones').select('id, sale_id, description, date').in('id', debtIds)
+    : { data: [] as any[] }
+  const saleIds = [...new Set((deudas ?? []).map((d: any) => d.sale_id).filter(Boolean))]
+  const { data: ventas } = saleIds.length
+    ? await supabase.from('ventas').select('id, remito_number').in('id', saleIds)
+    : { data: [] as any[] }
+
+  const remitoBySale = new Map((ventas ?? []).map((v: any) => [v.id, v.remito_number]))
+  const deudaById = new Map((deudas ?? []).map((d: any) => [d.id, d]))
+  const imputadoByTx = new Map<string, string>()
+  for (const p of pagos ?? []) {
+    if (!p.debt_id) { imputadoByTx.set(p.id, 'A cuenta'); continue }
+    const deuda = deudaById.get(p.debt_id)
+    if (!deuda) continue
+    const remito = deuda.sale_id ? remitoBySale.get(deuda.sale_id) : undefined
+    imputadoByTx.set(
+      p.id,
+      remito
+        ? `Remito N° ${remito}`
+        : esDeudaAnterior(deuda.description)
+          ? `Deuda anterior ${new Date(deuda.date).toLocaleDateString('es-AR')}`
+          : deuda.description || 'Deuda',
+    )
+  }
+
+  return comps.map((c) =>
+    c.transactionId && imputadoByTx.has(c.transactionId)
+      ? { ...c, imputadoA: imputadoByTx.get(c.transactionId) }
+      : c,
+  )
 }
 
 // Comprobantes de un vendedor

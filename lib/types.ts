@@ -381,4 +381,6 @@ export interface ComprobantePago {
   autorizado?: boolean;
   autorizadoBy?: string;
   autorizadoAt?: Date;
+  /** Qué paga el cobro: "Remito N° X", "Deuda anterior ..." o "A cuenta" (sin imputación puntual) */
+  imputadoA?: string;
 }
