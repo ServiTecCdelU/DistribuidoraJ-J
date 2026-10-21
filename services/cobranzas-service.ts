@@ -140,6 +140,7 @@ function mapComprobante(d: any): ComprobantePago {
     autorizado: d.autorizado ?? false,
     autorizadoBy: d.autorizado_by ?? undefined,
     autorizadoAt: d.autorizado_at ? new Date(d.autorizado_at) : undefined,
+    imputadoA: Array.isArray(d.remitos) && d.remitos.length > 0 ? d.remitos : undefined,
   }
 }
 
@@ -428,13 +429,15 @@ export const uploadComprobanteAprobado = async (data: {
 }
 
 /** Admin marca como revisado/autorizado un cobro registrado por un cobrador (el pago ya estaba aplicado). */
-export const authorizeComprobanteCobrador = async (id: string, adminName: string): Promise<void> => {
+// `remitos`: lo que pagaba el cobro al revisarlo; queda guardado para el historial.
+export const authorizeComprobanteCobrador = async (id: string, adminName: string, remitos?: string[]): Promise<void> => {
   const { error } = await supabase
     .from('comprobantes_pago')
     .update({
       autorizado: true,
       autorizado_by: adminName,
       autorizado_at: new Date().toISOString(),
+      ...(remitos?.length ? { remitos } : {}),
     })
     .eq('id', id)
   if (error) throw new Error(`No se pudo verificar el cobro: ${error.message}`)
@@ -459,7 +462,7 @@ export const unauthorizeComprobanteCobrador = async (id: string): Promise<void> 
  * Admin rechaza un cobro de cobrador: anula el pago (revierte saldo, no lo borra)
  * y deja el comprobante marcado como rechazado con el motivo.
  */
-export const voidComprobanteCobrador = async (id: string, adminName: string, motivo: string): Promise<void> => {
+export const voidComprobanteCobrador = async (id: string, adminName: string, motivo: string, remitos?: string[]): Promise<void> => {
   const { data: comp } = await supabase.from('comprobantes_pago').select('*').eq('id', id).single()
   if (!comp) throw new Error('Comprobante no encontrado')
 
@@ -475,6 +478,7 @@ export const voidComprobanteCobrador = async (id: string, adminName: string, mot
       rejection_reason: motivo,
       reviewed_at: new Date().toISOString(),
       reviewed_by: adminName,
+      ...(remitos?.length ? { remitos } : {}),
     })
     .eq('id', id)
 }

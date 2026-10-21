@@ -643,11 +643,11 @@ export const cobranzasApi = {
   async rejectComprobante(id: string, reason: string, reviewedBy: string) {
     return rejectComprobante(id, reason, reviewedBy)
   },
-  async authorizeComprobanteCobrador(id: string, adminName: string) {
-    return authorizeComprobanteCobrador(id, adminName)
+  async authorizeComprobanteCobrador(id: string, adminName: string, remitos?: string[]) {
+    return authorizeComprobanteCobrador(id, adminName, remitos)
   },
-  async voidComprobanteCobrador(id: string, adminName: string, motivo: string) {
-    return voidComprobanteCobrador(id, adminName, motivo)
+  async voidComprobanteCobrador(id: string, adminName: string, motivo: string, remitos?: string[]) {
+    return voidComprobanteCobrador(id, adminName, motivo, remitos)
   },
   async unauthorizeComprobanteCobrador(id: string) {
     return unauthorizeComprobanteCobrador(id)

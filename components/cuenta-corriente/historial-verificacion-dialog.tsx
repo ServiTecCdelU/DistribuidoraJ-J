@@ -36,6 +36,19 @@ const esc = (s: unknown) => String(s ?? '').replace(/[&<>]/g, (m) => ({ '&': '&a
 const cobradoPor = (c: ComprobantePago) => c.sellerName || c.reviewedBy || '—'
 const revisadoPor = (c: ComprobantePago) => (c.autorizado ? c.autorizadoBy : c.reviewedBy) || '—'
 
+// Remitos que paga un cobro, uno por fila (también lo usa el panel "Verificar pago")
+export function RemitosImputados({ remitos }: { remitos?: string[] }) {
+  if (!remitos || remitos.length === 0) return null
+  return (
+    <div className="mt-0.5 text-xs font-normal text-teal-700 dark:text-teal-400">
+      {remitos.some((r) => r.startsWith('N° ')) && <p className="text-muted-foreground">Remito</p>}
+      {remitos.map((r) => (
+        <p key={r}>{r}</p>
+      ))}
+    </div>
+  )
+}
+
 interface Props {
   open: boolean
   onOpenChange: (open: boolean) => void
@@ -106,7 +119,7 @@ export function HistorialVerificacionDialog({ open, onOpenChange, items, onVolve
     const totalConfirmado = lista.filter((c) => c.autorizado).reduce((a, c) => a + c.amount, 0)
     const totalAnulado = lista.filter((c) => c.status === 'rejected').reduce((a, c) => a + c.amount, 0)
     const filas = lista.map((c) => `<tr>
-      <td>${esc(c.clientName || 'Cliente')}</td>
+      <td>${esc(c.clientName || 'Cliente')}${c.imputadoA?.length ? `<br><small>${c.imputadoA.some((r) => r.startsWith('N° ')) ? 'Remito<br>' : ''}${c.imputadoA.map(esc).join('<br>')}</small>` : ''}</td>
       <td class="center">${esc(formatDate(c.createdAt))}</td>
       <td>${esc(cobradoPor(c))}</td>
       <td class="right">${esc(formatCurrency(c.amount))}</td>
@@ -296,6 +309,7 @@ export function HistorialVerificacionDialog({ open, onOpenChange, items, onVolve
                   <TableRow key={comp.id}>
                     <TableCell className="font-medium min-w-[9rem] whitespace-normal break-words" title={comp.clientName}>
                       {comp.clientName || 'Cliente'}
+                      <RemitosImputados remitos={comp.imputadoA} />
                     </TableCell>
                     <TableCell className="text-xs text-muted-foreground whitespace-nowrap">{formatDate(comp.createdAt)}</TableCell>
                     <TableCell className="text-xs text-muted-foreground">{cobradoPor(comp)}</TableCell>

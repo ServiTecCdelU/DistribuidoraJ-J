@@ -55,7 +55,7 @@ import {
   History, RotateCcw, Tag, Receipt, Download, SlidersHorizontal, Trash2, FileDown,
 } from 'lucide-react'
 import { toast } from 'sonner'
-import { HistorialVerificacionDialog } from '@/components/cuenta-corriente/historial-verificacion-dialog'
+import { HistorialVerificacionDialog, RemitosImputados } from '@/components/cuenta-corriente/historial-verificacion-dialog'
 
 type ClientWithSeller = Client & { sellerName?: string; hasDeudaAnterior?: boolean }
 
@@ -1484,7 +1484,7 @@ ${renderTabla('Cuenta Mayorista', mayorista, balanceMay)}
     if (!user) return
     setAuthProcessingId(comp.id)
     try {
-      await cobranzasApi.authorizeComprobanteCobrador(comp.id, user.name)
+      await cobranzasApi.authorizeComprobanteCobrador(comp.id, user.name, comp.imputadoA)
       setComprobantes((prev) =>
         prev.map((c) => (c.id === comp.id ? { ...c, autorizado: true, autorizadoBy: user.name, autorizadoAt: new Date() } : c))
       )
@@ -1517,7 +1517,7 @@ ${renderTabla('Cuenta Mayorista', mayorista, balanceMay)}
     }
     setAuthProcessingId(rejectAuthTarget.id)
     try {
-      await cobranzasApi.voidComprobanteCobrador(rejectAuthTarget.id, user.name, rejectAuthMotivo.trim())
+      await cobranzasApi.voidComprobanteCobrador(rejectAuthTarget.id, user.name, rejectAuthMotivo.trim(), rejectAuthTarget.imputadoA)
       setComprobantes((prev) =>
         prev.map((c) =>
           c.id === rejectAuthTarget.id
@@ -3435,16 +3435,7 @@ ${renderTabla('Cuenta Mayorista', mayorista, balanceMay)}
                         <TableRow key={comp.id} className="cursor-pointer" onClick={() => handleOpenClientFromAuth(comp.clientId)}>
                           <TableCell className="font-medium min-w-[9rem] whitespace-normal break-words" title={comp.notes ? `${comp.clientName} — ${comp.notes}` : comp.clientName}>
                             {comp.clientName || 'Cliente'}
-                            {comp.imputadoA && comp.imputadoA.length > 0 && (
-                              <div className="mt-0.5 text-xs font-normal text-teal-700 dark:text-teal-400">
-                                {comp.imputadoA.some((r) => r.startsWith('N° ')) && (
-                                  <p className="text-muted-foreground">Remito</p>
-                                )}
-                                {comp.imputadoA.map((r) => (
-                                  <p key={r}>{r}</p>
-                                ))}
-                              </div>
-                            )}
+                            <RemitosImputados remitos={comp.imputadoA} />
                           </TableCell>
                           <TableCell className="text-xs text-muted-foreground whitespace-nowrap">{formatDate(comp.createdAt)}</TableCell>
                           <TableCell className="text-xs text-muted-foreground">{comp.sellerName || comp.reviewedBy || '—'}</TableCell>
