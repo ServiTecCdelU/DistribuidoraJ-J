@@ -3,6 +3,7 @@ import { supabase } from '@/lib/supabase'
 import { paginarTodo } from '@/lib/utils/paginar'
 import type { CartItem, Sale } from '@/lib/types'
 import { generateReadableId, slugify } from '@/services/supabase-helpers'
+import { formatCurrencyDecimals } from '@/lib/utils/format'
 
 
 // Cache: ¿existe la columna payment_method en ventas?
@@ -156,11 +157,30 @@ export const processSale = async (data: {
       : 0
   const total = Math.max(0, subtotal - discountAmount)
 
+  // 1 pedido = 1 venta. Si un cobro anterior de este pedido se cortó a mitad de camino
+  // (la venta quedó grabada pero el pedido no llegó a completarse), se retoma esa venta
+  // en vez de crear otra: un reintento no duplica la venta ni la deuda del cliente.
+  let ventaPrevia: { id: string; sale_number: string } | null = null
+  if (data.orderId) {
+    const { data: previa, error: previaErr } = await supabase
+      .from('ventas')
+      .select('id, sale_number')
+      .eq('order_id', data.orderId)
+      .order('created_at', { ascending: false })
+      .limit(1)
+      .maybeSingle()
+    if (previaErr) throw new Error(`Error al verificar el pedido: ${previaErr.message}`)
+    ventaPrevia = previa
+  }
+
   // Contar ventas para generar saleNumber
-  const { count } = await supabase
-    .from('ventas')
-    .select('id', { count: 'exact', head: true })
-  const saleNumber = generateSaleNumber(new Date(), count ?? 0)
+  let saleNumber = ventaPrevia?.sale_number ?? ''
+  if (!ventaPrevia) {
+    const { count } = await supabase
+      .from('ventas')
+      .select('id', { count: 'exact', head: true })
+    saleNumber = generateSaleNumber(new Date(), count ?? 0)
+  }
 
   let resolvedClientName = data.clientName ?? 'Venta directa'
   let resolvedTaxCategory: any
@@ -191,7 +211,7 @@ export const processSale = async (data: {
     }
   }
 
-  const saleId = await generateReadableId('ventas', 'venta', resolvedClientName)
+  const saleId = ventaPrevia?.id ?? await generateReadableId('ventas', 'venta', resolvedClientName)
 
   // Heredar el N° de hoja de ruta del pedido de origen (si la venta viene de un pedido).
   let hojaRutaNumber: string | null = null
@@ -249,7 +269,10 @@ export const processSale = async (data: {
   }
   const hasPayCol = await ensurePaymentMethodColumn()
   if (!hasPayCol) delete saleRow2.payment_method
-  const { error: insertErr } = await supabase.from('ventas').insert(saleRow2)
+  // Al retomar, la venta se actualiza con los datos de este cobro (pudo cambiar el pago).
+  const { error: insertErr } = ventaPrevia
+    ? await supabase.from('ventas').update(saleRow2).eq('id', saleId)
+    : await supabase.from('ventas').insert(saleRow2)
   if (insertErr) throw new Error(`Error al crear venta: ${insertErr.message}`)
 
   // Descontar stock con registrarMovimiento: lee el stock fresco de la BD, actualiza
@@ -258,7 +281,16 @@ export const processSale = async (data: {
   // producía hacer update + insert por separado con un stock leído una sola vez.
   // Si skipStock, el stock ya se descontó al generar el remito del pedido: no tocar acá.
   const { registrarMovimiento } = await import('@/services/stock-service')
-  if (!data.skipStock) {
+  // Al retomar una venta cuyo stock ya se descontó en el intento anterior, no repetirlo.
+  let stockYaMovido = false
+  if (ventaPrevia && !data.skipStock) {
+    const { count: movs } = await supabase
+      .from('stock_movimientos')
+      .select('id', { count: 'exact', head: true })
+      .eq('motivo', saleId)
+    stockYaMovido = (movs ?? 0) > 0
+  }
+  if (!data.skipStock && !stockYaMovido) {
     // Venta (lo pagado) y regalo del mismo producto (promo "cada X +N").
     for (const item of data.items) {
       if (!item.product.id) continue
@@ -283,21 +315,30 @@ export const processSale = async (data: {
         ? (data.creditAmount ?? 0)
         : 0
 
-  if (amountToCredit > 0 && data.clientId) {
-    const { data: clientRow } = await supabase
-      .from('clientes')
-      .select('current_balance')
-      .eq('id', data.clientId)
-      .single()
-    if (clientRow) {
-      await supabase
-        .from('clientes')
-        .update({ current_balance: (Number(clientRow.current_balance) || 0) + amountToCredit })
-        .eq('id', data.clientId)
+  // Si el intento anterior ya registró la deuda de esta venta, no se vuelve a sumar.
+  let deudaYaRegistrada = false
+  if (ventaPrevia) {
+    const { data: deudaPrevia } = await supabase
+      .from('transacciones')
+      .select('id, amount')
+      .eq('sale_id', saleId)
+      .eq('type', 'debt')
+      .limit(1)
+      .maybeSingle()
+    // Si la deuda registrada no coincide con este cobro (ej. antes fue a cuenta corriente y
+    // ahora se paga en efectivo), no se puede retomar sin dejar el saldo mal: frenar.
+    if (deudaPrevia && Math.abs(Number(deudaPrevia.amount) - amountToCredit) > 0.01) {
+      throw new Error(`Este pedido ya tiene la venta #${saleNumber} con ${formatCurrencyDecimals(Number(deudaPrevia.amount))} a cuenta corriente. Revisá la cuenta corriente del cliente antes de cobrarlo distinto.`)
     }
+    deudaYaRegistrada = !!deudaPrevia
+  }
 
+  if (amountToCredit > 0 && data.clientId && !deudaYaRegistrada) {
+    // Primero el movimiento y después el saldo, verificando cada paso. Antes el insert del
+    // movimiento podía fallar en silencio: el saldo quedaba sumado sin movimiento, el pedido
+    // sin cobrar, y al reintentar se sumaba otra vez (saldo del cliente al doble).
     const txId = await generateReadableId('transacciones', 'transaccion', resolvedClientName)
-    await supabase.from('transacciones').insert({
+    const { error: txErr } = await supabase.from('transacciones').insert({
       id: txId,
       client_id: data.clientId,
       type: 'debt',
@@ -306,6 +347,19 @@ export const processSale = async (data: {
       date: new Date().toISOString(),
       sale_id: saleId,
     })
+    if (txErr) throw new Error(`Error al registrar la deuda del cliente: ${txErr.message}`)
+
+    const { data: clientRow, error: clientErr } = await supabase
+      .from('clientes')
+      .select('current_balance')
+      .eq('id', data.clientId)
+      .single()
+    if (clientErr) throw new Error(`Error al leer el saldo del cliente: ${clientErr.message}`)
+    const { error: balErr } = await supabase
+      .from('clientes')
+      .update({ current_balance: (Number(clientRow.current_balance) || 0) + amountToCredit })
+      .eq('id', data.clientId)
+    if (balErr) throw new Error(`Error al actualizar el saldo del cliente: ${balErr.message}`)
   }
 
   // Saldo a favor
@@ -335,8 +389,9 @@ export const processSale = async (data: {
     })
   }
 
-  // Actualizar totales del vendedor (comisiones se derivan de ventas)
-  if (data.sellerId) {
+  // Actualizar totales del vendedor (comisiones se derivan de ventas).
+  // Al retomar una venta no se suma de nuevo.
+  if (data.sellerId && !ventaPrevia) {
     const { data: sellerRow } = await supabase
       .from('vendedores')
       .select('total_sales, total_commission, commission_rate')

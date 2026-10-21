@@ -1109,12 +1109,13 @@ export default function PedidosPage() {
         }
       }
 
-      // Registrar roturas y faltantes en transacciones usando el saleNumber
+      // Registrar roturas y faltantes en transacciones usando el saleNumber.
+      // Id fijo por venta + upsert: si el cobro se reintenta, no se duplican.
       if (roturasAdj.length > 0) {
         const totalPerdida = roturasAdj.reduce((acc, r) => acc + r.unitPrice * r.quantity, 0);
         const productosRotos = roturasAdj.map(r => `${r.productName} x${r.quantity}`).join(", ");
-        supabase.from("transacciones").insert({
-          id: `perdida_${sale.id}_${Date.now()}`,
+        supabase.from("transacciones").upsert({
+          id: `perdida_${sale.id}`,
           client_id: null,
           type: "payment",
           amount: -totalPerdida,
@@ -1125,8 +1126,8 @@ export default function PedidosPage() {
       }
       if (faltantesAdj.length > 0) {
         const productosFaltantes = faltantesAdj.map(r => `${r.productName} x${r.quantity}`).join(", ");
-        supabase.from("transacciones").insert({
-          id: `faltante_${sale.id}_${Date.now()}`,
+        supabase.from("transacciones").upsert({
+          id: `faltante_${sale.id}`,
           client_id: null,
           type: "payment",
           amount: 0,
@@ -1140,8 +1141,8 @@ export default function PedidosPage() {
         // Movimiento visible en la cuenta corriente del cliente: "Rechazo de productos".
         // Monto 0 (ya se descontó al entregar, el ítem no entra en la venta) + recibo de devolución.
         const reciboNumero = `DEV-${selectedOrder.remitoNumber || sale.saleNumber || sale.id}`;
-        supabase.from("transacciones").insert({
-          id: `no_quiere_${sale.id}_${Date.now()}`,
+        supabase.from("transacciones").upsert({
+          id: `no_quiere_${sale.id}`,
           client_id: resolvedClientId || null,
           type: "payment",
           amount: 0,
