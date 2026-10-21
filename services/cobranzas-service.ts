@@ -357,7 +357,7 @@ export const uploadComprobanteAprobado = async (data: {
 
 /** Admin marca como revisado/autorizado un cobro registrado por un cobrador (el pago ya estaba aplicado). */
 export const authorizeComprobanteCobrador = async (id: string, adminName: string): Promise<void> => {
-  await supabase
+  const { error } = await supabase
     .from('comprobantes_pago')
     .update({
       autorizado: true,
@@ -365,6 +365,22 @@ export const authorizeComprobanteCobrador = async (id: string, adminName: string
       autorizado_at: new Date().toISOString(),
     })
     .eq('id', id)
+  if (error) throw new Error(`No se pudo verificar el cobro: ${error.message}`)
+}
+
+/**
+ * Deshace una verificación hecha por error: el cobro vuelve a "Verificar pago".
+ * Solo quita la constancia de revisión; el pago sigue aplicado como estaba.
+ */
+export const unauthorizeComprobanteCobrador = async (id: string): Promise<void> => {
+  const { data, error } = await supabase
+    .from('comprobantes_pago')
+    .update({ autorizado: false, autorizado_by: null, autorizado_at: null })
+    .eq('id', id)
+    .eq('autorizado', true)
+    .select('id')
+  if (error) throw new Error(`No se pudo volver a verificación: ${error.message}`)
+  if (!data || data.length === 0) throw new Error('Este cobro ya no está verificado')
 }
 
 /**

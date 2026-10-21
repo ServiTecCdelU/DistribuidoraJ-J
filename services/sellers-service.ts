@@ -150,6 +150,16 @@ export const updateSeller = async (id: string, updates: Partial<Seller>): Promis
       .eq('seller_id', id)
   }
 
+  // El nombre del usuario de login es el que queda como "Cobrado por" / "Revisado por":
+  // si el vendedor cambia de nombre, el usuario vinculado también (si no, seguía
+  // apareciendo el nombre viejo en los cobros nuevos).
+  if (updates.name !== undefined && updates.name.trim()) {
+    await supabase
+      .from('usuarios')
+      .update({ name: updates.name.trim() })
+      .eq('seller_id', id)
+  }
+
   // Propagar el estado activo/inactivo al usuario de login vinculado:
   // un vendedor inactivo no debe poder entrar al sistema.
   if (updates.isActive !== undefined) {

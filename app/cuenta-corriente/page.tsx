@@ -55,6 +55,7 @@ import {
   History, RotateCcw, Tag, Receipt, Download, SlidersHorizontal, Trash2, FileDown,
 } from 'lucide-react'
 import { toast } from 'sonner'
+import { HistorialVerificacionDialog } from '@/components/cuenta-corriente/historial-verificacion-dialog'
 
 type ClientWithSeller = Client & { sellerName?: string; hasDeudaAnterior?: boolean }
 
@@ -553,7 +554,7 @@ export default function CuentaCorrientePage() {
           notes: payNotes || undefined,
           file: payComprobante || undefined,
           transactionId: txPago.id,
-          reviewedBy: user.name,
+          reviewedBy: cobradorNombre,
         })
         // Reflejar el comprobante recién subido sin esperar a recargar/reabrir el cliente
         setComprobantes((prev) => [comp, ...prev])
@@ -1434,8 +1435,6 @@ ${renderTabla('Cuenta Mayorista', mayorista, balanceMay)}
         }),
     [comprobantes]
   )
-  const authHistoryConfirmed = useMemo(() => authHistory.filter((c) => c.autorizado).length, [authHistory])
-  const authHistoryAnulados = useMemo(() => authHistory.filter((c) => c.status === 'rejected').length, [authHistory])
 
   // Comprobante vinculado a cada transacción de pago del cliente seleccionado
   // (cobrador auto-aprobado, o vendedor subido y luego aprobado por admin)
@@ -1485,6 +1484,19 @@ ${renderTabla('Cuenta Mayorista', mayorista, balanceMay)}
       toast.error(err.message || 'No se pudo autorizar el pago')
     } finally {
       setAuthProcessingId(null)
+    }
+  }
+
+  // Cobro confirmado por error: vuelve a "Verificar pago" (el pago sigue aplicado).
+  const handleVolverAVerificar = async (comp: ComprobantePago) => {
+    try {
+      await cobranzasApi.unauthorizeComprobanteCobrador(comp.id)
+      setComprobantes((prev) =>
+        prev.map((c) => (c.id === comp.id ? { ...c, autorizado: false, autorizadoBy: undefined, autorizadoAt: undefined } : c))
+      )
+      toast.success(`Cobro de ${comp.clientName || "cliente"} devuelto a Verificar pago`)
+    } catch (err: any) {
+      toast.error(err.message || "No se pudo volver a verificación")
     }
   }
 
@@ -3416,7 +3428,7 @@ ${renderTabla('Cuenta Mayorista', mayorista, balanceMay)}
                             {comp.clientName || 'Cliente'}
                           </TableCell>
                           <TableCell className="text-xs text-muted-foreground whitespace-nowrap">{formatDate(comp.createdAt)}</TableCell>
-                          <TableCell className="text-xs text-muted-foreground">{comp.reviewedBy || comp.sellerName || '—'}</TableCell>
+                          <TableCell className="text-xs text-muted-foreground">{comp.sellerName || comp.reviewedBy || '—'}</TableCell>
                           <TableCell className="text-right font-semibold text-green-600 whitespace-nowrap">{formatCurrency(comp.amount)}</TableCell>
                           <TableCell className="text-center">
                             {comp.fileUrl ? (
@@ -3466,71 +3478,12 @@ ${renderTabla('Cuenta Mayorista', mayorista, balanceMay)}
           </Dialog>
 
           {/* Historial de cobros de cobrador ya revisados (confirmados o anulados) */}
-          <Dialog open={authHistorialOpen} onOpenChange={setAuthHistorialOpen}>
-            <DialogContent className="sm:max-w-3xl max-h-[85vh] overflow-y-auto">
-              <DialogHeader>
-                <DialogTitle className="flex items-center gap-2">
-                  <History className="h-4.5 w-4.5 text-muted-foreground" />
-                  Historial de verificación
-                </DialogTitle>
-                <DialogDescription>
-                  Cobros de cobrador ya revisados por un admin: confirmados o anulados.
-                </DialogDescription>
-              </DialogHeader>
-              <div className="flex items-center gap-3 text-sm">
-                <span className="inline-flex items-center gap-1.5 rounded-lg bg-green-50 dark:bg-green-950/30 px-2.5 py-1.5">
-                  <CheckCircle2 className="h-3.5 w-3.5 text-green-600" />
-                  <span className="font-semibold text-green-700 dark:text-green-500">{authHistoryConfirmed}</span>
-                  <span className="text-muted-foreground">confirmados</span>
-                </span>
-                <span className="inline-flex items-center gap-1.5 rounded-lg bg-red-50 dark:bg-red-950/30 px-2.5 py-1.5">
-                  <XCircle className="h-3.5 w-3.5 text-red-600" />
-                  <span className="font-semibold text-red-700 dark:text-red-500">{authHistoryAnulados}</span>
-                  <span className="text-muted-foreground">anulados</span>
-                </span>
-              </div>
-              {authHistory.length === 0 ? (
-                <p className="text-sm text-muted-foreground text-center py-6">Todavía no hay cobros revisados.</p>
-              ) : (
-                <div className="overflow-x-auto -mx-6 px-6">
-                  <Table>
-                    <TableHeader>
-                      <TableRow>
-                        <TableHead>Cliente</TableHead>
-                        <TableHead>Fecha</TableHead>
-                        <TableHead>Cobrado por</TableHead>
-                        <TableHead className="text-right">Monto</TableHead>
-                        <TableHead>Estado</TableHead>
-                        <TableHead>Revisado por</TableHead>
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      {authHistory.map((comp) => (
-                        <TableRow key={comp.id}>
-                          <TableCell className="font-medium max-w-[10rem] truncate" title={comp.clientName}>
-                            {comp.clientName || 'Cliente'}
-                          </TableCell>
-                          <TableCell className="text-xs text-muted-foreground whitespace-nowrap">{formatDate(comp.createdAt)}</TableCell>
-                          <TableCell className="text-xs text-muted-foreground">{comp.sellerName || '—'}</TableCell>
-                          <TableCell className="text-right font-semibold whitespace-nowrap">{formatCurrency(comp.amount)}</TableCell>
-                          <TableCell>
-                            {comp.autorizado ? (
-                              <Badge className="bg-green-100 text-green-700 hover:bg-green-100">Confirmado</Badge>
-                            ) : (
-                              <Badge className="bg-red-100 text-red-700 hover:bg-red-100" title={comp.rejectionReason}>Anulado</Badge>
-                            )}
-                          </TableCell>
-                          <TableCell className="text-xs text-muted-foreground whitespace-nowrap">
-                            {comp.autorizado ? comp.autorizadoBy : comp.reviewedBy}
-                          </TableCell>
-                        </TableRow>
-                      ))}
-                    </TableBody>
-                  </Table>
-                </div>
-              )}
-            </DialogContent>
-          </Dialog>
+          <HistorialVerificacionDialog
+            open={authHistorialOpen}
+            onOpenChange={setAuthHistorialOpen}
+            items={authHistory}
+            onVolverAVerificar={handleVolverAVerificar}
+          />
 
           {/* Dialog motivo de rechazo/anulación desde el panel de verificación */}
           <Dialog open={!!rejectAuthTarget} onOpenChange={(open) => { if (!open) { setRejectAuthTarget(null); setRejectAuthMotivo('') } }}>

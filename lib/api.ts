@@ -128,6 +128,7 @@ import {
   approveComprobante,
   rejectComprobante,
   authorizeComprobanteCobrador,
+  unauthorizeComprobanteCobrador,
   voidComprobanteCobrador,
 } from '@/services/cobranzas-service'
 import {
@@ -647,6 +648,9 @@ export const cobranzasApi = {
   },
   async voidComprobanteCobrador(id: string, adminName: string, motivo: string) {
     return voidComprobanteCobrador(id, adminName, motivo)
+  },
+  async unauthorizeComprobanteCobrador(id: string) {
+    return unauthorizeComprobanteCobrador(id)
   },
 }
 
