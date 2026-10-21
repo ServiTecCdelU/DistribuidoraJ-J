@@ -3424,7 +3424,7 @@ ${renderTabla('Cuenta Mayorista', mayorista, balanceMay)}
                     <TableBody>
                       {pendingAuth.map((comp) => (
                         <TableRow key={comp.id}>
-                          <TableCell className="font-medium max-w-[10rem] truncate" title={comp.notes ? `${comp.clientName} — ${comp.notes}` : comp.clientName}>
+                          <TableCell className="font-medium min-w-[9rem] whitespace-normal break-words" title={comp.notes ? `${comp.clientName} — ${comp.notes}` : comp.clientName}>
                             {comp.clientName || 'Cliente'}
                           </TableCell>
                           <TableCell className="text-xs text-muted-foreground whitespace-nowrap">{formatDate(comp.createdAt)}</TableCell>

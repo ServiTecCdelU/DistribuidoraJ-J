@@ -18,6 +18,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { formatCurrency, formatDate } from '@/lib/utils/format'
 import { downloadBase64Pdf } from '@/services/pdf-service'
+import { normalizarBusqueda, tokenizarBusqueda } from '@/lib/utils/ventas-search'
 import type { ComprobantePago } from '@/lib/types'
 
 type Periodo = 'todo' | 'dia' | 'rango'
@@ -50,7 +51,7 @@ export function HistorialVerificacionDialog({ open, onOpenChange, items, onVolve
   const [desde, setDesde] = useState(hoy)
   const [hasta, setHasta] = useState(hoy)
   const [vendedor, setVendedor] = useState(TODOS)
-  const [cliente, setCliente] = useState(TODOS)
+  const [cliente, setCliente] = useState('')
   const [estado, setEstado] = useState<Estado>('todos')
   const [printing, setPrinting] = useState(false)
   const [volviendoId, setVolviendoId] = useState<string | null>(null)
@@ -59,10 +60,8 @@ export function HistorialVerificacionDialog({ open, onOpenChange, items, onVolve
     () => [...new Set(items.map(cobradoPor).filter((n) => n !== '—'))].sort((a, b) => a.localeCompare(b)),
     [items]
   )
-  const clientes = useMemo(
-    () => [...new Set(items.map((c) => c.clientName || 'Cliente'))].sort((a, b) => a.localeCompare(b)),
-    [items]
-  )
+  // Cliente escrito: todas las palabras, en cualquier orden, sin mayúsculas ni tildes.
+  const palabrasCliente = useMemo(() => tokenizarBusqueda(normalizarBusqueda(cliente)), [cliente])
 
   const filtrados = useMemo(() => {
     return items.filter((c) => {
@@ -70,21 +69,24 @@ export function HistorialVerificacionDialog({ open, onOpenChange, items, onVolve
       if (periodo === 'dia' && f !== dia) return false
       if (periodo === 'rango' && ((desde && f < desde) || (hasta && f > hasta))) return false
       if (vendedor !== TODOS && cobradoPor(c) !== vendedor) return false
-      if (cliente !== TODOS && (c.clientName || 'Cliente') !== cliente) return false
+      if (palabrasCliente.length > 0) {
+        const nombre = normalizarBusqueda(c.clientName || '')
+        if (!palabrasCliente.every((p) => nombre.includes(p))) return false
+      }
       if (estado === 'confirmados' && !c.autorizado) return false
       if (estado === 'anulados' && c.status !== 'rejected') return false
       return true
     })
-  }, [items, periodo, dia, desde, hasta, vendedor, cliente, estado])
+  }, [items, periodo, dia, desde, hasta, vendedor, palabrasCliente, estado])
 
   const confirmados = filtrados.filter((c) => c.autorizado)
   const anulados = filtrados.filter((c) => c.status === 'rejected')
-  const hayFiltros = periodo !== 'todo' || vendedor !== TODOS || cliente !== TODOS || estado !== 'todos'
+  const hayFiltros = periodo !== 'todo' || vendedor !== TODOS || palabrasCliente.length > 0 || estado !== 'todos'
 
   const limpiarFiltros = () => {
     setPeriodo('todo')
     setVendedor(TODOS)
-    setCliente(TODOS)
+    setCliente('')
     setEstado('todos')
   }
 
@@ -93,7 +95,7 @@ export function HistorialVerificacionDialog({ open, onOpenChange, items, onVolve
     if (periodo === 'dia') partes.push(`Día ${formatDate(new Date(`${dia}T12:00:00`))}`)
     if (periodo === 'rango') partes.push(`Del ${desde ? formatDate(new Date(`${desde}T12:00:00`)) : '…'} al ${hasta ? formatDate(new Date(`${hasta}T12:00:00`)) : '…'}`)
     if (vendedor !== TODOS) partes.push(`Cobrado por ${vendedor}`)
-    if (cliente !== TODOS) partes.push(`Cliente ${cliente}`)
+    if (palabrasCliente.length > 0) partes.push(`Cliente: ${cliente.trim()}`)
     if (estado !== 'todos') partes.push(estado === 'confirmados' ? 'Solo confirmados' : 'Solo anulados')
     return partes.length > 0 ? partes.join(' · ') : 'Todos los cobros'
   }
@@ -218,13 +220,12 @@ export function HistorialVerificacionDialog({ open, onOpenChange, items, onVolve
           </div>
           <div className="space-y-1">
             <Label className="text-xs">Cliente</Label>
-            <Select value={cliente} onValueChange={setCliente}>
-              <SelectTrigger className="h-8 text-xs"><SelectValue /></SelectTrigger>
-              <SelectContent>
-                <SelectItem value={TODOS}>Todos</SelectItem>
-                {clientes.map((c) => <SelectItem key={c} value={c}>{c}</SelectItem>)}
-              </SelectContent>
-            </Select>
+            <Input
+              className="h-8 text-xs"
+              placeholder="Buscar cliente..."
+              value={cliente}
+              onChange={(e) => setCliente(e.target.value)}
+            />
           </div>
           <div className="space-y-1">
             <Label className="text-xs">Estado</Label>
@@ -293,7 +294,7 @@ export function HistorialVerificacionDialog({ open, onOpenChange, items, onVolve
               <TableBody>
                 {filtrados.map((comp) => (
                   <TableRow key={comp.id}>
-                    <TableCell className="font-medium max-w-[10rem] truncate" title={comp.clientName}>
+                    <TableCell className="font-medium min-w-[9rem] whitespace-normal break-words" title={comp.clientName}>
                       {comp.clientName || 'Cliente'}
                     </TableCell>
                     <TableCell className="text-xs text-muted-foreground whitespace-nowrap">{formatDate(comp.createdAt)}</TableCell>
