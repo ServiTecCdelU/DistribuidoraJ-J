@@ -7,10 +7,9 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Badge } from '@/components/ui/badge'
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog'
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Bar, BarChart, CartesianGrid, Cell, Pie, PieChart, ResponsiveContainer, XAxis } from 'recharts'
 import {
-  AlertCircle,
-  AlertTriangle,
   ArrowRight,
   Award,
   CreditCard,
@@ -32,6 +31,7 @@ import {
   Coins,
   Landmark,
   Clock,
+  Printer,
 } from 'lucide-react'
 import { ChartContainer, ChartTooltip } from '@/components/ui/chart'
 import { Skeleton } from '@/components/ui/skeleton'
@@ -39,7 +39,7 @@ import { dashboardApi, ordersApi, transferApi } from '@/lib/api'
 import type { TransferConfig } from '@/lib/api'
 import type { MontoDisponible } from '@/services/rentabilidad-service'
 import { Wallet } from 'lucide-react'
-import type { Product, Order } from '@/lib/types'
+import type { Order } from '@/lib/types'
 import { formatCurrency } from '@/lib/utils/format'
 import { Label } from '@/components/ui/label'
 import { toast } from 'sonner'
@@ -122,7 +122,13 @@ function DayTooltip({ active, payload }: any) {
 // Paleta teal/cyan para la torta (los colores del service se ignoran en la vista)
 const RUBRO_COLORS = ['#0f766e', '#0d9488', '#14b8a6', '#2dd4bf', '#0891b2', '#06b6d4', '#22d3ee', '#67e8f9']
 
-type DashboardTab = 'ventas' | 'finanzas' | 'productos' | 'cobranza' | 'operacion'
+const TODOS_VENDEDORES = '__todos__'
+const SIN_VENDEDOR = '__sin_vendedor__'
+
+const escapeHtml = (s: string) =>
+  s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;')
+
+type DashboardTab ='ventas' | 'finanzas' | 'productos' | 'cobranza' | 'operacion'
 
 function waLink(phone: string | undefined, msg: string): string {
   const digits = (phone ?? '').replace(/\D/g, '')
@@ -142,7 +148,6 @@ export default function DashboardPage() {
     salesPrevMonth: 0,
     monthDeltaPct: 0,
   })
-  const [lowStockProducts, setLowStockProducts] = useState<Product[]>([])
   const [pendingOrders, setPendingOrders] = useState<Order[]>([])
   const [salesLastDays, setSalesLastDays] = useState<{ day: string; total: number }[]>([])
   const [monthlyComparison, setMonthlyComparison] = useState<MonthData[]>([])
@@ -157,6 +162,7 @@ export default function DashboardPage() {
 
   const [deudorQuery, setDeudorQuery] = useState('')
   const [inactivoQuery, setInactivoQuery] = useState('')
+  const [inactivoVendedor, setInactivoVendedor] = useState(TODOS_VENDEDORES)
   const [tab, setTab] = useState<DashboardTab>('ventas')
 
   const [aliasModalOpen, setAliasModalOpen] = useState(false)
@@ -177,7 +183,6 @@ export default function DashboardPage() {
       ])
       if (isMounted && !isMounted()) return
       setStats(data.stats as typeof stats)
-      setLowStockProducts(data.lists.lowStockProducts)
       setPendingOrders(orders.filter(o => o.status && o.status !== 'completed' && Array.isArray(o.items)))
       setSalesLastDays(data.charts.salesLastDays)
       setMonthlyComparison(data.charts.salesLastMonths)
@@ -221,10 +226,59 @@ export default function DashboardPage() {
     () => deudores.filter(d => d.name?.toLowerCase().includes(deudorQuery.toLowerCase())),
     [deudores, deudorQuery],
   )
-  const filteredInactivos = useMemo(
-    () => inactivos.filter(c => c.name?.toLowerCase().includes(inactivoQuery.toLowerCase())),
-    [inactivos, inactivoQuery],
+  const vendedoresInactivos = useMemo(
+    () => [...new Set(inactivos.map(c => c.sellerName?.trim()).filter((v): v is string => !!v))].sort((a, b) => a.localeCompare(b, 'es')),
+    [inactivos],
   )
+  const filteredInactivos = useMemo(
+    () => inactivos.filter(c => {
+      if (!c.name?.toLowerCase().includes(inactivoQuery.toLowerCase())) return false
+      if (inactivoVendedor === TODOS_VENDEDORES) return true
+      if (inactivoVendedor === SIN_VENDEDOR) return !c.sellerName?.trim()
+      return c.sellerName?.trim() === inactivoVendedor
+    }),
+    [inactivos, inactivoQuery, inactivoVendedor],
+  )
+
+  const handlePrintInactivos = () => {
+    const vendedorLabel = inactivoVendedor === TODOS_VENDEDORES
+      ? 'Todos los vendedores'
+      : inactivoVendedor === SIN_VENDEDOR ? 'Sin vendedor' : inactivoVendedor
+    const rows = filteredInactivos.map((c, i) => `<tr>
+<td class="num">${i + 1}</td>
+<td><strong>${escapeHtml(c.name)}</strong></td>
+<td>${escapeHtml(c.sellerName || '—')}</td>
+<td>${escapeHtml(c.phone || '—')}</td>
+<td>${new Date(c.lastPurchase).toLocaleDateString('es-AR')}</td>
+<td class="num">${c.daysSince}</td>
+<td class="check"></td>
+</tr>`).join('')
+    const html = `<!doctype html><html><head><meta charset="utf-8"><title>Clientes que dejaron de comprar</title>
+<style>
+*{box-sizing:border-box}body{font-family:Arial,Helvetica,sans-serif;color:#0f172a;margin:24px;font-size:12px}
+h1{font-size:18px;margin:0 0 4px}.sub{color:#64748b;margin:0 0 16px}
+table{width:100%;border-collapse:collapse}th{background:#f0fdfa;color:#0f766e;text-align:left;font-size:11px;text-transform:uppercase;padding:6px 8px;border-bottom:2px solid #99f6e4}
+td{padding:6px 8px;border-bottom:1px solid #e2e8f0}.num{text-align:right;font-variant-numeric:tabular-nums}
+.check{width:60px;border-left:1px solid #e2e8f0}tr{page-break-inside:avoid}
+.foot{margin-top:16px;color:#94a3b8;font-size:10px}
+</style></head><body>
+<h1>Clientes que dejaron de comprar</h1>
+<p class="sub">${escapeHtml(vendedorLabel)} · sin compras en +30 días · ${filteredInactivos.length} clientes</p>
+<table><thead><tr><th class="num">#</th><th>Cliente</th><th>Vendedor</th><th>Teléfono</th><th>Última compra</th><th class="num">Días</th><th>Visitado</th></tr></thead>
+<tbody>${rows}</tbody></table>
+<p class="foot">Distribuidora Patricia · generado el ${new Date().toLocaleString('es-AR')}</p>
+</body></html>`
+    const iframe = document.createElement('iframe')
+    iframe.style.cssText = 'position:fixed;top:0;left:0;width:0;height:0;border:0;opacity:0;'
+    document.body.appendChild(iframe)
+    const doc = iframe.contentWindow?.document
+    if (!doc) { document.body.removeChild(iframe); return }
+    doc.open(); doc.write(html); doc.close()
+    iframe.onload = () => {
+      iframe.contentWindow?.print()
+      setTimeout(() => document.body.removeChild(iframe), 1000)
+    }
+  }
 
   const kpis = useMemo(() => {
     const isUp = stats.monthDeltaPct >= 0
@@ -246,19 +300,15 @@ export default function DashboardPage() {
         id: 'pendientes', title: 'Pedidos pendientes', value: `${stats.pendingOrders}`,
         detail: `${pendingOrders.filter(o => o.status === 'delivery').length} en camino`, icon: Truck, color: 'sky',
       },
-      {
-        id: 'stock', title: 'Stock bajo', value: `${stats.lowStockProducts}`,
-        detail: `${lowStockProducts.filter(p => p.stock < 5).length} críticos`, icon: AlertTriangle, color: 'rose',
-      },
     ]
-  }, [stats, deudores, pendingOrders, lowStockProducts])
+  }, [stats, deudores, pendingOrders])
 
   const tabs: { id: DashboardTab; label: string; icon: React.ElementType; count?: number }[] = [
     { id: 'ventas', label: 'Ventas', icon: TrendingUp },
     { id: 'finanzas', label: 'Finanzas', icon: Wallet },
     { id: 'productos', label: 'Productos', icon: Package },
     { id: 'cobranza', label: 'Cobranza', icon: CreditCard, count: deudores.length },
-    { id: 'operacion', label: 'Operación', icon: Truck, count: pendingOrders.length + lowStockProducts.length },
+    { id: 'operacion', label: 'Operación', icon: Truck, count: pendingOrders.length },
   ]
 
   if (loading) {
@@ -267,8 +317,8 @@ export default function DashboardPage() {
         <div className="min-h-screen bg-slate-50/50">
           <div className="max-w-[1600px] mx-auto p-3 sm:p-4 lg:p-6 space-y-4 sm:space-y-5">
             <Skeleton className="h-24 rounded-2xl" />
-            <div className="grid grid-cols-2 lg:grid-cols-5 gap-3">
-              {Array.from({ length: 5 }).map((_, i) => <Skeleton key={i} className="h-28 rounded-2xl" />)}
+            <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+              {Array.from({ length: 4 }).map((_, i) => <Skeleton key={i} className="h-28 rounded-2xl" />)}
             </div>
             <div className="flex gap-1.5">
               {Array.from({ length: 5 }).map((_, i) => <Skeleton key={i} className="h-8 w-24 rounded-2xl shrink-0" />)}
@@ -323,7 +373,7 @@ export default function DashboardPage() {
           </div>
 
           {/* KPIs */}
-          <section className="grid grid-cols-2 lg:grid-cols-5 gap-3">
+          <section className="grid grid-cols-2 lg:grid-cols-4 gap-3">
             {kpis.map((kpi) => {
               const Icon = kpi.icon
               const hasDelta = typeof kpi.delta === 'number'
@@ -762,15 +812,34 @@ export default function DashboardPage() {
             {/* Clientes que dejaron de comprar — para ofertar */}
             <Card className="border-border/40 bg-white shadow-sm rounded-2xl">
               <CardHeader className="p-3 sm:p-4 pb-2 space-y-2">
-                <div>
-                  <CardTitle className="text-sm sm:text-base font-semibold flex items-center gap-1.5">
-                    <Users className="h-4 w-4 text-rose-500" /> Dejaron de comprar — ofertar
-                  </CardTitle>
-                  <p className="text-xs text-muted-foreground mt-0.5">Sin compras en +30 días. Recuperalos con una oferta.</p>
+                <div className="flex flex-row items-start justify-between gap-2">
+                  <div className="min-w-0">
+                    <CardTitle className="text-sm sm:text-base font-semibold flex items-center gap-1.5">
+                      <Users className="h-4 w-4 text-rose-500" /> Dejaron de comprar — ofertar
+                    </CardTitle>
+                    <p className="text-xs text-muted-foreground mt-0.5 tabular-nums">
+                      Sin compras en +30 días · {filteredInactivos.length} {filteredInactivos.length === 1 ? 'cliente' : 'clientes'}
+                    </p>
+                  </div>
+                  <Button variant="ghost" size="sm" className="h-7 text-xs gap-1 text-teal-600 hover:text-teal-700 hover:bg-teal-50 shrink-0" onClick={handlePrintInactivos} disabled={filteredInactivos.length === 0}>
+                    <Printer className="h-3 w-3" /> Imprimir
+                  </Button>
                 </div>
-                <div className="relative">
-                  <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
-                  <Input placeholder="Buscar cliente..." value={inactivoQuery} onChange={(e) => setInactivoQuery(e.target.value)} className="pl-8 h-8 text-xs rounded-xl" />
+                <div className="flex gap-2">
+                  <div className="relative flex-1 min-w-0">
+                    <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
+                    <Input placeholder="Buscar cliente..." value={inactivoQuery} onChange={(e) => setInactivoQuery(e.target.value)} className="pl-8 h-8 text-xs rounded-xl" />
+                  </div>
+                  <Select value={inactivoVendedor} onValueChange={setInactivoVendedor}>
+                    <SelectTrigger className="h-8 text-xs rounded-xl w-36 sm:w-44 shrink-0">
+                      <SelectValue placeholder="Vendedor" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value={TODOS_VENDEDORES}>Todos los vendedores</SelectItem>
+                      {vendedoresInactivos.map((v) => <SelectItem key={v} value={v}>{v}</SelectItem>)}
+                      <SelectItem value={SIN_VENDEDOR}>Sin vendedor</SelectItem>
+                    </SelectContent>
+                  </Select>
                 </div>
               </CardHeader>
               <CardContent className="p-3 sm:p-4 pt-0">
@@ -778,7 +847,7 @@ export default function DashboardPage() {
                   <p className="text-xs text-muted-foreground text-center py-8">No hay clientes inactivos.</p>
                 ) : (
                   <div className="max-h-[380px] overflow-y-auto divide-y divide-slate-100">
-                    {filteredInactivos.slice(0, 50).map((c) => (
+                    {filteredInactivos.map((c) => (
                       <div key={c.id} className="flex items-center justify-between gap-2 p-2 rounded-xl hover:bg-slate-50 transition-colors">
                         <div className="min-w-0">
                           <p className="text-xs font-semibold text-foreground truncate">{c.name}</p>
@@ -806,40 +875,26 @@ export default function DashboardPage() {
           </>)}
 
           {tab === 'operacion' && (<>
-          {/* Stock bajo + Pedidos pendientes */}
+          {/* Recomendación de compra + Pedidos pendientes */}
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-3 sm:gap-4">
             <Card className="border-border/40 bg-white shadow-sm rounded-2xl">
-              <CardHeader className="flex flex-row items-center justify-between p-3 sm:p-4 pb-2">
-                <div className="min-w-0">
-                  <CardTitle className="text-sm sm:text-base font-semibold flex items-center gap-1.5">
-                    <AlertCircle className="h-4 w-4 text-rose-500" /> Stock bajo
-                  </CardTitle>
-                  <p className="text-xs text-muted-foreground mt-0.5">Productos para reponer</p>
-                </div>
-                <Button variant="ghost" size="sm" className="h-7 text-xs gap-1 text-teal-600 hover:text-teal-700 hover:bg-teal-50" onClick={() => window.location.href = '/productos?filter=low-stock'}>
-                  Ver todos <ArrowRight className="h-3 w-3" />
-                </Button>
+              <CardHeader className="p-3 sm:p-4 pb-2">
+                <CardTitle className="text-sm sm:text-base font-semibold flex items-center gap-1.5">
+                  <ShoppingCart className="h-4 w-4 text-teal-500" /> Recomendación de compra
+                </CardTitle>
+                <p className="text-xs text-muted-foreground mt-0.5">Lo que más vendés · promedio mensual de los últimos 6 meses</p>
               </CardHeader>
-              <CardContent className="p-3 sm:p-4 pt-0 space-y-2">
-                {lowStockProducts.slice(0, 5).map((product) => {
-                  const isCritical = product.stock < 5
-                  return (
-                    <div key={product.id} className="flex items-center justify-between gap-2 p-2 rounded-xl border border-slate-100 hover:bg-slate-50 transition-colors">
-                      <div className="flex items-center gap-2.5 min-w-0">
-                        <img src={product.imageUrl || '/placeholder.svg'} alt={product.name} className="h-9 w-9 rounded-lg object-cover border border-slate-100 shrink-0" />
-                        <div className="min-w-0">
-                          <p className="text-xs font-medium text-foreground truncate">{product.name}</p>
-                          <p className="text-[11px] text-muted-foreground truncate">{product.category}</p>
-                        </div>
-                      </div>
-                      <div className="flex items-center gap-1.5 shrink-0">
-                        <Badge variant="outline" className={`${isCritical ? 'bg-rose-50 text-rose-700 border-rose-200' : 'bg-amber-50 text-amber-700 border-amber-200'} text-[10px] tabular-nums`}>{product.stock} uds</Badge>
-                        <Button size="sm" variant="outline" className="h-7 text-xs rounded-xl hover:bg-teal-50 hover:text-teal-700" onClick={() => window.location.href = `/productos?id=${product.id}&action=edit`}>Reponer</Button>
-                      </div>
-                    </div>
-                  )
-                })}
-                {lowStockProducts.length === 0 && <p className="text-xs text-muted-foreground text-center py-8">Stock en orden.</p>}
+              <CardContent className="p-3 sm:p-4 pt-0">
+                <ListaRanking
+                  emptyText="Sin ventas registradas."
+                  items={topProducts.map((p) => ({
+                    key: p.id,
+                    name: p.name,
+                    value: p.units,
+                    valueLabel: `~${Math.ceil(p.units / 6)} uds/mes`,
+                    detail: `${p.units} uds en 6 meses`,
+                  }))}
+                />
               </CardContent>
             </Card>
 
