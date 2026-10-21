@@ -3435,8 +3435,15 @@ ${renderTabla('Cuenta Mayorista', mayorista, balanceMay)}
                         <TableRow key={comp.id} className="cursor-pointer" onClick={() => handleOpenClientFromAuth(comp.clientId)}>
                           <TableCell className="font-medium min-w-[9rem] whitespace-normal break-words" title={comp.notes ? `${comp.clientName} — ${comp.notes}` : comp.clientName}>
                             {comp.clientName || 'Cliente'}
-                            {comp.imputadoA && (
-                              <p className="text-xs font-normal text-teal-700 dark:text-teal-400">{comp.imputadoA}</p>
+                            {comp.imputadoA && comp.imputadoA.length > 0 && (
+                              <div className="mt-0.5 text-xs font-normal text-teal-700 dark:text-teal-400">
+                                {comp.imputadoA.some((r) => r.startsWith('N° ')) && (
+                                  <p className="text-muted-foreground">Remito</p>
+                                )}
+                                {comp.imputadoA.map((r) => (
+                                  <p key={r}>{r}</p>
+                                ))}
+                              </div>
                             )}
                           </TableCell>
                           <TableCell className="text-xs text-muted-foreground whitespace-nowrap">{formatDate(comp.createdAt)}</TableCell>

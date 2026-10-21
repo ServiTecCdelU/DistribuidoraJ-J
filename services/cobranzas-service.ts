@@ -269,15 +269,15 @@ async function adjuntarImputacion(comps: ComprobantePago[]): Promise<Comprobante
   const etiqueta = (debtId: string): string => {
     const deuda = deudaById.get(debtId)
     const remito = deuda?.sale_id ? remitoBySale.get(deuda.sale_id) : undefined
-    if (remito) return `Remito N° ${remito}`
+    if (remito) return `N° ${remito}`
     if (esDeudaAnterior(deuda?.description)) return `Deuda anterior ${new Date(deuda.date).toLocaleDateString('es-AR')}`
     return deuda?.description || 'Deuda'
   }
 
-  const imputadoByTx = new Map<string, string>()
+  const imputadoByTx = new Map<string, string[]>()
   for (const c of pendientes) {
     const ids = deudasByTx.get(c.transactionId as string)
-    imputadoByTx.set(c.transactionId as string, ids?.length ? ids.map(etiqueta).join(' · ') : 'A cuenta (sin deuda pendiente)')
+    imputadoByTx.set(c.transactionId as string, ids?.length ? ids.map(etiqueta) : ['A cuenta (sin deuda pendiente)'])
   }
 
   return comps.map((c) =>
