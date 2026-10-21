@@ -159,7 +159,7 @@ async function fetchDashboardData() {
   // Los ítems de venta usan IDs mayorista (mp_XXXX); en `productos` son prod_mp_XXXX.
   const normId = (id: string) => (id?.startsWith('mp_') ? `prod_${id}` : id)
 
-  const productSales: Record<string, { units: number; revenue: number }> = {}
+  const productSales: Record<string, { units: number; revenue: number; monthly: number[] }> = {}
   const soldIds = new Set<string>()
   sales.forEach((s) => {
     s.items?.forEach((item: any) => {
@@ -167,9 +167,11 @@ async function fetchDashboardData() {
       if (!pid) return
       const qty = Number(item.quantity) || 0
       const rev = (Number(item.price) || 0) * qty
-      if (!productSales[pid]) productSales[pid] = { units: 0, revenue: 0 }
+      if (!productSales[pid]) productSales[pid] = { units: 0, revenue: 0, monthly: [0, 0, 0, 0, 0, 0] }
       productSales[pid].units += qty
       productSales[pid].revenue += rev
+      const mIdx = saleMonthIdx.get(s.id)
+      if (mIdx !== undefined) productSales[pid].monthly[mIdx] += qty
       soldIds.add(pid)
     })
   })
@@ -205,16 +207,15 @@ async function fetchDashboardData() {
   const topProducts = Object.entries(productSales)
     .map(([productId, st]) => {
       const p = resolveProd(productId)
-      return p ? { id: normId(productId), name: p.name, category: p.category, units: st.units, revenue: st.revenue, imageUrl: (p as any).imageUrl ?? '' } : null
+      return p ? { id: normId(productId), name: p.name, category: p.category, units: st.units, revenue: st.revenue, monthlyUnits: st.monthly, imageUrl: (p as any).imageUrl ?? '' } : null
     })
     .filter(Boolean)
     .sort((a, b) => b!.units - a!.units)
-    .slice(0, 6)
+    .slice(0, 15)
 
   const categoryRanking = Object.entries(categoryAgg)
     .map(([name, v]) => ({ name, units: v.units, revenue: v.revenue }))
     .sort((a, b) => b.revenue - a.revenue)
-    .slice(0, 8)
 
   // Ranking de vendedores (por facturación, últimos 6 meses)
   const sellerAgg: Record<string, { total: number; count: number }> = {}
@@ -229,6 +230,25 @@ async function fetchDashboardData() {
     .sort((a, b) => b.total - a.total)
     .slice(0, 8)
 
+  // Competencia de vendedores por mes (últimos 6 meses)
+  const sellerMonthAgg: Record<string, { total: number; count: number }>[] = salesLastMonths.map(() => ({}))
+  sales.forEach((s) => {
+    const idx = saleMonthIdx.get(s.id)
+    if (idx === undefined) return
+    const name = (((s as any).seller_name ?? '') as string).trim() || 'Sin vendedor'
+    const agg = sellerMonthAgg[idx]
+    if (!agg[name]) agg[name] = { total: 0, count: 0 }
+    agg[name].total += s.total ?? 0
+    agg[name].count += 1
+  })
+  const sellerByMonth = salesLastMonths.map((b, i) => ({
+    month: formatterM.format(b.date),
+    year: b.date.getFullYear(),
+    ranking: Object.entries(sellerMonthAgg[i])
+      .map(([name, v]) => ({ name, total: v.total, count: v.count }))
+      .sort((a, b) => b.total - a.total),
+  }))
+
   // Distribucion por categoria
   const categoryTotals: Record<string, number> = {}
   products.forEach((p) => {
@@ -238,6 +258,7 @@ async function fetchDashboardData() {
   const productDistribution = Object.entries(categoryTotals)
     .map(([cat, count], i) => ({
       name: cat,
+      count,
       value: Math.round((count / products.length) * 100),
       color: colors[i % colors.length],
     }))
@@ -276,6 +297,7 @@ async function fetchDashboardData() {
       debtors,
       categoryRanking,
       sellerRanking,
+      sellerByMonth,
     },
   }
 }

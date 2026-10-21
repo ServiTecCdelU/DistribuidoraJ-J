@@ -8,7 +8,7 @@ import { Input } from '@/components/ui/input'
 import { Badge } from '@/components/ui/badge'
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
-import { Bar, BarChart, CartesianGrid, Cell, Pie, PieChart, ResponsiveContainer, XAxis } from 'recharts'
+import { Bar, BarChart, CartesianGrid, XAxis } from 'recharts'
 import {
   ArrowRight,
   Award,
@@ -41,6 +41,7 @@ import type { MontoDisponible } from '@/services/rentabilidad-service'
 import { Wallet } from 'lucide-react'
 import type { Order } from '@/lib/types'
 import { formatCurrency } from '@/lib/utils/format'
+import { clasificarDeuda } from '@/lib/utils/deuda'
 import { Label } from '@/components/ui/label'
 import { toast } from 'sonner'
 import { ListaRanking } from '@/components/dashboard/lista-ranking'
@@ -58,6 +59,7 @@ interface MonthData {
   nc: number
 }
 interface SellerRank { name: string; total: number; count: number }
+interface SellerMonth { month: string; year: number; ranking: SellerRank[] }
 interface CategoryRank { name: string; units: number; revenue: number }
 interface DeudorAntiguedad {
   id: string
@@ -80,9 +82,18 @@ interface ClienteActividad {
 const classMeta: Record<DeudorAntiguedad['classification'], { label: string; cls: string }> = {
   normal: { label: 'Al día', cls: 'bg-emerald-50 text-emerald-700 border-emerald-200' },
   atrasado: { label: 'Atrasado', cls: 'bg-amber-50 text-amber-700 border-amber-200' },
-  moroso: { label: 'Moroso', cls: 'bg-rose-50 text-rose-700 border-rose-200' },
-  incobrable: { label: 'Incobrable', cls: 'bg-rose-100 text-rose-900 border-rose-300' },
+  moroso: { label: 'Moroso', cls: 'bg-orange-50 text-orange-700 border-orange-200' },
+  incobrable: { label: 'Incobrable', cls: 'bg-rose-50 text-rose-700 border-rose-200' },
 }
+
+// Clasificación por días (igual que cuenta corriente); fallback al campo manual moroso/incobrable
+function clasificacionDeudor(d: DeudorAntiguedad): DeudorAntiguedad['classification'] {
+  const live = clasificarDeuda(d.debtSince ? new Date(d.debtSince) : null)
+  return live !== 'normal' ? live : d.classification
+}
+
+const formatPct = (part: number, total: number) =>
+  `${(total > 0 ? (part / total) * 100 : 0).toFixed(1).replace('.', ',')}%`
 
 function MonthTooltip({ active, payload }: any) {
   if (!active || !payload?.length) return null
@@ -119,9 +130,6 @@ function DayTooltip({ active, payload }: any) {
   )
 }
 
-// Paleta teal/cyan para la torta (los colores del service se ignoran en la vista)
-const RUBRO_COLORS = ['#0f766e', '#0d9488', '#14b8a6', '#2dd4bf', '#0891b2', '#06b6d4', '#22d3ee', '#67e8f9']
-
 const TODOS_VENDEDORES = '__todos__'
 const SIN_VENDEDOR = '__sin_vendedor__'
 
@@ -153,8 +161,11 @@ export default function DashboardPage() {
   const [monthlyComparison, setMonthlyComparison] = useState<MonthData[]>([])
   const [mesDetalle, setMesDetalle] = useState<MonthData | null>(null)
   const [topProducts, setTopProducts] = useState<any[]>([])
-  const [productDistribution, setProductDistribution] = useState<{ name: string; value: number; color: string }[]>([])
+  const [productDistribution, setProductDistribution] = useState<{ name: string; value: number; count?: number }[]>([])
   const [sellerRanking, setSellerRanking] = useState<SellerRank[]>([])
+  const [sellerByMonth, setSellerByMonth] = useState<SellerMonth[]>([])
+  const [sellerMes, setSellerMes] = useState(5) // índice en sellerByMonth; -1 = total 6 meses
+  const [deudorOrden, setDeudorOrden] = useState<'antiguos' | 'monto'>('antiguos')
   const [categoryRanking, setCategoryRanking] = useState<CategoryRank[]>([])
   const [deudores, setDeudores] = useState<DeudorAntiguedad[]>([])
   const [inactivos, setInactivos] = useState<ClienteActividad[]>([])
@@ -189,6 +200,7 @@ export default function DashboardPage() {
       setTopProducts(data.lists.topProducts || [])
       setProductDistribution(data.charts.productDistribution || [])
       setSellerRanking((data.lists as any).sellerRanking || [])
+      setSellerByMonth((data.lists as any).sellerByMonth || [])
       setCategoryRanking((data.lists as any).categoryRanking || [])
       setAliasConfig(transferCfg)
       setInactivos(actividad.inactivos as ClienteActividad[])
@@ -221,10 +233,17 @@ export default function DashboardPage() {
     }
   }
 
-  const maxSeller = useMemo(() => Math.max(1, ...sellerRanking.map(s => s.total)), [sellerRanking])
+  const sellerList = sellerMes < 0 ? sellerRanking : (sellerByMonth[sellerMes]?.ranking ?? [])
+  const maxSeller = Math.max(1, ...sellerList.map(s => s.total))
+  const totalRubros = useMemo(() => categoryRanking.reduce((a, c) => a + c.revenue, 0), [categoryRanking])
+  const totalCatalogo = useMemo(() => productDistribution.reduce((a, c) => a + (c.count ?? 0), 0), [productDistribution])
   const filteredDeudores = useMemo(
-    () => deudores.filter(d => d.name?.toLowerCase().includes(deudorQuery.toLowerCase())),
-    [deudores, deudorQuery],
+    () => deudores
+      .filter(d => d.name?.toLowerCase().includes(deudorQuery.toLowerCase()))
+      .sort((a, b) => deudorOrden === 'monto'
+        ? b.balance - a.balance
+        : (b.daysSince ?? -1) - (a.daysSince ?? -1)),
+    [deudores, deudorQuery, deudorOrden],
   )
   const vendedoresInactivos = useMemo(
     () => [...new Set(inactivos.map(c => c.sellerName?.trim()).filter((v): v is string => !!v))].sort((a, b) => a.localeCompare(b, 'es')),
@@ -632,16 +651,60 @@ td{padding:6px 8px;border-bottom:1px solid #e2e8f0}.num{text-align:right;font-va
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-3 sm:gap-4">
             {/* Ranking vendedores */}
             <Card className="border-border/40 bg-white shadow-sm rounded-2xl">
-              <CardHeader className="p-3 sm:p-4 pb-2">
-                <CardTitle className="text-sm sm:text-base font-semibold flex items-center gap-1.5">
-                  <Trophy className="h-4 w-4 text-amber-500" /> Vendedores que más venden
-                </CardTitle>
-                <p className="text-xs text-muted-foreground mt-0.5">Por facturación · últimos 6 meses</p>
+              <CardHeader className="flex flex-row items-start justify-between gap-2 p-3 sm:p-4 pb-2">
+                <div className="min-w-0">
+                  <CardTitle className="text-sm sm:text-base font-semibold flex items-center gap-1.5">
+                    <Trophy className="h-4 w-4 text-amber-500" /> Competencia de vendedores
+                  </CardTitle>
+                  <p className="text-xs text-muted-foreground mt-0.5">Ganador de cada mes · tocá un mes para ver su ranking</p>
+                </div>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className={`h-7 text-xs gap-1 shrink-0 ${sellerMes < 0 ? 'bg-teal-50 text-teal-700' : 'text-teal-600'} hover:text-teal-700 hover:bg-teal-50`}
+                  onClick={() => setSellerMes(sellerMes < 0 ? sellerByMonth.length - 1 : -1)}
+                >
+                  {sellerMes < 0 ? 'Ver por mes' : 'Total 6 meses'}
+                </Button>
               </CardHeader>
               <CardContent className="p-3 sm:p-4 pt-0 space-y-2">
-                {sellerRanking.length === 0 ? (
+                {sellerByMonth.length > 0 && (
+                  <div className="grid grid-cols-3 gap-1.5 pb-1">
+                    {sellerByMonth.map((m, i) => {
+                      const ganador = m.ranking[0]
+                      const active = sellerMes === i
+                      return (
+                        <button
+                          key={`${m.month}-${m.year}`}
+                          type="button"
+                          onClick={() => setSellerMes(i)}
+                          className={`min-w-0 rounded-xl border p-2 text-left transition-colors ${active ? 'bg-teal-50 border-teal-300' : 'bg-white border-slate-100 hover:bg-slate-50'}`}
+                        >
+                          <p className={`text-[11px] capitalize ${active ? 'text-teal-700 font-medium' : 'text-muted-foreground'}`}>
+                            {m.month}{i === sellerByMonth.length - 1 ? ' (en curso)' : ''}
+                          </p>
+                          {ganador ? (
+                            <>
+                              <p className="text-xs font-semibold text-foreground truncate flex items-center gap-1">
+                                <Trophy className="h-3 w-3 text-amber-500 shrink-0" />
+                                <span className="truncate">{ganador.name}</span>
+                              </p>
+                              <p className="text-[11px] text-muted-foreground tabular-nums truncate">{formatCurrency(ganador.total)}</p>
+                            </>
+                          ) : (
+                            <p className="text-xs text-muted-foreground">Sin ventas</p>
+                          )}
+                        </button>
+                      )
+                    })}
+                  </div>
+                )}
+                <p className="text-xs font-medium text-muted-foreground capitalize">
+                  Ranking · {sellerMes < 0 ? 'últimos 6 meses' : `${sellerByMonth[sellerMes]?.month ?? ''} ${sellerByMonth[sellerMes]?.year ?? ''}`}
+                </p>
+                {sellerList.length === 0 ? (
                   <p className="text-xs text-muted-foreground text-center py-8">Sin datos de ventas.</p>
-                ) : sellerRanking.map((s, i) => {
+                ) : sellerList.map((s, i) => {
                   const pct = Math.round((s.total / maxSeller) * 100)
                   const style = podiumStyle[i]
                   const Icon = style?.icon
@@ -672,19 +735,23 @@ td{padding:6px 8px;border-bottom:1px solid #e2e8f0}.num{text-align:right;font-va
                 <CardTitle className="text-sm sm:text-base font-semibold flex items-center gap-1.5">
                   <Layers className="h-4 w-4 text-teal-500" /> Rubros más vendidos
                 </CardTitle>
-                <p className="text-xs text-muted-foreground mt-0.5">Por facturación · últimos 6 meses</p>
+                <p className="text-xs text-muted-foreground mt-0.5 tabular-nums">
+                  Por facturación · últimos 6 meses · {categoryRanking.length} rubros
+                </p>
               </CardHeader>
               <CardContent className="p-3 sm:p-4 pt-0">
-                <ListaRanking
-                  emptyText="Sin datos de rubros."
-                  items={categoryRanking.map((c) => ({
-                    key: c.name,
-                    name: c.name,
-                    value: c.revenue,
-                    valueLabel: formatCurrency(c.revenue),
-                    detail: `${c.units} uds`,
-                  }))}
-                />
+                <div className="max-h-[520px] overflow-y-auto pr-1">
+                  <ListaRanking
+                    emptyText="Sin datos de rubros."
+                    items={categoryRanking.map((c) => ({
+                      key: c.name,
+                      name: c.name,
+                      value: c.revenue,
+                      valueLabel: formatCurrency(c.revenue),
+                      detail: `${formatPct(c.revenue, totalRubros)} · ${c.units} uds`,
+                    }))}
+                  />
+                </div>
               </CardContent>
             </Card>
           </div>
@@ -708,7 +775,7 @@ td{padding:6px 8px;border-bottom:1px solid #e2e8f0}.num{text-align:right;font-va
               <CardContent className="p-3 sm:p-4 pt-0 space-y-1.5">
                 {topProducts.length === 0 ? (
                   <p className="text-xs text-muted-foreground text-center py-8">Sin ventas registradas.</p>
-                ) : topProducts.map((p, i) => (
+                ) : topProducts.slice(0, 10).map((p, i) => (
                   <div key={p.id} className="flex items-center justify-between gap-2 p-2 rounded-xl hover:bg-slate-50 transition-colors cursor-pointer" onClick={() => window.location.href = `/productos?id=${p.id}`}>
                     <div className="flex items-center gap-2.5 min-w-0">
                       <div className="h-7 w-7 rounded-lg bg-teal-50 border border-teal-100 flex items-center justify-center text-xs font-bold text-teal-600 shrink-0">{i + 1}</div>
@@ -731,34 +798,22 @@ td{padding:6px 8px;border-bottom:1px solid #e2e8f0}.num{text-align:right;font-va
                 <CardTitle className="text-sm sm:text-base font-semibold flex items-center gap-1.5">
                   <Layers className="h-4 w-4 text-teal-500" /> Catálogo por rubro
                 </CardTitle>
-                <p className="text-xs text-muted-foreground mt-0.5">% de productos</p>
+                <p className="text-xs text-muted-foreground mt-0.5 tabular-nums">
+                  % de productos del catálogo · {productDistribution.length} rubros
+                </p>
               </CardHeader>
               <CardContent className="p-3 sm:p-4 pt-0">
-                <div className="h-32 relative">
-                  <ResponsiveContainer width="100%" height="100%">
-                    <PieChart>
-                      <Pie data={productDistribution} dataKey="value" nameKey="name" innerRadius={36} outerRadius={56} paddingAngle={3}>
-                        {productDistribution.map((entry, i) => <Cell key={entry.name} fill={RUBRO_COLORS[i % RUBRO_COLORS.length]} strokeWidth={0} />)}
-                      </Pie>
-                    </PieChart>
-                  </ResponsiveContainer>
-                  <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
-                    <div className="text-center">
-                      <div className="text-lg font-bold text-foreground tabular-nums">{productDistribution.length > 0 ? `${productDistribution[0].value}%` : '0%'}</div>
-                      <div className="text-[11px] text-muted-foreground truncate max-w-[80px]">{productDistribution.length > 0 ? productDistribution[0].name : 'Sin datos'}</div>
-                    </div>
-                  </div>
-                </div>
-                <div className="mt-3 space-y-1">
-                  {productDistribution.slice(0, 5).map((item, i) => (
-                    <div key={item.name} className="flex items-center justify-between text-xs">
-                      <div className="flex items-center gap-1.5 min-w-0">
-                        <span className="h-2 w-2 rounded-full shrink-0" style={{ backgroundColor: RUBRO_COLORS[i % RUBRO_COLORS.length] }} />
-                        <span className="text-muted-foreground truncate">{item.name}</span>
-                      </div>
-                      <span className="font-medium text-foreground shrink-0 tabular-nums">{item.value}%</span>
-                    </div>
-                  ))}
+                <div className="max-h-[520px] overflow-y-auto pr-1">
+                  <ListaRanking
+                    emptyText="Sin datos de rubros."
+                    items={productDistribution.map((r) => ({
+                      key: r.name || 'sin-rubro',
+                      name: r.name || 'Sin rubro',
+                      value: r.count ?? r.value,
+                      valueLabel: totalCatalogo > 0 ? formatPct(r.count ?? 0, totalCatalogo) : `${r.value}%`,
+                      detail: r.count != null ? `${r.count} productos` : undefined,
+                    }))}
+                  />
                 </div>
               </CardContent>
             </Card>
@@ -775,11 +830,24 @@ td{padding:6px 8px;border-bottom:1px solid #e2e8f0}.num{text-align:right;font-va
                   <CardTitle className="text-sm sm:text-base font-semibold flex items-center gap-1.5">
                     <CreditCard className="h-4 w-4 text-orange-500" /> Deudores por monto y antigüedad
                   </CardTitle>
-                  <p className="text-xs text-muted-foreground mt-0.5">Priorizar cobranza: cuánto y desde cuándo deben</p>
+                  <p className="text-xs text-muted-foreground mt-0.5 tabular-nums">
+                    Priorizar cobranza: cuánto y desde cuándo deben · {filteredDeudores.length} {filteredDeudores.length === 1 ? 'cliente' : 'clientes'}
+                  </p>
                 </div>
-                <div className="relative">
-                  <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
-                  <Input placeholder="Buscar cliente..." value={deudorQuery} onChange={(e) => setDeudorQuery(e.target.value)} className="pl-8 h-8 text-xs rounded-xl" />
+                <div className="flex gap-2">
+                  <div className="relative flex-1 min-w-0">
+                    <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
+                    <Input placeholder="Buscar cliente..." value={deudorQuery} onChange={(e) => setDeudorQuery(e.target.value)} className="pl-8 h-8 text-xs rounded-xl" />
+                  </div>
+                  <Select value={deudorOrden} onValueChange={(v) => setDeudorOrden(v as 'antiguos' | 'monto')}>
+                    <SelectTrigger className="h-8 text-xs rounded-xl w-36 sm:w-40 shrink-0">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="antiguos">Más antiguos</SelectItem>
+                      <SelectItem value="monto">Mayor monto</SelectItem>
+                    </SelectContent>
+                  </Select>
                 </div>
               </CardHeader>
               <CardContent className="p-3 sm:p-4 pt-0">
@@ -787,8 +855,8 @@ td{padding:6px 8px;border-bottom:1px solid #e2e8f0}.num{text-align:right;font-va
                   <p className="text-xs text-muted-foreground text-center py-8">Sin deudores.</p>
                 ) : (
                   <div className="max-h-[380px] overflow-y-auto divide-y divide-slate-100">
-                    {filteredDeudores.slice(0, 50).map((d) => {
-                      const meta = classMeta[d.classification] ?? classMeta.normal
+                    {filteredDeudores.map((d) => {
+                      const meta = classMeta[clasificacionDeudor(d)] ?? classMeta.normal
                       return (
                         <div key={d.id} className="flex items-center justify-between gap-2 p-2 rounded-xl hover:bg-slate-50 transition-colors cursor-pointer" onClick={() => window.location.href = '/cuenta-corriente'}>
                           <div className="min-w-0">
@@ -882,19 +950,52 @@ td{padding:6px 8px;border-bottom:1px solid #e2e8f0}.num{text-align:right;font-va
                 <CardTitle className="text-sm sm:text-base font-semibold flex items-center gap-1.5">
                   <ShoppingCart className="h-4 w-4 text-teal-500" /> Recomendación de compra
                 </CardTitle>
-                <p className="text-xs text-muted-foreground mt-0.5">Lo que más vendés · promedio mensual de los últimos 6 meses</p>
+                <p className="text-xs text-muted-foreground mt-0.5">
+                  Tus productos más vendidos y cuánto conviene comprar por mes, según el promedio de los últimos 5 meses completos.
+                </p>
               </CardHeader>
               <CardContent className="p-3 sm:p-4 pt-0">
-                <ListaRanking
-                  emptyText="Sin ventas registradas."
-                  items={topProducts.map((p) => ({
-                    key: p.id,
-                    name: p.name,
-                    value: p.units,
-                    valueLabel: `~${Math.ceil(p.units / 6)} uds/mes`,
-                    detail: `${p.units} uds en 6 meses`,
-                  }))}
-                />
+                {topProducts.length === 0 ? (
+                  <p className="text-xs text-muted-foreground text-center py-8">Sin ventas registradas.</p>
+                ) : (
+                  <div className="max-h-[520px] overflow-y-auto space-y-2 pr-1">
+                    {topProducts.map((p, i) => {
+                      const meses: number[] = Array.isArray(p.monthlyUnits) ? p.monthlyUnits : []
+                      const completos = meses.slice(0, -1)
+                      const promedio = completos.length > 0 ? completos.reduce((a, n) => a + n, 0) / completos.length : p.units / 6
+                      const sugerido = Math.ceil(promedio)
+                      const esteMes = meses[meses.length - 1] ?? 0
+                      const maxMes = Math.max(1, ...meses)
+                      return (
+                        <div key={p.id} className="flex items-center gap-2.5 p-2 rounded-xl border border-slate-100 hover:bg-slate-50 transition-colors">
+                          <div className="h-7 w-7 rounded-lg bg-teal-50 border border-teal-100 flex items-center justify-center text-xs font-bold text-teal-600 shrink-0">{i + 1}</div>
+                          <div className="min-w-0 flex-1">
+                            <p className="text-xs font-semibold text-foreground truncate">{p.name}</p>
+                            <p className="text-[11px] text-muted-foreground truncate tabular-nums">
+                              Vendés ~{Math.round(promedio)} por mes · este mes llevás {esteMes}
+                            </p>
+                          </div>
+                          {meses.length > 0 && (
+                            <div className="hidden sm:flex items-end gap-0.5 h-7 shrink-0" title="Unidades vendidas por mes (últimos 6 meses)">
+                              {meses.map((n, mi) => (
+                                <div
+                                  key={mi}
+                                  title={`${monthlyComparison[mi]?.month ?? ''}: ${n} uds`}
+                                  className={`w-1.5 rounded-sm ${mi === meses.length - 1 ? 'bg-cyan-300' : 'bg-teal-500'}`}
+                                  style={{ height: `${Math.max(8, (n / maxMes) * 100)}%` }}
+                                />
+                              ))}
+                            </div>
+                          )}
+                          <div className="text-right shrink-0 w-24">
+                            <p className="text-[10px] uppercase tracking-wide text-muted-foreground">Comprar</p>
+                            <p className="text-sm font-bold text-teal-700 tabular-nums">{sugerido} <span className="text-[11px] font-medium">por mes</span></p>
+                          </div>
+                        </div>
+                      )
+                    })}
+                  </div>
+                )}
               </CardContent>
             </Card>
 
