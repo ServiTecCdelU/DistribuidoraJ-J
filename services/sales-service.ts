@@ -20,6 +20,48 @@ async function ensurePaymentMethodColumn(): Promise<boolean> {
   return false
 }
 
+// Movimiento de cuenta corriente de una venta (deuda o saldo a favor) + saldo del cliente.
+// Primero el movimiento y después el saldo, verificando cada paso: si algo falla el cobro
+// corta con error. Antes el saldo se tocaba primero y el insert podía fallar en silencio,
+// dejando el saldo del cliente distinto a sus movimientos.
+async function registrarMovimientoVenta(params: {
+  clientId: string
+  clientName: string
+  type: 'debt' | 'payment'
+  amount: number
+  description: string
+  saleId: string
+}): Promise<void> {
+  const txId = await generateReadableId('transacciones', 'transaccion', params.clientName)
+  const { error: txErr } = await supabase.from('transacciones').insert({
+    id: txId,
+    client_id: params.clientId,
+    type: params.type,
+    amount: params.amount,
+    description: params.description,
+    date: new Date().toISOString(),
+    sale_id: params.saleId,
+  })
+  if (txErr) throw new Error(`Error al registrar el movimiento del cliente: ${txErr.message}`)
+
+  const { data: cr, error: crErr } = await supabase
+    .from('clientes')
+    .select('current_balance')
+    .eq('id', params.clientId)
+    .single()
+  if (crErr) throw new Error(`Error al leer el saldo del cliente: ${crErr.message}`)
+  const delta = params.type === 'debt' ? params.amount : -params.amount
+  const { error: balErr } = await supabase
+    .from('clientes')
+    .update({ current_balance: (Number(cr.current_balance) || 0) + delta })
+    .eq('id', params.clientId)
+  if (balErr) throw new Error(`Error al actualizar el saldo del cliente: ${balErr.message}`)
+
+  // Si el cliente tenía saldo a favor, se imputa a la deuda nueva (boletas al día).
+  const { recomputarSaldosDeudas } = await import('@/services/payments-service')
+  await recomputarSaldosDeudas(params.clientId, 'minorista').catch(() => {})
+}
+
 function mapSale(d: Record<string, any>): Sale {
   return {
     id: d.id,
@@ -334,58 +376,26 @@ export const processSale = async (data: {
   }
 
   if (amountToCredit > 0 && data.clientId && !deudaYaRegistrada) {
-    // Primero el movimiento y después el saldo, verificando cada paso. Antes el insert del
-    // movimiento podía fallar en silencio: el saldo quedaba sumado sin movimiento, el pedido
-    // sin cobrar, y al reintentar se sumaba otra vez (saldo del cliente al doble).
-    const txId = await generateReadableId('transacciones', 'transaccion', resolvedClientName)
-    const { error: txErr } = await supabase.from('transacciones').insert({
-      id: txId,
-      client_id: data.clientId,
+    await registrarMovimientoVenta({
+      clientId: data.clientId,
+      clientName: resolvedClientName,
       type: 'debt',
       amount: amountToCredit,
       description: `Venta #${saleNumber}`,
-      date: new Date().toISOString(),
-      sale_id: saleId,
+      saleId,
     })
-    if (txErr) throw new Error(`Error al registrar la deuda del cliente: ${txErr.message}`)
-
-    const { data: clientRow, error: clientErr } = await supabase
-      .from('clientes')
-      .select('current_balance')
-      .eq('id', data.clientId)
-      .single()
-    if (clientErr) throw new Error(`Error al leer el saldo del cliente: ${clientErr.message}`)
-    const { error: balErr } = await supabase
-      .from('clientes')
-      .update({ current_balance: (Number(clientRow.current_balance) || 0) + amountToCredit })
-      .eq('id', data.clientId)
-    if (balErr) throw new Error(`Error al actualizar el saldo del cliente: ${balErr.message}`)
   }
 
   // Saldo a favor
   const overpaymentAmount = data.overpayment ?? 0
   if (overpaymentAmount > 0 && data.clientId) {
-    const { data: clientRow } = await supabase
-      .from('clientes')
-      .select('current_balance')
-      .eq('id', data.clientId)
-      .single()
-    if (clientRow) {
-      await supabase
-        .from('clientes')
-        .update({ current_balance: (Number(clientRow.current_balance) || 0) - overpaymentAmount })
-        .eq('id', data.clientId)
-    }
-
-    const txId = await generateReadableId('transacciones', 'transaccion', resolvedClientName)
-    await supabase.from('transacciones').insert({
-      id: txId,
-      client_id: data.clientId,
+    await registrarMovimientoVenta({
+      clientId: data.clientId,
+      clientName: resolvedClientName,
       type: 'payment',
       amount: overpaymentAmount,
       description: `Saldo a favor (Venta #${saleNumber})`,
-      date: new Date().toISOString(),
-      sale_id: saleId,
+      saleId,
     })
   }
 
@@ -682,31 +692,15 @@ export const processSaleMayorista = async (data: {
   if ((amountToCredit > 0 || overpaymentAmount > 0) && data.clientId) {
     postSaleOps.push((async () => {
       if (amountToCredit > 0) {
-        const { data: cr } = await supabase.from('clientes').select('current_balance').eq('id', data.clientId!).single()
-        if (cr) {
-          await supabase.from('clientes').update({ current_balance: (Number(cr.current_balance) || 0) + amountToCredit - overpaymentAmount }).eq('id', data.clientId!)
-        }
-        const txId = await generateReadableId('transacciones', 'transaccion', resolvedClientName)
-        await supabase.from('transacciones').insert({
-          id: txId, client_id: data.clientId!, type: 'debt', amount: amountToCredit,
-          description: `Venta #${saleNumber}`, date: new Date().toISOString(), sale_id: saleId,
+        await registrarMovimientoVenta({
+          clientId: data.clientId!, clientName: resolvedClientName, type: 'debt',
+          amount: amountToCredit, description: `Venta #${saleNumber}`, saleId,
         })
-        if (overpaymentAmount > 0) {
-          const txId2 = await generateReadableId('transacciones', 'transaccion', resolvedClientName)
-          await supabase.from('transacciones').insert({
-            id: txId2, client_id: data.clientId!, type: 'payment', amount: overpaymentAmount,
-            description: `Saldo a favor (Venta #${saleNumber})`, date: new Date().toISOString(), sale_id: saleId,
-          })
-        }
-      } else if (overpaymentAmount > 0) {
-        const { data: cr } = await supabase.from('clientes').select('current_balance').eq('id', data.clientId!).single()
-        if (cr) {
-          await supabase.from('clientes').update({ current_balance: (Number(cr.current_balance) || 0) - overpaymentAmount }).eq('id', data.clientId!)
-        }
-        const txId = await generateReadableId('transacciones', 'transaccion', resolvedClientName)
-        await supabase.from('transacciones').insert({
-          id: txId, client_id: data.clientId!, type: 'payment', amount: overpaymentAmount,
-          description: `Saldo a favor (Venta #${saleNumber})`, date: new Date().toISOString(), sale_id: saleId,
+      }
+      if (overpaymentAmount > 0) {
+        await registrarMovimientoVenta({
+          clientId: data.clientId!, clientName: resolvedClientName, type: 'payment',
+          amount: overpaymentAmount, description: `Saldo a favor (Venta #${saleNumber})`, saleId,
         })
       }
     })())

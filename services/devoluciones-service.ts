@@ -150,20 +150,6 @@ export async function registrarDevolucion(data: {
   // affectsBalance es true. Clientes sin CC habilitada: queda con afecta_saldo
   // false, visible en la tabla pero sin tocar saldo ni totales.
   if (data.clientId && total > 0) {
-    if (affectsBalance) {
-      const { data: cr } = await supabase
-        .from('clientes')
-        .select('current_balance')
-        .eq('id', data.clientId)
-        .single()
-      if (cr) {
-        await supabase
-          .from('clientes')
-          .update({ current_balance: (Number(cr.current_balance) || 0) - total })
-          .eq('id', data.clientId)
-      }
-    }
-
     // Deuda (remito) de esta venta: la devolución se imputa a ESA boleta.
     // Si no se encuentra, queda sin debt_id y el replay la imputa FIFO.
     let debtTxId: string | undefined
@@ -194,11 +180,28 @@ export async function registrarDevolucion(data: {
       afecta_saldo: affectsBalance,
     }
     if (debtTxId) row.debt_id = debtTxId
-    const { error: insErr } = await supabase.from('transacciones').insert(row)
+    let { error: insErr } = await supabase.from('transacciones').insert(row)
     if (insErr && debtTxId) {
       // Columna debt_id aún no creada: registrar sin la referencia
       delete row.debt_id
-      await supabase.from('transacciones').insert(row)
+      ;({ error: insErr } = await supabase.from('transacciones').insert(row))
+    }
+    // Primero el movimiento y después el saldo: si el movimiento no se graba, el saldo
+    // no se toca (antes bajaba igual y quedaba distinto a los movimientos).
+    if (insErr) throw new Error(`Devolución registrada, pero no se pudo grabar el movimiento del cliente: ${insErr.message}`)
+
+    if (affectsBalance) {
+      const { data: cr, error: crErr } = await supabase
+        .from('clientes')
+        .select('current_balance')
+        .eq('id', data.clientId)
+        .single()
+      if (crErr) throw new Error(`No se pudo leer el saldo del cliente: ${crErr.message}`)
+      const { error: balErr } = await supabase
+        .from('clientes')
+        .update({ current_balance: (Number(cr.current_balance) || 0) - total })
+        .eq('id', data.clientId)
+      if (balErr) throw new Error(`No se pudo actualizar el saldo del cliente: ${balErr.message}`)
     }
 
     if (affectsBalance) {

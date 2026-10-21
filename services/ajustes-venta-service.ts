@@ -59,32 +59,28 @@ async function debtTxIdForSale(saleId?: string): Promise<string | undefined> {
   return data?.id
 }
 
-async function bajarSaldoCliente(clientId: string, monto: number): Promise<void> {
-  const { data: cr } = await supabase
+// Se llama DESPUÉS de grabar el movimiento: si algo falla, corta con error en vez de
+// dejar el saldo del cliente distinto a sus movimientos.
+async function moverSaldoCliente(clientId: string, delta: number): Promise<void> {
+  const { data: cr, error } = await supabase
     .from('clientes')
     .select('current_balance')
     .eq('id', clientId)
     .single()
-  if (cr) {
-    await supabase
-      .from('clientes')
-      .update({ current_balance: (Number(cr.current_balance) || 0) - monto })
-      .eq('id', clientId)
-  }
+  if (error) throw new Error(`Movimiento registrado, pero no se pudo leer el saldo del cliente: ${error.message}`)
+  const { error: updErr } = await supabase
+    .from('clientes')
+    .update({ current_balance: (Number(cr.current_balance) || 0) + delta })
+    .eq('id', clientId)
+  if (updErr) throw new Error(`Movimiento registrado, pero no se pudo actualizar el saldo del cliente: ${updErr.message}`)
+}
+
+async function bajarSaldoCliente(clientId: string, monto: number): Promise<void> {
+  await moverSaldoCliente(clientId, -monto)
 }
 
 async function subirSaldoCliente(clientId: string, monto: number): Promise<void> {
-  const { data: cr } = await supabase
-    .from('clientes')
-    .select('current_balance')
-    .eq('id', clientId)
-    .single()
-  if (cr) {
-    await supabase
-      .from('clientes')
-      .update({ current_balance: (Number(cr.current_balance) || 0) + monto })
-      .eq('id', clientId)
-  }
+  await moverSaldoCliente(clientId, monto)
 }
 
 // Actualiza la forma de pago de la venta; reintenta sin payment_method si la columna no existe.
@@ -145,11 +141,9 @@ export async function registrarDescuentoVenta(data: {
   const motivoTxt = data.motivo ? ` — ${data.motivo}` : ''
   const description = `[DESCUENTO] ${data.saleNumber ? `#${data.saleNumber}` : ''}${motivoTxt}`.trim()
 
-  if (data.clientId && affectsBalance) await bajarSaldoCliente(data.clientId, monto)
-
   // Si no afecta la cta cte, se guarda sin client_id: queda como registro de la venta
   // (visible en el detalle vía sale_id) pero no aparece en el historial de cta cte del cliente.
-  await supabase.from('transacciones').insert({
+  const { error: txErr } = await supabase.from('transacciones').insert({
     id,
     client_id: affectsBalance ? (data.clientId ?? null) : null,
     type: 'payment',
@@ -160,6 +154,9 @@ export async function registrarDescuentoVenta(data: {
     sale_id: data.saleId ?? null,
     recibo_numero: reciboNumero,
   })
+  if (txErr) throw new Error(`No se pudo registrar el descuento: ${txErr.message}`)
+
+  if (data.clientId && affectsBalance) await bajarSaldoCliente(data.clientId, monto)
 
   if (data.clientId && affectsBalance) {
     const debtTxId = await debtTxIdForSale(data.saleId)
@@ -260,10 +257,8 @@ export async function convertirPagoVenta(data: {
     const metodo = data.metodo ?? 'efectivo'
     const reciboNumero = await nextReciboNumero()
 
-    if (data.clientId) await bajarSaldoCliente(data.clientId, monto)
-
     const txId = await generateReadableId('transacciones', 'transaccion', data.clientName || 'pago')
-    await supabase.from('transacciones').insert({
+    const { error: txErr } = await supabase.from('transacciones').insert({
       id: txId,
       client_id: data.clientId ?? null,
       type: 'payment',
@@ -274,6 +269,9 @@ export async function convertirPagoVenta(data: {
       sale_id: data.saleId,
       recibo_numero: reciboNumero,
     })
+    if (txErr) throw new Error(`No se pudo registrar el pago: ${txErr.message}`)
+
+    if (data.clientId) await bajarSaldoCliente(data.clientId, monto)
 
     if (data.clientId) {
       const debtTxId = await debtTxIdForSale(data.saleId)
@@ -287,9 +285,8 @@ export async function convertirPagoVenta(data: {
 
   // aCuentaCorriente: sube la deuda y genera la transacción de deuda imputable
   if (data.clientId) {
-    await subirSaldoCliente(data.clientId, monto)
     const txId = await generateReadableId('transacciones', 'transaccion', data.clientName || 'deuda')
-    await supabase.from('transacciones').insert({
+    const { error: txErr } = await supabase.from('transacciones').insert({
       id: txId,
       client_id: data.clientId,
       type: 'debt',
@@ -300,6 +297,8 @@ export async function convertirPagoVenta(data: {
       cuenta: 'minorista',
       sale_id: data.saleId,
     })
+    if (txErr) throw new Error(`No se pudo registrar la deuda: ${txErr.message}`)
+    await subirSaldoCliente(data.clientId, monto)
   }
 
   await actualizarPagoVenta(data.saleId, camposConversionPago('aCuentaCorriente', monto))

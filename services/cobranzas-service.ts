@@ -403,52 +403,58 @@ export const approveComprobante = async (id: string, reviewedBy: string): Promis
   if (!comp) throw new Error('Comprobante no encontrado')
   if (comp.status !== 'pending') throw new Error('Comprobante ya fue procesado')
 
-  // Decrementar saldo del cliente
-  const newBalance = (Number(comp.clientes?.current_balance) || 0) - Number(comp.amount)
-  await supabase
-    .from('clientes')
-    .update({ current_balance: newBalance })
-    .eq('id', comp.client_id)
+  // Tomar el comprobante (pending → approved) antes de registrar nada: si se aprueba dos
+  // veces (doble click, dos admins), solo uno pasa y el pago no se duplica.
+  const { data: tomado, error: lockErr } = await supabase
+    .from('comprobantes_pago')
+    .update({ status: 'approved', reviewed_at: new Date().toISOString(), reviewed_by: reviewedBy })
+    .eq('id', id)
+    .eq('status', 'pending')
+    .select('id')
+  if (lockErr) throw new Error(`No se pudo aprobar el comprobante: ${lockErr.message}`)
+  if (!tomado || tomado.length === 0) throw new Error('Comprobante ya fue procesado')
 
-  // Bajar saldo de las deudas (remitos) más antiguas primero (FIFO)
-  try {
-    const { data: debts } = await supabase
-      .from('transacciones')
-      .select('id, saldo')
-      .eq('client_id', comp.client_id)
-      .eq('type', 'debt')
-      .gt('saldo', 0)
-      .or('cuenta.eq.minorista,cuenta.is.null')
-      .order('date', { ascending: true })
-    let restante = Number(comp.amount)
-    for (const d of debts ?? []) {
-      if (restante <= 0) break
-      const saldo = Number(d.saldo) || 0
-      const aplicado = Math.min(saldo, restante)
-      await supabase.from('transacciones').update({ saldo: saldo - aplicado }).eq('id', d.id)
-      restante -= aplicado
-    }
-  } catch { /* columna saldo aún no creada — no bloquear la aprobación */ }
-
-  // Crear transacción
+  // Primero el movimiento y después el saldo (antes el saldo bajaba aunque el pago no
+  // se grabara). Si el movimiento falla, el comprobante vuelve a quedar pendiente.
   const clientName = comp.clientes?.name || 'pago'
-  const docId = await generateReadableId('transacciones', 'transaccion', clientName)
-  await supabase.from('transacciones').insert({
-    id: docId,
-    client_id: comp.client_id,
-    type: 'payment',
-    amount: comp.amount,
-    description: `Pago con comprobante (${comp.file_name || 'archivo'})`,
-    date: new Date().toISOString(),
-  })
+  let docId: string
+  try {
+    docId = await generateReadableId('transacciones', 'transaccion', clientName)
+    const { error: txErr } = await supabase.from('transacciones').insert({
+      id: docId,
+      client_id: comp.client_id,
+      type: 'payment',
+      amount: comp.amount,
+      description: `Pago con comprobante (${comp.file_name || 'archivo'})`,
+      date: new Date().toISOString(),
+    })
+    if (txErr) throw new Error(txErr.message)
+  } catch (e) {
+    await supabase.from('comprobantes_pago')
+      .update({ status: 'pending', reviewed_at: null, reviewed_by: null })
+      .eq('id', id)
+    throw new Error(`No se pudo registrar el pago: ${e instanceof Error ? e.message : String(e)}`)
+  }
 
-  // Actualizar comprobante
-  await supabase.from('comprobantes_pago').update({
-    status: 'approved',
-    reviewed_at: new Date().toISOString(),
-    reviewed_by: reviewedBy,
-    transaction_id: docId,
-  }).eq('id', id)
+  await supabase.from('comprobantes_pago').update({ transaction_id: docId }).eq('id', id)
+
+  const { data: cr, error: crErr } = await supabase
+    .from('clientes')
+    .select('current_balance')
+    .eq('id', comp.client_id)
+    .single()
+  if (crErr) throw new Error(`Pago registrado, pero no se pudo leer el saldo del cliente: ${crErr.message}`)
+  const { error: balErr } = await supabase
+    .from('clientes')
+    .update({ current_balance: (Number(cr.current_balance) || 0) - Number(comp.amount) })
+    .eq('id', comp.client_id)
+  if (balErr) throw new Error(`Pago registrado, pero no se pudo actualizar el saldo del cliente: ${balErr.message}`)
+
+  // Saldos por boleta: mismo replay que el resto de los pagos (FIFO + imputaciones).
+  try {
+    const { recomputarSaldosDeudas } = await import('@/services/payments-service')
+    await recomputarSaldosDeudas(comp.client_id, 'minorista')
+  } catch { /* columna saldo aún no creada — no bloquear la aprobación */ }
 
   return {
     ...mapComprobante(comp),

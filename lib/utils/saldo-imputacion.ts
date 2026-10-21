@@ -75,11 +75,16 @@ export function recomputarSaldos(
     saldos.set(d.id, limpiarResiduo(Math.max(0, Number(d.amount) || 0)));
   }
   for (const p of pagos) {
-    if (p.debtId && saldos.has(p.debtId)) {
-      saldos.set(p.debtId, imputarADeuda(saldos.get(p.debtId)!, p.monto));
-      continue;
-    }
     let restante = p.monto;
+    // Imputación puntual: lo que no entra en esa deuda (ya estaba cancelada o el pago
+    // la supera) sigue FIFO. Antes el sobrante se perdía y la suma de boletas
+    // pendientes quedaba por encima de lo que el cliente realmente debía.
+    if (p.debtId && saldos.has(p.debtId)) {
+      const saldo = saldos.get(p.debtId)!;
+      const aplicado = Math.min(saldo, restante);
+      saldos.set(p.debtId, limpiarResiduo(saldo - aplicado));
+      restante -= aplicado;
+    }
     for (const d of deudas) {
       if (restante <= 0) break;
       const saldo = saldos.get(d.id)!;
