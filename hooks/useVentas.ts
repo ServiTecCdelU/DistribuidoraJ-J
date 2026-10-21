@@ -229,7 +229,9 @@ export function useVentas(filterBySellerId?: string, clientCityMap?: Record<stri
   // de dejar de tipear, para no pegarle a la BD en cada tecla.
   const [debouncedSearch, setDebouncedSearch] = useState("");
   useEffect(() => {
-    const t = setTimeout(() => setDebouncedSearch(filtros.searchQuery.trim()), 350);
+    // Con menos de 2 caracteres no se busca en servidor: no recargar por eso.
+    const q = filtros.searchQuery.trim();
+    const t = setTimeout(() => setDebouncedSearch(q.length >= 2 ? q : ""), 350);
     return () => clearTimeout(t);
   }, [filtros.searchQuery]);
 

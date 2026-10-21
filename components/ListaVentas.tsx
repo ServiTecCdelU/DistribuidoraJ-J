@@ -45,7 +45,7 @@ import { formatDate, formatTime, formatCurrency } from "@/lib/utils/format";
 import { incidenciasVenta } from "@/lib/utils/incidencias";
 import { toDate } from "@/services/supabase-helpers";
 import { toast } from "sonner";
-import { useMemo, useState, useCallback, useEffect, type KeyboardEvent } from "react";
+import { useMemo, useState, useCallback, useEffect, useRef, type KeyboardEvent } from "react";
 import {
   Dialog,
   DialogContent,
@@ -420,7 +420,11 @@ export function ListaVentas({
     setExportOpen(false);
   }, [ventas, exportPeriod, exportFrom, exportTo, onExportData]);
 
-  if (cargando) return <DataTableSkeleton columns={5} rows={8} />;
+  // Skeleton solo en la primera carga: en recargas (al buscar o filtrar) se mantiene
+  // la pantalla montada para que el buscador no pierda el foco.
+  const yaCargo = useRef(false);
+  if (!cargando) yaCargo.current = true;
+  if (cargando && !yaCargo.current) return <DataTableSkeleton columns={5} rows={8} />;
 
   // ─── render ────────────────────────────────────────────────────────────────
   return (
