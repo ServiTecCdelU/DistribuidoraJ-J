@@ -2,7 +2,7 @@ import { supabase } from '@/lib/supabase'
 import type { Client, ComprobantePago, Transaction } from '@/lib/types'
 import { generateReadableId } from '@/services/supabase-helpers'
 import { getSellerIdsByCodigo } from '@/services/sellers-service'
-import { SALDO_EPSILON } from '@/lib/utils/saldo-imputacion'
+import { SALDO_EPSILON, recomputarSaldos } from '@/lib/utils/saldo-imputacion'
 import { esDeudaAnterior } from '@/lib/utils/deuda-anterior'
 
 // Clientes con deuda asignados a un vendedor (incluye clientes de vendedores anteriores
@@ -215,40 +215,69 @@ export const getComprobantes = async (filters?: {
   }
 }
 
-// Para los cobros de cobrador pendientes de verificación: resuelve qué factura pagan
-// (pago.debt_id → deuda.sale_id → venta.remito_number). Pago sin debt_id = "A cuenta".
+// Para los cobros de cobrador pendientes de verificación: resuelve qué factura(s) pagan.
+// Replay de la imputación del cliente (misma lógica que recomputarSaldosDeudas): con
+// debt_id va a esa deuda; sin debt_id, a la(s) más vieja(s) pendiente(s) (FIFO).
 async function adjuntarImputacion(comps: ComprobantePago[]): Promise<ComprobantePago[]> {
-  const txIds = comps
-    .filter((c) => c.viaCobrador && !c.autorizado && c.status === 'approved' && c.transactionId)
-    .map((c) => c.transactionId as string)
-  if (txIds.length === 0) return comps
+  const pendientes = comps.filter((c) => c.viaCobrador && !c.autorizado && c.status === 'approved' && c.transactionId)
+  if (pendientes.length === 0) return comps
+  const clientIds = [...new Set(pendientes.map((c) => c.clientId))]
 
-  const { data: pagos } = await supabase.from('transacciones').select('id, debt_id').in('id', txIds)
-  const debtIds = [...new Set((pagos ?? []).map((p: any) => p.debt_id).filter(Boolean))]
-  const { data: deudas } = debtIds.length
-    ? await supabase.from('transacciones').select('id, sale_id, description, date').in('id', debtIds)
-    : { data: [] as any[] }
+  const [{ data: deudas }, { data: pagos }] = await Promise.all([
+    supabase
+      .from('transacciones')
+      .select('id, client_id, amount, cuenta, sale_id, description, date')
+      .in('client_id', clientIds)
+      .eq('type', 'debt')
+      .eq('anulado', false)
+      .not('saldo', 'is', null)
+      .order('date', { ascending: true }),
+    supabase
+      .from('transacciones')
+      .select('id, client_id, amount, cuenta, debt_id, afecta_saldo')
+      .in('client_id', clientIds)
+      .eq('type', 'payment')
+      .eq('anulado', false)
+      .order('date', { ascending: true }),
+  ])
+
+  // Deudas cubiertas por cada pago, replayeando por cliente + cuenta
+  const deudasByTx = new Map<string, string[]>()
+  const grupo = (t: any) => `${t.client_id}|${t.cuenta === 'mayorista' ? 'mayorista' : 'minorista'}`
+  const grupos = new Set([...(deudas ?? []), ...(pagos ?? [])].map(grupo))
+  for (const g of grupos) {
+    const ds = (deudas ?? []).filter((d: any) => grupo(d) === g)
+    const ps = (pagos ?? []).filter((p: any) => grupo(p) === g && p.afecta_saldo !== false)
+    recomputarSaldos(
+      ds.map((d: any) => ({ id: d.id, amount: Number(d.amount) })),
+      ps.map((p: any) => ({ monto: Number(p.amount), debtId: p.debt_id ?? undefined })),
+      (idx, debtId) => {
+        const txId = ps[idx].id
+        const lista = deudasByTx.get(txId) ?? []
+        if (!lista.includes(debtId)) deudasByTx.set(txId, [...lista, debtId])
+      },
+    )
+  }
+
   const saleIds = [...new Set((deudas ?? []).map((d: any) => d.sale_id).filter(Boolean))]
   const { data: ventas } = saleIds.length
     ? await supabase.from('ventas').select('id, remito_number').in('id', saleIds)
     : { data: [] as any[] }
-
   const remitoBySale = new Map((ventas ?? []).map((v: any) => [v.id, v.remito_number]))
   const deudaById = new Map((deudas ?? []).map((d: any) => [d.id, d]))
+
+  const etiqueta = (debtId: string): string => {
+    const deuda = deudaById.get(debtId)
+    const remito = deuda?.sale_id ? remitoBySale.get(deuda.sale_id) : undefined
+    if (remito) return `Remito N° ${remito}`
+    if (esDeudaAnterior(deuda?.description)) return `Deuda anterior ${new Date(deuda.date).toLocaleDateString('es-AR')}`
+    return deuda?.description || 'Deuda'
+  }
+
   const imputadoByTx = new Map<string, string>()
-  for (const p of pagos ?? []) {
-    if (!p.debt_id) { imputadoByTx.set(p.id, 'A cuenta'); continue }
-    const deuda = deudaById.get(p.debt_id)
-    if (!deuda) continue
-    const remito = deuda.sale_id ? remitoBySale.get(deuda.sale_id) : undefined
-    imputadoByTx.set(
-      p.id,
-      remito
-        ? `Remito N° ${remito}`
-        : esDeudaAnterior(deuda.description)
-          ? `Deuda anterior ${new Date(deuda.date).toLocaleDateString('es-AR')}`
-          : deuda.description || 'Deuda',
-    )
+  for (const c of pendientes) {
+    const ids = deudasByTx.get(c.transactionId as string)
+    imputadoByTx.set(c.transactionId as string, ids?.length ? ids.map(etiqueta).join(' · ') : 'A cuenta (sin deuda pendiente)')
   }
 
   return comps.map((c) =>

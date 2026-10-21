@@ -69,12 +69,14 @@ export type PagoImputacion = {
 export function recomputarSaldos(
   deudas: ReadonlyArray<DeudaOriginal>,
   pagos: ReadonlyArray<PagoImputacion>,
+  // Opcional: avisa a qué deuda fue cada parte de cada pago (índice del pago en `pagos`).
+  onAplicar?: (pagoIdx: number, debtId: string) => void,
 ): Map<string, number> {
   const saldos = new Map<string, number>();
   for (const d of deudas) {
     saldos.set(d.id, limpiarResiduo(Math.max(0, Number(d.amount) || 0)));
   }
-  for (const p of pagos) {
+  pagos.forEach((p, idx) => {
     let restante = p.monto;
     // Imputación puntual: lo que no entra en esa deuda (ya estaba cancelada o el pago
     // la supera) sigue FIFO. Antes el sobrante se perdía y la suma de boletas
@@ -84,6 +86,7 @@ export function recomputarSaldos(
       const aplicado = Math.min(saldo, restante);
       saldos.set(p.debtId, limpiarResiduo(saldo - aplicado));
       restante -= aplicado;
+      if (aplicado > 0) onAplicar?.(idx, p.debtId);
     }
     for (const d of deudas) {
       if (restante <= 0) break;
@@ -92,7 +95,8 @@ export function recomputarSaldos(
       const aplicado = Math.min(saldo, restante);
       saldos.set(d.id, limpiarResiduo(saldo - aplicado));
       restante -= aplicado;
+      onAplicar?.(idx, d.id);
     }
-  }
+  });
   return saldos;
 }
