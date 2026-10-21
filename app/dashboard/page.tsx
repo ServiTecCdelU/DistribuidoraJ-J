@@ -7,7 +7,7 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Badge } from '@/components/ui/badge'
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog'
-import { Bar, BarChart, CartesianGrid, Cell, Pie, PieChart, ResponsiveContainer, XAxis, YAxis } from 'recharts'
+import { Bar, BarChart, CartesianGrid, Cell, Pie, PieChart, ResponsiveContainer, XAxis } from 'recharts'
 import {
   AlertCircle,
   AlertTriangle,
@@ -33,7 +33,7 @@ import {
   Landmark,
   Clock,
 } from 'lucide-react'
-import { ChartContainer, ChartTooltip, ChartTooltipContent } from '@/components/ui/chart'
+import { ChartContainer, ChartTooltip } from '@/components/ui/chart'
 import { Skeleton } from '@/components/ui/skeleton'
 import { dashboardApi, ordersApi, transferApi } from '@/lib/api'
 import type { TransferConfig } from '@/lib/api'
@@ -43,6 +43,7 @@ import type { Product, Order } from '@/lib/types'
 import { formatCurrency } from '@/lib/utils/format'
 import { Label } from '@/components/ui/label'
 import { toast } from 'sonner'
+import { ListaRanking } from '@/components/dashboard/lista-ranking'
 
 interface MonthData {
   month: string
@@ -107,7 +108,19 @@ const podiumStyle = [
   { ring: 'ring-orange-300', bg: 'bg-orange-50', text: 'text-orange-600', icon: Award },
 ]
 
-const RUBRO_COLORS = ['#0d9488', '#14b8a6', '#2dd4bf', '#5eead4', '#22c55e', '#84cc16', '#06b6d4', '#0ea5e9']
+function DayTooltip({ active, payload }: any) {
+  if (!active || !payload?.length) return null
+  const d = payload[0].payload as { day: string; total: number }
+  return (
+    <div className="rounded-xl border border-border/50 bg-white px-3 py-2 shadow-md text-xs">
+      <p className="font-semibold capitalize mb-1">{d.day}</p>
+      <p className="text-cyan-700 font-semibold tabular-nums">{formatCurrency(d.total)}</p>
+    </div>
+  )
+}
+
+// Paleta teal/cyan para la torta (los colores del service se ignoran en la vista)
+const RUBRO_COLORS = ['#0f766e', '#0d9488', '#14b8a6', '#2dd4bf', '#0891b2', '#06b6d4', '#22d3ee', '#67e8f9']
 
 function waLink(phone: string | undefined, msg: string): string {
   const digits = (phone ?? '').replace(/\D/g, '')
@@ -241,16 +254,17 @@ export default function DashboardPage() {
     return (
       <MainLayout allowedRoles={['admin']} title="Dashboard" description="Resumen ejecutivo y operación diaria">
         <div className="min-h-screen bg-slate-50/50">
-          <div className="max-w-[1600px] mx-auto p-3 sm:p-4 lg:p-6 space-y-4">
+          <div className="max-w-[1600px] mx-auto p-3 sm:p-4 lg:p-6 space-y-4 sm:space-y-5">
             <Skeleton className="h-24 rounded-2xl" />
             <div className="grid grid-cols-2 lg:grid-cols-5 gap-3">
               {Array.from({ length: 5 }).map((_, i) => <Skeleton key={i} className="h-28 rounded-2xl" />)}
             </div>
-            <div className="grid grid-cols-1 lg:grid-cols-3 gap-3">
+            <Skeleton className="h-28 rounded-2xl" />
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-3 sm:gap-4">
               <Skeleton className="h-64 rounded-2xl lg:col-span-2" />
               <Skeleton className="h-64 rounded-2xl" />
             </div>
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-3 sm:gap-4">
               <Skeleton className="h-72 rounded-2xl" />
               <Skeleton className="h-72 rounded-2xl" />
             </div>
@@ -310,14 +324,14 @@ export default function DashboardPage() {
                         <Icon className="h-4 w-4" />
                       </div>
                     </div>
-                    <div className="text-lg sm:text-xl lg:text-2xl font-bold text-foreground tracking-tight truncate">{kpi.value}</div>
+                    <div className="text-lg sm:text-xl lg:text-2xl font-bold text-foreground tracking-tight truncate tabular-nums">{kpi.value}</div>
                     <div className="flex items-center gap-1 text-xs">
                       {hasDelta && (
                         <span className={`inline-flex items-center gap-0.5 font-medium px-1.5 py-0.5 rounded-full border ${up ? 'bg-emerald-50 text-emerald-700 border-emerald-200' : 'bg-rose-50 text-rose-700 border-rose-200'}`}>
                           {up ? <TrendingUp className="h-3 w-3" /> : <TrendingDown className="h-3 w-3" />}
                         </span>
                       )}
-                      <span className="text-muted-foreground truncate">{kpi.detail}</span>
+                      <span className="text-muted-foreground truncate tabular-nums">{kpi.detail}</span>
                     </div>
                   </CardContent>
                 </Card>
@@ -334,7 +348,7 @@ export default function DashboardPage() {
                   <div className="flex items-center gap-2 text-white/80 text-xs font-medium">
                     <Wallet className="h-4 w-4" /> Monto aproximado que me queda
                   </div>
-                  <div className="text-2xl sm:text-3xl font-bold text-white tracking-tight mt-1">
+                  <div className="text-2xl sm:text-3xl font-bold text-white tracking-tight tabular-nums mt-1">
                     {formatCurrency(montoDisponible.total)}
                   </div>
                   <p className="text-[11px] text-white/70 mt-1">Mes en curso · estimado</p>
@@ -351,7 +365,7 @@ export default function DashboardPage() {
                   ].map((it) => (
                     <div key={it.label} className="min-w-0">
                       <p className="text-[11px] text-muted-foreground truncate">{it.label}</p>
-                      <p className={`text-sm font-bold tracking-tight ${it.sign > 0 ? 'text-emerald-600' : 'text-rose-600'}`}>
+                      <p className={`text-sm font-bold tracking-tight tabular-nums ${it.sign > 0 ? 'text-emerald-600' : 'text-rose-600'}`}>
                         {it.sign > 0 ? '+' : '−'}{formatCurrency(it.value)}
                       </p>
                     </div>
@@ -366,11 +380,11 @@ export default function DashboardPage() {
             <Card className="border-border/40 bg-white shadow-sm rounded-2xl overflow-hidden">
               <div className="grid grid-cols-1 lg:grid-cols-[minmax(0,300px)_1fr]">
                 {/* Resultado */}
-                <div className="p-4 sm:p-6 flex flex-col justify-center bg-gradient-to-br from-emerald-600 to-teal-500">
+                <div className="p-4 sm:p-6 flex flex-col justify-center bg-gradient-to-br from-teal-600 to-cyan-500">
                   <div className="flex items-center gap-2 text-white/80 text-xs font-medium">
                     <Wallet className="h-4 w-4" /> Plata líquida (en el bolsillo)
                   </div>
-                  <div className="text-2xl sm:text-3xl font-bold text-white tracking-tight mt-1">
+                  <div className="text-2xl sm:text-3xl font-bold text-white tracking-tight tabular-nums mt-1">
                     {formatCurrency(montoDisponible.efectivoMes + montoDisponible.transferenciaMes)}
                   </div>
                   <p className="text-[11px] text-white/70 mt-1">Cobrado este mes · efectivo + banco</p>
@@ -378,30 +392,30 @@ export default function DashboardPage() {
                 {/* Desglose */}
                 <div className="p-4 sm:p-5 grid grid-cols-1 sm:grid-cols-3 gap-x-4 gap-y-3 items-center">
                   <div className="flex items-center gap-2.5 min-w-0">
-                    <div className="h-9 w-9 rounded-xl flex items-center justify-center border bg-emerald-50 text-emerald-600 border-emerald-100 shrink-0">
+                    <div className="h-8 w-8 rounded-xl flex items-center justify-center border bg-cyan-50 text-cyan-600 border-cyan-100 shrink-0">
                       <Coins className="h-4 w-4" />
                     </div>
                     <div className="min-w-0">
                       <p className="text-[11px] text-muted-foreground truncate">Efectivo en caja</p>
-                      <p className="text-sm font-bold text-foreground tracking-tight">{formatCurrency(montoDisponible.efectivoMes)}</p>
+                      <p className="text-sm font-bold text-foreground tracking-tight tabular-nums">{formatCurrency(montoDisponible.efectivoMes)}</p>
                     </div>
                   </div>
                   <div className="flex items-center gap-2.5 min-w-0">
-                    <div className="h-9 w-9 rounded-xl flex items-center justify-center border bg-teal-50 text-teal-600 border-teal-100 shrink-0">
+                    <div className="h-8 w-8 rounded-xl flex items-center justify-center border bg-teal-50 text-teal-600 border-teal-100 shrink-0">
                       <Landmark className="h-4 w-4" />
                     </div>
                     <div className="min-w-0">
                       <p className="text-[11px] text-muted-foreground truncate">En el banco (transfer.)</p>
-                      <p className="text-sm font-bold text-foreground tracking-tight">{formatCurrency(montoDisponible.transferenciaMes)}</p>
+                      <p className="text-sm font-bold text-foreground tracking-tight tabular-nums">{formatCurrency(montoDisponible.transferenciaMes)}</p>
                     </div>
                   </div>
                   <div className="flex items-center gap-2.5 min-w-0">
-                    <div className="h-9 w-9 rounded-xl flex items-center justify-center border bg-amber-50 text-amber-600 border-amber-100 shrink-0">
+                    <div className="h-8 w-8 rounded-xl flex items-center justify-center border bg-amber-50 text-amber-600 border-amber-100 shrink-0">
                       <Clock className="h-4 w-4" />
                     </div>
                     <div className="min-w-0">
                       <p className="text-[11px] text-muted-foreground truncate">Por cobrar (cta cte)</p>
-                      <p className="text-sm font-bold text-amber-600 tracking-tight">{formatCurrency(montoDisponible.ctaCteClientes)}</p>
+                      <p className="text-sm font-bold text-amber-600 tracking-tight tabular-nums">{formatCurrency(montoDisponible.ctaCteClientes)}</p>
                       <p className="text-[10px] text-muted-foreground">no lo tenés todavía</p>
                     </div>
                   </div>
@@ -415,10 +429,12 @@ export default function DashboardPage() {
             <Card className="lg:col-span-2 border-border/40 bg-white shadow-sm rounded-2xl">
               <CardHeader className="flex flex-row items-center justify-between p-3 sm:p-4 pb-1">
                 <div>
-                  <CardTitle className="text-sm sm:text-base font-semibold">Ventas últimos 6 meses</CardTitle>
+                  <CardTitle className="text-sm sm:text-base font-semibold flex items-center gap-1.5">
+                    <TrendingUp className="h-4 w-4 text-teal-500" /> Ventas últimos 6 meses
+                  </CardTitle>
                   <p className="text-xs text-muted-foreground mt-0.5">Facturación mensual · clic en un mes para el detalle</p>
                 </div>
-                <Badge variant="secondary" className={`rounded-lg font-medium text-xs ${stats.monthDeltaPct >= 0 ? 'bg-emerald-50 text-emerald-700 border-emerald-200' : 'bg-rose-50 text-rose-700 border-rose-200'}`}>
+                <Badge variant="outline" className={`rounded-lg font-medium text-xs tabular-nums shrink-0 ${stats.monthDeltaPct >= 0 ? 'bg-emerald-50 text-emerald-700 border-emerald-200' : 'bg-rose-50 text-rose-700 border-rose-200'}`}>
                   {stats.monthDeltaPct >= 0 ? '+' : ''}{stats.monthDeltaPct.toFixed(1)}% mensual
                 </Badge>
               </CardHeader>
@@ -442,7 +458,9 @@ export default function DashboardPage() {
 
             <Card className="border-border/40 bg-white shadow-sm rounded-2xl">
               <CardHeader className="p-3 sm:p-4 pb-1">
-                <CardTitle className="text-sm sm:text-base font-semibold">Ventas últimos 7 días</CardTitle>
+                <CardTitle className="text-sm sm:text-base font-semibold flex items-center gap-1.5">
+                  <DollarSign className="h-4 w-4 text-cyan-500" /> Ventas últimos 7 días
+                </CardTitle>
                 <p className="text-xs text-muted-foreground mt-0.5">Tendencia diaria</p>
               </CardHeader>
               <CardContent className="p-3 sm:p-4 pt-0">
@@ -456,7 +474,7 @@ export default function DashboardPage() {
                     </defs>
                     <CartesianGrid vertical={false} strokeDasharray="3 3" stroke="#f1f5f9" />
                     <XAxis dataKey="day" tickLine={false} axisLine={false} tick={{ fill: '#64748b', fontSize: 11 }} dy={8} />
-                    <ChartTooltip content={<ChartTooltipContent />} formatter={(value) => formatCurrency(Number(value))} />
+                    <ChartTooltip cursor={{ fill: 'rgba(13,148,136,0.06)' }} content={<DayTooltip />} />
                     <Bar dataKey="total" fill="url(#barCyan)" radius={[6, 6, 0, 0]} />
                   </BarChart>
                 </ChartContainer>
@@ -471,7 +489,7 @@ export default function DashboardPage() {
                 <DialogTitle className="capitalize">Detalle de {mesDetalle?.month}</DialogTitle>
               </DialogHeader>
               {mesDetalle && (
-                <div className="space-y-3 text-sm">
+                <div className="space-y-3 text-sm tabular-nums">
                   <div className="flex items-center justify-between">
                     <span className="text-muted-foreground">Cantidad de ventas</span>
                     <span className="font-semibold">{mesDetalle.count}</span>
@@ -543,12 +561,12 @@ export default function DashboardPage() {
                       <div className="min-w-0 flex-1">
                         <div className="flex items-center justify-between gap-2 mb-1">
                           <span className="text-xs font-semibold text-foreground truncate">{s.name}</span>
-                          <span className="text-xs font-bold text-foreground shrink-0">{formatCurrency(s.total)}</span>
+                          <span className="text-xs font-bold text-foreground shrink-0 tabular-nums">{formatCurrency(s.total)}</span>
                         </div>
                         <div className="h-2 rounded-full bg-slate-100 overflow-hidden">
                           <div className="h-full rounded-full bg-gradient-to-r from-teal-500 to-cyan-400 transition-all duration-700" style={{ width: `${pct}%` }} />
                         </div>
-                        <p className="text-[11px] text-muted-foreground mt-0.5">{s.count} ventas</p>
+                        <p className="text-[11px] text-muted-foreground mt-0.5 tabular-nums">{s.count} ventas</p>
                       </div>
                     </div>
                   )
@@ -565,21 +583,16 @@ export default function DashboardPage() {
                 <p className="text-xs text-muted-foreground mt-0.5">Por facturación · últimos 6 meses</p>
               </CardHeader>
               <CardContent className="p-3 sm:p-4 pt-0">
-                {categoryRanking.length === 0 ? (
-                  <p className="text-xs text-muted-foreground text-center py-8">Sin datos de rubros.</p>
-                ) : (
-                  <ChartContainer config={{ revenue: { label: 'Facturación', color: '#0d9488' } }} className="h-56 sm:h-64 w-full">
-                    <BarChart data={categoryRanking} layout="vertical" margin={{ left: 8, right: 16, top: 4, bottom: 4 }}>
-                      <CartesianGrid horizontal={false} strokeDasharray="3 3" stroke="#f1f5f9" />
-                      <XAxis type="number" hide />
-                      <YAxis type="category" dataKey="name" width={96} tickLine={false} axisLine={false} tick={{ fill: '#475569', fontSize: 11 }} />
-                      <ChartTooltip content={<ChartTooltipContent />} formatter={(value) => formatCurrency(Number(value))} />
-                      <Bar dataKey="revenue" radius={[0, 6, 6, 0]}>
-                        {categoryRanking.map((_, i) => <Cell key={i} fill={RUBRO_COLORS[i % RUBRO_COLORS.length]} />)}
-                      </Bar>
-                    </BarChart>
-                  </ChartContainer>
-                )}
+                <ListaRanking
+                  emptyText="Sin datos de rubros."
+                  items={categoryRanking.map((c) => ({
+                    key: c.name,
+                    name: c.name,
+                    value: c.revenue,
+                    valueLabel: formatCurrency(c.revenue),
+                    detail: `${c.units} uds`,
+                  }))}
+                />
               </CardContent>
             </Card>
           </div>
@@ -588,9 +601,12 @@ export default function DashboardPage() {
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-3 sm:gap-4">
             <Card className="lg:col-span-2 border-border/40 bg-white shadow-sm rounded-2xl">
               <CardHeader className="flex flex-row items-center justify-between p-3 sm:p-4 pb-2">
-                <CardTitle className="text-sm sm:text-base font-semibold flex items-center gap-1.5">
-                  <Package className="h-4 w-4 text-cyan-500" /> Productos más vendidos
-                </CardTitle>
+                <div className="min-w-0">
+                  <CardTitle className="text-sm sm:text-base font-semibold flex items-center gap-1.5">
+                    <Package className="h-4 w-4 text-cyan-500" /> Productos más vendidos
+                  </CardTitle>
+                  <p className="text-xs text-muted-foreground mt-0.5">Por unidades vendidas</p>
+                </div>
                 <Button variant="ghost" size="sm" className="h-7 text-xs gap-1 text-teal-600 hover:text-teal-700 hover:bg-teal-50" onClick={() => window.location.href = '/productos?sort=ventas'}>
                   Ver todos <ArrowRight className="h-3 w-3" />
                 </Button>
@@ -608,8 +624,8 @@ export default function DashboardPage() {
                       </div>
                     </div>
                     <div className="text-right shrink-0">
-                      <p className="text-xs font-bold text-foreground">{p.units} uds</p>
-                      <p className="text-[11px] text-muted-foreground">{formatCurrency(p.revenue || 0)}</p>
+                      <p className="text-xs font-bold text-foreground tabular-nums">{p.units} uds</p>
+                      <p className="text-[11px] text-muted-foreground tabular-nums">{formatCurrency(p.revenue || 0)}</p>
                     </div>
                   </div>
                 ))}
@@ -618,7 +634,9 @@ export default function DashboardPage() {
 
             <Card className="border-border/40 bg-white shadow-sm rounded-2xl">
               <CardHeader className="p-3 sm:p-4 pb-1">
-                <CardTitle className="text-sm sm:text-base font-semibold">Catálogo por rubro</CardTitle>
+                <CardTitle className="text-sm sm:text-base font-semibold flex items-center gap-1.5">
+                  <Layers className="h-4 w-4 text-teal-500" /> Catálogo por rubro
+                </CardTitle>
                 <p className="text-xs text-muted-foreground mt-0.5">% de productos</p>
               </CardHeader>
               <CardContent className="p-3 sm:p-4 pt-0">
@@ -626,25 +644,25 @@ export default function DashboardPage() {
                   <ResponsiveContainer width="100%" height="100%">
                     <PieChart>
                       <Pie data={productDistribution} dataKey="value" nameKey="name" innerRadius={36} outerRadius={56} paddingAngle={3}>
-                        {productDistribution.map((entry) => <Cell key={entry.name} fill={entry.color} strokeWidth={0} />)}
+                        {productDistribution.map((entry, i) => <Cell key={entry.name} fill={RUBRO_COLORS[i % RUBRO_COLORS.length]} strokeWidth={0} />)}
                       </Pie>
                     </PieChart>
                   </ResponsiveContainer>
                   <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
                     <div className="text-center">
-                      <div className="text-lg font-bold text-slate-700">{productDistribution.length > 0 ? `${productDistribution[0].value}%` : '0%'}</div>
+                      <div className="text-lg font-bold text-foreground tabular-nums">{productDistribution.length > 0 ? `${productDistribution[0].value}%` : '0%'}</div>
                       <div className="text-[11px] text-muted-foreground truncate max-w-[80px]">{productDistribution.length > 0 ? productDistribution[0].name : 'Sin datos'}</div>
                     </div>
                   </div>
                 </div>
                 <div className="mt-3 space-y-1">
-                  {productDistribution.slice(0, 5).map((item) => (
+                  {productDistribution.slice(0, 5).map((item, i) => (
                     <div key={item.name} className="flex items-center justify-between text-xs">
                       <div className="flex items-center gap-1.5 min-w-0">
-                        <span className="h-2 w-2 rounded-full shrink-0" style={{ backgroundColor: item.color }} />
+                        <span className="h-2 w-2 rounded-full shrink-0" style={{ backgroundColor: RUBRO_COLORS[i % RUBRO_COLORS.length] }} />
                         <span className="text-muted-foreground truncate">{item.name}</span>
                       </div>
-                      <span className="font-medium text-foreground shrink-0">{item.value}%</span>
+                      <span className="font-medium text-foreground shrink-0 tabular-nums">{item.value}%</span>
                     </div>
                   ))}
                 </div>
@@ -676,17 +694,17 @@ export default function DashboardPage() {
                     {filteredDeudores.slice(0, 50).map((d) => {
                       const meta = classMeta[d.classification] ?? classMeta.normal
                       return (
-                        <div key={d.id} className="flex items-center justify-between gap-2 py-2 cursor-pointer hover:bg-slate-50 rounded-lg px-1" onClick={() => window.location.href = '/cuenta-corriente'}>
+                        <div key={d.id} className="flex items-center justify-between gap-2 p-2 rounded-xl hover:bg-slate-50 transition-colors cursor-pointer" onClick={() => window.location.href = '/cuenta-corriente'}>
                           <div className="min-w-0">
                             <p className="text-xs font-semibold text-foreground truncate">{d.name}</p>
                             <div className="flex items-center gap-1.5 mt-0.5">
                               <Badge variant="outline" className={`text-[10px] py-0 ${meta.cls}`}>{meta.label}</Badge>
                               {typeof d.daysSince === 'number' && (
-                                <span className="text-[10px] text-muted-foreground">hace {d.daysSince} días</span>
+                                <span className="text-[10px] text-muted-foreground tabular-nums">hace {d.daysSince} días</span>
                               )}
                             </div>
                           </div>
-                          <span className="text-xs font-bold text-orange-600 shrink-0">{formatCurrency(d.balance)}</span>
+                          <span className="text-xs font-bold text-orange-600 shrink-0 tabular-nums">{formatCurrency(d.balance)}</span>
                         </div>
                       )
                     })}
@@ -715,7 +733,7 @@ export default function DashboardPage() {
                 ) : (
                   <div className="max-h-[380px] overflow-y-auto divide-y divide-slate-100">
                     {filteredInactivos.slice(0, 50).map((c) => (
-                      <div key={c.id} className="flex items-center justify-between gap-2 py-2">
+                      <div key={c.id} className="flex items-center justify-between gap-2 p-2 rounded-xl hover:bg-slate-50 transition-colors">
                         <div className="min-w-0">
                           <p className="text-xs font-semibold text-foreground truncate">{c.name}</p>
                           <p className="text-[11px] text-muted-foreground truncate">
@@ -723,10 +741,10 @@ export default function DashboardPage() {
                           </p>
                         </div>
                         <div className="flex items-center gap-1.5 shrink-0">
-                          <Badge variant="outline" className="text-[10px] bg-rose-50 text-rose-700 border-rose-200">hace {c.daysSince}d</Badge>
+                          <Badge variant="outline" className="text-[10px] tabular-nums bg-rose-50 text-rose-700 border-rose-200">hace {c.daysSince}d</Badge>
                           {c.phone && (
                             <a href={waLink(c.phone, `Hola ${c.name}! Tenemos una oferta especial para vos en Distribuidora Patricia.`)} target="_blank" rel="noopener noreferrer" onClick={(e) => e.stopPropagation()}>
-                              <Button size="sm" variant="outline" className="h-7 w-7 p-0 rounded-lg text-emerald-600 border-emerald-200 hover:bg-emerald-50">
+                              <Button size="sm" variant="outline" className="h-7 w-7 p-0 rounded-xl text-teal-600 border-teal-100 hover:bg-teal-50 hover:text-teal-700">
                                 <MessageCircle className="h-3.5 w-3.5" />
                               </Button>
                             </a>
@@ -744,10 +762,13 @@ export default function DashboardPage() {
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-3 sm:gap-4">
             <Card className="border-border/40 bg-white shadow-sm rounded-2xl">
               <CardHeader className="flex flex-row items-center justify-between p-3 sm:p-4 pb-2">
-                <CardTitle className="text-sm sm:text-base font-semibold flex items-center gap-1.5">
-                  <AlertCircle className="h-4 w-4 text-rose-500" /> Stock bajo
-                </CardTitle>
-                <Button variant="ghost" size="sm" className="h-7 text-xs gap-1" onClick={() => window.location.href = '/productos?filter=low-stock'}>
+                <div className="min-w-0">
+                  <CardTitle className="text-sm sm:text-base font-semibold flex items-center gap-1.5">
+                    <AlertCircle className="h-4 w-4 text-rose-500" /> Stock bajo
+                  </CardTitle>
+                  <p className="text-xs text-muted-foreground mt-0.5">Productos para reponer</p>
+                </div>
+                <Button variant="ghost" size="sm" className="h-7 text-xs gap-1 text-teal-600 hover:text-teal-700 hover:bg-teal-50" onClick={() => window.location.href = '/productos?filter=low-stock'}>
                   Ver todos <ArrowRight className="h-3 w-3" />
                 </Button>
               </CardHeader>
@@ -755,7 +776,7 @@ export default function DashboardPage() {
                 {lowStockProducts.slice(0, 5).map((product) => {
                   const isCritical = product.stock < 5
                   return (
-                    <div key={product.id} className="flex items-center justify-between gap-2 p-2 rounded-xl border border-slate-100 hover:border-rose-200 transition-colors">
+                    <div key={product.id} className="flex items-center justify-between gap-2 p-2 rounded-xl border border-slate-100 hover:bg-slate-50 transition-colors">
                       <div className="flex items-center gap-2.5 min-w-0">
                         <img src={product.imageUrl || '/placeholder.svg'} alt={product.name} className="h-9 w-9 rounded-lg object-cover border border-slate-100 shrink-0" />
                         <div className="min-w-0">
@@ -764,8 +785,8 @@ export default function DashboardPage() {
                         </div>
                       </div>
                       <div className="flex items-center gap-1.5 shrink-0">
-                        <Badge className={`${isCritical ? 'bg-rose-50 text-rose-700 border-rose-200' : 'bg-amber-50 text-amber-700 border-amber-200'} border text-xs`}>{product.stock} uds</Badge>
-                        <Button size="sm" variant="outline" className="h-7 text-xs rounded-lg" onClick={() => window.location.href = `/productos?id=${product.id}&action=edit`}>Reponer</Button>
+                        <Badge variant="outline" className={`${isCritical ? 'bg-rose-50 text-rose-700 border-rose-200' : 'bg-amber-50 text-amber-700 border-amber-200'} text-[10px] tabular-nums`}>{product.stock} uds</Badge>
+                        <Button size="sm" variant="outline" className="h-7 text-xs rounded-xl hover:bg-teal-50 hover:text-teal-700" onClick={() => window.location.href = `/productos?id=${product.id}&action=edit`}>Reponer</Button>
                       </div>
                     </div>
                   )
@@ -776,10 +797,13 @@ export default function DashboardPage() {
 
             <Card className="border-border/40 bg-white shadow-sm rounded-2xl">
               <CardHeader className="flex flex-row items-center justify-between p-3 sm:p-4 pb-2">
-                <CardTitle className="text-sm sm:text-base font-semibold flex items-center gap-1.5">
-                  <Truck className="h-4 w-4 text-sky-500" /> Pedidos pendientes
-                </CardTitle>
-                <Button variant="ghost" size="sm" className="h-7 text-xs gap-1" onClick={() => window.location.href = '/pedidos'}>
+                <div className="min-w-0">
+                  <CardTitle className="text-sm sm:text-base font-semibold flex items-center gap-1.5">
+                    <Truck className="h-4 w-4 text-sky-500" /> Pedidos pendientes
+                  </CardTitle>
+                  <p className="text-xs text-muted-foreground mt-0.5">Pendientes, en preparación y en camino</p>
+                </div>
+                <Button variant="ghost" size="sm" className="h-7 text-xs gap-1 text-teal-600 hover:text-teal-700 hover:bg-teal-50" onClick={() => window.location.href = '/pedidos'}>
                   Gestionar <ArrowRight className="h-3 w-3" />
                 </Button>
               </CardHeader>
@@ -788,7 +812,7 @@ export default function DashboardPage() {
                   <div key={o.id} className="flex items-center justify-between gap-2 p-2 rounded-xl border border-slate-100 hover:bg-slate-50 transition-colors cursor-pointer" onClick={() => window.location.href = '/pedidos'}>
                     <div className="min-w-0">
                       <p className="text-xs font-semibold text-foreground truncate">{o.clientName || 'Cliente'}</p>
-                      <p className="text-[11px] text-muted-foreground truncate">{o.items.reduce((a, it) => a + it.quantity, 0)} uds · {o.address || 'Sin dirección'}</p>
+                      <p className="text-[11px] text-muted-foreground truncate tabular-nums">{o.items.reduce((a, it) => a + it.quantity, 0)} uds · {o.address || 'Sin dirección'}</p>
                     </div>
                     <Badge variant="outline" className={`text-[10px] shrink-0 ${o.status === 'delivery' ? 'bg-sky-50 text-sky-700 border-sky-200' : 'bg-amber-50 text-amber-700 border-amber-200'}`}>
                       {o.status === 'delivery' ? 'En camino' : o.status === 'preparation' ? 'Preparando' : 'Pendiente'}
@@ -814,20 +838,20 @@ export default function DashboardPage() {
           <div className="space-y-4 py-2">
             <div className="space-y-2">
               <Label htmlFor="alias">Alias</Label>
-              <Input id="alias" placeholder="ej: distribuidora.patricia.mp" value={aliasConfig.alias} onChange={(e) => setAliasConfig(prev => ({ ...prev, alias: e.target.value }))} />
+              <Input id="alias" className="rounded-xl" placeholder="ej: distribuidora.patricia.mp" value={aliasConfig.alias} onChange={(e) => setAliasConfig(prev => ({ ...prev, alias: e.target.value }))} />
             </div>
             <div className="space-y-2">
               <Label htmlFor="titular">Titular</Label>
-              <Input id="titular" placeholder="ej: Juan Pérez" value={aliasConfig.titular} onChange={(e) => setAliasConfig(prev => ({ ...prev, titular: e.target.value }))} />
+              <Input id="titular" className="rounded-xl" placeholder="ej: Juan Pérez" value={aliasConfig.titular} onChange={(e) => setAliasConfig(prev => ({ ...prev, titular: e.target.value }))} />
             </div>
             <div className="space-y-2">
               <Label htmlFor="banco">Banco</Label>
-              <Input id="banco" placeholder="ej: Mercado Pago" value={aliasConfig.banco} onChange={(e) => setAliasConfig(prev => ({ ...prev, banco: e.target.value }))} />
+              <Input id="banco" className="rounded-xl" placeholder="ej: Mercado Pago" value={aliasConfig.banco} onChange={(e) => setAliasConfig(prev => ({ ...prev, banco: e.target.value }))} />
             </div>
           </div>
           <DialogFooter>
-            <Button variant="outline" onClick={() => setAliasModalOpen(false)}>Cancelar</Button>
-            <Button className="bg-teal-600 hover:bg-teal-700" onClick={handleSaveAlias} disabled={aliasSaving}>
+            <Button variant="outline" className="rounded-xl" onClick={() => setAliasModalOpen(false)}>Cancelar</Button>
+            <Button className="rounded-xl bg-teal-600 hover:bg-teal-700" onClick={handleSaveAlias} disabled={aliasSaving}>
               {aliasSaving ? <><Loader2 className="h-4 w-4 animate-spin mr-2" />Guardando...</> : 'Guardar'}
             </Button>
           </DialogFooter>
