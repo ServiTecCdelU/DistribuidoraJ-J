@@ -102,12 +102,6 @@ const registerPayment = async (
     .eq('id', data.clientId)
     .single()
 
-  const newBalance = (Number((client as any)?.[balanceCol]) || 0) - data.amount
-  await supabase
-    .from('clientes')
-    .update({ [balanceCol]: newBalance })
-    .eq('id', data.clientId)
-
   // Número de recibo atómico y consecutivo (función next_recibo_number en Postgres).
   // Si la función no existe todavía, fallback con timestamp para no bloquear el pago.
   let reciboNumero: string
@@ -131,12 +125,28 @@ const registerPayment = async (
     recibo_numero: reciboNumero,
   }
   if (data.debtTxId) row.debt_id = data.debtTxId
-  const { error } = await supabase.from('transacciones').insert(row)
+  let { error } = await supabase.from('transacciones').insert(row)
   if (error && data.debtTxId) {
     // Columna debt_id aún no creada: registrar el pago sin la referencia
     delete row.debt_id
-    await supabase.from('transacciones').insert(row)
+    ;({ error } = await supabase.from('transacciones').insert(row))
   }
+  // Primero el movimiento y después el saldo: antes el saldo se bajaba antes de grabar el
+  // pago y, si el insert fallaba, quedaba en 0 sin movimiento ("Cancelada" arriba y deuda abajo).
+  if (error) throw new Error(`No se pudo registrar el pago: ${error.message}`)
+
+  const { data: clientFresh, error: clientErr } = await supabase
+    .from('clientes')
+    .select(balanceCol)
+    .eq('id', data.clientId)
+    .single()
+  if (clientErr) throw new Error(`Pago registrado, pero no se pudo leer el saldo del cliente: ${clientErr.message}`)
+  const newBalance = (Number((clientFresh as any)?.[balanceCol]) || 0) - data.amount
+  const { error: balErr } = await supabase
+    .from('clientes')
+    .update({ [balanceCol]: newBalance })
+    .eq('id', data.clientId)
+  if (balErr) throw new Error(`Pago registrado, pero no se pudo actualizar el saldo del cliente: ${balErr.message}`)
 
   // Recalcular saldos por-boleta con el pago ya persistido: replay holístico de
   // todos los pagos vigentes. Evita residuos por pagos retroactivos o previos a

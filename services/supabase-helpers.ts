@@ -30,11 +30,14 @@ export const generateReadableId = async (
   let num = 1
   while (num < 1000) {
     const candidateId = `${base}_${num}`
-    const { data } = await supabase
+    const { data, error } = await supabase
       .from(table)
       .select('id')
       .eq('id', candidateId)
       .maybeSingle()
+    // Si la consulta falla no se sabe si el id está libre: devolverlo igual daba un id ya
+    // usado y el insert posterior fallaba (pagos/deudas que no quedaban grabados).
+    if (error) throw new Error(`No se pudo generar el id en ${table}: ${error.message}`)
     if (!data) return candidateId
     num++
   }
