@@ -1423,6 +1423,15 @@ ${renderTabla('Cuenta Mayorista', mayorista, balanceMay)}
     [comprobantes]
   )
 
+  // Desde "Verificar pago": abre la cuenta corriente del cliente del cobro
+  const handleOpenClientFromAuth = async (clientId: string) => {
+    const client = debtClients.find((c) => c.id === clientId) ?? (await clientsApi.getById(clientId))
+    if (!client) { toast.error('No se encontró el cliente'); return }
+    setAuthPanelOpen(false)
+    setAuthPreviewUrl(null)
+    handleSelectClient(client as ClientWithSeller)
+  }
+
   // Historial de cobros de cobrador ya revisados (confirmados o anulados)
   const authHistory = useMemo(
     () =>
@@ -3423,7 +3432,7 @@ ${renderTabla('Cuenta Mayorista', mayorista, balanceMay)}
                     </TableHeader>
                     <TableBody>
                       {pendingAuth.map((comp) => (
-                        <TableRow key={comp.id}>
+                        <TableRow key={comp.id} className="cursor-pointer" onClick={() => handleOpenClientFromAuth(comp.clientId)}>
                           <TableCell className="font-medium min-w-[9rem] whitespace-normal break-words" title={comp.notes ? `${comp.clientName} — ${comp.notes}` : comp.clientName}>
                             {comp.clientName || 'Cliente'}
                             {comp.imputadoA && (
@@ -3433,7 +3442,7 @@ ${renderTabla('Cuenta Mayorista', mayorista, balanceMay)}
                           <TableCell className="text-xs text-muted-foreground whitespace-nowrap">{formatDate(comp.createdAt)}</TableCell>
                           <TableCell className="text-xs text-muted-foreground">{comp.sellerName || comp.reviewedBy || '—'}</TableCell>
                           <TableCell className="text-right font-semibold text-green-600 whitespace-nowrap">{formatCurrency(comp.amount)}</TableCell>
-                          <TableCell className="text-center">
+                          <TableCell className="text-center" onClick={(e) => e.stopPropagation()}>
                             {comp.fileUrl ? (
                               <button
                                 type="button"
@@ -3447,7 +3456,7 @@ ${renderTabla('Cuenta Mayorista', mayorista, balanceMay)}
                               <span className="text-muted-foreground">—</span>
                             )}
                           </TableCell>
-                          <TableCell>
+                          <TableCell onClick={(e) => e.stopPropagation()}>
                             <div className="flex justify-end gap-1">
                               <Button
                                 size="icon"
