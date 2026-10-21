@@ -164,6 +164,18 @@ export const generateSaleNumber = (date: Date, index: number) => {
   return `N${index + 1}-${day}-${month}-${year}`
 }
 
+// Último N° de venta usado. Antes se usaba la cantidad de ventas: al borrar una venta la
+// cantidad bajaba y el próximo número ya existía (N° de venta repetidos).
+async function ultimoNumeroVenta(): Promise<number> {
+  const { data, error } = await supabase
+    .from('ventas')
+    .select('sale_number')
+    .order('created_at', { ascending: false })
+    .limit(50)
+  if (error) throw new Error(`No se pudo generar el número de venta: ${error.message}`)
+  return Math.max(0, ...(data ?? []).map((v) => Number(/^N(\d+)-/.exec(v.sale_number ?? '')?.[1]) || 0))
+}
+
 export const processSale = async (data: {
   clientId?: string
   clientName?: string
@@ -215,14 +227,8 @@ export const processSale = async (data: {
     ventaPrevia = previa
   }
 
-  // Contar ventas para generar saleNumber
   let saleNumber = ventaPrevia?.sale_number ?? ''
-  if (!ventaPrevia) {
-    const { count } = await supabase
-      .from('ventas')
-      .select('id', { count: 'exact', head: true })
-    saleNumber = generateSaleNumber(new Date(), count ?? 0)
-  }
+  if (!ventaPrevia) saleNumber = generateSaleNumber(new Date(), await ultimoNumeroVenta())
 
   let resolvedClientName = data.clientName ?? 'Venta directa'
   let resolvedTaxCategory: any
@@ -572,13 +578,12 @@ export const processSaleMayorista = async (data: {
   const total = Math.max(0, subtotal - discountAmount)
 
   // Paralelizar queries iniciales
-  const countPromise = supabase.from('ventas').select('id', { count: 'exact', head: true })
   const clientPromise = data.clientId
     ? supabase.from('clientes').select('*').eq('id', data.clientId).single()
     : Promise.resolve({ data: null })
 
-  const [{ count }, { data: cd }] = await Promise.all([countPromise, clientPromise])
-  const saleNumber = generateSaleNumber(new Date(), count ?? 0)
+  const [ultimoNumero, { data: cd }] = await Promise.all([ultimoNumeroVenta(), clientPromise])
+  const saleNumber = generateSaleNumber(new Date(), ultimoNumero)
 
   let resolvedClientName = data.clientName ?? 'Venta directa'
   let resolvedTaxCategory: any
