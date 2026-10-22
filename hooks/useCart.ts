@@ -102,7 +102,7 @@ export interface CartState {
 
 export interface CartActions {
   // Cart
-  addToCart: (product: Product) => void;
+  addToCart: (product: Product, applyPromo?: boolean) => void;
   updateQuantity: (productId: string, delta: number) => void;
   setQuantityDirect: (productId: string, value: number) => void;
   removeFromCart: (productId: string) => void;
@@ -588,7 +588,7 @@ export function useCart(role: UserRole, userEmail?: string, externalProducts?: P
   };
 
   // --- Cart actions ---
-  const addToCart = useCallback((product: Product) => {
+  const addToCart = useCallback((product: Product, applyPromo = true) => {
     setCart((prev) => {
       const existing = prev.find((item) => item.product.id === product.id);
       if (existing) {
@@ -603,8 +603,9 @@ export function useCart(role: UserRole, userEmail?: string, externalProducts?: P
         );
       }
       // Producto en oferta: entra con el % de oferta ya aplicado (el que se ve en
-      // el listado). El vendedor puede bajarlo o cambiarlo por regalo en el carrito.
-      const itemDiscount = role ? initialItemDiscount(product.descuento, sellerMaxDiscount) : undefined;
+      // el listado), salvo que el vendedor elija no aplicarla. Puede bajarlo o
+      // cambiarlo por regalo en el carrito.
+      const itemDiscount = role && applyPromo ? initialItemDiscount(product.descuento, sellerMaxDiscount) : undefined;
       return [...prev, withRegaloAuto({ product, quantity: 1, itemDiscount })];
     });
   }, [role, sellerMaxDiscount]);
@@ -649,15 +650,14 @@ export function useCart(role: UserRole, userEmail?: string, externalProducts?: P
   const setItemDiscount = useCallback((productId: string, discount: number) => {
     setCart((prev) => prev.map((item) => {
       if (item.product.id !== productId) return item;
-      // Máximo combinado: tope del producto y tope del vendedor (perfil).
-      const productMax = (item.product.descuento ?? 0) > 0 ? (item.product.descuento as number) : 100;
-      const sellerCap = sellerMaxDiscount != null ? sellerMaxDiscount : 100;
+      // Máximo: la promo del producto si tiene; si no, el tope del vendedor (perfil).
+      const enPromo = (item.product.descuento ?? 0) > 0;
       const max = effectiveDiscountMax(item.product.descuento, sellerMaxDiscount);
       if (discount > max) {
         toast.error(
-          sellerCap < productMax
-            ? `Tu descuento máximo permitido es ${max}%`
-            : `Descuento máximo del producto: ${max}%`,
+          enPromo
+            ? `Descuento máximo del producto: ${max}%`
+            : `Tu descuento máximo permitido es ${max}%`,
         );
       }
       const clamped = clampDiscount(discount, max);

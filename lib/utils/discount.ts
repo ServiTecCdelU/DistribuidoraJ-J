@@ -2,24 +2,23 @@
 // Tope de descuento por producto combinado con el tope configurado por vendedor.
 
 /**
- * Máximo de descuento (%) que se puede aplicar a un producto, combinando:
- * - el máximo del producto (`productDescuento`, 0 = libre hasta 100%)
- * - el tope configurado en el perfil del vendedor (`sellerMaxDiscount`,
- *   undefined = sin vendedor asignado / sin tope propio → 100%)
+ * Máximo de descuento (%) que se puede aplicar a un producto:
+ * - Producto en promoción (`productDescuento` > 0): la promo la configura el
+ *   admin, así que vale para cualquier vendedor sin importar su tope propio.
+ * - Producto sin promoción: el tope del perfil del vendedor
+ *   (`sellerMaxDiscount`, undefined = sin vendedor asignado → 100%).
  */
 export function effectiveDiscountMax(
   productDescuento: number | undefined,
   sellerMaxDiscount: number | undefined | null,
 ): number {
-  const productMax = (productDescuento ?? 0) > 0 ? (productDescuento as number) : 100;
-  const sellerCap = sellerMaxDiscount != null ? sellerMaxDiscount : 100;
-  return Math.min(productMax, sellerCap);
+  if ((productDescuento ?? 0) > 0) return Math.min(100, productDescuento as number);
+  return sellerMaxDiscount != null ? sellerMaxDiscount : 100;
 }
 
 /**
- * Descuento que se pre-aplica al agregar un producto en oferta al carrito:
- * el % configurado en el producto, recortado al tope del vendedor.
- * undefined si el producto no tiene oferta (o el tope resultante es 0).
+ * Descuento que se pre-aplica al agregar un producto en promoción al carrito:
+ * el % configurado en el producto. undefined si el producto no tiene promo.
  */
 export function initialItemDiscount(
   productDescuento: number | undefined,

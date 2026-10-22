@@ -18,6 +18,15 @@ import {
   DialogDescription,
 } from "@/components/ui/dialog";
 import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
+import {
   Select,
   SelectContent,
   SelectItem,
@@ -211,6 +220,22 @@ function NuevaVentaContent({
   }, [state.selectedSeller]);
 
   const [cartDialogOpen, setCartDialogOpen] = useState(false);
+
+  // Producto con promo agregado desde la búsqueda común: preguntar si se aplica.
+  // Desde el filtro "Promociones" se aplica directo.
+  const [promoPrompt, setPromoPrompt] = useState<Product | null>(null);
+  const handleAddProduct = useCallback((product: Product) => {
+    const enCarrito = state.cart.some((i) => i.product.id === product.id);
+    if (!enCarrito && !soloDescuento && (product.descuento ?? 0) > 0) {
+      setPromoPrompt(product);
+      return;
+    }
+    actions.addToCart(product);
+  }, [state.cart, soloDescuento, actions]);
+  const resolvePromoPrompt = (aplicar: boolean) => {
+    if (promoPrompt) actions.addToCart(promoPrompt, aplicar);
+    setPromoPrompt(null);
+  };
 
   // Botón "ir abajo" del modal del carrito (cuando el scroll es largo)
   const cartScrollRef = useRef<HTMLDivElement>(null);
@@ -458,7 +483,7 @@ function NuevaVentaContent({
           </div>
         ) : (
           <div className="space-y-3">
-            <ProductGrid products={enabledProducts} cart={state.cart} addToCart={actions.addToCart} removeFromCart={actions.removeFromCart} updateQuantity={actions.updateQuantity} formatCurrency={actions.formatCurrency} priceList={state.selectedPriceList} />
+            <ProductGrid products={enabledProducts} cart={state.cart} addToCart={handleAddProduct} removeFromCart={actions.removeFromCart} updateQuantity={actions.updateQuantity} formatCurrency={actions.formatCurrency} priceList={state.selectedPriceList} />
             {/* Paginación */}
             {totalPages > 1 && (
               <div className="flex items-center justify-between pt-2">
@@ -548,6 +573,25 @@ function NuevaVentaContent({
           </span>
         )}
       </Button>
+
+      <AlertDialog open={!!promoPrompt} onOpenChange={(open) => { if (!open) setPromoPrompt(null); }}>
+        <AlertDialogContent className="rounded-2xl">
+          <AlertDialogHeader>
+            <AlertDialogTitle>¿Aplicar promoción?</AlertDialogTitle>
+            <AlertDialogDescription>
+              {promoPrompt?.name} tiene {promoPrompt?.descuento}% de descuento.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <Button variant="outline" className="rounded-xl" onClick={() => resolvePromoPrompt(false)}>
+              No
+            </Button>
+            <AlertDialogAction className="rounded-xl bg-teal-600 hover:bg-teal-700" onClick={() => resolvePromoPrompt(true)}>
+              Sí
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
 
     </MainLayout>
   );
