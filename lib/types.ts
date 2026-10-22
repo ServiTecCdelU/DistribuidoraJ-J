@@ -118,6 +118,7 @@ export interface CartItem {
   regalo?: number;       // unidades gratis del mismo producto (manual)
   regaloOtroCantidad?: number; // unidades del producto fijado a regalar (manual)
   regaladas?: number;    // unidades de `quantity` que regala el admin (se cobra como descuento N/quantity)
+  unidadesPromo?: number; // unidades de `quantity` que llevan la promo (undefined = todas, 0 = ninguna); el resto va a precio normal
   cantidadStockLocal?: number;
   cantidadPendienteMayorista?: number;
 }

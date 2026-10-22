@@ -110,6 +110,7 @@ export interface CartActions {
   setItemRegaloMismo: (productId: string, n: number) => void;
   setItemRegaloOtro: (productId: string, n: number) => void;
   setItemRegaladas: (productId: string, n: number) => void;
+  setItemUnidadesPromo: (productId: string, n: number) => void;
 
   // Client
   setLookupType: (type: LookupType) => void;
@@ -565,12 +566,23 @@ export function useCart(role: UserRole, userEmail?: string, externalProducts?: P
   // cantidad cargada. Solo aplica si el item no tiene descuento ni regalo cruzado.
   const withRegaloAuto = (item: CartItem): CartItem => {
     if (item.regaladas) return conRegaladas(item, item.regaladas);
-    if (item.itemDiscount) return item;
     const p = item.product;
+    // Promo parcial: solo `unidadesPromo` de las cargadas llevan la promo.
+    const conPromo = item.unidadesPromo != null ? Math.min(item.unidadesPromo, item.quantity) : item.quantity;
+
+    // Descuento % sobre parte de las unidades: se expresa como % de la línea
+    // (pct × conPromo / cantidad) para que pedidos, remito y ventas lo cobren igual.
+    if (item.unidadesPromo != null && (p.descuento ?? 0) > 0) {
+      const pct = conPromo > 0 ? initialItemDiscount(p.descuento, sellerMaxDiscount) ?? 0 : 0;
+      const disc = (pct * conPromo) / item.quantity;
+      return { ...item, itemDiscount: disc > 0 ? disc : undefined };
+    }
+    if (item.itemDiscount) return item;
+    if (conPromo <= 0) return { ...item, regalo: undefined, regaloOtroCantidad: undefined };
 
     // Regalo del mismo producto (consume stock del propio producto)
     if (p.regaloMismoLleva && p.regaloMismoRegala && !item.regaloOtroCantidad) {
-      const porRegla = Math.floor(item.quantity / p.regaloMismoLleva) * p.regaloMismoRegala;
+      const porRegla = Math.floor(conPromo / p.regaloMismoLleva) * p.regaloMismoRegala;
       const esMayorista = p.stockLocal !== undefined;
       const topeStock = esMayorista ? Infinity : Math.max(0, p.stock - item.quantity);
       const val = Math.min(porRegla, p.regaloMismoMax ?? Infinity, topeStock);
@@ -579,7 +591,7 @@ export function useCart(role: UserRole, userEmail?: string, externalProducts?: P
 
     // Regalo de otro producto
     if (p.regaloProductoId && p.regaloOtroLleva && p.regaloOtroRegala && !item.regalo) {
-      const porRegla = Math.floor(item.quantity / p.regaloOtroLleva) * p.regaloOtroRegala;
+      const porRegla = Math.floor(conPromo / p.regaloOtroLleva) * p.regaloOtroRegala;
       const val = Math.min(porRegla, p.regaloOtroMax ?? Infinity);
       return val > 0 ? { ...item, regaloOtroCantidad: val } : { ...item, regaloOtroCantidad: undefined };
     }
@@ -602,10 +614,11 @@ export function useCart(role: UserRole, userEmail?: string, externalProducts?: P
           item.product.id === product.id ? withRegaloAuto({ ...item, quantity: item.quantity + 1 }) : item,
         );
       }
-      // Producto en oferta: entra con el % de oferta ya aplicado (el que se ve en
-      // el listado), salvo que el vendedor elija no aplicarla. Puede bajarlo o
-      // cambiarlo por regalo en el carrito.
-      const itemDiscount = role && applyPromo ? initialItemDiscount(product.descuento, sellerMaxDiscount) : undefined;
+      // Producto en oferta: entra con el % de oferta y el regalo automático ya
+      // aplicados, salvo que el vendedor elija no aplicar la promo. Puede bajarlo
+      // o cambiarlo por regalo en el carrito.
+      if (!applyPromo) return [...prev, withRegaloAuto({ product, quantity: 1, unidadesPromo: 0 })];
+      const itemDiscount = role ? initialItemDiscount(product.descuento, sellerMaxDiscount) : undefined;
       return [...prev, withRegaloAuto({ product, quantity: 1, itemDiscount })];
     });
   }, [role, sellerMaxDiscount]);
@@ -662,9 +675,9 @@ export function useCart(role: UserRole, userEmail?: string, externalProducts?: P
       }
       const clamped = clampDiscount(discount, max);
       if (clamped > 0) {
-        return { ...item, itemDiscount: clamped, regalo: undefined, regaloOtroCantidad: undefined, regaladas: undefined };
+        return { ...item, itemDiscount: clamped, regalo: undefined, regaloOtroCantidad: undefined, regaladas: undefined, unidadesPromo: undefined };
       }
-      return { ...item, itemDiscount: undefined, regaladas: undefined };
+      return { ...item, itemDiscount: undefined, regaladas: undefined, unidadesPromo: undefined };
     }));
   }, [sellerMaxDiscount]);
 
@@ -730,6 +743,21 @@ export function useCart(role: UserRole, userEmail?: string, externalProducts?: P
       return conRegaladas(item, n);
     }));
   }, [role]);
+
+  // Promo parcial: cuántas de las unidades cargadas llevan la promo; el resto
+  // se cobra a precio normal. Todas = vuelve al comportamiento por defecto.
+  const setItemUnidadesPromo = useCallback((productId: string, n: number) => {
+    setCart((prev) => prev.map((item) => {
+      if (item.product.id !== productId) return item;
+      const val = Math.max(0, Math.min(Math.floor(n || 0), item.quantity));
+      const base = { ...item, itemDiscount: undefined, regalo: undefined, regaloOtroCantidad: undefined, regaladas: undefined };
+      if (val >= item.quantity) {
+        const itemDiscount = role ? initialItemDiscount(item.product.descuento, sellerMaxDiscount) : undefined;
+        return withRegaloAuto({ ...base, unidadesPromo: undefined, itemDiscount });
+      }
+      return withRegaloAuto({ ...base, unidadesPromo: val });
+    }));
+  }, [role, sellerMaxDiscount]);
 
   // --- Payment actions ---
   const handleCashAmountChange = useCallback(
@@ -1249,7 +1277,7 @@ export function useCart(role: UserRole, userEmail?: string, externalProducts?: P
   };
 
   const actions: CartActions = {
-    addToCart, updateQuantity, setQuantityDirect, removeFromCart, setItemDiscount, setItemRegaloMismo, setItemRegaloOtro, setItemRegaladas,
+    addToCart, updateQuantity, setQuantityDirect, removeFromCart, setItemDiscount, setItemRegaloMismo, setItemRegaloOtro, setItemRegaladas, setItemUnidadesPromo,
     setLookupType, setSelectedClient, setDniLookup, selectClientFromSearch,
     setClientName, setClientEmail, setClientPhone, setClientAddress,
     setClientDni, setClientCuit, setClientTaxCategory,

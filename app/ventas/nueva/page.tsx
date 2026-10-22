@@ -226,7 +226,7 @@ function NuevaVentaContent({
   const [promoPrompt, setPromoPrompt] = useState<Product | null>(null);
   const handleAddProduct = useCallback((product: Product) => {
     const enCarrito = state.cart.some((i) => i.product.id === product.id);
-    if (!enCarrito && !soloDescuento && (product.descuento ?? 0) > 0) {
+    if (!enCarrito && !soloDescuento && ((product.descuento ?? 0) > 0 || textoRegalo(product))) {
       setPromoPrompt(product);
       return;
     }
@@ -579,7 +579,11 @@ function NuevaVentaContent({
           <AlertDialogHeader>
             <AlertDialogTitle>¿Aplicar promoción?</AlertDialogTitle>
             <AlertDialogDescription>
-              {promoPrompt?.name} tiene {promoPrompt?.descuento}% de descuento.
+              {promoPrompt && [
+                (promoPrompt.descuento ?? 0) > 0 ? `${promoPrompt.descuento}% de descuento` : null,
+                textoRegalo(promoPrompt),
+              ].filter(Boolean).join(" · ")}
+              {" — "}{promoPrompt?.name}. Podés cambiar cuántas unidades llevan la promo en el carrito.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
@@ -598,6 +602,17 @@ function NuevaVentaContent({
 }
 
 // ─── Sub-componentes de productos ─────────────────────────────────────────────
+
+/** Texto de la promo de regalo ("llevando X se regala N") o null si no tiene. */
+function textoRegalo(product: Product): string | null {
+  if (product.regaloMismoLleva && product.regaloMismoRegala) {
+    return `Llevando ${product.regaloMismoLleva} se regala ${product.regaloMismoRegala}`;
+  }
+  if (product.regaloOtroLleva && product.regaloOtroRegala) {
+    return `Llevando ${product.regaloOtroLleva} se regala ${product.regaloOtroRegala}× ${product.regaloProductoNombre ?? "otro producto"}`;
+  }
+  return null;
+}
 
 const ProductListItem = memo(function ProductListItem({
   product, quantity, onAdd, onRemove, onDecrement, formatCurrency, priceList,
@@ -619,13 +634,7 @@ const ProductListItem = memo(function ProductListItem({
   const unidadesLote = unidadesPorBulto
     ? (seDivideEn && seDivideEn > 1 ? Math.floor(unidadesPorBulto / seDivideEn) : unidadesPorBulto)
     : null;
-  const lleva = product.regaloMismoLleva;
-  const regala = product.regaloMismoRegala;
-  const promoTexto = lleva && regala
-    ? `Llevando ${lleva} se regala ${regala}`
-    : product.regaloOtroLleva && product.regaloOtroRegala
-      ? `Llevando ${product.regaloOtroLleva} se regala ${product.regaloOtroRegala}× ${product.regaloProductoNombre ?? "otro producto"}`
-      : null;
+  const promoTexto = textoRegalo(product);
 
   return (
     <div className={cn(

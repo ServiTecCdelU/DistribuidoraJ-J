@@ -385,6 +385,34 @@ export function UnifiedCart({ role, state, actions, onConfirmSale, allowDiscount
                       )}
                     </div>
                   )}
+                  {/* Promo parcial: cuántas unidades llevan la promo; el resto a precio normal */}
+                  {role !== null && !item.regaladas && (
+                    (item.product.descuento ?? 0) > 0 ||
+                    (item.product.regaloMismoLleva && item.product.regaloMismoRegala) ||
+                    (item.product.regaloProductoId && item.product.regaloOtroLleva && item.product.regaloOtroRegala)
+                  ) && (
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <span className="text-[10px] sm:text-xs text-muted-foreground">Con promo:</span>
+                      <input type="number" min={0} max={item.quantity}
+                        value={item.unidadesPromo ?? item.quantity}
+                        onChange={(e) => actions.setItemUnidadesPromo(item.product.id, Number(e.target.value) || 0)}
+                        className="h-7 w-16 rounded-lg border border-input bg-background px-2 text-center text-xs" />
+                      <span className="text-[10px] sm:text-xs text-muted-foreground">de {item.quantity}</span>
+                      {item.unidadesPromo != null && item.unidadesPromo < item.quantity && (
+                        <span className="text-[10px] font-medium text-teal-600">
+                          {item.quantity - item.unidadesPromo} a precio normal
+                        </span>
+                      )}
+                      {(item.unidadesPromo != null ||
+                        ((item.product.descuento ?? 0) > 0 && (item.itemDiscount ?? 0) < (item.product.descuento as number))) && (
+                        <button type="button"
+                          onClick={() => actions.setItemUnidadesPromo(item.product.id, item.quantity)}
+                          className="h-7 px-2.5 rounded-lg bg-teal-600 hover:bg-teal-700 text-white text-[10px] sm:text-xs font-medium">
+                          Aplicar promoción
+                        </button>
+                      )}
+                    </div>
+                  )}
                   {/* Promo: unidades de regalo (paga {quantity}, lleva {quantity + regalo}) */}
                   {regalo > 0 && (
                     <div className="flex items-center gap-1 text-[10px] font-medium text-fuchsia-600">
