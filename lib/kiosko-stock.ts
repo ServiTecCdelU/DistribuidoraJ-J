@@ -27,7 +27,8 @@ export async function llamarKiosko(body: Record<string, unknown>): Promise<{ sta
       headers: { "Content-Type": "application/json", Authorization: `Bearer ${clave}` },
       body: JSON.stringify(body),
       cache: "no-store",
-      signal: AbortSignal.timeout(30_000),
+      // Pasar varios de una puede tardar (el kiosko hace dos llamadas por producto).
+      signal: AbortSignal.timeout(280_000),
     });
     return { status: res.status, data: await res.json().catch(() => ({ error: `El super respondió ${res.status}` })) };
   } catch {
