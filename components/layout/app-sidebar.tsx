@@ -24,6 +24,7 @@ import {
   ShieldCheck,
   PanelLeftClose,
   PanelLeftOpen,
+  ArrowLeftRight,
 } from "lucide-react";
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
@@ -85,6 +86,8 @@ export function AppSidebar({ hidden, onToggle }: AppSidebarProps) {
           roles: ["admin", ...(isVendedor || isCobrador ? ["seller"] : [])],
         },
         { href: "/mayorista", label: "Mayorista", icon: Store, roles: ["admin"] },
+        // Stock compartido con el supermercado (lib/kiosko-stock.ts)
+        { href: "/stock-super", label: "Stock Super", icon: ArrowLeftRight, roles: ["admin"] },
       ],
     },
     {
