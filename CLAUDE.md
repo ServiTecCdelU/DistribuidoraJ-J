@@ -206,16 +206,16 @@ Rutas públicas (no requieren auth) en `app/api/public/` — clientes, productos
 - Credenciales Google Drive para backup de PDFs
 - `SERVITEC_ESTADO_PAGO_CLAVE` — clave de J&J para consultar a ServiTec si hay pagos atrasados (opcional `SERVITEC_ESTADO_PAGO_URL`; por defecto `https://www.servitec.net.ar/distribuidora/api/externo/estado-pago`)
 
-## Pendientes (análisis del 2026-10-27)
+## Pendientes (actualizado el 2026-10-28)
 
 Ordenados por prioridad. Al resolver uno, borrarlo de esta lista.
 
 ### Seguridad
-- **RLS deshabilitado** en casi todo `public`. Bloqueante: `services/users-service.ts` (`ensureUserProfile`) crea, actualiza y borra filas de `usuarios` y asigna roles (vendedor por email, primer admin) desde el navegador. Hay que moverlo a una ruta API con service role y recién ahí activar RLS por rol, tabla por tabla y probando en el navegador. Hoy cualquier cuenta de Google que se loguee tiene un JWT `authenticated` con el que podría escribir en la base. Plan y rollback en `PLAN_RLS.md` (sus "Server Components con anon" no existen: esas páginas son `"use client"`).
-- **Rotar el token de Supabase** (`SUPABASE_ACCESS_TOKEN`): pasó por el chat. También sigue pendiente el secreto en `.claude/settings.local.json` (ver `.claude/rules/security.md`).
+- **RLS deshabilitado** en casi todo `public`. Bloqueante: `services/users-service.ts` (`ensureUserProfile`) crea, actualiza y borra filas de `usuarios` y asigna roles (vendedor por email, primer admin) desde el navegador. Hay que moverlo a una ruta API con service role y recién ahí activar RLS por rol, tabla por tabla y probando en el navegador con cada rol (admin, vendedor, reparto/transportista, cobrador, cliente). Hoy cualquier cuenta de Google que se loguee tiene un JWT `authenticated` con el que podría escribir en la base. Plan y rollback en `PLAN_RLS.md` (sus "Server Components con anon" no existen: esas páginas son `"use client"`). Las RPC nuevas (`cobrar_pedido`, `guardar_remito_pedido`, `caja_dia`, `recomputar_saldos_deudas`, `aplicar_pago_a_deudas`, `productos_a_revisar`) son `security invoker`: con RLS activo respetan las políticas del usuario que las llama.
+- **Token de Supabase**: el 2026-10-28 se generó uno nuevo en `.env`. Confirmar que el viejo esté revocado y borrar el secreto que sigue en `.claude/settings.local.json` (ver `.claude/rules/security.md`). El MCP de Supabase del repo respondía "Unauthorized": actualizarle el token.
 
 ### Plata
-- **Devoluciones**: no se validan contra lo vendido (se puede devolver el mismo producto varias veces o a otro precio, y repone stock cada vez).
+- **Devoluciones**: no se validan contra lo vendido (se puede devolver el mismo producto varias veces o a otro precio, y repone stock cada vez). Resolver con una RPC transaccional como `cobrar_pedido`.
 - **Descuentos/conversión de pago** (`ajustes-venta-service.ts`): sin tope contra el saldo de la boleta ni bloqueo contra doble click.
 - **Comisiones**: la lista calcula `ventas.total × tasa actual` y no resta los descuentos (`[DESCUENTO]`); además usa la tasa actual para ventas viejas. Conviene guardar `commission_rate`/`commission_amount` en cada venta.
 - `approveComprobante` (`cobranzas-service.ts`): registra el pago sin `cuenta` ni `recibo_numero` y siempre baja el saldo minorista; `rejectComprobante` no chequea errores ni el estado actual.
@@ -224,13 +224,18 @@ Ordenados por prioridad. Al resolver uno, borrarlo de esta lista.
 
 ### Robustez
 - La venta de mostrador (`processSaleMayorista`) no es una transacción: pasarla a una RPC como `cobrar_pedido`.
-- Fechas: Caja calcula "hoy" con la hora del navegador; el cron usa UTC-3 fijo. Unificar con un helper de día argentino.
+- Fechas: Caja calcula "hoy" con la hora del navegador; el cron usa UTC-3 fijo; `cobrar_pedido` usa `America/Argentina/Buenos_Aires`. Unificar con un helper de día argentino.
 - `faltantesApi.registrar/quitar` ignoran errores de Supabase.
 - `app/pedidos/page.tsx`: `payment-modal` toma el precio de la primera línea si un producto aparece en dos renglones.
+- Cobro con todo roto (sin ítems para vender): sigue por el camino JS viejo (pasos sueltos), no por `cobrar_pedido`.
+- Errores de tipos que ya estaban (el build los ignora): `groupKey` en `app/pedidos/page.tsx`, `stockLocal` en `hooks/useCart.ts`, argumentos en `lib/api.ts` (~línea 517).
+- `app/pedidos/page.tsx` (~2.580 líneas) y `app/caja/page.tsx` (~2.100) son demasiado grandes.
 
-### Rendimiento (pendiente)
+### Rendimiento
 - El carrito legacy (tienda con rol admin/seller) baja los ~2000 productos habilitados para armar la grilla. Pedido mayorista y Recepción ya traen solo los productos que usan (`getMayoristaProductosByIds`).
-- PDFs base64 en las filas (`remito_pdf_base64`, ~6 KB c/u; base 99 MB): moverlos a Storage no rinde todavía. Los listados, los updates de pedidos y el realtime ya no los traen.
-- Clientes se cargan completos varias veces por navegación (`clientsApi.getAll`): búsqueda server-side en los selectores.
-- Cuenta corriente recarga todas las transacciones del cliente tras cada acción (son livianas, sin PDFs). La carga general (`loadData`) sigue trayendo los comprobantes de todos los clientes.
+- PDFs base64 en las filas (`remito_pdf_base64`, ~6 KB c/u; base 99 MB de 500): moverlos a Storage no rinde todavía (tocar ~20 archivos). Los listados, los updates de pedidos, cuenta corriente y el realtime ya no los traen.
+- Clientes se cargan completos varias veces por navegación (`clientsApi.getAll`, 443 clientes, ~93 KB): búsqueda server-side en los selectores.
+- Cuenta corriente recarga todas las transacciones del cliente tras cada acción (son livianas, sin PDFs). La carga general (`loadData`) sigue trayendo los comprobantes de todos los clientes (302).
 - Historial de ventas: trae todo el período elegido (hoy por defecto; un mes ≈ 500 ventas, ~450 KB). Paginar en la base si crece.
+- Caja → detalle de un día del historial: 2 consultas (podría usar `caja_dia`).
+- Las páginas son todas `"use client"`: el primer render espera JS + auth + consultas. Pasar a Server Components exige sesión en el servidor; no prioritario.
