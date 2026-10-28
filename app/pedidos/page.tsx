@@ -1907,7 +1907,10 @@ tfoot td{border-top:2px solid #1f4e78;background:#f2f2f2;font-weight:700;font-si
 
     // Blindaje: si algún pedido todavía no terminó de cargar sus ítems en el front,
     // su importe da 0. No imprimir una hoja con importes en 0 — pedir recarga.
-    const sinImporte = cargoGroups.flatMap(({ orders }) => orders).filter((o) => calculateOrderTotal(o) <= 0);
+    // Se mira el importe bruto (sin descuentos): un pedido 100% bonificado da $0 y es válido.
+    const sinImporte = cargoGroups
+      .flatMap(({ orders }) => orders)
+      .filter((o) => o.items.reduce((acc, i) => acc + i.quantity * i.price, 0) <= 0);
     if (sinImporte.length > 0) {
       toast.error("Hay pedidos sin importe cargado. Recargá la página (F5) y volvé a generar la hoja de ruta.");
       return;
