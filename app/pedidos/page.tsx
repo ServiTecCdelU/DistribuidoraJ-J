@@ -238,6 +238,11 @@ export default function PedidosPage() {
   }, []);
 
   const generateRemitoForOrder = useCallback(async (order: Order, excludeProductIds: string[] = [], replacements: Record<string, ReplacementOption> = {}, quantities: Record<string, number> = {}, discounts: Record<string, number> = {}) => {
+    // El remito es INMODIFICABLE: si el pedido ya tiene uno, no se regenera ni se pisa.
+    if (order.remitoNumber) {
+      toast.error(`El pedido ya tiene el remito ${order.remitoNumber}. Para cambiarlo hay que anularlo primero.`);
+      return;
+    }
     setGeneratingDoc(true);
     // El stock se descuenta al generar el remito (la mercadería sale del depósito). Si este pedido
     // ya lo descontó antes (regenerar remito / reimprimir PDF), no volver a descontar.
@@ -329,25 +334,25 @@ export default function PedidosPage() {
 
       // Trazabilidad 1 pedido = 1 remito = 1 venta: el remito se genera SOLO sobre este pedido.
       // No se consolidan ni se borran otros pedidos del cliente.
-      await supabase
+      // Si no se graba, el remito saldría con items distintos a los del pedido en la base.
+      const { error: itemsErr } = await supabase
         .from("pedidos")
         .update({ items: filteredItems, ...(nota ? { notes: notasPedido } : {}) })
         .eq("id", order.id);
+      if (itemsErr) {
+        toast.error(`No se pudo guardar el pedido editado: ${itemsErr.message}`);
+        return;
+      }
       order = { ...order, items: filteredItems as Order["items"], notes: notasPedido };
       setOrders((prev) => prev.map((o) => (o.id === order.id ? order : o)));
       if (detailOrder?.id === order.id) setDetailOrder(order);
 
-      // Si el pedido ya tiene remito, regenerar conservando el MISMO número (no quemar uno nuevo).
-      // Si no, pedir un número único y consecutivo (función atómica en Postgres).
-      let remitoNumber = order.remitoNumber;
-      const remitoPrevio = order.remitoNumber;
-      if (!remitoNumber) {
-        const { data, error: remitoErr } = await supabase.rpc("next_remito_number");
-        if (remitoErr || !data) {
-          toast.error("Error al generar el número de remito");
-          return;
-        }
-        remitoNumber = data;
+      // Número único y consecutivo (función atómica en Postgres). Acá el pedido nunca tiene
+      // remito: el de un pedido que ya lo tiene no se regenera (ver arriba).
+      const { data: remitoNumber, error: remitoErr } = await supabase.rpc("next_remito_number");
+      if (remitoErr || !remitoNumber) {
+        toast.error("Error al generar el número de remito");
+        return;
       }
 
       // Quién y cuándo le asignó (o le cambió) el número de remito al pedido. Sin esto no
@@ -357,15 +362,13 @@ export default function PedidosPage() {
           action: "order_items_edited",
           userId: user.id,
           userName: user.name || user.email,
-          description: remitoPrevio
-            ? `Regeneró el remito ${remitoPrevio} del pedido de "${order.clientName}" (mismo número)`
-            : `Generó el remito ${remitoNumber} del pedido de "${order.clientName}"`,
+          description: `Generó el remito ${remitoNumber} del pedido de "${order.clientName}"`,
           entityType: "order",
           entityId: order.id,
           metadata: {
             remitoNumber,
-            remitoPrevio: remitoPrevio ?? null,
-            remitoNuevo: remitoPrevio ? null : remitoNumber,
+            remitoPrevio: null,
+            remitoNuevo: remitoNumber,
           },
         });
       }
@@ -391,22 +394,33 @@ export default function PedidosPage() {
 
       const { generarPdfCliente } = await import("@/hooks/useGenerarPdf");
       const pdfBase64 = await generarPdfCliente(ventaData, "remito");
-      let updatedOrder = await ordersApi.saveRemitoToOrder(order.id, remitoNumber, pdfBase64);
 
       // Descontar stock de lo que va en el remito (sale del depósito). Una sola vez por pedido.
+      // Va ANTES de grabar el remito y es todo o nada: si un movimiento falla se revierten los
+      // ya hechos y no se graba el remito. Antes quedaba el remito guardado con el stock a medias
+      // y stock_descontado=false, y el cobro volvía a descontar todo.
       if (!yaDescontado) {
         const { registrarMovimiento } = await import("@/services/stock-service");
-        for (const mov of salidasRemito(filteredItems as any[])) {
-          await registrarMovimiento({
-            productoId: mov.productId,
-            tipo: "venta",
-            cantidad: mov.cantidad,
-            referencia: `Remito ${remitoNumber} pedido #${order.id}`,
-          });
+        const referencia = `Remito ${remitoNumber} pedido #${order.id}`;
+        const hechos: { productId: string; cantidad: number }[] = [];
+        try {
+          for (const mov of salidasRemito(filteredItems as any[])) {
+            await registrarMovimiento({ productoId: mov.productId, tipo: "venta", cantidad: mov.cantidad, referencia });
+            hechos.push(mov);
+          }
+          await ordersApi.markStockDescontado(order.id);
+        } catch (err) {
+          for (const mov of hechos) {
+            await registrarMovimiento({
+              productoId: mov.productId, tipo: "ajuste", cantidad: -mov.cantidad,
+              referencia: `Reversión ${referencia} (falló el descuento de stock)`,
+            }).catch(() => {});
+          }
+          throw err;
         }
-        await ordersApi.markStockDescontado(order.id);
-        updatedOrder = { ...updatedOrder, stockDescontado: true };
       }
+      let updatedOrder = await ordersApi.saveRemitoToOrder(order.id, remitoNumber, pdfBase64);
+      if (!yaDescontado) updatedOrder = { ...updatedOrder, stockDescontado: true };
 
       setOrders((prev) => prev.map((o) => (o.id === order.id ? updatedOrder : o)));
       if (detailOrder?.id === order.id) setDetailOrder(updatedOrder);
@@ -416,23 +430,26 @@ export default function PedidosPage() {
       link.download = `remito-${remitoNumber}.pdf`;
       link.click();
     } catch (error) {
-      toast.error("Error al generar el remito");
+      toast.error(error instanceof Error ? `Error al generar el remito: ${error.message}` : "Error al generar el remito");
     } finally {
       setGeneratingDoc(false);
     }
-  }, [detailOrder, orders]);
+  }, [detailOrder, orders, user]);
 
   const handleGenerateRemito = useCallback(async (order: Order) => {
     // Si el remito ya existe, bajar su PDF on-demand (la lista no trae los base64)
     if (order.remitoNumber) {
       const pdf = order.remitoPdfBase64 || (await ordersApi.getRemitoPdf(order.id));
-      if (pdf) {
-        const link = document.createElement("a");
-        link.href = `data:application/pdf;base64,${pdf}`;
-        link.download = `remito-${order.remitoNumber}.pdf`;
-        link.click();
+      // Sin PDF no se regenera con los items actuales: el remito es inmodificable.
+      if (!pdf) {
+        toast.error(`No se encontró el PDF del remito ${order.remitoNumber}`);
         return;
       }
+      const link = document.createElement("a");
+      link.href = `data:application/pdf;base64,${pdf}`;
+      link.download = `remito-${order.remitoNumber}.pdf`;
+      link.click();
+      return;
     }
 
     // Verificar stock de cada producto
@@ -578,8 +595,10 @@ export default function PedidosPage() {
     const nota = remitoDeleteNota.trim();
     if (!order || !nota) return;
     try {
-      // Si el stock ya se había descontado al generar el remito, reponerlo: eliminar el remito
-      // revierte la salida. Al regenerar se vuelve a descontar con las cantidades correctas.
+      // Primero se quita el remito (condicionado: falla si ya no tiene o si se cobró) y después,
+      // si el stock ya se había descontado al generarlo, se repone: eliminar el remito revierte
+      // la salida. Al regenerar se vuelve a descontar con las cantidades correctas.
+      const updated = await ordersApi.deleteRemito(order.id);
       const reposiciones = reposicionEliminarRemito(order.stockDescontado === true, order.items as any[]);
       if (reposiciones.length > 0) {
         const { registrarMovimiento } = await import("@/services/stock-service");
@@ -592,7 +611,6 @@ export default function PedidosPage() {
           });
         }
       }
-      const updated = await ordersApi.deleteRemito(order.id);
       if (user) {
         auditApi.log({
           action: "order_items_edited",
@@ -622,8 +640,8 @@ export default function PedidosPage() {
       setRemitoDeleteNota("");
       // Confirmar contra la BD para que no quede mostrándose en el listado de carga
       loadData();
-    } catch {
-      toast.error("Error al eliminar el remito");
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Error al eliminar el remito");
     }
   }, [pendingDeleteRemito, remitoDeleteNota, detailOrder, loadData, user]);
 
@@ -639,7 +657,18 @@ export default function PedidosPage() {
     try {
       // Reponer el stock de los pedidos que ya lo tenían descontado (remito generado): al
       // anularse, la mercadería vuelve al depósito. Queda registrado en el historial del producto.
-      const toCancel = orders.filter((o) => ids.includes(o.id));
+      // El pedido NO se borra: queda anulado con responsable, fecha y motivo. Primero se anula
+      // (condicionado al estado) y después se repone el stock, solo de los que quedaron anulados:
+      // antes se reponía primero y, si la anulación fallaba o se repetía, el stock subía igual.
+      const resultados = await Promise.allSettled(
+        ids.map((id) => ordersApi.cancelOrder(id, responsable, motivo)),
+      );
+      const anulados = resultados.flatMap((r) => (r.status === "fulfilled" ? [r.value] : []));
+      const fallido = resultados.find((r): r is PromiseRejectedResult => r.status === "rejected");
+      if (anulados.length === 0) throw fallido?.reason ?? new Error("No se pudo anular el pedido");
+      if (fallido) toast.warning(`Se anularon ${anulados.length} de ${ids.length}: ${fallido.reason instanceof Error ? fallido.reason.message : "error"}`);
+
+      const toCancel = orders.filter((o) => anulados.some((a) => a.id === o.id));
       const { registrarMovimiento } = await import("@/services/stock-service");
       for (const o of toCancel) {
         const reposiciones = reposicionEliminarRemito(o.stockDescontado === true, o.items as any[]);
@@ -652,10 +681,6 @@ export default function PedidosPage() {
           });
         }
       }
-      // El pedido NO se borra: queda anulado con responsable, fecha y motivo.
-      const anulados = await Promise.all(
-        ids.map((id) => ordersApi.cancelOrder(id, responsable, motivo)),
-      );
       setOrders((prev) => prev.map((o) => anulados.find((a) => a.id === o.id) ?? o));
       setHeldOrderIds((prev) => { const n = new Set(prev); ids.forEach((id) => n.delete(id)); return n; });
       setActiveModal(null);
@@ -674,7 +699,7 @@ export default function PedidosPage() {
         }
       }
 
-      toast.success(ids.length > 1 ? "Pedidos anulados — stock repuesto" : "Pedido anulado — stock repuesto");
+      if (!fallido) toast.success(anulados.length > 1 ? "Pedidos anulados — stock repuesto" : "Pedido anulado — stock repuesto");
     } catch (error: any) {
       toast.error(error?.message || "No se pudo anular el pedido");
     } finally {
@@ -937,7 +962,7 @@ export default function PedidosPage() {
       if (movsCobro.length > 0) {
         const { registrarMovimiento } = await import("@/services/stock-service");
         const nombreDe = new Map(adjustments.map((a) => [a.productId, a.productName]));
-        for (const mov of movsCobro) {
+        for (const [i, mov] of movsCobro.entries()) {
           const esReposicion = mov.cantidad > 0;
           const labelMotivo = mov.motivo === "no_quiere"
             ? "Devolución"
@@ -949,6 +974,8 @@ export default function PedidosPage() {
             tipo: esReposicion ? "ajuste" : "rotura",
             cantidad: mov.cantidad,
             referencia: `${labelMotivo} cobro pedido #${selectedOrder.id} — ${nombreDe.get(mov.productId) ?? ""}`.trim(),
+            // Si el cobro falla y se reintenta, el ajuste no se aplica dos veces.
+            clave: `cobro:${selectedOrder.id}:${i}:${mov.productId}:${mov.motivo}:${mov.cantidad}`,
           });
         }
       }
@@ -965,14 +992,15 @@ export default function PedidosPage() {
           const { supabase: sb } = await import("@/lib/supabase");
           const totalPerdida = roturasAdj.reduce((acc, r) => acc + r.unitPrice * r.quantity, 0);
           const productosRotos = roturasAdj.map(r => `${r.productName} x${r.quantity}`).join(", ");
-          sb.from("transacciones").insert({
-            id: `perdida_${selectedOrder.id}_${Date.now()}`,
+          const { error: perdidaErr } = await sb.from("transacciones").upsert({
+            id: `perdida_${selectedOrder.id}`,
             client_id: null,
             type: "payment",
             amount: -totalPerdida,
             description: `[ROTURA] Pedido #${selectedOrder.id} — ${productosRotos}`,
             date: new Date().toISOString(),
-          }).then(() => {}).catch(() => {});
+          });
+          if (perdidaErr) toast.warning(`Pedido cerrado, pero la pérdida no quedó registrada en caja: ${perdidaErr.message}`);
         }
 
         toast.success("Pedido cerrado — roturas registradas como pérdida");
@@ -1061,16 +1089,40 @@ export default function PedidosPage() {
         createOrder: false,
         orderId: selectedOrder.id,
         skipStock: stockYaDescontado, // el stock ya salió al generar el remito
+        remitoNumber: selectedOrder.remitoNumber,
         deliveryMethod:
           selectedOrder.address === "Retiro en local" ? "pickup" : "delivery",
         deliveryAddress: selectedOrder.address,
       });
 
+      // La venta ya está grabada: lo que sigue no corta el cobro, pero si algo falla se avisa
+      // (antes se ignoraba y la venta quedaba sin desglose o sin las pérdidas en caja).
+      const avisos: string[] = [];
+      const anotar = async (paso: string, op: PromiseLike<{ error: { message: string } | null }>) => {
+        const { error } = await op;
+        if (error) avisos.push(`${paso}: ${error.message}`);
+      };
+
+      // El remito es INMODIFICABLE: se generó al pasar a reparto con el pedido completo y
+      // es la fuente de verdad (cantidades y total originales). Al cobrar NO se regenera ni
+      // se pisa — solo se copia tal cual a la venta (el número ya va en el insert de la venta).
+      // Las roturas/faltantes se registran aparte (items_no_entregados + transacciones) y se
+      // descuentan en la presentación, nunca en el remito.
+      if (selectedOrder.remitoNumber) {
+        try {
+          const remitoPdf = selectedOrder.remitoPdfBase64 || (await ordersApi.getRemitoPdf(selectedOrder.id));
+          if (remitoPdf) await salesApi.saveRemitoToSale(sale.id, selectedOrder.remitoNumber, remitoPdf);
+          else avisos.push(`PDF del remito ${selectedOrder.remitoNumber}: no se encontró`);
+        } catch (err) {
+          avisos.push(err instanceof Error ? err.message : "No se pudo copiar el remito a la venta");
+        }
+      }
+
       // Guardar desglose efectivo/transferencia
-      supabase.from("ventas").update({
+      await anotar("Desglose efectivo/transferencia", supabase.from("ventas").update({
         efectivo_amount: efectivo > 0 ? efectivo : null,
         transferencia_amount: transferencia > 0 ? transferencia : null,
-      }).eq("id", sale.id).then(() => {}).catch(() => {});
+      }).eq("id", sale.id));
 
       // Limpiar del historial de faltantes los productos que sí se entregaron.
       // Esto complementa el quitar en generateRemito para cubrir ventas directas y ajustes de cobro.
@@ -1092,7 +1144,7 @@ export default function PedidosPage() {
             motivo: adj.type === 'no_quiere' ? 'no_quiso' : adj.type,
           };
         });
-        supabase.from("ventas").update({ items_no_entregados: noEntregados }).eq("id", sale.id).then(() => {}).catch(() => {});
+        await anotar("Productos no entregados", supabase.from("ventas").update({ items_no_entregados: noEntregados }).eq("id", sale.id));
 
         // Qué se descontó al cobrar y por qué motivo: es lo que explica la diferencia
         // entre el remito y el detalle de la venta.
@@ -1114,7 +1166,7 @@ export default function PedidosPage() {
       if (roturasAdj.length > 0) {
         const totalPerdida = roturasAdj.reduce((acc, r) => acc + r.unitPrice * r.quantity, 0);
         const productosRotos = roturasAdj.map(r => `${r.productName} x${r.quantity}`).join(", ");
-        supabase.from("transacciones").upsert({
+        await anotar("Pérdida por rotura", supabase.from("transacciones").upsert({
           id: `perdida_${sale.id}`,
           client_id: null,
           type: "payment",
@@ -1122,11 +1174,11 @@ export default function PedidosPage() {
           description: `[ROTURA] #${sale.saleNumber} — ${productosRotos}`,
           sale_id: sale.id,
           date: new Date().toISOString(),
-        }).then(() => {}).catch(() => {});
+        }));
       }
       if (faltantesAdj.length > 0) {
         const productosFaltantes = faltantesAdj.map(r => `${r.productName} x${r.quantity}`).join(", ");
-        supabase.from("transacciones").upsert({
+        await anotar("Faltante", supabase.from("transacciones").upsert({
           id: `faltante_${sale.id}`,
           client_id: null,
           type: "payment",
@@ -1134,14 +1186,14 @@ export default function PedidosPage() {
           description: `[FALTANTE] #${sale.saleNumber} — ${productosFaltantes}`,
           sale_id: sale.id,
           date: new Date().toISOString(),
-        }).then(() => {}).catch(() => {});
+        }));
       }
       if (noQuiereAdj.length > 0) {
         const productosNoQuiere = noQuiereAdj.map(r => `${r.productName} x${r.quantity}`).join(", ");
         // Movimiento visible en la cuenta corriente del cliente: "Rechazo de productos".
         // Monto 0 (ya se descontó al entregar, el ítem no entra en la venta) + recibo de devolución.
         const reciboNumero = `DEV-${selectedOrder.remitoNumber || sale.saleNumber || sale.id}`;
-        supabase.from("transacciones").upsert({
+        await anotar("Rechazo de productos", supabase.from("transacciones").upsert({
           id: `no_quiere_${sale.id}`,
           client_id: resolvedClientId || null,
           type: "payment",
@@ -1150,7 +1202,7 @@ export default function PedidosPage() {
           sale_id: sale.id,
           date: new Date().toISOString(),
           cuenta: "minorista",
-        }).then(() => {}).catch(() => {});
+        }));
       }
 
       // Completar SOLO el pedido cobrado (1 pedido = 1 venta)
@@ -1175,15 +1227,6 @@ export default function PedidosPage() {
       //     orderAny.afipData ? { afipData: orderAny.afipData } : undefined,
       //   );
       // }
-
-      // El remito es INMODIFICABLE: se generó al pasar a reparto con el pedido completo y
-      // es la fuente de verdad (cantidades y total originales). Al cobrar NO se regenera ni
-      // se pisa — solo se copia tal cual a la venta. Las roturas/faltantes se registran aparte
-      // (items_no_entregados + transacciones) y se descuentan en la presentación, nunca en el remito.
-      if (selectedOrder.remitoNumber) {
-        const remitoPdf = selectedOrder.remitoPdfBase64 || (await ordersApi.getRemitoPdf(selectedOrder.id));
-        if (remitoPdf) await salesApi.saveRemitoToSale(sale.id, selectedOrder.remitoNumber, remitoPdf);
-      }
 
       // Subir comprobante de transferencia si se adjuntó
       if (comprobanteFile && transferencia > 0) {
@@ -1237,6 +1280,9 @@ export default function PedidosPage() {
         paymentLabel: paymentParts,
       });
 
+      if (avisos.length > 0) {
+        toast.warning(`Venta ${sale.saleNumber} registrada, pero fallaron pasos: ${avisos.join(" · ")}`, { duration: 15000 });
+      }
       setActiveModal("success");
       setSelectedOrder(null);
       setSelectedClientId("");
@@ -1251,7 +1297,7 @@ export default function PedidosPage() {
       setProcessingPayment(false);
       completingRef.current = false;
     }
-  }, [selectedOrder, selectedClientId, clients, selectedClientOrders, loadData]);
+  }, [selectedOrder, selectedClientId, clients, selectedClientOrders, loadData, user]);
 
   // Rechazo del pedido por el repartidor: el cliente no lo quiso.
   // No descuenta stock, no genera venta, no suma a caja ni a comisiones.
@@ -1261,12 +1307,17 @@ export default function PedidosPage() {
     setProcessingPayment(true);
     try {
       const ordersToReject = selectedClientOrders.length > 0 ? selectedClientOrders : [selectedOrder];
-      const rejected = await Promise.all(ordersToReject.map((o) => ordersApi.rejectOrder(o.id)));
+      // Primero el cambio de estado (condicionado: no pisa un pedido ya cobrado o anulado) y
+      // recién después se repone el stock, solo de los que efectivamente quedaron rechazados.
+      const resultados = await Promise.allSettled(ordersToReject.map((o) => ordersApi.rejectOrder(o.id)));
+      const rejected = resultados.flatMap((r) => (r.status === "fulfilled" ? [r.value] : []));
+      const fallido = resultados.find((r): r is PromiseRejectedResult => r.status === "rejected");
+      if (rejected.length === 0) throw fallido?.reason ?? new Error("No se pudo rechazar el pedido");
 
       // Reponer el stock de los pedidos que ya lo tenían descontado (remito generado): al
       // rechazarse, la mercadería vuelve al depósito. Queda registrado en el historial del producto.
       const { registrarMovimiento } = await import("@/services/stock-service");
-      for (const o of ordersToReject) {
+      for (const o of ordersToReject.filter((x) => rejected.some((r) => r.id === x.id))) {
         const reposiciones = reposicionEliminarRemito(o.stockDescontado === true, o.items as any[]);
         for (const mov of reposiciones) {
           await registrarMovimiento({
@@ -1281,7 +1332,11 @@ export default function PedidosPage() {
       setOrders((prev) =>
         prev.map((o) => rejected.find((r) => r.id === o.id) ?? o),
       );
-      toast.success(ordersToReject.length > 1 ? "Pedidos rechazados — stock repuesto" : "Pedido rechazado — stock repuesto");
+      if (fallido) {
+        toast.warning(`Se rechazaron ${rejected.length} de ${ordersToReject.length} pedidos: ${fallido.reason instanceof Error ? fallido.reason.message : "error"}`);
+      } else {
+        toast.success(ordersToReject.length > 1 ? "Pedidos rechazados — stock repuesto" : "Pedido rechazado — stock repuesto");
+      }
       setActiveModal(null);
       setSelectedOrder(null);
       setSelectedClientId("");
@@ -1878,7 +1933,9 @@ tfoot td{border-top:2px solid #1f4e78;background:#f2f2f2;font-weight:700;font-si
     if (hojaRutaNro) {
       const idsHoja = cargoGroups.flatMap(({ orders }) => orders.map((o) => o.id));
       if (idsHoja.length > 0) {
-        supabase.from("pedidos").update({ hoja_ruta_number: hojaRutaNro }).in("id", idsHoja).then(() => {});
+        // Si no se graba, la venta no hereda el N° y en Caja figura "Local".
+        const { error: hrErr } = await supabase.from("pedidos").update({ hoja_ruta_number: hojaRutaNro }).in("id", idsHoja);
+        if (hrErr) toast.error(`No se pudo guardar el N° de hoja de ruta en los pedidos: ${hrErr.message}`);
       }
     }
 

@@ -170,7 +170,14 @@ export function PaymentModal({
   };
 
   const originalTotal = calculateOrderTotal(order);
-  const total = Math.round(Math.max(0, originalTotal - adjustmentDeduction) * 100) / 100;
+  // Misma fórmula que la venta (handleCompleteOrder / processSale): primero se descuentan los
+  // ajustes y recién después el descuento global. Antes, con descuento en %, el modal cobraba
+  // T×(1−d)−ajustes y la venta registraba (T−ajustes)×(1−d): quedaba una diferencia sin cobrar.
+  const netoAjustado = Math.max(0, calculateOrderTotal({ ...order, discount: 0 }) - adjustmentDeduction);
+  const descGlobal = order.discount && order.discount > 0
+    ? (order.discountType === "percent" ? (netoAjustado * order.discount) / 100 : order.discount)
+    : 0;
+  const total = Math.round(Math.max(0, netoAjustado - descGlobal) * 100) / 100;
   const hasAdjustments = adjustmentsList.length > 0;
 
   // Montos ingresados

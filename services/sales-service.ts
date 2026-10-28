@@ -189,6 +189,9 @@ export const processSale = async (data: {
   deliveryAddress: string
   // Si el stock ya se descontó antes (ej: al generar el remito del pedido), no volver a descontarlo acá.
   skipStock?: boolean
+  // N° del remito del pedido: va en el mismo insert para que la venta nunca quede sin remito
+  // (Ventas y Caja solo muestran ventas con remito). El PDF se copia después, tal cual.
+  remitoNumber?: string
 }): Promise<Sale> => {
   const subtotal = data.items.reduce((acc, item) => {
     const base = item.product.price * item.quantity
@@ -306,6 +309,10 @@ export const processSale = async (data: {
     delivery_address: clientAddress ?? null,
     order_id: data.orderId ?? null,
     hoja_ruta_number: hojaRutaNumber,
+    ...(data.remitoNumber ? { remito_number: data.remitoNumber } : {}),
+    // El total ya viene con el descuento aplicado; se guarda para mostrarlo en el detalle.
+    discount: data.discount && data.discount > 0 ? data.discount : null,
+    discount_type: data.discount && data.discount > 0 ? (data.discountType ?? null) : null,
   }
   const hasPayCol = await ensurePaymentMethodColumn()
   if (!hasPayCol) delete saleRow2.payment_method
@@ -472,10 +479,11 @@ export const saveRemitoToSale = async (
   remitoNumber: string,
   remitoPdfBase64: string,
 ): Promise<void> => {
-  await supabase.from('ventas').update({
+  const { error } = await supabase.from('ventas').update({
     remito_number: remitoNumber,
     remito_pdf_base64: remitoPdfBase64,
   }).eq('id', saleId)
+  if (error) throw new Error(`No se pudo copiar el remito a la venta: ${error.message}`)
 }
 
 export const updateSaleInvoice = async (
@@ -655,6 +663,8 @@ export const processSaleMayorista = async (data: {
     invoice_emitted: false,
     delivery_method: data.deliveryMethod ?? 'pickup',
     delivery_address: clientAddress ?? null,
+    discount: data.discount && data.discount > 0 ? data.discount : null,
+    discount_type: data.discount && data.discount > 0 ? (data.discountType ?? null) : null,
   }
   const hasPayCol2 = await ensurePaymentMethodColumn()
   if (!hasPayCol2) delete saleRow.payment_method

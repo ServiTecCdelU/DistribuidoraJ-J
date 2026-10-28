@@ -137,13 +137,14 @@ export const updateOrderItems = async (
 }
 
 export const completeOrder = async (id: string, saleId: string): Promise<Order> => {
-  const { data } = await supabase
+  const { data, error } = await supabase
     .from('pedidos')
     .update({ status: 'completed', sale_id: saleId })
     .eq('id', id)
     .select()
     .single()
 
+  if (error) throw new Error(`No se pudo completar el pedido: ${error.message}`)
   if (!data) throw new Error('Order not found')
   return mapOrder(data)
 }
@@ -151,15 +152,19 @@ export const completeOrder = async (id: string, saleId: string): Promise<Order> 
 // Rechaza un pedido: el cliente no lo quiso. No descuenta stock, no genera venta,
 // no suma a caja ni a comisiones. Solo cambia el estado a 'rechazado' para que el
 // vendedor lo vea como rechazado en Mis Pedidos.
+// Condicionado al estado: con la lista vieja en pantalla, otro admin pudo haberlo cobrado o
+// anulado; antes se pisaba `completed` con `rechazado` y se reponía mercadería ya vendida.
 export const rejectOrder = async (id: string): Promise<Order> => {
-  const { data } = await supabase
+  const { data, error } = await supabase
     .from('pedidos')
     .update({ status: 'rechazado', held: false })
     .eq('id', id)
+    .not('status', 'in', '(completed,rechazado,anulado)')
     .select()
-    .single()
+    .maybeSingle()
 
-  if (!data) throw new Error('Order not found')
+  if (error) throw new Error(`No se pudo rechazar el pedido: ${error.message}`)
+  if (!data) throw new Error('El pedido ya fue cobrado, rechazado o anulado. Recargá la lista.')
   return mapOrder(data)
 }
 
@@ -228,15 +233,17 @@ export const cancelOrder = async (
   const permitido = puedeAnularse(estadoActual.data.status as EstadoPedido)
   if (!permitido.ok) throw new Error(permitido.motivo)
 
+  // Mismo chequeo en el update: si otro usuario lo cobró o anuló entre la lectura y acá, no se pisa.
   const { data, error } = await supabase
     .from('pedidos')
     .update(camposAnulacion(responsable, motivo))
     .eq('id', id)
+    .not('status', 'in', '(completed,rechazado,anulado)')
     .select()
-    .single()
+    .maybeSingle()
 
   if (error) throw error
-  if (!data) throw new Error('Order not found')
+  if (!data) throw new Error('El pedido ya fue cobrado, rechazado o anulado. Recargá la lista.')
   return mapOrder(data)
 }
 
@@ -259,11 +266,14 @@ export const deleteRemitoFromOrder = async (id: string): Promise<Order> => {
     .from('pedidos')
     .update({ remito_number: null, remito_pdf_base64: null, stock_descontado: false })
     .eq('id', id)
+    // Solo pedidos sin cobrar y con remito: un doble click o la lista vieja no reponen dos veces.
+    .not('status', 'in', '(completed,rechazado,anulado)')
+    .not('remito_number', 'is', null)
     .select()
-    .single()
+    .maybeSingle()
 
   if (error) throw error
-  if (!data) throw new Error('Order not found')
+  if (!data) throw new Error('El pedido ya no tiene remito o ya fue cobrado/anulado. Recargá la lista.')
   return mapOrder(data)
 }
 
@@ -286,22 +296,26 @@ export const setOrderHeld = async (id: string, held: boolean): Promise<void> => 
   if (error) throw error
 }
 
+// El remito es inmodificable: solo se graba si el pedido todavía no tiene uno.
 export const saveRemitoToOrder = async (id: string, remitoNumber: string, remitoPdfBase64: string): Promise<Order> => {
-  const { data } = await supabase
+  const { data, error } = await supabase
     .from('pedidos')
     .update({ remito_number: remitoNumber, remito_pdf_base64: remitoPdfBase64 })
     .eq('id', id)
+    .is('remito_number', null)
     .select()
-    .single()
+    .maybeSingle()
 
-  if (!data) throw new Error('Order not found')
+  if (error) throw new Error(`No se pudo guardar el remito: ${error.message}`)
+  if (!data) throw new Error('El pedido ya tiene remito: no se puede generar otro')
   return mapOrder(data)
 }
 
 // Marca que el stock del pedido ya fue descontado (al generar el remito).
 // Idempotencia: evita descontar dos veces (regenerar remito, cobrar).
 export const markOrderStockDescontado = async (id: string): Promise<void> => {
-  await supabase.from('pedidos').update({ stock_descontado: true }).eq('id', id)
+  const { error } = await supabase.from('pedidos').update({ stock_descontado: true }).eq('id', id)
+  if (error) throw new Error(`No se pudo marcar el stock del pedido como descontado: ${error.message}`)
 }
 
 export const saveBoletaToOrder = async (
