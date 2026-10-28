@@ -78,6 +78,7 @@ export function ModalDetalleVenta({
   const [modalConvAbierto, setModalConvAbierto] = useState(false);
   const [devoluciones, setDevoluciones] = useState<Devolucion[]>([]);
   const [descuentos, setDescuentos] = useState<DescuentoVenta[]>([]);
+  const [fechaPedido, setFechaPedido] = useState<Date | null>(null);
 
   const cargarDevoluciones = () => {
     if (!venta?.id) return;
@@ -126,6 +127,23 @@ export function ModalDetalleVenta({
         setIncidenciaItems(incidencias);
       });
   }, [venta?.id, abierto]);
+
+  // Fecha en que se tomó el pedido de origen (la venta tiene la fecha del cobro).
+  useEffect(() => {
+    setFechaPedido(null);
+    if (!venta?.id || !abierto) return;
+    const cargar = async () => {
+      let pedidoId: string | null = venta.rechazado ? venta.id : null;
+      if (!pedidoId) {
+        const { data } = await supabase.from("ventas").select("order_id").eq("id", venta.id).maybeSingle();
+        pedidoId = (data as any)?.order_id ?? null;
+      }
+      if (!pedidoId) return;
+      const { data: pedido } = await supabase.from("pedidos").select("created_at").eq("id", pedidoId).maybeSingle();
+      if ((pedido as any)?.created_at) setFechaPedido(new Date((pedido as any).created_at));
+    };
+    cargar().catch(() => {});
+  }, [venta?.id, venta?.rechazado, abierto]);
 
   useEffect(() => {
     if (!venta?.id || !abierto) return;
@@ -335,6 +353,9 @@ export function ModalDetalleVenta({
                   <Clock className="h-3.5 w-3.5" />
                   {formatearFechaHora(venta.createdAt)}
                 </DialogDescription>
+                {fechaPedido && (
+                  <p className="text-xs text-muted-foreground font-medium mt-0.5">Pedido del {formatearFechaHora(fechaPedido)}</p>
+                )}
                 {venta.remitoNumber && (
                   <p className="text-xs text-muted-foreground font-medium mt-0.5">Remito N° {venta.remitoNumber}</p>
                 )}
