@@ -213,8 +213,6 @@ Ordenados por prioridad. Al resolver uno, borrarlo de esta lista.
 ### Seguridad
 - **RLS deshabilitado** en casi todo `public`. Bloqueante: `services/users-service.ts` (`ensureUserProfile`) crea, actualiza y borra filas de `usuarios` y asigna roles (vendedor por email, primer admin) desde el navegador. Hay que moverlo a una ruta API con service role y recién ahí activar RLS por rol, tabla por tabla y probando en el navegador. Hoy cualquier cuenta de Google que se loguee tiene un JWT `authenticated` con el que podría escribir en la base. Plan y rollback en `PLAN_RLS.md` (sus "Server Components con anon" no existen: esas páginas son `"use client"`).
 - **Rotar el token de Supabase** (`SUPABASE_ACCESS_TOKEN`): pasó por el chat. También sigue pendiente el secreto en `.claude/settings.local.json` (ver `.claude/rules/security.md`).
-- `app/api/cron/reconciliar-caja` acepta el secreto por `?secret=` y muta con GET: quitar el query string.
-- Validar montos en `registerPayment` (`amount > 0`, finito, cliente existente).
 
 ### Plata
 - **Devoluciones**: no se validan contra lo vendido (se puede devolver el mismo producto varias veces o a otro precio, y repone stock cada vez).

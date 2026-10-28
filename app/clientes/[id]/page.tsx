@@ -10,6 +10,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Skeleton } from '@/components/ui/skeleton'
+import { toast } from 'sonner'
 import {
   Dialog,
   DialogContent,
@@ -98,7 +99,7 @@ export default function ClientDetailPage() {
       setPaymentAmount('')
       setPaymentDescription('')
     } catch (error) {
-      console.error('Error registering payment:', error)
+      toast.error(error instanceof Error ? error.message : 'No se pudo registrar el pago')
     } finally {
       setProcessingPayment(false)
     }

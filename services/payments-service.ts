@@ -48,12 +48,19 @@ const registerPayment = async (
   cuenta: 'minorista' | 'mayorista',
   data: { clientId: string; amount: number; description?: string; debtTxId?: string; date?: string; metodoPago?: MetodoPago },
 ): Promise<Transaction> => {
+  // Validar antes de grabar nada: un monto 0, negativo o NaN subía la deuda o dejaba un pago
+  // vacío, y con un cliente inexistente quedaba el pago grabado sin saldo que bajar.
+  if (typeof data.amount !== 'number' || !Number.isFinite(data.amount) || data.amount <= 0) {
+    throw new Error('El monto del pago tiene que ser mayor a cero')
+  }
   const balanceCol = cuenta === 'minorista' ? 'current_balance' : 'current_balance_mayorista'
-  const { data: client } = await supabase
+  const { data: client, error: clientErr } = await supabase
     .from('clientes')
     .select(`${balanceCol}, name`)
     .eq('id', data.clientId)
-    .single()
+    .maybeSingle()
+  if (clientErr) throw new Error(`No se pudo verificar el cliente: ${clientErr.message}`)
+  if (!client) throw new Error('El cliente no existe')
 
   // Número de recibo atómico y consecutivo (función next_recibo_number en Postgres).
   // Si la función no existe todavía, fallback con timestamp para no bloquear el pago.

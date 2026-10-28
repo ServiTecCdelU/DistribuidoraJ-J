@@ -243,10 +243,9 @@ async function reconciliar() {
 function autorizado(req: NextRequest): boolean {
   const secret = process.env.CRON_SECRET;
   if (!secret) return false;
-  const auth = req.headers.get("authorization");
-  if (auth === `Bearer ${secret}`) return true;
-  const qs = req.nextUrl.searchParams.get("secret");
-  return qs === secret;
+  // Solo por header: la clave en la URL (?secret=) queda en logs, historial y proxies.
+  // pg_cron la manda como "Authorization: Bearer ..." (ver cron.job "reconciliar-caja").
+  return req.headers.get("authorization") === `Bearer ${secret}`;
 }
 
 export async function POST(req: NextRequest) {
@@ -259,8 +258,4 @@ export async function POST(req: NextRequest) {
   } catch (e: any) {
     return NextResponse.json({ success: false, error: e?.message || "Error" }, { status: 500 });
   }
-}
-
-export async function GET(req: NextRequest) {
-  return POST(req);
 }
