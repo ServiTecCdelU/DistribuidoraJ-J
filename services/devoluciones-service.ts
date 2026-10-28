@@ -7,7 +7,7 @@
 //      derivando las devoluciones como entradas negativas (ver commissions-service).
 //   4. Recibo: se genera un PDF "RECIBO DE DEVOLUCIÓN" y se guarda en recibo_pdf_base64.
 import { supabase } from '@/lib/supabase'
-import { generateReadableId } from '@/services/supabase-helpers'
+import { generateReadableId, moverSaldoCliente, moverTotalesVendedor } from '@/services/supabase-helpers'
 import { registrarMovimiento } from '@/services/stock-service'
 import { recomputarSaldosDeudas } from '@/services/payments-service'
 import { tasaComision } from '@/lib/utils/comisiones'
@@ -107,11 +107,11 @@ export async function registrarDevolucion(data: {
   }
   const commissionAmount = total * (commissionRate / 100)
 
-  // Número de recibo correlativo
-  const { count } = await supabase
-    .from('devoluciones')
-    .select('id', { count: 'exact', head: true })
-  const reciboNumero = `DEV-${String((count ?? 0) + 1).padStart(5, '0')}`
+  // Número de recibo correlativo (secuencia en Postgres). Antes era count+1: se
+  // repetía al borrar una devolución o si dos se registraban a la vez.
+  const { data: nroDev, error: nroErr } = await supabase.rpc('next_devolucion_number')
+  if (nroErr || !nroDev) throw new Error(`No se pudo generar el número de recibo: ${nroErr?.message ?? 'sin número'}`)
+  const reciboNumero = String(nroDev)
 
   const id = await generateReadableId('devoluciones', 'devolucion', data.clientName || 'cliente')
 
@@ -192,17 +192,11 @@ export async function registrarDevolucion(data: {
     if (insErr) throw new Error(`Devolución registrada, pero no se pudo grabar el movimiento del cliente: ${insErr.message}`)
 
     if (affectsBalance) {
-      const { data: cr, error: crErr } = await supabase
-        .from('clientes')
-        .select('current_balance')
-        .eq('id', data.clientId)
-        .single()
-      if (crErr) throw new Error(`No se pudo leer el saldo del cliente: ${crErr.message}`)
-      const { error: balErr } = await supabase
-        .from('clientes')
-        .update({ current_balance: (Number(cr.current_balance) || 0) - total })
-        .eq('id', data.clientId)
-      if (balErr) throw new Error(`No se pudo actualizar el saldo del cliente: ${balErr.message}`)
+      try {
+        await moverSaldoCliente(data.clientId, -total)
+      } catch (balErr: any) {
+        throw new Error(`No se pudo actualizar el saldo del cliente: ${balErr.message}`)
+      }
     }
 
     if (affectsBalance) {
@@ -219,20 +213,7 @@ export async function registrarDevolucion(data: {
 
   // 3. Comisión del vendedor: bajar running totals (la lista se deriva con devoluciones negativas)
   if (affectsBalance && data.sellerId && (total > 0 || commissionAmount > 0)) {
-    const { data: sr } = await supabase
-      .from('vendedores')
-      .select('total_sales, total_commission')
-      .eq('id', data.sellerId)
-      .single()
-    if (sr) {
-      await supabase
-        .from('vendedores')
-        .update({
-          total_sales: Math.max(0, (Number(sr.total_sales) || 0) - total),
-          total_commission: Math.max(0, (Number(sr.total_commission) || 0) - commissionAmount),
-        })
-        .eq('id', data.sellerId)
-    }
+    await moverTotalesVendedor(data.sellerId, -total, -commissionAmount, `vendedor-devolucion:${id}`)
   }
 
   return mapDevolucion(row)

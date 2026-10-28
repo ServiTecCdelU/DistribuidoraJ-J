@@ -36,10 +36,20 @@ const { from, queues, inserts, updates, resetMock } = vi.hoisted(() => {
   };
   return { from, queues, inserts, updates, resetMock };
 });
-vi.mock("@/lib/supabase", () => ({ supabase: { from } }));
+// N° de recibo: RPC next_devolucion_number
+const { rpc } = vi.hoisted(() => ({
+  rpc: vi.fn().mockResolvedValue({ data: "DEV-00001", error: null }),
+}));
+vi.mock("@/lib/supabase", () => ({ supabase: { from, rpc } }));
 
+const { moverSaldoClienteMock, moverTotalesVendedorMock } = vi.hoisted(() => ({
+  moverSaldoClienteMock: vi.fn().mockResolvedValue(0),
+  moverTotalesVendedorMock: vi.fn().mockResolvedValue(undefined),
+}));
 vi.mock("@/services/supabase-helpers", () => ({
   generateReadableId: vi.fn().mockResolvedValue("devolucion_cliente_1"),
+  moverSaldoCliente: moverSaldoClienteMock,
+  moverTotalesVendedor: moverTotalesVendedorMock,
 }));
 
 const { registrarMovimientoMock } = vi.hoisted(() => ({
@@ -63,12 +73,10 @@ describe("registrarDevolucion", () => {
     resetMock();
     registrarMovimientoMock.mockClear();
     recomputarSaldosDeudasMock.mockClear();
-    queues.devoluciones = [{ count: 0 }];
-    // 1ra consulta: flag de cta cte; 2da: saldo actual
-    queues.clientes = [
-      { data: { cuenta_corriente_habilitada: true } },
-      { data: { current_balance: 1000 } },
-    ];
+    moverSaldoClienteMock.mockClear();
+    moverTotalesVendedorMock.mockClear();
+    // Flag de cta cte (el saldo lo mueve la RPC mover_saldo_cliente)
+    queues.clientes = [{ data: { cuenta_corriente_habilitada: true } }];
     queues.transacciones = [{ data: null }];
   });
 
@@ -90,8 +98,8 @@ describe("registrarDevolucion", () => {
       expect.objectContaining({ productoId: "prod_1", cantidad: 2 }),
     );
 
-    const clienteUpdate = from.mock.calls.filter((c) => c[0] === "clientes");
-    expect(clienteUpdate.length).toBeGreaterThan(0);
+    expect(dev.reciboNumero).toBe("DEV-00001");
+    expect(moverSaldoClienteMock).toHaveBeenCalledWith("cliente_1", -1300);
 
     const txInsert = inserts.transacciones?.[0];
     expect(txInsert.amount).toBe(1300);
@@ -140,8 +148,8 @@ describe("registrarDevolucion", () => {
     expect(tx.afecta_saldo).toBe(false);
     expect(tx.debt_id).toBeUndefined();
     expect(recomputarSaldosDeudasMock).not.toHaveBeenCalled();
-    expect(updates.clientes).toBeUndefined();
-    expect(updates.vendedores).toBeUndefined();
+    expect(moverSaldoClienteMock).not.toHaveBeenCalled();
+    expect(moverTotalesVendedorMock).not.toHaveBeenCalled();
   });
 
   it("cliente sin cuenta corriente habilitada: la nota de crédito no genera saldo a favor", async () => {
@@ -167,8 +175,8 @@ describe("registrarDevolucion", () => {
     expect(tx.afecta_saldo).toBe(false);
     expect(tx.amount).toBe(4000);
     expect(recomputarSaldosDeudasMock).not.toHaveBeenCalled();
-    expect(updates.clientes).toBeUndefined();
-    expect(updates.vendedores).toBeUndefined();
+    expect(moverSaldoClienteMock).not.toHaveBeenCalled();
+    expect(moverTotalesVendedorMock).not.toHaveBeenCalled();
   });
 
   it("lanza error si no hay productos ni monto", async () => {

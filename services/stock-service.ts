@@ -24,80 +24,30 @@ export const getMovimientosByProducto = async (productoId: string): Promise<Stoc
 }
 
 /**
- * Registra un movimiento de stock Y actualiza el campo stock_local del producto.
- * cantidad positiva = entrada (apertura_bulto), negativa = salida (venta).
+ * Registra un movimiento de stock Y actualiza el stock del producto (productos.stock y
+ * mayorista_productos.stock_local). cantidad positiva = entrada, negativa = salida.
+ *
+ * Lo hace la RPC `mover_stock` en una sola transacción con lock de fila: antes se leía el
+ * stock en el navegador y dos movimientos simultáneos del mismo producto se pisaban.
+ * `clave` (opcional) lo hace idempotente: un reintento con la misma clave no se repite.
+ * El stock nunca queda negativo.
  */
 export const registrarMovimiento = async (params: {
   productoId: string
   tipo: StockMovimiento['tipo']
   cantidad: number
   referencia?: string
+  clave?: string
 }): Promise<void> => {
-  const { productoId, tipo, cantidad, referencia } = params
-
-  // Normalizar IDs. Casos:
-  //  - "prod_mp_XXXX" (id de productos mayorista) → mp id = "mp_XXXX"
-  //  - "mp_XXXX"      (id de mayorista)           → prod id = "prod_mp_XXXX"
-  //  - "producto_XXX" (id de productos manual)    → sin equivalente en mayorista
-  let prodId: string
-  let mpId: string
-  if (productoId.startsWith('prod_')) {
-    prodId = productoId
-    mpId = productoId.slice('prod_'.length)
-  } else if (productoId.startsWith('mp_')) {
-    prodId = `prod_${productoId}`
-    mpId = productoId
-  } else {
-    prodId = productoId
-    mpId = ''
-  }
-
-  // Fuente de verdad = productos.stock (lo que ve la UI y el carrito).
-  // Se cae a stock_local solo si el producto no existe en `productos`.
-  const { data: prod } = await supabase
-    .from('productos')
-    .select('stock')
-    .eq('id', prodId)
-    .maybeSingle()
-
-  let stockAnterior: number
-  if (prod && prod.stock != null) {
-    stockAnterior = Number(prod.stock)
-  } else if (mpId) {
-    const { data: mp } = await supabase
-      .from('mayorista_productos')
-      .select('stock_local')
-      .eq('id', mpId)
-      .maybeSingle()
-    stockAnterior = Number(mp?.stock_local ?? 0)
-  } else {
-    stockAnterior = 0
-  }
-
-  // El stock físico nunca debe quedar negativo
-  const stockPosterior = Math.max(0, stockAnterior + cantidad)
-
-  // Registrar movimiento
-  await supabase.from('stock_movimientos').insert({
-    mayorista_producto_id: mpId || null,
-    tipo,
-    cantidad,
-    stock_anterior: stockAnterior,
-    stock_posterior: stockPosterior,
-    motivo: referencia ?? null,
+  const { productoId, tipo, cantidad, referencia, clave } = params
+  const { error } = await supabase.rpc('mover_stock', {
+    p_producto_id: productoId,
+    p_tipo: tipo,
+    p_cantidad: cantidad,
+    p_motivo: referencia ?? null,
+    p_clave: clave ?? null,
   })
-
-  // Mantener ambas tablas sincronizadas con el mismo valor
-  if (mpId) {
-    await supabase
-      .from('mayorista_productos')
-      .update({ stock_local: stockPosterior })
-      .eq('id', mpId)
-  }
-  await supabase
-    .from('productos')
-    .update({ stock: stockPosterior })
-    .eq('id', prodId)
+  if (error) throw new Error(`No se pudo mover el stock: ${error.message}`)
 }
 
 export interface ProductoARevisar {
@@ -200,12 +150,14 @@ export const descontarStockVenta = async (
   ventaId: string
 ): Promise<void> => {
   await Promise.all(
-    items.map((item) =>
+    items.map((item, i) =>
       registrarMovimiento({
         productoId: item.productoId,
         tipo: 'venta',
         cantidad: -item.cantidad,
         referencia: ventaId,
+        // Un reintento del cobro no vuelve a descontar la misma línea.
+        clave: `venta:${ventaId}:${i}:${item.productoId}`,
       })
     )
   )
@@ -222,12 +174,13 @@ export const descontarStockRegalo = async (
   await Promise.all(
     items
       .filter((item) => item.cantidad > 0)
-      .map((item) =>
+      .map((item, i) =>
         registrarMovimiento({
           productoId: item.productoId,
           tipo: 'regalo',
           cantidad: -item.cantidad,
           referencia: ventaId,
+          clave: `regalo:${ventaId}:${i}:${item.productoId}`,
         })
       )
   )

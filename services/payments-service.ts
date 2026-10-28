@@ -1,6 +1,6 @@
 import { supabase } from '@/lib/supabase'
 import type { Transaction } from '@/lib/types'
-import { generateReadableId } from '@/services/supabase-helpers'
+import { generateReadableId, moverSaldoCliente } from '@/services/supabase-helpers'
 import { imputarADeuda, imputarFIFO, recomputarSaldos } from '@/lib/utils/saldo-imputacion'
 import { descripcionDeudaAnterior } from '@/lib/utils/deuda-anterior'
 import { descripcionNotaDebito } from '@/lib/utils/nota-debito'
@@ -139,18 +139,11 @@ const registerPayment = async (
   // pago y, si el insert fallaba, quedaba en 0 sin movimiento ("Cancelada" arriba y deuda abajo).
   if (error) throw new Error(`No se pudo registrar el pago: ${error.message}`)
 
-  const { data: clientFresh, error: clientErr } = await supabase
-    .from('clientes')
-    .select(balanceCol)
-    .eq('id', data.clientId)
-    .single()
-  if (clientErr) throw new Error(`Pago registrado, pero no se pudo leer el saldo del cliente: ${clientErr.message}`)
-  const newBalance = (Number((clientFresh as any)?.[balanceCol]) || 0) - data.amount
-  const { error: balErr } = await supabase
-    .from('clientes')
-    .update({ [balanceCol]: newBalance })
-    .eq('id', data.clientId)
-  if (balErr) throw new Error(`Pago registrado, pero no se pudo actualizar el saldo del cliente: ${balErr.message}`)
+  try {
+    await moverSaldoCliente(data.clientId, -data.amount, cuenta)
+  } catch (balErr: any) {
+    throw new Error(`Pago registrado, pero no se pudo actualizar el saldo del cliente: ${balErr.message}`)
+  }
 
   // Recalcular saldos por-boleta con el pago ya persistido: replay holístico de
   // todos los pagos vigentes. Evita residuos por pagos retroactivos o previos a
@@ -232,16 +225,11 @@ export const registerDeudaAnterior = async (data: {
     if (retryError) throw new Error(`Error registrando la deuda: ${retryError.message}`)
   }
 
-  // Saldo leído recién (no el de antes de subir la foto) y verificado.
-  const { data: clientFresh, error: clientErr } = await supabase
-    .from('clientes')
-    .select('current_balance')
-    .eq('id', data.clientId)
-    .single()
-  if (clientErr) throw new Error(`Deuda registrada, pero no se pudo leer el saldo del cliente: ${clientErr.message}`)
-  const newBalance = (Number(clientFresh.current_balance) || 0) + data.amount
-  const { error: balErr } = await supabase.from('clientes').update({ current_balance: newBalance }).eq('id', data.clientId)
-  if (balErr) throw new Error(`Deuda registrada, pero no se pudo actualizar el saldo del cliente: ${balErr.message}`)
+  try {
+    await moverSaldoCliente(data.clientId, data.amount, 'minorista')
+  } catch (balErr: any) {
+    throw new Error(`Deuda registrada, pero no se pudo actualizar el saldo del cliente: ${balErr.message}`)
+  }
 
   // Si el cliente tenía saldo a favor, ese crédito se imputa a esta deuda.
   try {
@@ -415,7 +403,6 @@ export const deletePayment = async (txId: string): Promise<void> => {
   const cuenta: 'minorista' | 'mayorista' = (tx.cuenta as any) ?? 'minorista'
   const clientId = tx.client_id
   const amount = Number(tx.amount)
-  const balanceCol = cuenta === 'minorista' ? 'current_balance' : 'current_balance_mayorista'
 
   // Borrar primero cualquier comprobante vinculado (FK hacia esta transacción), si no,
   // el delete de abajo falla por violar la constraint y el pago queda sin borrarse.
@@ -428,14 +415,11 @@ export const deletePayment = async (txId: string): Promise<void> => {
   if (!borrados || borrados.length === 0) throw new Error('Este pago ya fue eliminado')
 
   // Devolver el monto al saldo del cliente
-  const { data: client } = await supabase
-    .from('clientes')
-    .select(balanceCol)
-    .eq('id', clientId)
-    .single()
-  const newBalance = (Number((client as any)?.[balanceCol]) || 0) + amount
-  const { error: balErr } = await supabase.from('clientes').update({ [balanceCol]: newBalance }).eq('id', clientId)
-  if (balErr) throw new Error(`Pago revertido, pero no se pudo actualizar el saldo del cliente: ${balErr.message}`)
+  try {
+    await moverSaldoCliente(clientId, amount, cuenta)
+  } catch (balErr: any) {
+    throw new Error(`Pago revertido, pero no se pudo actualizar el saldo del cliente: ${balErr.message}`)
+  }
 
   // Recalcular saldos por remito: replay de los pagos restantes (el borrado ya no está).
   try {
@@ -463,7 +447,6 @@ export const voidPayment = async (txId: string, motivo: string, adminName: strin
   const cuenta: 'minorista' | 'mayorista' = (tx.cuenta as any) ?? 'minorista'
   const clientId = tx.client_id
   const amount = Number(tx.amount)
-  const balanceCol = cuenta === 'minorista' ? 'current_balance' : 'current_balance_mayorista'
 
   // Condicionado a anulado=false: si se anula dos veces a la vez (doble click), solo una
   // pasa y el monto no se devuelve dos veces al saldo.
@@ -482,14 +465,11 @@ export const voidPayment = async (txId: string, motivo: string, adminName: strin
   if (!anulados || anulados.length === 0) throw new Error('Este pago ya fue anulado')
 
   // Devolver el monto al saldo del cliente
-  const { data: client } = await supabase
-    .from('clientes')
-    .select(balanceCol)
-    .eq('id', clientId)
-    .single()
-  const newBalance = (Number((client as any)?.[balanceCol]) || 0) + amount
-  const { error: balErr } = await supabase.from('clientes').update({ [balanceCol]: newBalance }).eq('id', clientId)
-  if (balErr) throw new Error(`Pago revertido, pero no se pudo actualizar el saldo del cliente: ${balErr.message}`)
+  try {
+    await moverSaldoCliente(clientId, amount, cuenta)
+  } catch (balErr: any) {
+    throw new Error(`Pago revertido, pero no se pudo actualizar el saldo del cliente: ${balErr.message}`)
+  }
 
   // Recalcular saldos por remito: replay de los pagos vigentes (el anulado ya
   // quedó marcado y el helper lo excluye).

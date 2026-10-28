@@ -6,7 +6,7 @@
 //      efectivo/transferencia (y viceversa), impactando la cuenta corriente.
 // No toca stock ni emite documentos AFIP. Reutiliza la lógica de imputación de pagos.
 import { supabase } from '@/lib/supabase'
-import { generateReadableId } from '@/services/supabase-helpers'
+import { generateReadableId, moverSaldoCliente, moverTotalesVendedor } from '@/services/supabase-helpers'
 import { aplicarPagoADeudas } from '@/services/payments-service'
 import { calcularComisionDescuento } from '@/lib/utils/ajuste-venta'
 import { camposConversionPago } from '@/lib/utils/conversion-pago'
@@ -27,20 +27,9 @@ async function getCommissionRate(sellerId?: string): Promise<number> {
   return tasaComision(data?.commission_rate)
 }
 
+// Resta en Postgres (mover_totales_vendedor no deja los totales por debajo de 0).
 async function bajarComision(sellerId: string, monto: number, comision: number): Promise<void> {
-  const { data: sr } = await supabase
-    .from('vendedores')
-    .select('total_sales, total_commission')
-    .eq('id', sellerId)
-    .single()
-  if (!sr) return
-  await supabase
-    .from('vendedores')
-    .update({
-      total_sales: Math.max(0, (Number(sr.total_sales) || 0) - monto),
-      total_commission: Math.max(0, (Number(sr.total_commission) || 0) - comision),
-    })
-    .eq('id', sellerId)
+  await moverTotalesVendedor(sellerId, -monto, -comision)
 }
 
 async function nextReciboNumero(): Promise<string> {
@@ -61,27 +50,21 @@ async function debtTxIdForSale(saleId?: string): Promise<string | undefined> {
 }
 
 // Se llama DESPUÉS de grabar el movimiento: si algo falla, corta con error en vez de
-// dejar el saldo del cliente distinto a sus movimientos.
-async function moverSaldoCliente(clientId: string, delta: number): Promise<void> {
-  const { data: cr, error } = await supabase
-    .from('clientes')
-    .select('current_balance')
-    .eq('id', clientId)
-    .single()
-  if (error) throw new Error(`Movimiento registrado, pero no se pudo leer el saldo del cliente: ${error.message}`)
-  const { error: updErr } = await supabase
-    .from('clientes')
-    .update({ current_balance: (Number(cr.current_balance) || 0) + delta })
-    .eq('id', clientId)
-  if (updErr) throw new Error(`Movimiento registrado, pero no se pudo actualizar el saldo del cliente: ${updErr.message}`)
+// dejar el saldo del cliente distinto a sus movimientos. La suma la hace Postgres.
+async function moverSaldo(clientId: string, delta: number): Promise<void> {
+  try {
+    await moverSaldoCliente(clientId, delta)
+  } catch (err: any) {
+    throw new Error(`Movimiento registrado, pero no se pudo actualizar el saldo del cliente: ${err.message}`)
+  }
 }
 
 async function bajarSaldoCliente(clientId: string, monto: number): Promise<void> {
-  await moverSaldoCliente(clientId, -monto)
+  await moverSaldo(clientId, -monto)
 }
 
 async function subirSaldoCliente(clientId: string, monto: number): Promise<void> {
-  await moverSaldoCliente(clientId, monto)
+  await moverSaldo(clientId, monto)
 }
 
 // Actualiza la forma de pago de la venta; reintenta sin payment_method si la columna no existe.

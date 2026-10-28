@@ -177,6 +177,19 @@ function mapVenta(d: Record<string, any>): Venta {
   };
 }
 
+// N° de remito para una venta que todavía no tiene. Sale del mismo contador atómico que
+// Pedidos (`next_remito_number`): antes se calculaba el último de `ventas` + 1, que repetía
+// números ya usados por pedidos y se pisaba con dos ventas a la vez.
+// El remito es inmodificable: si la venta ya tiene uno, no se genera otro.
+async function reservarNumeroRemito(venta: { remitoNumber?: string } | null | undefined): Promise<string> {
+  if (venta?.remitoNumber) {
+    throw new Error(`La venta ya tiene el remito ${venta.remitoNumber}; descargalo desde el detalle`);
+  }
+  const { data, error } = await supabase.rpc("next_remito_number");
+  if (error || !data) throw new Error("No se pudo generar el número de remito");
+  return String(data);
+}
+
 // Pedido rechazado por el repartidor (cliente no lo quiso). Figura en Ventas con su
 // remito pero sin monto: total 0 y bandera rechazado para mostrar el cartel "Rechazado".
 function mapPedidoRechazado(d: Record<string, any>): Venta {
@@ -529,20 +542,7 @@ export function useVentas(filterBySellerId?: string, clientCityMap?: Record<stri
         downloadBase64Pdf(pdfBase64, buildDocFilename("boleta", invoiceNumber, ventaParaEmitir?.clientName));
         toast.success("Boleta emitida correctamente", { id: toastId });
       } else if (tipoDocumento === "remito") {
-        const { data: lastRemitos } = await supabase
-          .from("ventas")
-          .select("remito_number")
-          .not("remito_number", "is", null)
-          .order("remito_number", { ascending: false })
-          .limit(1);
-
-        let ultimoNumero = 0;
-        if (lastRemitos && lastRemitos.length > 0) {
-          const lastRemito = lastRemitos[0].remito_number;
-          const match = lastRemito?.match(/R-\d+-(\d+)/);
-          if (match) ultimoNumero = parseInt(match[1], 10);
-        }
-        const remitoNumber = `R-${new Date().getFullYear()}-${String(ultimoNumero + 1).padStart(5, "0")}`;
+        const remitoNumber = await reservarNumeroRemito(ventaParaEmitir);
 
         const pdfBase64 = await generarPdfCompleto({ ...ventaParaEmitir, remitoNumber }, "remito");
 
@@ -633,19 +633,7 @@ export function useVentas(filterBySellerId?: string, clientCityMap?: Record<stri
         } as Venta : prev);
         toast.success("Boleta emitida correctamente", { id: toastId });
       } else {
-        const { data: lastRemitos } = await supabase
-          .from("ventas")
-          .select("remito_number")
-          .not("remito_number", "is", null)
-          .order("remito_number", { ascending: false })
-          .limit(1);
-
-        let ultimoNumero = 0;
-        if (lastRemitos && lastRemitos.length > 0) {
-          const match = lastRemitos[0].remito_number?.match(/R-\d+-(\d+)/);
-          if (match) ultimoNumero = parseInt(match[1], 10);
-        }
-        const remitoNumber = `R-${new Date().getFullYear()}-${String(ultimoNumero + 1).padStart(5, "0")}`;
+        const remitoNumber = await reservarNumeroRemito(venta);
 
         let saldoAnterior: number | undefined = undefined;
         let diaCobro: string | undefined = undefined;

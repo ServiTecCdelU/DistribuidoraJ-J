@@ -43,3 +43,38 @@ export const generateReadableId = async (
   }
   return `${base}_${Date.now()}`
 }
+
+/**
+ * Suma `delta` al saldo del cliente dentro de Postgres (RPC `mover_saldo_cliente`).
+ * Antes se leía el saldo, se sumaba en JS y se escribía: dos movimientos simultáneos
+ * se pisaban y uno se perdía. Devuelve el saldo nuevo.
+ */
+export const moverSaldoCliente = async (
+  clientId: string,
+  delta: number,
+  cuenta: 'minorista' | 'mayorista' = 'minorista',
+): Promise<number> => {
+  const { data, error } = await supabase.rpc('mover_saldo_cliente', {
+    p_client_id: clientId,
+    p_delta: delta,
+    p_cuenta: cuenta,
+  })
+  if (error) throw new Error(error.message)
+  return Number(data) || 0
+}
+
+/** Suma a los totales del vendedor en Postgres. `clave` evita aplicarlo dos veces (reintentos). */
+export const moverTotalesVendedor = async (
+  sellerId: string,
+  deltaVentas: number,
+  deltaComision: number,
+  clave?: string,
+): Promise<void> => {
+  const { error } = await supabase.rpc('mover_totales_vendedor', {
+    p_seller_id: sellerId,
+    p_delta_ventas: deltaVentas,
+    p_delta_comision: deltaComision,
+    p_clave: clave ?? null,
+  })
+  if (error) throw new Error(error.message)
+}

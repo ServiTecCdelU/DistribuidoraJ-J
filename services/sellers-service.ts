@@ -391,32 +391,22 @@ export const resetCommissions = async (sellerId: string, sellerName: string, not
 
   const monto = pendientes.reduce((sum, c) => sum + c.commissionAmount, 0)
 
-  // Resetear comisiones y ventas pendientes del vendedor
-  await supabase
-    .from('vendedores')
-    .update({ total_commission: 0, total_sales: 0 })
-    .eq('id', sellerId)
-
-  // Registrar el pago — el timestamp actúa como cutoff para marcar comisiones como pagadas
-  const pagoId = `pago_${sellerId}_${Date.now()}`
-  const row = {
-    id: pagoId,
-    seller_id: sellerId,
-    seller_name: sellerName,
-    monto,
-    monto_pagado: monto,
-    fecha_pago: new Date().toISOString(),
-    cantidad_comisiones: pendientes.length,
-    nota: nota || null,
-  }
-
+  // Registra el pago y pone en cero los totales del vendedor en una sola transacción
+  // (RPC pagar_comisiones). Antes se ponían en cero primero y, si el insert fallaba,
+  // se perdían; además rechaza el mismo pago repetido por doble click.
+  // El timestamp del pago actúa como cutoff para marcar comisiones como pagadas.
   const { data, error } = await supabase
-    .from('pagos_comisiones')
-    .insert(row)
-    .select()
+    .rpc('pagar_comisiones', {
+      p_pago_id: `pago_${sellerId}_${Date.now()}`,
+      p_seller_id: sellerId,
+      p_seller_name: sellerName,
+      p_monto: monto,
+      p_cantidad: pendientes.length,
+      p_nota: nota || null,
+    })
     .single()
 
-  if (error) throw error
+  if (error) throw new Error(error.message)
   return mapPago(data)
 }
 

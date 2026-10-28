@@ -28,22 +28,17 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ message: "Venta no encontrada" }, { status: 404 });
     }
 
-    // Generar número de remito secuencial
-    const { data: lastRemitos } = await supabaseAdmin
-      .from("ventas")
-      .select("remito_number")
-      .not("remito_number", "is", null)
-      .order("remito_number", { ascending: false })
-      .limit(1);
-
-    let lastNumber = 0;
-    if (lastRemitos && lastRemitos.length > 0) {
-      const lastRemito = lastRemitos[0].remito_number;
-      const match = lastRemito?.match(/R-\d+-(\d+)/);
-      if (match) lastNumber = parseInt(match[1], 10);
+    // El remito es inmodificable: si la venta ya tiene número, no se asigna otro.
+    if (venta.remito_number) {
+      return NextResponse.json({ message: "La venta ya tiene remito" }, { status: 409 });
     }
 
-    const remitoNumber = `R-${new Date().getFullYear()}-${String(lastNumber + 1).padStart(5, "0")}`;
+    // Número del contador atómico compartido con Pedidos (antes: último de ventas + 1).
+    const { data: remitoNumber, error: nroError } = await supabaseAdmin.rpc("next_remito_number");
+    if (nroError || !remitoNumber) {
+      console.error("[Remitos] next_remito_number:", nroError?.message);
+      return NextResponse.json({ message: "No se pudo generar el número de remito" }, { status: 500 });
+    }
 
     // Actualizar venta con el número de remito (el PDF se genera en el frontend)
     await supabaseAdmin

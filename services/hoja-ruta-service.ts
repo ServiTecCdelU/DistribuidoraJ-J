@@ -1,43 +1,15 @@
 // services/hoja-ruta-service.ts
 import { supabase } from '@/lib/supabase'
 
-const CONFIG_KEY = 'hoja_ruta'
-
-interface HojaRutaState {
-  last?: number
-  hash?: string
-}
-
-function formatNumero(n: number): string {
-  return String(n).padStart(3, '0')
-}
-
-async function readState(): Promise<HojaRutaState> {
-  const { data } = await supabase
-    .from('configuracion')
-    .select('value')
-    .eq('key', CONFIG_KEY)
-    .maybeSingle()
-  return (data?.value as HojaRutaState | null) || {}
-}
-
 // Asigna el N° de hoja de ruta según el contenido (fingerprint):
 // - Si el contenido es idéntico al de la última hoja emitida, devuelve el MISMO número.
 // - Si cambió (otra persona, otro remito, otro importe), incrementa en 1.
-// Empieza en 1 ("001").
+// Empieza en 1 ("001"). Lo resuelve la RPC next_hoja_ruta_number con lock de fila:
+// antes se leía y escribía desde el navegador y dos admins a la vez sacaban el mismo número.
 export async function assignHojaRuta(fingerprint: string): Promise<string> {
-  const state = await readState()
-  const last = typeof state.last === 'number' ? state.last : 0
-
-  if (last > 0 && state.hash === fingerprint) {
-    return formatNumero(last)
-  }
-
-  const next = last + 1
-  await supabase
-    .from('configuracion')
-    .upsert({ key: CONFIG_KEY, value: { last: next, hash: fingerprint } }, { onConflict: 'key' })
-  return formatNumero(next)
+  const { data, error } = await supabase.rpc('next_hoja_ruta_number', { p_fingerprint: fingerprint })
+  if (error || !data) throw new Error(`No se pudo asignar el número de hoja de ruta: ${error?.message ?? 'sin número'}`)
+  return String(data)
 }
 
 const BUCKET = 'hojas-ruta'

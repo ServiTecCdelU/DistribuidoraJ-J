@@ -2,7 +2,7 @@
 import { supabase } from '@/lib/supabase'
 import { paginarTodo } from '@/lib/utils/paginar'
 import type { CartItem, Sale } from '@/lib/types'
-import { generateReadableId, slugify } from '@/services/supabase-helpers'
+import { generateReadableId, slugify, moverSaldoCliente, moverTotalesVendedor } from '@/services/supabase-helpers'
 import { formatCurrencyDecimals } from '@/lib/utils/format'
 import { tasaComision } from '@/lib/utils/comisiones'
 
@@ -45,18 +45,12 @@ async function registrarMovimientoVenta(params: {
   })
   if (txErr) throw new Error(`Error al registrar el movimiento del cliente: ${txErr.message}`)
 
-  const { data: cr, error: crErr } = await supabase
-    .from('clientes')
-    .select('current_balance')
-    .eq('id', params.clientId)
-    .single()
-  if (crErr) throw new Error(`Error al leer el saldo del cliente: ${crErr.message}`)
   const delta = params.type === 'debt' ? params.amount : -params.amount
-  const { error: balErr } = await supabase
-    .from('clientes')
-    .update({ current_balance: (Number(cr.current_balance) || 0) + delta })
-    .eq('id', params.clientId)
-  if (balErr) throw new Error(`Error al actualizar el saldo del cliente: ${balErr.message}`)
+  try {
+    await moverSaldoCliente(params.clientId, delta, 'minorista')
+  } catch (balErr: any) {
+    throw new Error(`Error al actualizar el saldo del cliente: ${balErr.message}`)
+  }
 
   // Si el cliente tenía saldo a favor, se imputa a la deuda nueva (boletas al día).
   const { recomputarSaldosDeudas } = await import('@/services/payments-service')
@@ -165,16 +159,13 @@ export const generateSaleNumber = (date: Date, index: number) => {
   return `N${index + 1}-${day}-${month}-${year}`
 }
 
-// Último N° de venta usado. Antes se usaba la cantidad de ventas: al borrar una venta la
-// cantidad bajaba y el próximo número ya existía (N° de venta repetidos).
+// Reserva el próximo N° de venta (secuencia en Postgres, `next_venta_number`) y devuelve
+// el anterior, como espera generateSaleNumber. Antes se leía el último + 1 en el navegador
+// y dos ventas simultáneas (vendedores en campo) salían con el mismo número.
 async function ultimoNumeroVenta(): Promise<number> {
-  const { data, error } = await supabase
-    .from('ventas')
-    .select('sale_number')
-    .order('created_at', { ascending: false })
-    .limit(50)
-  if (error) throw new Error(`No se pudo generar el número de venta: ${error.message}`)
-  return Math.max(0, ...(data ?? []).map((v) => Number(/^N(\d+)-/.exec(v.sale_number ?? '')?.[1]) || 0))
+  const { data, error } = await supabase.rpc('next_venta_number')
+  if (error || data == null) throw new Error(`No se pudo generar el número de venta: ${error?.message ?? 'sin número'}`)
+  return Number(data) - 1
 }
 
 export const processSale = async (data: {
@@ -324,35 +315,44 @@ export const processSale = async (data: {
     : await supabase.from('ventas').insert(saleRow2)
   if (insertErr) throw new Error(`Error al crear venta: ${insertErr.message}`)
 
-  // Descontar stock con registrarMovimiento: lee el stock fresco de la BD, actualiza
-  // productos.stock + mayorista_productos.stock_local y registra el movimiento en una sola
-  // operación encapsulada (la misma vía sana que usa el remito). Evita el desfase que
-  // producía hacer update + insert por separado con un stock leído una sola vez.
+  // Descontar stock con registrarMovimiento (RPC mover_stock: atómico, con lock de fila).
   // Si skipStock, el stock ya se descontó al generar el remito del pedido: no tocar acá.
+  // Cada línea lleva una clave única: al retomar un cobro cortado a mitad se descuentan
+  // solo las líneas que faltaban (antes, con un movimiento ya hecho se salteaban todas).
   const { registrarMovimiento } = await import('@/services/stock-service')
-  // Al retomar una venta cuyo stock ya se descontó en el intento anterior, no repetirlo.
+  // Venta retomada de antes de las claves: si ya tiene movimientos sin clave, no repetir.
   let stockYaMovido = false
   if (ventaPrevia && !data.skipStock) {
     const { count: movs } = await supabase
       .from('stock_movimientos')
       .select('id', { count: 'exact', head: true })
       .eq('motivo', saleId)
+      .is('clave', null)
     stockYaMovido = (movs ?? 0) > 0
   }
   if (!data.skipStock && !stockYaMovido) {
     // Venta (lo pagado) y regalo del mismo producto (promo "cada X +N").
-    for (const item of data.items) {
+    for (const [i, item] of data.items.entries()) {
       if (!item.product.id) continue
       const regaloMismo = item.regalo ?? 0
-      await registrarMovimiento({ productoId: item.product.id, tipo: 'venta', cantidad: -item.quantity, referencia: saleId })
+      await registrarMovimiento({
+        productoId: item.product.id, tipo: 'venta', cantidad: -item.quantity, referencia: saleId,
+        clave: `venta:${saleId}:${i}:${item.product.id}`,
+      })
       if (regaloMismo > 0) {
-        await registrarMovimiento({ productoId: item.product.id, tipo: 'regalo', cantidad: -regaloMismo, referencia: saleId })
+        await registrarMovimiento({
+          productoId: item.product.id, tipo: 'regalo', cantidad: -regaloMismo, referencia: saleId,
+          clave: `regalo:${saleId}:${i}:${item.product.id}`,
+        })
       }
     }
 
     // Regalos de OTRO producto (promo cruzada) — tipo regalo.
-    for (const r of regalosCruzados) {
-      await registrarMovimiento({ productoId: r.productoId, tipo: 'regalo', cantidad: -r.cantidad, referencia: saleId })
+    for (const [i, r] of regalosCruzados.entries()) {
+      await registrarMovimiento({
+        productoId: r.productoId, tipo: 'regalo', cantidad: -r.cantidad, referencia: saleId,
+        clave: `regalo-cruzado:${saleId}:${i}:${r.productoId}`,
+      })
     }
   }
 
@@ -406,23 +406,17 @@ export const processSale = async (data: {
     })
   }
 
-  // Actualizar totales del vendedor (comisiones se derivan de ventas).
-  // Al retomar una venta no se suma de nuevo.
-  if (data.sellerId && !ventaPrevia) {
+  // Actualizar totales del vendedor (comisiones se derivan de ventas). La clave por venta
+  // hace que al retomar un cobro cortado se sume si faltaba y nunca dos veces.
+  if (data.sellerId) {
     const { data: sellerRow } = await supabase
       .from('vendedores')
-      .select('total_sales, total_commission, commission_rate')
+      .select('commission_rate')
       .eq('id', data.sellerId)
       .single()
     if (sellerRow) {
       const rate = tasaComision(sellerRow.commission_rate) / 100
-      await supabase
-        .from('vendedores')
-        .update({
-          total_sales: (Number(sellerRow.total_sales) || 0) + total,
-          total_commission: (Number(sellerRow.total_commission) || 0) + (total * rate),
-        })
-        .eq('id', data.sellerId)
+      await moverTotalesVendedor(data.sellerId, total, total * rate, `vendedor-venta:${saleId}`)
     }
   }
 
@@ -667,20 +661,29 @@ export const processSaleMayorista = async (data: {
   const { error: insertError } = await supabase.from('ventas').insert(saleRow)
   if (insertError) throw new Error(`Error al crear venta: ${insertError.message}`)
 
+  // Desde acá la venta ya está grabada: si algo falla, el error lo dice con el N° para que
+  // no se vuelva a cargar (antes el reintento duplicaba la venta y el descuento de stock).
+  const yaGrabada = (err: unknown) =>
+    new Error(`La venta ${saleNumber} quedó registrada, pero falló un paso posterior: ${err instanceof Error ? err.message : String(err)}. No la vuelvas a cargar; avisá para revisarla.`)
+
   // Descontar stock solo en modo "disponible" — venta y regalo por separado
   if (modo === 'disponible') {
-    const { descontarStockVenta, descontarStockRegalo } = await import('@/services/stock-service')
-    const itemsVenta = itemsConStock
-      .filter((i) => i.cantidadStockLocal > 0)
-      .map((i) => ({ productoId: i.productId, cantidad: i.cantidadStockLocal }))
-    // Regalo del mismo producto + regalos de otro producto (promo cruzada)
-    const itemsRegaloMismo = itemsConStock
-      .filter((i) => i.regalo > 0)
-      .map((i) => ({ productoId: i.productId, cantidad: i.regalo }))
-    const itemsRegaloCruzado = regalosCruzados.map((r) => ({ productoId: r.productoId, cantidad: r.cantidad }))
-    if (itemsVenta.length > 0) await descontarStockVenta(itemsVenta, saleId)
-    const regalos = [...itemsRegaloMismo, ...itemsRegaloCruzado]
-    if (regalos.length > 0) await descontarStockRegalo(regalos, saleId)
+    try {
+      const { descontarStockVenta, descontarStockRegalo } = await import('@/services/stock-service')
+      const itemsVenta = itemsConStock
+        .filter((i) => i.cantidadStockLocal > 0)
+        .map((i) => ({ productoId: i.productId, cantidad: i.cantidadStockLocal }))
+      // Regalo del mismo producto + regalos de otro producto (promo cruzada)
+      const itemsRegaloMismo = itemsConStock
+        .filter((i) => i.regalo > 0)
+        .map((i) => ({ productoId: i.productId, cantidad: i.regalo }))
+      const itemsRegaloCruzado = regalosCruzados.map((r) => ({ productoId: r.productoId, cantidad: r.cantidad }))
+      if (itemsVenta.length > 0) await descontarStockVenta(itemsVenta, saleId)
+      const regalos = [...itemsRegaloMismo, ...itemsRegaloCruzado]
+      if (regalos.length > 0) await descontarStockRegalo(regalos, saleId)
+    } catch (err) {
+      throw yaGrabada(err)
+    }
   }
 
   // Credito, saldo a favor y comisión en paralelo
@@ -715,18 +718,17 @@ export const processSaleMayorista = async (data: {
   // Actualizar totales del vendedor (comisiones se derivan de ventas)
   if (data.sellerId) {
     postSaleOps.push((async () => {
-      const { data: sr } = await supabase.from('vendedores').select('total_sales, total_commission, commission_rate').eq('id', data.sellerId!).single()
+      const { data: sr } = await supabase.from('vendedores').select('commission_rate').eq('id', data.sellerId!).single()
       if (sr) {
         const rate = tasaComision(sr.commission_rate) / 100
-        await supabase.from('vendedores').update({
-          total_sales: (Number(sr.total_sales) || 0) + total,
-          total_commission: (Number(sr.total_commission) || 0) + (total * rate),
-        }).eq('id', data.sellerId!)
+        await moverTotalesVendedor(data.sellerId!, total, total * rate, `vendedor-venta:${saleId}`)
       }
     })())
   }
 
-  await Promise.all(postSaleOps)
+  // Todas corren hasta el final aunque una falle (deuda y comisión no dependen entre sí).
+  const fallos = (await Promise.allSettled(postSaleOps)).filter((r): r is PromiseRejectedResult => r.status === 'rejected')
+  if (fallos.length > 0) throw yaGrabada(fallos[0].reason)
 
   return {
     id: saleId, saleNumber, clientId: data.clientId, clientName: resolvedClientName,

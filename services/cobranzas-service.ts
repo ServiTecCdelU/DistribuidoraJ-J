@@ -1,6 +1,6 @@
 import { supabase } from '@/lib/supabase'
 import type { Client, ComprobantePago, Transaction } from '@/lib/types'
-import { generateReadableId } from '@/services/supabase-helpers'
+import { generateReadableId, moverSaldoCliente } from '@/services/supabase-helpers'
 import { getSellerIdsByCodigo } from '@/services/sellers-service'
 import { SALDO_EPSILON, recomputarSaldos } from '@/lib/utils/saldo-imputacion'
 import { esDeudaAnterior } from '@/lib/utils/deuda-anterior'
@@ -530,17 +530,11 @@ export const approveComprobante = async (id: string, reviewedBy: string): Promis
 
   await supabase.from('comprobantes_pago').update({ transaction_id: docId }).eq('id', id)
 
-  const { data: cr, error: crErr } = await supabase
-    .from('clientes')
-    .select('current_balance')
-    .eq('id', comp.client_id)
-    .single()
-  if (crErr) throw new Error(`Pago registrado, pero no se pudo leer el saldo del cliente: ${crErr.message}`)
-  const { error: balErr } = await supabase
-    .from('clientes')
-    .update({ current_balance: (Number(cr.current_balance) || 0) - Number(comp.amount) })
-    .eq('id', comp.client_id)
-  if (balErr) throw new Error(`Pago registrado, pero no se pudo actualizar el saldo del cliente: ${balErr.message}`)
+  try {
+    await moverSaldoCliente(comp.client_id, -Number(comp.amount))
+  } catch (balErr: any) {
+    throw new Error(`Pago registrado, pero no se pudo actualizar el saldo del cliente: ${balErr.message}`)
+  }
 
   // Saldos por boleta: mismo replay que el resto de los pagos (FIFO + imputaciones).
   try {
