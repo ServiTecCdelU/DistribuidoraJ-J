@@ -12,9 +12,13 @@ npm run dev       # Start development server
 npm run build     # Production build (TypeScript errors are ignored — see next.config.mjs)
 npm run lint      # Run ESLint
 npm run start     # Start production server
+npm run test      # Vitest (tests de lib/utils y algunos services)
 ```
 
-No hay tests en este proyecto.
+### SQL en Supabase
+- Las migraciones viven en `migrations/AAAA-MM-DD-*.sql` (no destructivas y re-ejecutables).
+- El usuario autorizó que Claude las ejecute directo: `.env` (gitignored) tiene `SUPABASE_ACCESS_TOKEN` y `SUPABASE_PROJECT_REF`. Se corre con `POST https://api.supabase.com/v1/projects/$SUPABASE_PROJECT_REF/database/query` y body `{"query": "..."}` (devuelve solo el resultado de la última sentencia). El MCP de Supabase del repo es `--read-only`: no sirve para DDL.
+- Para probar funciones contra la base real sin dejar cambios: `do $$ ... raise exception '...' $$`. Ojo: `nextval` no se revierte; después resetear la secuencia con `setval` al máximo real.
 
 ## Reglas del Proyecto
 
@@ -95,6 +99,16 @@ Hacer UN SOLO commit y push cuando el usuario confirme que todo funciona o cuand
 
 ## Decisiones de Arquitectura (no revertir)
 
+- **Saldos, stock, comisiones y numeración se calculan en Postgres, nunca leyendo + sumando en JS** (dos usuarios a la vez se pisaban). Migración `migrations/2026-10-27-atomicidad-y-rendimiento.sql`:
+  - Saldo del cliente → `moverSaldoCliente()` (`services/supabase-helpers.ts`, RPC `mover_saldo_cliente`, cuenta `minorista`/`mayorista`).
+  - Totales del vendedor → `moverTotalesVendedor()` (RPC `mover_totales_vendedor`, con `clave` para no aplicar dos veces).
+  - Stock → `registrarMovimiento()` (`services/stock-service.ts`, RPC `mover_stock`, con lock de fila). `clave` opcional = idempotente: los reintentos de un cobro no vuelven a descontar/reponer.
+  - Pago de comisiones → RPC `pagar_comisiones` (registra el pago y pone en cero los totales en la misma transacción).
+  - Números: `next_venta_number`, `next_remito_number` (contador único para Pedidos y Ventas), `next_devolucion_number`, `next_hoja_ruta_number`, `next_recibo_number`. Nunca calcular "último + 1".
+- **El remito no se puede pisar ni regenerar**: `saveRemitoToOrder` solo graba si el pedido no tiene remito; la venta nace con `remito_number` en el mismo insert (`processSale({ remitoNumber })`). Para cambiarlo hay que eliminar el remito (repone stock) y generar uno nuevo.
+- Rechazar/anular/eliminar remito de un pedido: primero cambia el estado (condicionado a que no esté cobrado/anulado) y recién después repone stock.
+- **AFIP no se usa** en la distribuidora: no priorizar trabajo de facturación electrónica salvo pedido explícito.
+
 - **EL REMITO ES INMODIFICABLE.** Una vez generado (al pasar el pedido a reparto, con el pedido completo), el remito NO se regenera, NO se pisa y NO se recalcula NUNCA — ni al cobrar, ni al marcar roturas/faltantes, ni al sincronizar precios. Es la fuente de verdad de cantidades y total originales. Las roturas/faltantes se registran SOLO en `items_no_entregados` + `transacciones` y se descuentan en la presentación (caja/ventas), jamás tocando el remito. Al cobrar, el remito del pedido se COPIA tal cual a la venta (`saveRemitoToSale`), sin regenerar el PDF.
 - El carrito es un unico componente `UnifiedCart` (`components/cart/UnifiedCart.tsx`) que se adapta por rol (`admin`, `seller`, `null`). La logica vive en `hooks/useCart.ts`.
 - AFIP billing unificado en `lib/facturacion-helper.ts`.
@@ -161,8 +175,11 @@ Next.js 16 (App Router) desplegado en Vercel. Maneja ventas, pedidos, inventario
 - Deuda del cliente se muestra con colores: amber (normal con deuda), rojo (moroso), rojo oscuro (incobrable), verde (al día).
 - Modales: `OrderDetailModal`, `PaymentModal`, `SuccessModal`, `StockCheckModal`.
 
-### Ventas atómicas
-`processSale()` usa la función RPC `process_sale()` en PostgreSQL que ejecuta en una transacción ACID: inserta venta, descuenta stock, registra crédito del cliente y comisión del vendedor.
+### Ventas
+`processSale()` (cobro de pedidos) y `processSaleMayorista()` (venta de mostrador) en `services/sales-service.ts` **no usan** la RPC `process_sale()` (existe en la base pero no se llama). Hacen pasos separados (insert venta → stock → deuda → comisión), cada uno atómico vía las RPC de arriba, pero la venta completa no es una sola transacción. Si un paso posterior falla en la venta de mostrador, el error avisa el N° de venta para que no se vuelva a cargar.
+
+### Caja
+`esperado = inicial + efectivo de ventas + cobros cta cte en efectivo − devoluciones en efectivo − comisiones pagadas`, fórmula única en `efectivoEsperado()` (`lib/utils/caja-desglose.ts`), usada por la pantalla, el PDF (`components/caja/caja-pdf.tsx`) y el cierre automático (`app/api/cron/reconciliar-caja`). Lo que no es venta lo calcula la RPC `caja_movimientos_efectivo`; los cobros guardan `transacciones.metodo_pago`. Detalle en `app/caja/CAJA.md`.
 
 ### Páginas adicionales
 - **`app/vendedor/`** — vista mobile para vendedores en campo: búsqueda de productos + `UnifiedCart` inline. Acceso solo con rol `seller`.
@@ -186,3 +203,35 @@ Rutas públicas (no requieren auth) en `app/api/public/` — clientes, productos
 - `BIT_INGENIERIA_COMPANY_NAME`, `BIT_INGENIERIA_COMPANY_ADDRESS`, `BIT_INGENIERIA_COMPANY_CITY` — datos empresa
 - Credenciales Google Drive para backup de PDFs
 - `SERVITEC_ESTADO_PAGO_CLAVE` — clave de J&J para consultar a ServiTec si hay pagos atrasados (opcional `SERVITEC_ESTADO_PAGO_URL`; por defecto `https://www.servitec.net.ar/distribuidora/api/externo/estado-pago`)
+
+## Pendientes (análisis del 2026-10-27)
+
+Ordenados por prioridad. Al resolver uno, borrarlo de esta lista.
+
+### Seguridad
+- **RLS deshabilitado** en casi todo `public`. Bloqueante: `services/users-service.ts` (`ensureUserProfile`) crea, actualiza y borra filas de `usuarios` y asigna roles (vendedor por email, primer admin) desde el navegador. Hay que moverlo a una ruta API con service role y recién ahí activar RLS por rol, tabla por tabla y probando en el navegador. Hoy cualquier cuenta de Google que se loguee tiene un JWT `authenticated` con el que podría escribir en la base. Plan y rollback en `PLAN_RLS.md` (sus "Server Components con anon" no existen: esas páginas son `"use client"`).
+- **Rotar el token de Supabase** (`SUPABASE_ACCESS_TOKEN`): pasó por el chat. También sigue pendiente el secreto en `.claude/settings.local.json` (ver `.claude/rules/security.md`).
+- `app/api/cron/reconciliar-caja` acepta el secreto por `?secret=` y muta con GET: quitar el query string.
+- Validar montos en `registerPayment` (`amount > 0`, finito, cliente existente).
+
+### Plata
+- **Devoluciones**: no se validan contra lo vendido (se puede devolver el mismo producto varias veces o a otro precio, y repone stock cada vez).
+- **Descuentos/conversión de pago** (`ajustes-venta-service.ts`): sin tope contra el saldo de la boleta ni bloqueo contra doble click.
+- **Comisiones**: la lista calcula `ventas.total × tasa actual` y no resta los descuentos (`[DESCUENTO]`); además usa la tasa actual para ventas viejas. Conviene guardar `commission_rate`/`commission_amount` en cada venta.
+- `approveComprobante` (`cobranzas-service.ts`): registra el pago sin `cuenta` ni `recibo_numero` y siempre baja el saldo minorista; `rejectComprobante` no chequea errores ni el estado actual.
+- Redondeo: devoluciones y comisiones guardan montos sin `round2`.
+- Datos históricos: hay números de remito repetidos (ej. `R-2026-00001` ×18) de antes del contador único. No se tocaron.
+
+### Robustez
+- La venta completa no es una transacción (ver "Ventas"): mover cobro y venta de mostrador a una sola RPC si vuelven a aparecer ventas a medias.
+- Fechas: Caja calcula "hoy" con la hora del navegador; el cron usa UTC-3 fijo. Unificar con un helper de día argentino.
+- `faltantesApi.registrar/quitar` ignoran errores de Supabase.
+- `app/pedidos/page.tsx`: `payment-modal` toma el precio de la primera línea si un producto aparece en dos renglones.
+
+### Rendimiento (pendiente)
+- `getMayoristaProductos` baja toda `mayorista_productos` (~7400 filas) en el carrito legacy, Pedido mayorista y Recepción: reemplazar por búsqueda en la base.
+- Clientes se cargan completos varias veces por navegación (`clientsApi.getAll`): búsqueda server-side en los selectores.
+- `recomputarSaldosDeudas` / `aplicarPagoADeudas`: un UPDATE por boleta en serie; pasar a RPC.
+- Cuenta corriente recarga todas las transacciones del cliente tras cada acción y `getComprobantes()` trae los de todos los clientes.
+- Historial de ventas: paginar en la base en vez de traer todo el período.
+- `getProductosARevisar` agrupa miles de movimientos en JS.
