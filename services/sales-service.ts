@@ -4,6 +4,7 @@ import { paginarTodo } from '@/lib/utils/paginar'
 import type { CartItem, Sale } from '@/lib/types'
 import { generateReadableId, slugify } from '@/services/supabase-helpers'
 import { formatCurrencyDecimals } from '@/lib/utils/format'
+import { tasaComision } from '@/lib/utils/comisiones'
 
 
 // Cache: ¿existe la columna payment_method en ventas?
@@ -414,7 +415,7 @@ export const processSale = async (data: {
       .eq('id', data.sellerId)
       .single()
     if (sellerRow) {
-      const rate = (Number(sellerRow.commission_rate) || 10) / 100
+      const rate = tasaComision(sellerRow.commission_rate) / 100
       await supabase
         .from('vendedores')
         .update({
@@ -716,7 +717,7 @@ export const processSaleMayorista = async (data: {
     postSaleOps.push((async () => {
       const { data: sr } = await supabase.from('vendedores').select('total_sales, total_commission, commission_rate').eq('id', data.sellerId!).single()
       if (sr) {
-        const rate = (Number(sr.commission_rate) || 10) / 100
+        const rate = tasaComision(sr.commission_rate) / 100
         await supabase.from('vendedores').update({
           total_sales: (Number(sr.total_sales) || 0) + total,
           total_commission: (Number(sr.total_commission) || 0) + (total * rate),
@@ -757,13 +758,24 @@ export const getSalesPendientesMayorista = async (): Promise<Sale[]> => {
   return (data ?? []).map(mapSale)
 }
 
+// Todas las columnas que usa mapSale menos los PDFs base64 (remito/factura) y `busqueda`:
+// Caja carga las ventas del día en cada apertura y no muestra los PDFs.
+const SALE_COLS_SIN_PDF =
+  'id, sale_number, client_id, client_name, client_phone, client_cuit, client_dni, client_email, ' +
+  'client_address, client_tax_category, seller_id, seller_name, source, items, subtotal, tax, total, ' +
+  'payment_type, payment_method, cash_amount, credit_amount, efectivo_amount, transferencia_amount, ' +
+  'comprobante_transferencia, status, invoice_emitted, invoice_number, invoice_status, invoice_pdf_url, ' +
+  'invoice_whatsapp_url, remito_pdf_url, remito_number, hoja_ruta_number, discount, discount_type, ' +
+  'order_id, delivery_method, delivery_address, created_at, updated_at, invoice_drive_url, ' +
+  'invoice_drive_file_id, remito_drive_url, remito_drive_file_id, items_no_entregados, afip_data, client_data'
+
 export const getSalesByDateRange = async (
   startDate: Date,
   endDate: Date,
 ): Promise<Sale[]> => {
   const { data } = await supabase
     .from('ventas')
-    .select('*')
+    .select(SALE_COLS_SIN_PDF)
     .gte('created_at', startDate.toISOString())
     .lte('created_at', endDate.toISOString())
     .order('created_at', { ascending: false })

@@ -1,6 +1,8 @@
 import { supabase } from '@/lib/supabase'
 import type { SellerCommission } from '@/lib/types'
 import { imputarComisiones } from '@/lib/utils/comision-imputacion'
+import { tasaComision } from '@/lib/utils/comisiones'
+import { fetchAllPages } from '@/lib/utils/fetch-all-pages'
 
 /**
  * Deriva comisiones desde la tabla `ventas` (source of truth).
@@ -17,16 +19,21 @@ export const getCommissionsBySeller = async (sellerId: string): Promise<SellerCo
     .eq('id', sellerId)
     .single()
 
-  const commissionRate = Number(seller?.commission_rate) || 10
+  const commissionRate = tasaComision(seller?.commission_rate)
 
-  // Traer ventas de este vendedor
-  const { data: ventas } = await supabase
-    .from('ventas')
-    .select('id, sale_number, client_name, total, created_at, seller_id')
-    .eq('seller_id', sellerId)
-    .order('created_at', { ascending: false })
+  // Traer ventas de este vendedor (paginado: PostgREST corta en 1000 filas y las
+  // comisiones de vendedores con más ventas salían truncadas).
+  const ventas = await fetchAllPages<any>((from, to) =>
+    supabase
+      .from('ventas')
+      .select('id, sale_number, client_name, total, created_at, seller_id')
+      .eq('seller_id', sellerId)
+      .order('created_at', { ascending: false })
+      .order('id', { ascending: false })
+      .range(from, to),
+  )
 
-  if (!ventas || ventas.length === 0) return []
+  if (ventas.length === 0) return []
 
   // Todos los pagos registrados (con o sin período) para determinar cobertura de "pagado"
   const { data: pagos } = await supabase
@@ -74,7 +81,7 @@ export const getCommissionsBySeller = async (sellerId: string): Promise<SellerCo
       saleNumber: d.sale_number ? `Devolución #${d.sale_number}` : 'Devolución',
       clientName: d.client_name ?? undefined,
       saleTotal: -(Number(d.total) || 0),
-      commissionRate: Number(d.commission_rate) || commissionRate,
+      commissionRate: tasaComision(d.commission_rate, commissionRate),
       commissionAmount: -(Number(d.commission_amount) || 0),
       isPaid: false,
       createdAt,

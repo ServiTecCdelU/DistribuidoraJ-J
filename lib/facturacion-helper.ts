@@ -114,6 +114,40 @@ export async function procesarEmision(
   let invoicePdfBase64: string | undefined;
 
   if (emitirAfip) {
+    // Una venta = una factura. Sin esto, un doble click o un reintento emitía dos
+    // comprobantes reales en AFIP para la misma venta.
+    if (sale.invoice_emitted) {
+      return {
+        success: false,
+        invoiceNumber: sale.invoice_number ?? null,
+        afipData: null,
+        message: `La venta ya tiene factura emitida${sale.invoice_number ? ` (${sale.invoice_number})` : ""}`,
+        statusCode: 409,
+      };
+    }
+    // Lock: marca la venta como "emitiendo" solo si nadie más lo está haciendo.
+    // Un lock de más de 2 minutos se considera colgado (la función se cortó) y se retoma.
+    const lockVencido = new Date(Date.now() - 2 * 60 * 1000).toISOString();
+    const { data: lock, error: lockError } = await supabaseAdmin
+      .from(collectionName)
+      .update({ invoice_status: "emitiendo", updated_at: new Date().toISOString() })
+      .eq("id", saleId)
+      .or("invoice_emitted.is.null,invoice_emitted.eq.false")
+      .or(`invoice_status.is.null,invoice_status.neq.emitiendo,updated_at.lt.${lockVencido}`)
+      .select("id");
+    if (lockError) throw lockError;
+    if (!lock?.length) {
+      return {
+        success: false,
+        invoiceNumber: null,
+        afipData: null,
+        message: "La factura de esta venta ya se está emitiendo",
+        statusCode: 409,
+      };
+    }
+    const liberarLock = () =>
+      supabaseAdmin.from(collectionName).update({ invoice_status: sale.invoice_status ?? null }).eq("id", saleId);
+
     // Fallback: si el documento no trae `total` (caso típico de pedidos),
     // calcularlo sumando los items.
     let importeTotal = sale.total || 0;
@@ -125,6 +159,7 @@ export async function procesarEmision(
       );
     }
     if (!importeTotal || importeTotal <= 0) {
+      await liberarLock();
       return {
         success: false,
         invoiceNumber: null,
@@ -175,6 +210,7 @@ export async function procesarEmision(
       // PDF se genera del lado del cliente con diseño personalizado
     } catch (err: any) {
       console.error("[AFIP-Direct] Error:", err.message);
+      await liberarLock();
       return {
         success: false,
         invoiceNumber: null,
@@ -220,7 +256,11 @@ export async function procesarEmision(
     .from(collectionName)
     .update(updateData)
     .eq("id", saleId);
-  if (updateError) throw updateError;
+  if (updateError) {
+    // AFIP ya emitió: dejar el CAE en el log para poder cargarlo a mano.
+    if (afipResponse) console.error("[AFIP] CAE emitido pero no guardado", saleId, invoiceNumber, JSON.stringify(updateData.afip_data));
+    throw updateError;
+  }
 
   return {
     success: true,

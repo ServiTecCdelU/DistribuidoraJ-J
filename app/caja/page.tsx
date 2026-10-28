@@ -847,7 +847,9 @@ export default function CajaPage() {
     if (!initialAmount || !user) return;
     setSaving(true);
     try {
-      const dateStr = new Date().toISOString().split("T")[0].replace(/-/g, '');
+      // Fecha local (toISOString daba la fecha UTC: después de las 21 h, el día siguiente).
+      const hoy = new Date();
+      const dateStr = `${hoy.getFullYear()}${String(hoy.getMonth() + 1).padStart(2, "0")}${String(hoy.getDate()).padStart(2, "0")}`;
       const id = await generateReadableId("caja", "caja", dateStr);
       const { error } = await supabase.from("caja").insert({
         id,

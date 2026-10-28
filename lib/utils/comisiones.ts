@@ -73,3 +73,11 @@ export function resumenVentasPendientes(
   }
   return { brutas, devoluciones, neto: brutas - devoluciones }
 }
+
+// Tasa de comisión del vendedor (%). Sin dato → 10 por defecto; un 0 cargado es 0
+// (antes `Number(x) || 10` convertía el 0% de un transportista en 10%).
+export function tasaComision(valor: unknown, porDefecto = 10): number {
+  if (valor === null || valor === undefined || valor === '') return porDefecto
+  const n = Number(valor)
+  return Number.isFinite(n) ? n : porDefecto
+}

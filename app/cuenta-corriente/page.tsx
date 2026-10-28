@@ -1542,52 +1542,6 @@ ${renderTabla('Cuenta Mayorista', mayorista, balanceMay)}
     }
   }
 
-  const handleRegenerarRemito = async (sale: Sale) => {
-    if (!sale.remitoNumber) { toast.error('La venta no tiene número de remito'); return }
-    try {
-      const { generarPdfCliente } = await import('@/hooks/useGenerarPdf')
-      const noEntregados = (sale.itemsNoEntregados || [])
-        .filter((it) => it.motivo === 'no_quiso')
-        .map((it) => ({
-          name: `${it.name} (NO ENT.)`,
-          quantity: it.quantity,
-          price: 0,
-          codigo: it.codigo || '',
-          ...(it.itemDiscount ? { itemDiscount: it.itemDiscount } : {}),
-        }))
-      const remitoData = {
-        id: sale.id,
-        clientName: sale.clientName,
-        sellerName: sale.sellerName,
-        items: [
-          ...sale.items.map((it) => ({
-            name: it.name,
-            quantity: it.quantity,
-            price: it.price,
-            codigo: it.codigo || '',
-            ...(it.itemDiscount ? { itemDiscount: it.itemDiscount } : {}),
-          })),
-          ...noEntregados,
-        ],
-        total: sale.total,
-        discount: sale.discount,
-        discountType: sale.discountType,
-        paymentType: 'cash' as const,
-        createdAt: sale.createdAt,
-        deliveryAddress: sale.deliveryAddress,
-        remitoNumber: sale.remitoNumber,
-      }
-      const newPdf = await generarPdfCliente(remitoData, 'remito')
-      await salesApi.saveRemitoToSale(sale.id, sale.remitoNumber, newPdf)
-      // Refrescar ventas del cliente para que el botón "Descargar remito" tenga el nuevo base64
-      const updatedSales = await salesApi.getByClient(selectedClient!.id)
-      setClientSales(updatedSales)
-      toast.success(`Remito ${sale.remitoNumber} regenerado`)
-    } catch (err: any) {
-      toast.error(err.message || 'Error al regenerar remito')
-    }
-  }
-
   // Vista detalle de cliente
   if (selectedClient) {
     const clientPending = clientComprobantes.filter((c) => c.status === 'pending')
@@ -1831,7 +1785,6 @@ ${renderTabla('Cuenta Mayorista', mayorista, balanceMay)}
                             sale={sale}
                             devoluciones={devolsSale}
                             saldoAcumulado={saldoAcum}
-                            onRegenerarRemito={canManage ? handleRegenerarRemito : undefined}
                             onRegenerarRecibo={canManage ? handleRegenerarRecibo : undefined}
                             onAnularPago={canManage ? setPagoToAnular : undefined}
                             onEliminarPago={canManage && isLocalhost ? setPagoToDelete : undefined}

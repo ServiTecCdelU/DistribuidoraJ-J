@@ -10,6 +10,7 @@ import { supabase } from '@/lib/supabase'
 import { generateReadableId } from '@/services/supabase-helpers'
 import { registrarMovimiento } from '@/services/stock-service'
 import { recomputarSaldosDeudas } from '@/services/payments-service'
+import { tasaComision } from '@/lib/utils/comisiones'
 
 export interface DevolucionItem {
   productId: string
@@ -102,7 +103,7 @@ export async function registrarDevolucion(data: {
       .select('commission_rate')
       .eq('id', data.sellerId)
       .single()
-    commissionRate = Number(seller?.commission_rate) || 10
+    commissionRate = tasaComision(seller?.commission_rate)
   }
   const commissionAmount = total * (commissionRate / 100)
 

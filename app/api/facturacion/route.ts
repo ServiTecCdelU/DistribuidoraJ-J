@@ -10,6 +10,8 @@ const facturacionSchema = z.object({
   emitirAfip: z.boolean().optional(),
 });
 
+const TIPO_COMPROBANTE_LABEL: Record<number, string> = { 1: "Factura A", 6: "Factura B", 11: "Factura C" };
+
 export async function POST(request: NextRequest) {
   try {
     const auth = await requireAuth(request);
@@ -34,7 +36,7 @@ export async function POST(request: NextRequest) {
       afipData: result.afipData
         ? {
             ...result.afipData,
-            tipoComprobante: result.afipData.tipoComprobante === 1 ? "Factura A" : "Factura B",
+            tipoComprobante: TIPO_COMPROBANTE_LABEL[result.afipData.tipoComprobante] ?? "Factura B",
           }
         : null,
       invoicePdfBase64: result.invoicePdfBase64 || null,

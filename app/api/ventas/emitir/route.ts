@@ -9,7 +9,8 @@ const emitirSchema = z.object({
   saleId: z.string().min(1, "Falta saleId"),
   client: z.any().optional(),
   emitirAfip: z.boolean().optional(),
-  collection: z.string().optional(),
+  // Solo ventas: antes aceptaba cualquier tabla y se leía/escribía con service role.
+  collection: z.literal("ventas").optional(),
 });
 
 export async function POST(request: NextRequest) {
@@ -19,9 +20,9 @@ export async function POST(request: NextRequest) {
 
     const parsed = await parseJsonBody(request, emitirSchema, "message");
     if (!parsed.ok) return parsed.response;
-    const { saleId, client, emitirAfip, collection: collectionName } = parsed.data;
+    const { saleId, client, emitirAfip } = parsed.data;
 
-    const result = await procesarEmision(saleId, client, emitirAfip, collectionName || "ventas");
+    const result = await procesarEmision(saleId, client, emitirAfip, "ventas");
 
     if (!result.success) {
       return NextResponse.json(
@@ -38,9 +39,6 @@ export async function POST(request: NextRequest) {
     });
   } catch (error: any) {
     console.error("[Emitir] Error:", error.message, error.stack);
-    return NextResponse.json(
-      { message: "Error interno", error: error.message, stack: error.stack?.substring(0, 500) },
-      { status: 500 },
-    );
+    return NextResponse.json({ message: "Error interno" }, { status: 500 });
   }
 }

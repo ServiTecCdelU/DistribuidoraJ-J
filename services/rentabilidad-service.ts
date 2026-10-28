@@ -5,6 +5,7 @@ import { getSellers } from '@/services/sellers-service'
 import { getGastosFijos, getGastosVariables } from '@/services/gastos-service'
 import type { GastoFijo, GastoVariable } from '@/services/gastos-service'
 import { getBalanceMayorista } from '@/services/mayorista-cuenta-service'
+import { tasaComision } from '@/lib/utils/comisiones'
 
 // Margen bruto asumido cuando no se puede estimar el costo de un producto.
 const MARGEN_DEFAULT_PCT = 30
@@ -176,7 +177,7 @@ export const getRentabilidadMensual = async (
 
   const rateById = new Map<string, number>()
   sellers.forEach((s: any) => {
-    rateById.set(s.id, Number(s.commissionRate ?? s.commission_rate) || COMISION_DEFAULT_PCT)
+    rateById.set(s.id, tasaComision(s.commissionRate ?? s.commission_rate, COMISION_DEFAULT_PCT))
   })
 
   const ingresos = ventas.reduce((acc, v) => acc + (Number(v.total) || 0), 0)

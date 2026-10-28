@@ -10,6 +10,7 @@ import { generateReadableId } from '@/services/supabase-helpers'
 import { aplicarPagoADeudas } from '@/services/payments-service'
 import { calcularComisionDescuento } from '@/lib/utils/ajuste-venta'
 import { camposConversionPago } from '@/lib/utils/conversion-pago'
+import { tasaComision } from '@/lib/utils/comisiones'
 
 // Máximo de ids por request (evita URLs demasiado largas en los .in())
 const ID_CHUNK = 100
@@ -23,7 +24,7 @@ async function getCommissionRate(sellerId?: string): Promise<number> {
     .select('commission_rate')
     .eq('id', sellerId)
     .single()
-  return Number(data?.commission_rate) || 10
+  return tasaComision(data?.commission_rate)
 }
 
 async function bajarComision(sellerId: string, monto: number, comision: number): Promise<void> {

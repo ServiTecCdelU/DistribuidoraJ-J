@@ -24,7 +24,6 @@ interface MovimientoDeudaCardProps {
   sale?: Sale
   devoluciones?: Devolucion[]
   saldoAcumulado?: number
-  onRegenerarRemito?: (sale: Sale) => Promise<void>
   onRegenerarRecibo?: (tx: Transaction) => Promise<void>
   onAnularPago?: (tx: Transaction) => void
   /** Solo se pasa en localhost — borra el pago sin dejar rastro (para pruebas). */
@@ -165,10 +164,9 @@ function ItemsTable({ items, showTotal = false }: { items: TableRow[]; showTotal
 }
 
 export function MovimientoDeudaCard({
-  tx, sale, devoluciones = [], saldoAcumulado, onRegenerarRemito, onRegenerarRecibo, onAnularPago, onEliminarPago, comprobante, onVerComprobante,
+  tx, sale, devoluciones = [], saldoAcumulado, onRegenerarRecibo, onAnularPago, onEliminarPago, comprobante, onVerComprobante,
 }: MovimientoDeudaCardProps) {
   const [expanded, setExpanded] = useState(false)
-  const [regenerando, setRegenerando] = useState(false)
   const [regenerandoRecibo, setRegenerandoRecibo] = useState(false)
   const [descargandoDevol, setDescargandoDevol] = useState(false)
   const [descargandoRechazo, setDescargandoRechazo] = useState(false)
@@ -421,16 +419,6 @@ export function MovimientoDeudaCard({
       const dto = it.itemDiscount ?? 0
       return acc + it.price * (1 - dto / 100) * it.quantity
     }, 0)
-
-  const handleRegenerar = async () => {
-    if (!sale || !onRegenerarRemito) return
-    setRegenerando(true)
-    try {
-      await onRegenerarRemito(sale)
-    } finally {
-      setRegenerando(false)
-    }
-  }
 
   const handleRegenerarRecibo = async (e: React.MouseEvent) => {
     e.stopPropagation()
@@ -834,19 +822,6 @@ export function MovimientoDeudaCard({
               >
                 <Download className="h-3 w-3" />
                 Remito {sale.remitoNumber}
-              </Button>
-            )}
-            {onRegenerarRemito && (
-              <Button
-                variant="outline"
-                size="sm"
-                className="gap-1.5 text-xs h-7 text-blue-600 border-blue-300 hover:bg-blue-50"
-                onClick={handleRegenerar}
-                disabled={regenerando}
-                title="Regenera el PDF del remito con los ítems y total actuales (sin modificar stock)"
-              >
-                {regenerando ? <Loader2 className="h-3 w-3 animate-spin" /> : <RefreshCw className="h-3 w-3" />}
-                Regenerar remito
               </Button>
             )}
           </div>

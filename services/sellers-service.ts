@@ -2,7 +2,7 @@
 import { supabase } from '@/lib/supabase'
 import type { Seller, SellerCommission } from '@/lib/types'
 import { generateReadableId } from '@/services/supabase-helpers'
-import { resumenVentasPendientes } from '@/lib/utils/comisiones'
+import { resumenVentasPendientes, tasaComision } from '@/lib/utils/comisiones'
 
 function mapSeller(d: Record<string, any>): Seller {
   return {
@@ -12,7 +12,7 @@ function mapSeller(d: Record<string, any>): Seller {
     phone: d.phone ?? '',
     codigoVendedor: d.codigo_vendedor ?? undefined,
     employeeType: d.employee_type ?? 'vendedor',
-    commissionRate: Number(d.commission_rate) || 10,
+    commissionRate: tasaComision(d.commission_rate),
     transportistaCommissionRate: d.transportista_commission_rate ? Number(d.transportista_commission_rate) : undefined,
     maxDiscount: d.descuento_maximo != null ? Number(d.descuento_maximo) : 6,
     isActive: d.is_active ?? true,
