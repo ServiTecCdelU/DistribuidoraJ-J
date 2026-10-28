@@ -39,9 +39,20 @@ Esto neutraliza los duplicados que genera el doble cobro de un mismo pedido.
 ## Cálculo central
 
 ```
-expectedCash = initialAmount + efectivoTotal - comisionesTotal
+esperado = inicial + efectivo de ventas + cobros cta cte en efectivo − devoluciones en efectivo − comisiones pagadas
 ```
-(Inicial + lo cobrado en efectivo del día − comisiones pagadas en efectivo.)
+Fórmula única en `efectivoEsperado()` (`lib/utils/caja-desglose.ts`): la usan la pantalla, el
+modal de cierre, el PDF y el cierre automático (`app/api/cron/reconciliar-caja`).
+
+**Efectivo fuera de ventas** — RPC `caja_movimientos_efectivo(desde, hasta)` (migración
+`2026-10-28-caja-cobros-devoluciones.sql`):
+- `cobro`: cobro de cta cte con `transacciones.metodo_pago = 'efectivo'` cargado por el admin → entra al registrarse.
+- `cobro_cobrador`: cobro en efectivo de un cobrador → entra cuando el admin lo **autoriza**
+  (`comprobantes_pago.autorizado_at`), que es cuando recibe la plata.
+- `devolucion`: nota de crédito "Devuelto en efectivo" (`devoluciones.affects_balance = false`) → sale.
+- `descuento`: descuento de venta devuelto en efectivo (`[DESCUENTO]` sin `client_id`) → sale.
+Los cobros anulados no cuentan. Al cerrar se guardan `caja.cobros_efectivo` y `caja.devoluciones_efectivo`.
+`transacciones.metodo_pago` lo graba `registerPayment` (o lo deduce de la descripción, `lib/utils/metodo-pago.ts`).
 
 `todayStats` agrega del día: `efectivoTotal`, `transferTotal`, `cashTotal`, `creditTotal`,
 `total`, `count`, `lossTotal/lossCount` (roturas), `comisionesTotal/Count`.

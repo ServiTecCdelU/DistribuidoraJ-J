@@ -86,6 +86,7 @@ export default function ClientDetailPage() {
         clientId: client.id,
         amount: Number(paymentAmount),
         description: paymentDescription || 'Pago en efectivo',
+        metodoPago: 'efectivo',
       })
       
       setTransactions([newTransaction, ...transactions])

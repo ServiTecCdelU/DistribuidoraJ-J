@@ -4,6 +4,7 @@ import { generateReadableId, moverSaldoCliente } from '@/services/supabase-helpe
 import { imputarADeuda, imputarFIFO, recomputarSaldos } from '@/lib/utils/saldo-imputacion'
 import { descripcionDeudaAnterior } from '@/lib/utils/deuda-anterior'
 import { descripcionNotaDebito } from '@/lib/utils/nota-debito'
+import { metodoPagoDesdeDescripcion, type MetodoPago } from '@/lib/utils/metodo-pago'
 
 // Baja el saldo de las deudas (remitos/ventas) del cliente.
 // - Con debtTxId: imputa el pago a ESA deuda puntual.
@@ -97,7 +98,7 @@ export const recomputarSaldosDeudas = async (
 
 const registerPayment = async (
   cuenta: 'minorista' | 'mayorista',
-  data: { clientId: string; amount: number; description?: string; debtTxId?: string; date?: string },
+  data: { clientId: string; amount: number; description?: string; debtTxId?: string; date?: string; metodoPago?: MetodoPago },
 ): Promise<Transaction> => {
   const balanceCol = cuenta === 'minorista' ? 'current_balance' : 'current_balance_mayorista'
   const { data: client } = await supabase
@@ -127,6 +128,8 @@ const registerPayment = async (
     date: fecha.toISOString(),
     cuenta,
     recibo_numero: reciboNumero,
+    // La caja suma al efectivo esperado los cobros en efectivo (ver caja_movimientos_efectivo).
+    metodo_pago: data.metodoPago ?? metodoPagoDesdeDescripcion(description),
   }
   if (data.debtTxId) row.debt_id = data.debtTxId
   let { error } = await supabase.from('transacciones').insert(row)
@@ -486,6 +489,7 @@ export const registerCashPayment = async (data: {
   description?: string
   debtTxId?: string
   date?: string
+  metodoPago?: MetodoPago
 }): Promise<Transaction> => registerPayment('minorista', data)
 
 export const registerMayoristaPayment = async (data: {
@@ -494,4 +498,5 @@ export const registerMayoristaPayment = async (data: {
   description?: string
   debtTxId?: string
   date?: string
+  metodoPago?: MetodoPago
 }): Promise<Transaction> => registerPayment('mayorista', data)

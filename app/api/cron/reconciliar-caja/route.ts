@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabase-admin";
-import { agregarDesglose } from "@/lib/utils/caja-desglose";
+import { agregarDesglose, efectivoEsperado, totalesMovimientos, type MovimientoEfectivo } from "@/lib/utils/caja-desglose";
 import { paginarTodo } from "@/lib/utils/paginar";
 
 // Reconciliación de caja por horario fijo 06:00–23:00 (hora Argentina, UTC-3).
@@ -76,6 +76,16 @@ async function generarIdCaja(dateStr: string): Promise<string> {
   return `${base}_${Date.now()}`;
 }
 
+// Cobros de cta cte en efectivo y devoluciones en efectivo del período (calculado en la base).
+async function movimientosEntre(desde: Date, hasta: Date) {
+  const { data, error } = await supabaseAdmin.rpc("caja_movimientos_efectivo", {
+    p_desde: desde.toISOString(),
+    p_hasta: hasta.toISOString(),
+  });
+  if (error) throw new Error(`caja_movimientos_efectivo: ${error.message}`);
+  return totalesMovimientos((data || []) as MovimientoEfectivo[]);
+}
+
 async function comisionesEntre(desde: Date, hasta: Date): Promise<number> {
   const { data } = await supabaseAdmin
     .from("pagos_comisiones").select("monto, monto_pagado")
@@ -124,7 +134,11 @@ async function reconciliar() {
     });
     const st = agg(periodo);
     const comis = await comisionesEntre(ap, cierreReg);
-    const esperado = (reg.initial_amount || 0) + st.efectivo - comis;
+    const movs = await movimientosEntre(ap, cierreReg);
+    const esperado = efectivoEsperado({
+      inicial: reg.initial_amount || 0, efectivoVentas: st.efectivo,
+      cobros: movs.cobros, devoluciones: movs.devoluciones, comisiones: comis,
+    });
     await supabaseAdmin.from("caja").update({
       closed_at: cierreReg.toISOString(),
       closed_by: "Cierre automático",
@@ -138,6 +152,8 @@ async function reconciliar() {
       cash_total: st.efectivo,
       credit_total: st.credito,
       transfer_total: st.transfer,
+      cobros_efectivo: movs.cobros,
+      devoluciones_efectivo: movs.devoluciones,
     }).eq("id", reg.id).eq("status", "open");
     acciones.push(`cerrada ${reg.id}`);
   }
@@ -168,7 +184,11 @@ async function reconciliar() {
     if (periodo.length === 0) continue;
     const st = agg(periodo);
     const comis = await comisionesEntre(ap, cierre);
-    const esperado = st.efectivo - comis;
+    const movs = await movimientosEntre(ap, cierre);
+    const esperado = efectivoEsperado({
+      inicial: 0, efectivoVentas: st.efectivo,
+      cobros: movs.cobros, devoluciones: movs.devoluciones, comisiones: comis,
+    });
     const dateStr = `${yy}${String(mm + 1).padStart(2, "0")}${String(dd).padStart(2, "0")}`;
     const id = await generarIdCaja(dateStr);
     await supabaseAdmin.from("caja").insert({
@@ -188,6 +208,8 @@ async function reconciliar() {
       cash_total: st.efectivo,
       credit_total: st.credito,
       transfer_total: st.transfer,
+      cobros_efectivo: movs.cobros,
+      devoluciones_efectivo: movs.devoluciones,
     });
     acciones.push(`backfill ${id}`);
   }

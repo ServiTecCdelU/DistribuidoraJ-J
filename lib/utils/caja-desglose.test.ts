@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { desglosePago, agregarDesglose, type VentaCobro } from "./caja-desglose";
+import { desglosePago, agregarDesglose, efectivoEsperado, totalesMovimientos, type VentaCobro, type MovimientoEfectivo } from "./caja-desglose";
 
 describe("desglosePago", () => {
   it("efectivo simple: todo lo cobrado va a efectivo", () => {
@@ -133,5 +133,29 @@ describe("agregarDesglose", () => {
       desvio: 0,
       count: 0,
     });
+  });
+});
+
+describe("totalesMovimientos", () => {
+  it("separa lo que entra (cobros) de lo que sale (devoluciones y descuentos)", () => {
+    const movs: MovimientoEfectivo[] = [
+      { tipo: "cobro", id: "t1", fecha: "", monto: 50000 },
+      { tipo: "cobro_cobrador", id: "t2", fecha: "", monto: 20000.5 },
+      { tipo: "devolucion", id: "d1", fecha: "", monto: -3000 },
+      { tipo: "descuento", id: "t3", fecha: "", monto: -1500.25 },
+    ];
+    expect(totalesMovimientos(movs)).toEqual({ cobros: 70000.5, devoluciones: 4500.25 });
+  });
+
+  it("sin movimientos da cero", () => {
+    expect(totalesMovimientos([])).toEqual({ cobros: 0, devoluciones: 0 });
+  });
+});
+
+describe("efectivoEsperado", () => {
+  it("suma inicial, ventas en efectivo y cobros; resta devoluciones y comisiones", () => {
+    expect(
+      efectivoEsperado({ inicial: 10000, efectivoVentas: 200000, cobros: 50000, devoluciones: 3000, comisiones: 20000 }),
+    ).toBe(237000);
   });
 });

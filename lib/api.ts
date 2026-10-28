@@ -301,22 +301,10 @@ export const salesApi = {
 }
 
 export const paymentsApi = {
-  async registerCashPayment(data: {
-    clientId: string
-    amount: number
-    description?: string
-    debtTxId?: string
-    date?: string
-  }): Promise<Transaction> {
+  async registerCashPayment(data: Parameters<typeof registerCashPayment>[0]): Promise<Transaction> {
     return registerCashPayment(data)
   },
-  async registerMayoristaPayment(data: {
-    clientId: string
-    amount: number
-    description?: string
-    debtTxId?: string
-    date?: string
-  }): Promise<Transaction> {
+  async registerMayoristaPayment(data: Parameters<typeof registerMayoristaPayment>[0]): Promise<Transaction> {
     return registerMayoristaPayment(data)
   },
   async registerDeudaAnterior(data: {

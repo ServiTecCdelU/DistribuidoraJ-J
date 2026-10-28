@@ -502,6 +502,7 @@ export const approveComprobante = async (id: string, reviewedBy: string): Promis
       amount: comp.amount,
       description: `Pago con comprobante (${comp.file_name || 'archivo'})`,
       date: new Date().toISOString(),
+      metodo_pago: 'transferencia',
     })
     if (txErr) throw new Error(txErr.message)
   } catch (e) {

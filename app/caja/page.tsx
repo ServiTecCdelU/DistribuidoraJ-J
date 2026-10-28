@@ -42,7 +42,7 @@ import { useAuth } from "@/hooks/use-auth";
 import type { Sale } from "@/lib/types";
 import { supabase } from "@/lib/supabase";
 import { generateReadableId } from "@/services/supabase-helpers";
-import { agregarDesglose } from "@/lib/utils/caja-desglose";
+import { agregarDesglose, efectivoEsperado, totalesMovimientos, type MovimientoEfectivo } from "@/lib/utils/caja-desglose";
 import { formatCurrency, formatTime } from "@/lib/utils/format";
 import { incidenciasVenta, incidenciasDeVentas } from "@/lib/utils/incidencias";
 import { toast } from "sonner";
@@ -83,6 +83,35 @@ interface VentaClienteCaja {
   createdAt: string;
 }
 
+// Cobros de cta cte en efectivo y devoluciones en efectivo del período: los calcula la base
+// (caja_movimientos_efectivo). Entran/salen de la caja aunque no sean ventas.
+const cargarMovimientosEfectivo = async (desde: Date, hasta: Date): Promise<MovimientoEfectivo[]> => {
+  const { data, error } = await supabase.rpc("caja_movimientos_efectivo", {
+    p_desde: desde.toISOString(),
+    p_hasta: hasta.toISOString(),
+  });
+  if (error) throw error;
+  return (data || []) as MovimientoEfectivo[];
+};
+
+// Comisiones pagadas (salen de la caja) en el período: lo entregado, no lo devengado.
+const cargarComisionesPagadas = async (desde: Date, hasta: Date) => {
+  const { data } = await supabase
+    .from("pagos_comisiones")
+    .select("id, seller_name, monto, monto_pagado, created_at, fecha_pago")
+    .or("anulado.is.null,anulado.eq.false")
+    .gte("fecha_pago", desde.toISOString())
+    .lte("fecha_pago", hasta.toISOString());
+  return (data || []).map((p: any) => ({ id: p.id, sellerName: p.seller_name, monto: Number(p.monto_pagado ?? p.monto) || 0, createdAt: p.fecha_pago ?? p.created_at }));
+};
+
+const MOV_LABEL: Record<MovimientoEfectivo["tipo"], string> = {
+  cobro: "Cobro",
+  cobro_cobrador: "Cobro de cobrador",
+  devolucion: "Devolución",
+  descuento: "Descuento",
+};
+
 const mapRegister = (data: any): CashRegister => ({
   id: data.id,
   openedAt: new Date(data.opened_at),
@@ -117,6 +146,7 @@ export default function CajaPage() {
   const [rejectedOrders, setRejectedOrders] = useState<{ id: string; clientName: string; remitoNumber?: string; date: string }[]>([]);
   const [losses, setLosses] = useState<{ id: string; amount: number; description: string; date: string }[]>([]);
   const [pagosComisiones, setPagosComisiones] = useState<{ id: string; sellerName: string; monto: number; createdAt: string }[]>([]);
+  const [movimientosEfectivo, setMovimientosEfectivo] = useState<MovimientoEfectivo[]>([]);
   const [currentRegister, setCurrentRegister] = useState<CashRegister | null>(null);
 
   // Open register modal
@@ -129,6 +159,9 @@ export default function CajaPage() {
   const [closeNotes, setCloseNotes] = useState("");
   const [closingRegister, setClosingRegister] = useState<CashRegister | null>(null);
   const [closingSales, setClosingSales] = useState<Sale[] | null>(null);
+  // Cierre de una caja del historial: sus movimientos y comisiones (null = caja actual).
+  const [closingMovs, setClosingMovs] = useState<MovimientoEfectivo[] | null>(null);
+  const [closingComisiones, setClosingComisiones] = useState<number | null>(null);
 
   // Verify register modal (admin concilia la caja de reparto → caja final)
   const [showVerifyModal, setShowVerifyModal] = useState(false);
@@ -231,8 +264,8 @@ export default function CajaPage() {
         cajaDate.setHours(0, 0, 0, 0);
         const now = new Date();
 
-        // Cargar ventas, pérdidas, comisiones y pedidos rechazados del día en paralelo
-        const [salesData, { data: lossData }, { data: pagosData }, { data: rejData }] = await Promise.all([
+        // Cargar ventas, pérdidas, comisiones, pedidos rechazados y cobros/devoluciones en efectivo del día
+        const [salesData, { data: lossData }, { data: pagosData }, { data: rejData }, movsData] = await Promise.all([
           salesApi.getByDateRange(cajaDate, now),
           supabase
             .from("transacciones")
@@ -249,8 +282,10 @@ export default function CajaPage() {
             .select("id, client_name, remito_number, updated_at")
             .eq("status", "rechazado")
             .gte("updated_at", cajaDate.toISOString()),
+          cargarMovimientosEfectivo(cajaDate, now),
         ]);
         if (!mounted) return;
+        setMovimientosEfectivo(movsData);
 
         // Caja toma SOLO ventas con remito. Una venta sin remito es un cobro duplicado/incompleto
         // (vale el remito) y no debe sumar al efectivo del día.
@@ -303,7 +338,7 @@ export default function CajaPage() {
       cajaDate.setHours(0, 0, 0, 0);
       const now = new Date();
 
-      const [salesData, { data: lossData }, { data: pagosData }, { data: rejData }] = await Promise.all([
+      const [salesData, { data: lossData }, { data: pagosData }, { data: rejData }, movsData] = await Promise.all([
         salesApi.getByDateRange(cajaDate, now),
         supabase
           .from("transacciones")
@@ -320,7 +355,9 @@ export default function CajaPage() {
           .select("id, client_name, remito_number, updated_at")
           .eq("status", "rechazado")
           .gte("updated_at", cajaDate.toISOString()),
+        cargarMovimientosEfectivo(cajaDate, now),
       ]);
+      setMovimientosEfectivo(movsData);
 
       // Caja toma SOLO ventas con remito (vale el remito; sin remito = cobro duplicado/incompleto).
       const todaySales = salesData.filter((sale) => Boolean(sale.remitoNumber));
@@ -485,8 +522,17 @@ export default function CajaPage() {
 
     const lossTotal = losses.reduce((acc, l) => acc + l.amount, 0);
     const comisionesTotal = pagosComisiones.reduce((acc, p) => acc + p.monto, 0);
-    return { efectivoTotal, transferTotal, cashTotal: efectivoTotal + transferTotal, creditTotal, total, count: sales.length, lossTotal, lossCount: losses.length, comisionesTotal, comisionesCount: pagosComisiones.length };
-  }, [sales, losses, pagosComisiones]);
+    const movs = totalesMovimientos(movimientosEfectivo);
+    const esperado = efectivoEsperado({
+      inicial: currentRegister?.initialAmount || 0, efectivoVentas: efectivoTotal,
+      cobros: movs.cobros, devoluciones: movs.devoluciones, comisiones: comisionesTotal,
+    });
+    return {
+      efectivoTotal, transferTotal, cashTotal: efectivoTotal + transferTotal, creditTotal, total, count: sales.length,
+      lossTotal, lossCount: losses.length, comisionesTotal, comisionesCount: pagosComisiones.length,
+      cobrosEfectivo: movs.cobros, devolucionesEfectivo: movs.devoluciones, esperado,
+    };
+  }, [sales, losses, pagosComisiones, movimientosEfectivo, currentRegister]);
 
   // Incidencias del día con los tres motivos separados. Se calculan desde los items no
   // entregados de las ventas, no desde las transacciones [ROTURA]: ahí no figuran ni los
@@ -501,16 +547,27 @@ export default function CajaPage() {
   const closingStats = useMemo(() => {
     const src = closingSales ?? sales;
     const agregado = agregarDesglose(src as any[]);
+    const movs = totalesMovimientos(closingMovs ?? movimientosEfectivo);
     return {
       efectivoTotal: agregado.efectivo,
       transferTotal: agregado.transferencia,
       creditTotal: agregado.credito,
       total: agregado.total,
       count: src.length,
+      cobrosEfectivo: movs.cobros,
+      devolucionesEfectivo: movs.devoluciones,
+      comisiones: closingComisiones ?? pagosComisiones.reduce((acc, p) => acc + p.monto, 0),
     };
-  }, [closingSales, sales]);
+  }, [closingSales, sales, closingMovs, movimientosEfectivo, closingComisiones, pagosComisiones]);
   const closingRegisterData = closingRegister ?? currentRegister;
-  const closingExpectedCash = (closingRegisterData?.initialAmount || 0) + closingStats.efectivoTotal;
+  // Inicial + efectivo de ventas + cobros de cta cte en efectivo − devoluciones en efectivo − comisiones.
+  const closingExpectedCash = efectivoEsperado({
+    inicial: closingRegisterData?.initialAmount || 0,
+    efectivoVentas: closingStats.efectivoTotal,
+    cobros: closingStats.cobrosEfectivo,
+    devoluciones: closingStats.devolucionesEfectivo,
+    comisiones: closingStats.comisiones,
+  });
 
   const handleOpenRegister = async () => {
     if (!initialAmount || !user) return;
@@ -574,6 +631,8 @@ export default function CajaPage() {
         cash_total: closingStats.efectivoTotal,
         credit_total: closingStats.creditTotal,
         transfer_total: closingStats.transferTotal,
+        cobros_efectivo: closingStats.cobrosEfectivo,
+        devoluciones_efectivo: closingStats.devolucionesEfectivo,
       }).eq("id", reg.id);
       if (error) throw error;
 
@@ -613,6 +672,8 @@ export default function CajaPage() {
       setCloseNotes("");
       setClosingRegister(null);
       setClosingSales(null);
+      setClosingMovs(null);
+      setClosingComisiones(null);
     } catch {
       toast.error("Error al cerrar la caja");
     } finally {
@@ -713,7 +774,7 @@ export default function CajaPage() {
     if (!currentRegister) return;
     setGeneratingPdf(true);
     try {
-      await (await import("@/components/caja/caja-pdf")).generarCajaPdf(currentRegister, sales, losses, pagosComisiones, rejectedOrders);
+      await (await import("@/components/caja/caja-pdf")).generarCajaPdf(currentRegister, sales, losses, pagosComisiones, rejectedOrders, movimientosEfectivo);
       toast.success("PDF descargado");
     } catch {
       toast.error("Error al generar PDF");
@@ -759,7 +820,8 @@ export default function CajaPage() {
         .lte("updated_at", end.toISOString());
       const dayRejected = (rejData || []).map((p: any) => ({ id: p.id, clientName: p.client_name, remitoNumber: p.remito_number ?? undefined, date: p.updated_at }));
 
-      await (await import("@/components/caja/caja-pdf")).generarCajaPdf(register, daySales, dayLosses, dayPagos, dayRejected);
+      const dayMovs = await cargarMovimientosEfectivo(start, end);
+      await (await import("@/components/caja/caja-pdf")).generarCajaPdf(register, daySales, dayLosses, dayPagos, dayRejected, dayMovs);
       toast.success("PDF descargado");
     } catch {
       toast.error("Error al generar PDF");
@@ -818,7 +880,7 @@ export default function CajaPage() {
             {isOpen && (
               <Button
                 variant="destructive"
-                onClick={() => { setClosingRegister(null); setClosingSales(null); setShowCloseModal(true); }}
+                onClick={() => { setClosingRegister(null); setClosingSales(null); setClosingMovs(null); setClosingComisiones(null); setShowCloseModal(true); }}
               >
                 <LockKeyhole className="h-4 w-4 mr-2" />
                 Cerrar Caja
@@ -1046,6 +1108,43 @@ export default function CajaPage() {
                             <span className="text-orange-600 font-medium shrink-0">-{formatCurrency(p.monto)}</span>
                           </div>
                         ))}
+                      </div>
+                    </CardContent>
+                  </Card>
+                )}
+
+                {/* Cobros de cuenta corriente en efectivo y devoluciones en efectivo: no son ventas
+                    pero entran/salen de la caja (caja_movimientos_efectivo). */}
+                {movimientosEfectivo.length > 0 && (
+                  <Card className="border-emerald-500/30 bg-emerald-500/5">
+                    <CardContent className="p-4">
+                      <div className="flex items-center justify-between mb-3 gap-2">
+                        <div className="flex items-center gap-2">
+                          <Banknote className="h-4 w-4 text-emerald-600" />
+                          <span className="text-sm font-semibold text-emerald-700">Efectivo fuera de ventas</span>
+                        </div>
+                        <div className="text-right text-xs leading-tight">
+                          {todayStats.cobrosEfectivo > 0 && <p className="font-bold text-emerald-700">Cobros +{formatCurrency(todayStats.cobrosEfectivo)}</p>}
+                          {todayStats.devolucionesEfectivo > 0 && <p className="font-bold text-rose-600">Devoluciones -{formatCurrency(todayStats.devolucionesEfectivo)}</p>}
+                        </div>
+                      </div>
+                      <div className="space-y-1.5">
+                        {movimientosEfectivo.map((m) => (
+                          <div key={`${m.tipo}-${m.id}`} className="flex items-center justify-between text-xs gap-2">
+                            <span className="truncate flex-1 text-muted-foreground">
+                              <span className="font-medium text-foreground">{MOV_LABEL[m.tipo]}</span>
+                              {m.cliente ? ` · ${m.cliente}` : ""}
+                              {m.fecha ? ` · ${formatTime(m.fecha)}` : ""}
+                            </span>
+                            <span className={`font-medium shrink-0 ${m.monto >= 0 ? "text-emerald-700" : "text-rose-600"}`}>
+                              {m.monto >= 0 ? "+" : "-"}{formatCurrency(Math.abs(Number(m.monto)))}
+                            </span>
+                          </div>
+                        ))}
+                      </div>
+                      <div className="flex items-center justify-between border-t border-emerald-500/20 mt-3 pt-2 text-sm">
+                        <span className="text-muted-foreground">Efectivo esperado en caja</span>
+                        <span className="font-bold">{formatCurrency(todayStats.esperado)}</span>
                       </div>
                     </CardContent>
                   </Card>
@@ -1701,8 +1800,15 @@ export default function CajaPage() {
                                   cajaDate.setHours(0, 0, 0, 0);
                                   const nextDay = new Date(cajaDate);
                                   nextDay.setDate(nextDay.getDate() + 1);
-                                  const cajaSales = await salesApi.getByDateRange(cajaDate, nextDay);
-                                  setClosingSales(cajaSales);
+                                  const [cajaSales, cajaMovs, cajaPagos] = await Promise.all([
+                                    salesApi.getByDateRange(cajaDate, nextDay),
+                                    cargarMovimientosEfectivo(cajaDate, nextDay),
+                                    cargarComisionesPagadas(cajaDate, nextDay),
+                                  ]);
+                                  // Igual que la caja del día: solo ventas con remito.
+                                  setClosingSales(cajaSales.filter((s) => Boolean(s.remitoNumber)));
+                                  setClosingMovs(cajaMovs);
+                                  setClosingComisiones(cajaPagos.reduce((acc, p) => acc + p.monto, 0));
                                   setShowCloseModal(true);
                                 }}
                               >
@@ -1836,6 +1942,24 @@ export default function CajaPage() {
                   <span className="text-muted-foreground">Ventas efectivo</span>
                   <span className="font-medium">{formatCurrency(closingStats.efectivoTotal)}</span>
                 </div>
+                {closingStats.cobrosEfectivo > 0 && (
+                  <div className="flex justify-between">
+                    <span className="text-muted-foreground">Cobros cta. cte. en efectivo</span>
+                    <span className="font-medium text-emerald-600">+{formatCurrency(closingStats.cobrosEfectivo)}</span>
+                  </div>
+                )}
+                {closingStats.devolucionesEfectivo > 0 && (
+                  <div className="flex justify-between">
+                    <span className="text-muted-foreground">Devoluciones en efectivo</span>
+                    <span className="font-medium text-rose-600">-{formatCurrency(closingStats.devolucionesEfectivo)}</span>
+                  </div>
+                )}
+                {closingStats.comisiones > 0 && (
+                  <div className="flex justify-between">
+                    <span className="text-muted-foreground">Comisiones pagadas</span>
+                    <span className="font-medium text-orange-600">-{formatCurrency(closingStats.comisiones)}</span>
+                  </div>
+                )}
                 {closingStats.transferTotal > 0 && (
                   <div className="flex justify-between">
                     <span className="text-muted-foreground">Transferencias (no entra en caja)</span>
@@ -1881,7 +2005,7 @@ export default function CajaPage() {
             <DialogFooter>
               <Button
                 variant="outline"
-                onClick={() => { setShowCloseModal(false); setClosingRegister(null); setClosingSales(null); }}
+                onClick={() => { setShowCloseModal(false); setClosingRegister(null); setClosingSales(null); setClosingMovs(null); setClosingComisiones(null); }}
               >
                 Cancelar
               </Button>

@@ -2,7 +2,7 @@
 // recién al descargar el PDF y no al abrir Caja, que es la pantalla de inicio del admin.
 import { Document, Page as PdfPage, Text, View, StyleSheet, pdf } from "@react-pdf/renderer";
 import type { Sale } from "@/lib/types";
-import { agregarDesglose } from "@/lib/utils/caja-desglose";
+import { agregarDesglose, efectivoEsperado, totalesMovimientos, type MovimientoEfectivo } from "@/lib/utils/caja-desglose";
 import { formatCurrency, formatDate, formatDateWeekday, formatTime } from "@/lib/utils/format";
 
 export interface CashRegister {
@@ -66,7 +66,14 @@ const cajaPdfStyles = StyleSheet.create({
   footer: { marginTop: "auto", paddingTop: 8, borderTop: "1px solid #e5e7eb", flexDirection: "row", justifyContent: "space-between", fontSize: 7, color: "#aaa" },
 });
 
-const CajaPdfDocument = ({ register, sales, losses = [], pagos = [], rejected = [] }: { register: CashRegister; sales: Sale[]; losses?: { id: string; amount: number; description: string; date: string }[]; pagos?: { id: string; sellerName: string; monto: number; createdAt: string }[]; rejected?: { id: string; clientName: string; remitoNumber?: string; date: string }[] }) => {
+const MOV_LABEL: Record<MovimientoEfectivo["tipo"], string> = {
+  cobro: "Cobro",
+  cobro_cobrador: "Cobro de cobrador",
+  devolucion: "Devolución",
+  descuento: "Descuento",
+};
+
+const CajaPdfDocument = ({ register, sales, losses = [], pagos = [], rejected = [], movimientos = [] }: { register: CashRegister; sales: Sale[]; losses?: { id: string; amount: number; description: string; date: string }[]; pagos?: { id: string; sellerName: string; monto: number; createdAt: string }[]; rejected?: { id: string; clientName: string; remitoNumber?: string; date: string }[]; movimientos?: MovimientoEfectivo[] }) => {
   const isClosed = register.status === "closed";
 
   // Calcular desglose desde ventas si no hay datos guardados.
@@ -83,7 +90,11 @@ const CajaPdfDocument = ({ register, sales, losses = [], pagos = [], rejected = 
   const totalSales = register.totalSales ?? totalCalc;
   const salesCount = register.salesCount ?? sales.length;
   const pagosTotal = pagos.reduce((a, p) => a + p.monto, 0);
-  const expectedCash = register.initialAmount + cashTotal;
+  const movs = totalesMovimientos(movimientos);
+  const expectedCash = efectivoEsperado({
+    inicial: register.initialAmount, efectivoVentas: cashTotal,
+    cobros: movs.cobros, devoluciones: movs.devoluciones, comisiones: pagosTotal,
+  });
   const hojasRutaCaja = Array.from(new Set(sales.map((s) => (s as any).hojaRutaNumber).filter(Boolean))).sort() as string[];
 
   return (
@@ -157,7 +168,7 @@ const CajaPdfDocument = ({ register, sales, losses = [], pagos = [], rejected = 
           <View style={cajaPdfStyles.statBox}>
             <Text style={cajaPdfStyles.statLabel}>EFECTIVO ESPERADO EN CAJA</Text>
             <Text style={cajaPdfStyles.statValue}>{formatCurrency(expectedCash)}</Text>
-            <Text style={cajaPdfStyles.statSub}>Inicial + efectivo - comisiones</Text>
+            <Text style={cajaPdfStyles.statSub}>Inicial + efectivo + cobros cta. cte. - devoluciones - comisiones</Text>
           </View>
         </View>
 
@@ -298,6 +309,25 @@ const CajaPdfDocument = ({ register, sales, losses = [], pagos = [], rejected = 
           </View>
         )}
 
+        {/* Cobros de cta cte y devoluciones en efectivo */}
+        {movimientos.length > 0 && (
+          <View style={cajaPdfStyles.section}>
+            <Text style={[cajaPdfStyles.sectionTitle, { color: "#047857" }]}>Efectivo fuera de ventas</Text>
+            {movimientos.map((m, i) => (
+              <View key={i} style={cajaPdfStyles.row}>
+                <Text style={[cajaPdfStyles.label, { flex: 3 }]}>{MOV_LABEL[m.tipo]}{m.cliente ? ` · ${m.cliente}` : ""}</Text>
+                <Text style={[cajaPdfStyles.value, { color: m.monto >= 0 ? "#047857" : "#dc2626" }]}>
+                  {m.monto >= 0 ? "+" : "-"}{formatCurrency(Math.abs(Number(m.monto)))}
+                </Text>
+              </View>
+            ))}
+            <View style={[cajaPdfStyles.row, { borderTop: "1px solid #a7f3d0", marginTop: 4, paddingTop: 4 }]}>
+              <Text style={[cajaPdfStyles.label, { fontWeight: "bold" }]}>Cobros / Devoluciones</Text>
+              <Text style={[cajaPdfStyles.value, { fontWeight: "bold" }]}>+{formatCurrency(movs.cobros)} / -{formatCurrency(movs.devoluciones)}</Text>
+            </View>
+          </View>
+        )}
+
         {/* Pagos de comisiones */}
         {pagos.length > 0 && (
           <View style={cajaPdfStyles.section}>
@@ -325,8 +355,8 @@ const CajaPdfDocument = ({ register, sales, losses = [], pagos = [], rejected = 
   );
 };
 
-export const generarCajaPdf = async (register: CashRegister, sales: Sale[], losses: { id: string; amount: number; description: string; date: string }[] = [], pagos: { id: string; sellerName: string; monto: number; createdAt: string }[] = [], rejected: { id: string; clientName: string; remitoNumber?: string; date: string }[] = []) => {
-  const blob = await pdf(<CajaPdfDocument register={register} sales={sales} losses={losses} pagos={pagos} rejected={rejected} />).toBlob();
+export const generarCajaPdf = async (register: CashRegister, sales: Sale[], losses: { id: string; amount: number; description: string; date: string }[] = [], pagos: { id: string; sellerName: string; monto: number; createdAt: string }[] = [], rejected: { id: string; clientName: string; remitoNumber?: string; date: string }[] = [], movimientos: MovimientoEfectivo[] = []) => {
+  const blob = await pdf(<CajaPdfDocument register={register} sales={sales} losses={losses} pagos={pagos} rejected={rejected} movimientos={movimientos} />).toBlob();
   const url = URL.createObjectURL(blob);
   const a = document.createElement("a");
   a.href = url;

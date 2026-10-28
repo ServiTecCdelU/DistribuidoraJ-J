@@ -112,3 +112,48 @@ export function agregarDesglose(ventas: VentaCobro[]): DesgloseAgregado {
     count: ventas.length,
   }
 }
+
+// ── Efectivo esperado en caja ──────────────────────────────────────────────
+
+/** Movimiento de efectivo que no es una venta (RPC caja_movimientos_efectivo). */
+export interface MovimientoEfectivo {
+  tipo: 'cobro' | 'cobro_cobrador' | 'devolucion' | 'descuento'
+  id: string
+  fecha: string
+  cliente?: string | null
+  /** > 0 entra a la caja, < 0 sale. */
+  monto: number
+  detalle?: string | null
+}
+
+export interface TotalesMovimientos {
+  /** Cobros de cuenta corriente en efectivo (admin + cobradores autorizados). */
+  cobros: number
+  /** Efectivo devuelto a clientes (devoluciones y descuentos), en positivo. */
+  devoluciones: number
+}
+
+export function totalesMovimientos(movs: MovimientoEfectivo[]): TotalesMovimientos {
+  let cobros = 0
+  let devoluciones = 0
+  for (const m of movs) {
+    const monto = num(m.monto)
+    if (monto >= 0) cobros += monto
+    else devoluciones += -monto
+  }
+  return { cobros: round2(cobros), devoluciones: round2(devoluciones) }
+}
+
+/**
+ * Efectivo que tiene que haber en caja. Fuente única para la pantalla, el PDF y el cierre
+ * automático (antes la pantalla y el PDF no restaban las comisiones y el cron sí).
+ */
+export function efectivoEsperado(p: {
+  inicial: number
+  efectivoVentas: number
+  cobros: number
+  devoluciones: number
+  comisiones: number
+}): number {
+  return round2(num(p.inicial) + num(p.efectivoVentas) + num(p.cobros) - num(p.devoluciones) - num(p.comisiones))
+}

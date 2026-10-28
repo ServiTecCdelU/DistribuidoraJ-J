@@ -531,6 +531,7 @@ export default function CuentaCorrientePage() {
         description: desc,
         debtTxId: payDebtId || undefined,
         date: payFecha || undefined,
+        metodoPago: payMethod === 'efectivo' || payMethod === 'transferencia' ? payMethod : 'otro',
       })
 
       auditApi.log({
@@ -822,6 +823,7 @@ export default function CuentaCorrientePage() {
         clientId: selectedClient.id,
         amount,
         description: desc,
+        metodoPago: payMayoristaMethod === 'efectivo' || payMayoristaMethod === 'transferencia' ? payMayoristaMethod : 'otro',
       })
 
       await emitirRecibo(txPagoMay, balanceMayorista, methods[payMayoristaMethod] || methods.otro)
