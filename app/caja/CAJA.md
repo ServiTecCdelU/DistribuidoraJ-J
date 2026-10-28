@@ -30,6 +30,13 @@ El cierre/apertura se **aplican cuando se abre la página de caja** (lógica cli
 quedan en 23:00 / 06:00 aunque la reconciliación corra más tarde. `loadData` (refresh tras acciones)
 NO reconcilia, para que un cierre manual no se reabra solo. Apertura/cierre manual siguen disponibles.
 
+## Carga del día
+
+La caja del día y sus filas (ventas con remito, pérdidas, comisiones pagadas, pedidos rechazados
+y cobros/devoluciones en efectivo) llegan en UNA llamada: RPC `caja_dia(p_hoy, p_hasta, p_incluir_cerrada)`
+(`services/caja-service.ts` → `cajaApi.getDia`, migración `migrations/2026-10-28-caja-dia.sql`). Los totales
+se siguen calculando con `efectivoEsperado()` en JS (fórmula única con el PDF y el cron).
+
 ## Solo ventas con remito
 
 Caja toma **únicamente las ventas con `remitoNumber`** (en `loadData`, carga del día e historial).

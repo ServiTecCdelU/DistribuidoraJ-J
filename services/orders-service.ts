@@ -304,25 +304,22 @@ export const setOrderHeld = async (id: string, held: boolean): Promise<void> => 
 }
 
 // El remito es inmodificable: solo se graba si el pedido todavía no tiene uno.
-export const saveRemitoToOrder = async (id: string, remitoNumber: string, remitoPdfBase64: string): Promise<Order> => {
-  const { data, error } = await supabase
-    .from('pedidos')
-    .update({ remito_number: remitoNumber, remito_pdf_base64: remitoPdfBase64 })
-    .eq('id', id)
-    .is('remito_number', null)
-    .select()
-    .maybeSingle()
-
+// Todo en una transacción (RPC `guardar_remito_pedido`): descuenta el stock de lo que sale (si el
+// pedido no lo tenía descontado), marca stock_descontado y graba número + PDF. Si algo falla no
+// queda nada a medias. `movs` = salidasRemito(items).
+export const saveRemitoToOrder = async (
+  id: string,
+  remitoNumber: string,
+  remitoPdfBase64: string,
+  movs: { productId: string; cantidad: number }[],
+): Promise<void> => {
+  const { error } = await supabase.rpc('guardar_remito_pedido', {
+    p_order_id: id,
+    p_remito_number: remitoNumber,
+    p_pdf_base64: remitoPdfBase64,
+    p_movs: movs,
+  })
   if (error) throw new Error(`No se pudo guardar el remito: ${error.message}`)
-  if (!data) throw new Error('El pedido ya tiene remito: no se puede generar otro')
-  return mapOrder(data)
-}
-
-// Marca que el stock del pedido ya fue descontado (al generar el remito).
-// Idempotencia: evita descontar dos veces (regenerar remito, cobrar).
-export const markOrderStockDescontado = async (id: string): Promise<void> => {
-  const { error } = await supabase.from('pedidos').update({ stock_descontado: true }).eq('id', id)
-  if (error) throw new Error(`No se pudo marcar el stock del pedido como descontado: ${error.message}`)
 }
 
 export const saveBoletaToOrder = async (

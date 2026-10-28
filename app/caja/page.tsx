@@ -37,7 +37,7 @@ import {
   X,
 } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
-import { salesApi, auditApi } from "@/lib/api";
+import { salesApi, auditApi, cajaApi, type CajaDia } from "@/lib/api";
 import { useAuth } from "@/hooks/use-auth";
 import type { Sale } from "@/lib/types";
 import { supabase } from "@/lib/supabase";
@@ -248,6 +248,14 @@ export default function CajaPage() {
     }
   }, []);
 
+  const aplicarDia = (dia: CajaDia) => {
+    setSales(dia.ventas);
+    setLosses(dia.perdidas);
+    setPagosComisiones(dia.comisiones);
+    setRejectedOrders(dia.rechazados);
+    setMovimientosEfectivo(dia.movimientos);
+  };
+
   useEffect(() => {
     let mounted = true;
     const doLoad = async () => {
@@ -255,45 +263,15 @@ export default function CajaPage() {
         const today = new Date();
         today.setHours(0, 0, 0, 0);
 
-        // Reconciliar por horario (06:00–23:00): cierra cajas vencidas y abre la del día.
-        const activeRegister = await reconciliarCajaHorario();
+        // Caja abierta de hoy + ventas (solo con remito), pérdidas, comisiones, pedidos rechazados
+        // y cobros/devoluciones en efectivo del día: una sola llamada a la base.
+        const dia = await cajaApi.getDia(today, new Date());
+        if (!mounted) return;
+        // Sin caja de hoy: si estamos en horario (06:00–23:00) y el cron todavía no la abrió, se abre.
+        const activeRegister = dia.caja ?? (await reconciliarCajaHorario());
         if (!mounted) return;
         setCurrentRegister(activeRegister ? mapRegister(activeRegister) : null);
-
-        const cajaDate = activeRegister ? new Date(activeRegister.opened_at) : today;
-        cajaDate.setHours(0, 0, 0, 0);
-        const now = new Date();
-
-        // Cargar ventas, pérdidas, comisiones, pedidos rechazados y cobros/devoluciones en efectivo del día
-        const [salesData, { data: lossData }, { data: pagosData }, { data: rejData }, movsData] = await Promise.all([
-          salesApi.getByDateRange(cajaDate, now),
-          supabase
-            .from("transacciones")
-            .select("*")
-            .like("description", "[ROTURA]%")
-            .gte("date", cajaDate.toISOString()),
-          supabase
-            .from("pagos_comisiones")
-            .select("id, seller_name, monto, monto_pagado, created_at, fecha_pago")
-            .or("anulado.is.null,anulado.eq.false")
-            .gte("fecha_pago", cajaDate.toISOString()),
-          supabase
-            .from("pedidos")
-            .select("id, client_name, remito_number, updated_at")
-            .eq("status", "rechazado")
-            .gte("updated_at", cajaDate.toISOString()),
-          cargarMovimientosEfectivo(cajaDate, now),
-        ]);
-        if (!mounted) return;
-        setMovimientosEfectivo(movsData);
-
-        // Caja toma SOLO ventas con remito. Una venta sin remito es un cobro duplicado/incompleto
-        // (vale el remito) y no debe sumar al efectivo del día.
-        const todaySales = salesData.filter((sale) => Boolean(sale.remitoNumber));
-        setSales(todaySales);
-        setLosses((lossData || []).map((l: any) => ({ id: l.id, amount: Math.abs(Number(l.amount)) || 0, description: (l.description || "").replace("[ROTURA] ", ""), date: l.date })));
-        setPagosComisiones((pagosData || []).map((p: any) => ({ id: p.id, sellerName: p.seller_name, monto: Number(p.monto_pagado ?? p.monto) || 0, createdAt: p.fecha_pago ?? p.created_at })));
-        setRejectedOrders((rejData || []).map((p: any) => ({ id: p.id, clientName: p.client_name, remitoNumber: p.remito_number ?? undefined, date: p.updated_at })));
+        aplicarDia(dia);
       } catch {
         if (!mounted) return;
         toast.error("Error al cargar datos de caja");
@@ -311,60 +289,12 @@ export default function CajaPage() {
       const today = new Date();
       today.setHours(0, 0, 0, 0);
 
-      const [{ data: registers }, { data: openRegisters }] = await Promise.all([
-        supabase
-          .from("caja")
-          .select("*")
-          .gte("opened_at", today.toISOString())
-          .order("opened_at", { ascending: false })
-          .limit(1),
-        supabase
-          .from("caja")
-          .select("*")
-          .eq("status", "open")
-          .order("opened_at", { ascending: false })
-          .limit(1),
-      ]);
-
-      const activeRegister = (registers && registers.length > 0)
-        ? registers[0]
-        : (openRegisters && openRegisters.length > 0 ? openRegisters[0] : null);
-
-      if (activeRegister) {
-        setCurrentRegister(mapRegister(activeRegister));
+      // La caja de hoy (aunque ya esté cerrada) o, si no hay, la última abierta, con todo su día.
+      const dia = await cajaApi.getDia(today, new Date(), true);
+      if (dia.caja) {
+        setCurrentRegister(mapRegister(dia.caja));
       }
-
-      const cajaDate = activeRegister ? new Date(activeRegister.opened_at) : today;
-      cajaDate.setHours(0, 0, 0, 0);
-      const now = new Date();
-
-      const [salesData, { data: lossData }, { data: pagosData }, { data: rejData }, movsData] = await Promise.all([
-        salesApi.getByDateRange(cajaDate, now),
-        supabase
-          .from("transacciones")
-          .select("*")
-          .like("description", "[ROTURA]%")
-          .gte("date", cajaDate.toISOString()),
-        supabase
-          .from("pagos_comisiones")
-          .select("id, seller_name, monto, monto_pagado, created_at, fecha_pago")
-          .or("anulado.is.null,anulado.eq.false")
-          .gte("fecha_pago", cajaDate.toISOString()),
-        supabase
-          .from("pedidos")
-          .select("id, client_name, remito_number, updated_at")
-          .eq("status", "rechazado")
-          .gte("updated_at", cajaDate.toISOString()),
-        cargarMovimientosEfectivo(cajaDate, now),
-      ]);
-      setMovimientosEfectivo(movsData);
-
-      // Caja toma SOLO ventas con remito (vale el remito; sin remito = cobro duplicado/incompleto).
-      const todaySales = salesData.filter((sale) => Boolean(sale.remitoNumber));
-      setSales(todaySales);
-      setLosses((lossData || []).map((l: any) => ({ id: l.id, amount: Math.abs(Number(l.amount)) || 0, description: (l.description || "").replace("[ROTURA] ", ""), date: l.date })));
-      setPagosComisiones((pagosData || []).map((p: any) => ({ id: p.id, sellerName: p.seller_name, monto: Number(p.monto_pagado ?? p.monto) || 0, createdAt: p.fecha_pago ?? p.created_at })));
-      setRejectedOrders((rejData || []).map((p: any) => ({ id: p.id, clientName: p.client_name, remitoNumber: p.remito_number ?? undefined, date: p.updated_at })));
+      aplicarDia(dia);
     } catch {
       toast.error("Error al recargar ventas");
     } finally {

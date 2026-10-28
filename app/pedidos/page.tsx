@@ -242,9 +242,6 @@ export default function PedidosPage() {
       return;
     }
     setGeneratingDoc(true);
-    // El stock se descuenta al generar el remito (la mercadería sale del depósito). Si este pedido
-    // ya lo descontó antes (regenerar remito / reimprimir PDF), no volver a descontar.
-    const yaDescontado = order.stockDescontado === true;
     try {
       // Aplicar cantidades editadas y reemplazos por otra marca (mantiene descuento %, cambia producto/precio).
       // El descuento es un porcentaje: se preserva y se aplica sobre el nuevo precio.
@@ -393,32 +390,11 @@ export default function PedidosPage() {
       const { generarPdfCliente } = await import("@/hooks/useGenerarPdf");
       const pdfBase64 = await generarPdfCliente(ventaData, "remito");
 
-      // Descontar stock de lo que va en el remito (sale del depósito). Una sola vez por pedido.
-      // Va ANTES de grabar el remito y es todo o nada: si un movimiento falla se revierten los
-      // ya hechos y no se graba el remito. Antes quedaba el remito guardado con el stock a medias
-      // y stock_descontado=false, y el cobro volvía a descontar todo.
-      if (!yaDescontado) {
-        const { registrarMovimiento } = await import("@/services/stock-service");
-        const referencia = `Remito ${remitoNumber} pedido #${order.id}`;
-        const hechos: { productId: string; cantidad: number }[] = [];
-        try {
-          for (const mov of salidasRemito(filteredItems as any[])) {
-            await registrarMovimiento({ productoId: mov.productId, tipo: "venta", cantidad: mov.cantidad, referencia });
-            hechos.push(mov);
-          }
-          await ordersApi.markStockDescontado(order.id);
-        } catch (err) {
-          for (const mov of hechos) {
-            await registrarMovimiento({
-              productoId: mov.productId, tipo: "ajuste", cantidad: -mov.cantidad,
-              referencia: `Reversión ${referencia} (falló el descuento de stock)`,
-            }).catch(() => {});
-          }
-          throw err;
-        }
-      }
-      let updatedOrder = await ordersApi.saveRemitoToOrder(order.id, remitoNumber, pdfBase64);
-      if (!yaDescontado) updatedOrder = { ...updatedOrder, stockDescontado: true };
+      // Una sola transacción en la base: descuenta el stock de lo que va en el remito (sale del
+      // depósito, una sola vez por pedido), marca stock_descontado y graba número + PDF.
+      // Todo o nada: si falla, no queda ni el stock a medias ni el remito grabado.
+      await ordersApi.saveRemitoToOrder(order.id, remitoNumber, pdfBase64, salidasRemito(filteredItems as any[]));
+      const updatedOrder: Order = { ...order, remitoNumber, remitoPdfBase64: pdfBase64, stockDescontado: true };
 
       setOrders((prev) => prev.map((o) => (o.id === order.id ? updatedOrder : o)));
       if (detailOrder?.id === order.id) setDetailOrder(updatedOrder);

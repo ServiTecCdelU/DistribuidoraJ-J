@@ -42,6 +42,7 @@ import {
   updateSaleInvoice,
   updateSaleRemito,
 } from '@/services/sales-service'
+import { getCajaDia, type CajaDia } from '@/services/caja-service'
 import { registerCashPayment, registerMayoristaPayment, registerDeudaAnterior, registerNotaDebito, saveReciboPdf, ensureReciboNumero, findReciboByNumero, deletePayment, voidPayment } from '@/services/payments-service'
 import {
   getTransaccionesMayorista,
@@ -84,7 +85,6 @@ import {
   removeTransportista,
   assignSeller,
   saveRemitoToOrder,
-  markOrderStockDescontado,
   saveBoletaToOrder,
   updateCheckedItems,
   cancelOrder,
@@ -428,11 +428,8 @@ export const ordersApi = {
   async assignSeller(id: string, sellerId: string, sellerName: string): Promise<Order> {
     return assignSeller(id, sellerId, sellerName)
   },
-  async saveRemitoToOrder(id: string, remitoNumber: string, remitoPdfBase64: string): Promise<Order> {
-    return saveRemitoToOrder(id, remitoNumber, remitoPdfBase64)
-  },
-  async markStockDescontado(id: string): Promise<void> {
-    return markOrderStockDescontado(id)
+  async saveRemitoToOrder(...args: Parameters<typeof saveRemitoToOrder>): Promise<void> {
+    return saveRemitoToOrder(...args)
   },
   async saveBoletaToOrder(id: string, invoiceNumber: string, invoicePdfBase64: string): Promise<Order> {
     return saveBoletaToOrder(id, invoiceNumber, invoicePdfBase64)
@@ -671,3 +668,8 @@ export const gastosApi = {
   deleteVariable: deleteGastoVariable,
 }
 export type { GastoFijo, GastoVariable }
+
+export const cajaApi = {
+  getDia: getCajaDia,
+}
+export type { CajaDia }

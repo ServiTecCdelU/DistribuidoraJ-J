@@ -102,7 +102,8 @@ Hacer UN SOLO commit y push cuando el usuario confirme que todo funciona o cuand
 - **Saldos, stock, comisiones y numeración se calculan en Postgres, nunca leyendo + sumando en JS** (dos usuarios a la vez se pisaban). Migración `migrations/2026-10-27-atomicidad-y-rendimiento.sql`:
   - Saldo del cliente → `moverSaldoCliente()` (`services/supabase-helpers.ts`, RPC `mover_saldo_cliente`, cuenta `minorista`/`mayorista`).
   - Totales del vendedor → `moverTotalesVendedor()` (RPC `mover_totales_vendedor`, con `clave` para no aplicar dos veces).
-  - Stock → `registrarMovimiento()` (`services/stock-service.ts`, RPC `mover_stock`, con lock de fila). `clave` opcional = idempotente: los reintentos de un cobro no vuelven a descontar/reponer.
+  - Remito de un pedido → `saveRemitoToOrder(id, nro, pdf, movs)` (RPC `guardar_remito_pedido`): descuenta stock, marca `stock_descontado` y graba el remito en una transacción.
+- Stock → `registrarMovimiento()` (`services/stock-service.ts`, RPC `mover_stock`, con lock de fila). `clave` opcional = idempotente: los reintentos de un cobro no vuelven a descontar/reponer.
   - Pago de comisiones → RPC `pagar_comisiones` (registra el pago y pone en cero los totales en la misma transacción).
   - Números: `next_venta_number`, `next_remito_number` (contador único para Pedidos y Ventas), `next_devolucion_number`, `next_hoja_ruta_number`, `next_recibo_number`. Nunca calcular "último + 1".
 - **El remito no se puede pisar ni regenerar**: `saveRemitoToOrder` solo graba si el pedido no tiene remito; la venta nace con `remito_number` en el mismo insert (`processSale({ remitoNumber })`). Para cambiarlo hay que eliminar el remito (repone stock) y generar uno nuevo.

@@ -57,7 +57,7 @@ async function registrarMovimientoVenta(params: {
   await recomputarSaldosDeudas(params.clientId, 'minorista').catch(() => {})
 }
 
-function mapSale(d: Record<string, any>): Sale {
+export function mapSale(d: Record<string, any>): Sale {
   return {
     id: d.id,
     saleNumber: d.sale_number ?? undefined,
