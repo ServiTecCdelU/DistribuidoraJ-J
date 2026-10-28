@@ -751,6 +751,7 @@ export function ListaVentas({
                     <div className="min-w-0">
                       <p className="font-medium text-sm text-foreground truncate">{venta.clientName || "Venta directa"}</p>
                       <p className="text-[11px] text-muted-foreground">{fmtDate(venta.createdAt)} · {venta.saleNumber || venta.remitoNumber || `#${ventas.length - index}`}</p>
+                      {venta.remitoNumber && <p className="text-[10px] text-muted-foreground font-medium">Remito: {venta.remitoNumber}</p>}
                       {venta.hojaRutaNumber
                         ? <p className="text-[10px] text-teal-600 font-medium">Hoja de ruta: {venta.hojaRutaNumber}</p>
                         : <p className="text-[10px] text-slate-500 font-medium">Entregado en local</p>}
@@ -800,6 +801,7 @@ export function ListaVentas({
                   <div>
                     <p className="font-semibold text-foreground text-sm">{venta.saleNumber || venta.remitoNumber || `N° ${ventas.length - index}`}</p>
                     <p className="text-[10px] text-muted-foreground">{fmtDate(venta.createdAt)} · {fmtTime(venta.createdAt)}</p>
+                    {venta.remitoNumber && <p className="text-[10px] text-muted-foreground font-medium">Remito: {venta.remitoNumber}</p>}
                   </div>
                 </div>
                 <div className="hidden md:flex md:col-span-2 items-center gap-2">

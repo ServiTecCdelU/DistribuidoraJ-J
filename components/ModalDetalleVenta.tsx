@@ -335,6 +335,9 @@ export function ModalDetalleVenta({
                   <Clock className="h-3.5 w-3.5" />
                   {formatearFechaHora(venta.createdAt)}
                 </DialogDescription>
+                {venta.remitoNumber && (
+                  <p className="text-xs text-muted-foreground font-medium mt-0.5">Remito N° {venta.remitoNumber}</p>
+                )}
                 {venta.hojaRutaNumber ? (
                   <p className="text-xs text-teal-600 font-medium mt-0.5">Hoja de ruta N° {venta.hojaRutaNumber}</p>
                 ) : (
