@@ -176,7 +176,7 @@ Next.js 16 (App Router) desplegado en Vercel. Maneja ventas, pedidos, inventario
 - Modales: `OrderDetailModal`, `PaymentModal`, `SuccessModal`, `StockCheckModal`.
 
 ### Ventas
-`processSale()` (cobro de pedidos) y `processSaleMayorista()` (venta de mostrador) en `services/sales-service.ts` **no usan** la RPC `process_sale()` (existe en la base pero no se llama). Hacen pasos separados (insert venta → stock → deuda → comisión), cada uno atómico vía las RPC de arriba, pero la venta completa no es una sola transacción. Si un paso posterior falla en la venta de mostrador, el error avisa el N° de venta para que no se vuelva a cargar.
+**Cobro de pedidos** → `cobrarPedido()` (`services/sales-service.ts`, RPC `cobrar_pedido`, migración `migrations/2026-10-28-cobrar-pedido.sql`): una sola transacción que lockea el pedido, crea o retoma la venta (copia el remito del pedido tal cual), mueve stock, deuda, vendedor, pérdidas/rechazos y completa el pedido. Rechaza un pedido ya cobrado. `processSale()` queda para otros usos y `processSaleMayorista()` (venta de mostrador) sigue en pasos separados (cada uno atómico vía las RPC de arriba); si un paso posterior falla, el error avisa el N° de venta. La RPC `process_sale()` existe en la base pero no se llama.
 
 ### Caja
 `esperado = inicial + efectivo de ventas + cobros cta cte en efectivo − devoluciones en efectivo − comisiones pagadas`, fórmula única en `efectivoEsperado()` (`lib/utils/caja-desglose.ts`), usada por la pantalla, el PDF (`components/caja/caja-pdf.tsx`) y el cierre automático (`app/api/cron/reconciliar-caja`). Lo que no es venta lo calcula la RPC `caja_movimientos_efectivo`; los cobros guardan `transacciones.metodo_pago`. Detalle en `app/caja/CAJA.md`.
@@ -223,7 +223,7 @@ Ordenados por prioridad. Al resolver uno, borrarlo de esta lista.
 - Datos históricos: hay números de remito repetidos (ej. `R-2026-00001` ×18) de antes del contador único. No se tocaron.
 
 ### Robustez
-- La venta completa no es una transacción (ver "Ventas"): mover cobro y venta de mostrador a una sola RPC si vuelven a aparecer ventas a medias.
+- La venta de mostrador (`processSaleMayorista`) no es una transacción: pasarla a una RPC como `cobrar_pedido`.
 - Fechas: Caja calcula "hoy" con la hora del navegador; el cron usa UTC-3 fijo. Unificar con un helper de día argentino.
 - `faltantesApi.registrar/quitar` ignoran errores de Supabase.
 - `app/pedidos/page.tsx`: `payment-modal` toma el precio de la primera línea si un producto aparece en dos renglones.

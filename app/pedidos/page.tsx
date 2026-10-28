@@ -918,21 +918,6 @@ export default function PedidosPage() {
     setProcessingPayment(true);
 
     try {
-      // Idempotencia: releer el estado real de los pedidos a cobrar. Sin realtime, la lista en
-      // memoria puede estar stale y permitir cobrar dos veces el mismo pedido (venta duplicada).
-      const ordersToCheck = selectedClientOrders.length > 0 ? selectedClientOrders : [selectedOrder];
-      const { data: estadoActual } = await supabase
-        .from("pedidos")
-        .select("id, status")
-        .in("id", ordersToCheck.map((o) => o.id));
-      if ((estadoActual || []).some((p: any) => p.status === "completed")) {
-        toast.error("Este pedido ya fue cobrado. Recargá la lista (F5).");
-        setActiveModal(null);
-        setSelectedOrder(null);
-        loadData();
-        return;
-      }
-
       // Aplicar ajustes a los items
       // - rotura: se rompió → descontar stock + registrar pérdida
       // - faltante: error humano, está en stock → solo quitar del pedido
@@ -953,33 +938,33 @@ export default function PedidosPage() {
 
       // Reconciliar stock al cobrar: si ya se descontó en el remito, repone faltante/no_quiere
       // (rotura queda como pérdida); si no, descuenta la rotura. Lógica pura en stock-remito.ts.
-      const movsCobro = reconciliarCobro(
+      const nombreDe = new Map(adjustments.map((a) => [a.productId, a.productName]));
+      const movimientosStock = reconciliarCobro(
         stockYaDescontado,
         adjustments.map((a) => ({ productId: a.productId, type: a.type as any, quantity: a.quantity })),
-      );
-      if (movsCobro.length > 0) {
-        const { registrarMovimiento } = await import("@/services/stock-service");
-        const nombreDe = new Map(adjustments.map((a) => [a.productId, a.productName]));
-        for (const [i, mov] of movsCobro.entries()) {
-          const esReposicion = mov.cantidad > 0;
-          const labelMotivo = mov.motivo === "no_quiere"
-            ? "Devolución"
-            : mov.motivo === "faltante"
-              ? "Faltante"
-              : "Rotura";
-          await registrarMovimiento({
-            productoId: mov.productId,
-            tipo: esReposicion ? "ajuste" : "rotura",
-            cantidad: mov.cantidad,
-            referencia: `${labelMotivo} cobro pedido #${selectedOrder.id} — ${nombreDe.get(mov.productId) ?? ""}`.trim(),
-            // Si el cobro falla y se reintenta, el ajuste no se aplica dos veces.
-            clave: `cobro:${selectedOrder.id}:${i}:${mov.productId}:${mov.motivo}:${mov.cantidad}`,
-          });
-        }
-      }
+      ).map((mov, i) => {
+        const labelMotivo = mov.motivo === "no_quiere" ? "Devolución" : mov.motivo === "faltante" ? "Faltante" : "Rotura";
+        return {
+          productId: mov.productId,
+          tipo: mov.cantidad > 0 ? "ajuste" : "rotura",
+          cantidad: mov.cantidad,
+          referencia: `${labelMotivo} cobro pedido #${selectedOrder.id} — ${nombreDe.get(mov.productId) ?? ""}`.trim(),
+          // Si el cobro falla y se reintenta, el ajuste no se aplica dos veces.
+          clave: `cobro:${selectedOrder.id}:${i}:${mov.productId}:${mov.motivo}:${mov.cantidad}`,
+        };
+      });
 
       // Si no quedan items para vender (todo rotura), solo completar el pedido sin venta
       if (adjustedItems.length === 0) {
+        // Idempotencia: releer el estado real (la lista en memoria puede estar vieja).
+        const { data: estadoActual } = await supabase.from("pedidos").select("status").eq("id", selectedOrder.id).maybeSingle();
+        if (estadoActual?.status === "completed") throw new Error("Este pedido ya fue cobrado. Recargá la lista (F5).");
+        if (movimientosStock.length > 0) {
+          const { registrarMovimiento } = await import("@/services/stock-service");
+          for (const mov of movimientosStock) {
+            await registrarMovimiento({ productoId: mov.productId, tipo: mov.tipo as any, cantidad: mov.cantidad, referencia: mov.referencia, clave: mov.clave });
+          }
+        }
         const updated = await ordersApi.completeOrder(selectedOrder.id, "");
         setOrders((prev) =>
           prev.map((o) => (o.id === selectedOrder.id ? updated : o)),
@@ -1009,17 +994,6 @@ export default function PedidosPage() {
         return;
       }
 
-      // Calcular total con items ajustados
-      const itemsTotal = adjustedItems.reduce((acc, item) => {
-        const base = item.price * item.quantity;
-        const dto = item.itemDiscount ? (base * item.itemDiscount) / 100 : 0;
-        return acc + base - dto;
-      }, 0);
-      const disc = (selectedOrder as any).discount ?? 0;
-      const total = disc > 0
-        ? Math.max(0, itemsTotal - ((selectedOrder as any).discountType === "percent" ? (itemsTotal * disc) / 100 : disc))
-        : itemsTotal;
-
       const { efectivo, transferencia, cuentaCorriente } = payments;
       const cashTotal = efectivo + transferencia;
       const hasCuentaCorriente = cuentaCorriente > 0;
@@ -1038,181 +1012,79 @@ export default function PedidosPage() {
         throw new Error("Debe seleccionar un cliente para cuenta corriente");
       }
 
-      // Traer la config de oferta VIGENTE de cada producto para aplicarla al cobrar.
-      // El item del pedido usa el id de mayorista (mp_XXX); la config vive en productos (prod_mp_XXX).
-      const normId = (pid: string) => (pid?.startsWith("mp_") ? `prod_${pid}` : pid);
-      const ofertaProductos = await productsApi.getByIds(adjustedItems.map((i) => normId(i.productId)));
-      const ofertaMap = new Map(ofertaProductos.map((p) => [p.id, p]));
+      // Items no entregados (con precio completo): explican la diferencia entre remito y venta.
+      const noEntregados = adjustments.map(adj => {
+        const orderItem = selectedOrder.items.find((i: any) => i.productId === adj.productId);
+        return {
+          name: adj.productName,
+          price: orderItem?.price ?? adj.unitPrice,
+          quantity: adj.quantity,
+          itemDiscount: orderItem?.itemDiscount ?? 0,
+          codigo: (orderItem as any)?.codigo ?? undefined,
+          motivo: adj.type === 'no_quiere' ? 'no_quiso' : adj.type,
+        };
+      });
+      const detalle = (adjs: ItemAdjustment[]) => adjs.map(r => `${r.productName} x${r.quantity}`).join(", ");
 
-      const sale = await salesApi.processSale({
-        clientId: resolvedClientId,
-        clientName: client?.name || selectedOrder.clientName,
-        clientPhone: client?.phone,
+      // Todo el cobro en una transacción de la base: venta (con el remito del pedido copiado tal
+      // cual, sin regenerarlo), stock, deuda, vendedor, pérdidas/rechazos y pedido completado.
+      // Si el pedido ya se cobró, la base lo rechaza.
+      const cobro = await salesApi.cobrarPedido({
+        orderId: selectedOrder.id,
+        clientId: resolvedClientId || undefined,
         sellerId: selectedOrder.sellerId,
         sellerName: selectedOrder.sellerName,
-        items: adjustedItems.map((item) => {
-          const cfg = ofertaMap.get(normId(item.productId));
-          return {
-          product: {
-            id: item.productId,
-            name: item.name,
-            price: item.price,
-            stock: 100,
-            description: "",
-            imageUrl: "",
-            category: "",
-            createdAt: new Date(),
-            descuento: cfg?.descuento ?? 0,
-            regaloMismo: cfg?.regaloMismo ?? false,
-            regaloMismoMax: cfg?.regaloMismoMax ?? null,
-            regaloMismoLleva: cfg?.regaloMismoLleva ?? null,
-            regaloMismoRegala: cfg?.regaloMismoRegala ?? null,
-            regaloOtroMax: cfg?.regaloOtroMax ?? null,
-            regaloOtroLleva: cfg?.regaloOtroLleva ?? null,
-            regaloOtroRegala: cfg?.regaloOtroRegala ?? null,
-            regaloProductoId: cfg?.regaloProductoId ?? null,
-            regaloProductoNombre: cfg?.regaloProductoNombre ?? null,
-          },
+        items: adjustedItems.map((item: any) => ({
+          productId: item.productId,
+          name: item.name,
+          price: item.price,
           quantity: item.quantity,
           itemDiscount: item.itemDiscount ?? undefined,
-          };
-        }),
-        discount: (selectedOrder as any).discount ?? undefined,
-        discountType: (selectedOrder as any).discountType ?? undefined,
+          codigo: item.codigo ?? undefined,
+        })),
         paymentType: salePaymentType,
         paymentMethod: primaryMethod,
         cashAmount: cashTotal > 0 ? cashTotal : undefined,
         creditAmount: hasCuentaCorriente ? cuentaCorriente : undefined,
-        source: "order",
-        createOrder: false,
-        orderId: selectedOrder.id,
-        skipStock: stockYaDescontado, // el stock ya salió al generar el remito
-        remitoNumber: selectedOrder.remitoNumber,
-        deliveryMethod:
-          selectedOrder.address === "Retiro en local" ? "pickup" : "delivery",
+        efectivo,
+        transferencia,
+        deliveryMethod: selectedOrder.address === "Retiro en local" ? "pickup" : "delivery",
         deliveryAddress: selectedOrder.address,
+        movimientosStock,
+        itemsNoEntregados: noEntregados,
+        perdida: roturasAdj.length > 0
+          ? { monto: roturasAdj.reduce((acc, r) => acc + r.unitPrice * r.quantity, 0), detalle: detalle(roturasAdj) }
+          : undefined,
+        faltante: faltantesAdj.length > 0 ? { detalle: detalle(faltantesAdj) } : undefined,
+        rechazo: noQuiereAdj.length > 0 ? { detalle: detalle(noQuiereAdj) } : undefined,
       });
-
-      // La venta ya está grabada: lo que sigue no corta el cobro, pero si algo falla se avisa
-      // (antes se ignoraba y la venta quedaba sin desglose o sin las pérdidas en caja).
+      const sale = { id: cobro.saleId, saleNumber: cobro.saleNumber };
+      const total = cobro.total;
       const avisos: string[] = [];
-      const anotar = async (paso: string, op: PromiseLike<{ error: { message: string } | null }>) => {
-        const { error } = await op;
-        if (error) avisos.push(`${paso}: ${error.message}`);
-      };
-
-      // El remito es INMODIFICABLE: se generó al pasar a reparto con el pedido completo y
-      // es la fuente de verdad (cantidades y total originales). Al cobrar NO se regenera ni
-      // se pisa — solo se copia tal cual a la venta (el número ya va en el insert de la venta).
-      // Las roturas/faltantes se registran aparte (items_no_entregados + transacciones) y se
-      // descuentan en la presentación, nunca en el remito.
-      if (selectedOrder.remitoNumber) {
-        try {
-          const remitoPdf = selectedOrder.remitoPdfBase64 || (await ordersApi.getRemitoPdf(selectedOrder.id));
-          if (remitoPdf) await salesApi.saveRemitoToSale(sale.id, selectedOrder.remitoNumber, remitoPdf);
-          else avisos.push(`PDF del remito ${selectedOrder.remitoNumber}: no se encontró`);
-        } catch (err) {
-          avisos.push(err instanceof Error ? err.message : "No se pudo copiar el remito a la venta");
-        }
-      }
-
-      // Guardar desglose efectivo/transferencia
-      await anotar("Desglose efectivo/transferencia", supabase.from("ventas").update({
-        efectivo_amount: efectivo > 0 ? efectivo : null,
-        transferencia_amount: transferencia > 0 ? transferencia : null,
-      }).eq("id", sale.id));
 
       // Limpiar del historial de faltantes los productos que sí se entregaron.
       // Esto complementa el quitar en generateRemito para cubrir ventas directas y ajustes de cobro.
-      if (resolvedClientId && adjustedItems.length > 0) {
+      if (resolvedClientId) {
         const entregadosIds = adjustedItems.map((i: any) => i.productId).filter(Boolean);
         faltantesApi.quitar(resolvedClientId, entregadosIds).catch(() => {});
       }
 
-      // Guardar items no entregados (con precio completo) en la venta
-      if (adjustments.length > 0) {
-        const noEntregados = adjustments.map(adj => {
-          const orderItem = selectedOrder.items.find((i: any) => i.productId === adj.productId);
-          return {
-            name: adj.productName,
-            price: orderItem?.price ?? adj.unitPrice,
-            quantity: adj.quantity,
-            itemDiscount: orderItem?.itemDiscount ?? 0,
-            codigo: (orderItem as any)?.codigo ?? undefined,
-            motivo: adj.type === 'no_quiere' ? 'no_quiso' : adj.type,
-          };
+      // Qué se descontó al cobrar y por qué motivo: es lo que explica la diferencia
+      // entre el remito y el detalle de la venta.
+      if (noEntregados.length > 0 && user) {
+        auditApi.log({
+          action: "order_items_edited",
+          userId: user.id,
+          userName: user.name || user.email,
+          description: `Ajustes al cobrar el pedido de "${selectedOrder.clientName}" (${sale.saleNumber}): ${noEntregados.map((i: any) => `${i.name} x${i.quantity} (${i.motivo})`).join(", ")}`,
+          entityType: "order",
+          entityId: selectedOrder.id,
+          metadata: { saleId: sale.id, remitoNumber: selectedOrder.remitoNumber ?? null, noEntregados },
         });
-        await anotar("Productos no entregados", supabase.from("ventas").update({ items_no_entregados: noEntregados }).eq("id", sale.id));
-
-        // Qué se descontó al cobrar y por qué motivo: es lo que explica la diferencia
-        // entre el remito y el detalle de la venta.
-        if (user) {
-          auditApi.log({
-            action: "order_items_edited",
-            userId: user.id,
-            userName: user.name || user.email,
-            description: `Ajustes al cobrar el pedido de "${selectedOrder.clientName}" (${sale.saleNumber}): ${noEntregados.map((i: any) => `${i.name} x${i.quantity} (${i.motivo})`).join(", ")}`,
-            entityType: "order",
-            entityId: selectedOrder.id,
-            metadata: { saleId: sale.id, remitoNumber: selectedOrder.remitoNumber ?? null, noEntregados },
-          });
-        }
       }
 
-      // Registrar roturas y faltantes en transacciones usando el saleNumber.
-      // Id fijo por venta + upsert: si el cobro se reintenta, no se duplican.
-      if (roturasAdj.length > 0) {
-        const totalPerdida = roturasAdj.reduce((acc, r) => acc + r.unitPrice * r.quantity, 0);
-        const productosRotos = roturasAdj.map(r => `${r.productName} x${r.quantity}`).join(", ");
-        await anotar("Pérdida por rotura", supabase.from("transacciones").upsert({
-          id: `perdida_${sale.id}`,
-          client_id: null,
-          type: "payment",
-          amount: -totalPerdida,
-          description: `[ROTURA] #${sale.saleNumber} — ${productosRotos}`,
-          sale_id: sale.id,
-          date: new Date().toISOString(),
-        }));
-      }
-      if (faltantesAdj.length > 0) {
-        const productosFaltantes = faltantesAdj.map(r => `${r.productName} x${r.quantity}`).join(", ");
-        await anotar("Faltante", supabase.from("transacciones").upsert({
-          id: `faltante_${sale.id}`,
-          client_id: null,
-          type: "payment",
-          amount: 0,
-          description: `[FALTANTE] #${sale.saleNumber} — ${productosFaltantes}`,
-          sale_id: sale.id,
-          date: new Date().toISOString(),
-        }));
-      }
-      if (noQuiereAdj.length > 0) {
-        const productosNoQuiere = noQuiereAdj.map(r => `${r.productName} x${r.quantity}`).join(", ");
-        // Movimiento visible en la cuenta corriente del cliente: "Rechazo de productos".
-        // Monto 0 (ya se descontó al entregar, el ítem no entra en la venta) + recibo de devolución.
-        const reciboNumero = `DEV-${selectedOrder.remitoNumber || sale.saleNumber || sale.id}`;
-        await anotar("Rechazo de productos", supabase.from("transacciones").upsert({
-          id: `no_quiere_${sale.id}`,
-          client_id: resolvedClientId || null,
-          type: "payment",
-          amount: 0,
-          description: `[RECHAZO] ${reciboNumero} — ${productosNoQuiere}`,
-          sale_id: sale.id,
-          date: new Date().toISOString(),
-          cuenta: "minorista",
-        }));
-      }
-
-      // Completar SOLO el pedido cobrado (1 pedido = 1 venta)
-      const ordersToComplete = selectedClientOrders.length > 0 ? selectedClientOrders : [selectedOrder];
-      const completedOrders = await Promise.all(
-        ordersToComplete.map((o) => ordersApi.completeOrder(o.id, sale.id))
-      );
       setOrders((prev) =>
-        prev.map((o) => {
-          const completedVersion = completedOrders.find((c) => c.id === o.id);
-          return completedVersion ?? o;
-        }),
+        prev.map((o) => (o.id === selectedOrder.id ? ({ ...o, status: "completed", saleId: sale.id } as Order) : o)),
       );
 
       // Boleta — deshabilitado temporalmente
@@ -1288,9 +1160,14 @@ export default function PedidosPage() {
       // Recargar desde servidor para asegurar que la lista quede limpia
       loadData();
     } catch (error) {
-      toast.error(
-        error instanceof Error ? error.message : "Error al completar el pedido",
-      );
+      const msg = error instanceof Error ? error.message : "Error al completar el pedido";
+      toast.error(msg);
+      // Otro usuario ya lo cobró (la lista estaba vieja): cerrar y recargar.
+      if (msg.includes("ya fue cobrado")) {
+        setActiveModal(null);
+        setSelectedOrder(null);
+        loadData();
+      }
     } finally {
       setProcessingPayment(false);
       completingRef.current = false;

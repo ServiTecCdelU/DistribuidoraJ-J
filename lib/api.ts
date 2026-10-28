@@ -36,6 +36,7 @@ import {
   getSalesByClient,
   getSaleById,
   processSale,
+  cobrarPedido,
   saveBoletaToSale,
   saveRemitoToSale,
   updateSaleInvoice,
@@ -281,6 +282,9 @@ export const salesApi = {
   // Mismo tipo que el service (antes era una copia que no incluía discount ni remitoNumber).
   async processSale(data: Parameters<typeof processSale>[0]): Promise<Sale> {
     return processSale(data)
+  },
+  async cobrarPedido(data: Parameters<typeof cobrarPedido>[0]) {
+    return cobrarPedido(data)
   },
   async emitInvoice(saleId: string, client?: { name?: string; phone?: string; email?: string }) {
     const invoice = await createInvoice({ saleId, client })

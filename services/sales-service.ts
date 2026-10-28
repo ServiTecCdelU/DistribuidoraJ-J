@@ -460,6 +460,71 @@ export const processSale = async (data: {
   }
 }
 
+export interface CobrarPedidoInput {
+  orderId: string
+  clientId?: string
+  sellerId?: string
+  sellerName?: string
+  // Ítems que se cobran, ya con los ajustes (rotura/faltante/no quiere) aplicados.
+  items: { productId: string; name: string; price: number; quantity: number; itemDiscount?: number; codigo?: string }[]
+  paymentType: 'cash' | 'credit' | 'mixed'
+  paymentMethod: 'efectivo' | 'transferencia'
+  cashAmount?: number
+  creditAmount?: number
+  efectivo: number
+  transferencia: number
+  deliveryMethod: 'pickup' | 'delivery'
+  deliveryAddress: string
+  movimientosStock: { productId: string; tipo: string; cantidad: number; referencia: string; clave: string }[]
+  itemsNoEntregados: Record<string, unknown>[]
+  perdida?: { monto: number; detalle: string }
+  faltante?: { detalle: string }
+  rechazo?: { detalle: string }
+}
+
+// Cobro de un pedido en UNA transacción de Postgres (RPC `cobrar_pedido`): venta con el remito
+// del pedido copiado, stock, deuda, vendedor, pérdidas/rechazos y pedido completado, todo o nada.
+// Antes eran 12-15 consultas sueltas desde el navegador y un corte dejaba la venta a medias.
+export const cobrarPedido = async (data: CobrarPedidoInput): Promise<{ saleId: string; saleNumber: string; total: number }> => {
+  const { data: res, error } = await supabase.rpc('cobrar_pedido', {
+    p: {
+      order_id: data.orderId,
+      client_id: data.clientId ?? null,
+      seller_id: data.sellerId ?? null,
+      seller_name: data.sellerName ?? null,
+      items: data.items.map((i) => ({
+        productId: i.productId,
+        quantity: i.quantity,
+        price: i.price,
+        name: i.name,
+        ...(i.codigo ? { codigo: i.codigo } : {}),
+        ...(i.itemDiscount ? { itemDiscount: i.itemDiscount } : {}),
+      })),
+      payment_type: data.paymentType,
+      payment_method: data.paymentMethod,
+      cash_amount: data.cashAmount ?? null,
+      credit_amount: data.creditAmount ?? null,
+      efectivo: data.efectivo,
+      transferencia: data.transferencia,
+      delivery_method: data.deliveryMethod,
+      delivery_address: data.deliveryAddress,
+      movimientos_stock: data.movimientosStock,
+      items_no_entregados: data.itemsNoEntregados,
+      ...(data.perdida ? { perdida: data.perdida } : {}),
+      ...(data.faltante ? { faltante: data.faltante } : {}),
+      ...(data.rechazo ? { rechazo: data.rechazo } : {}),
+    },
+  })
+  if (error) throw new Error(error.message)
+  const r = res as { sale_id: string; sale_number: string; total: number }
+  // Si el cliente tenía saldo a favor, se imputa a la deuda nueva (boletas al día).
+  if (data.clientId && data.paymentType !== 'cash') {
+    const { recomputarSaldosDeudas } = await import('@/services/payments-service')
+    await recomputarSaldosDeudas(data.clientId, 'minorista').catch(() => {})
+  }
+  return { saleId: r.sale_id, saleNumber: r.sale_number, total: Number(r.total) || 0 }
+}
+
 export const saveBoletaToSale = async (
   saleId: string,
   invoiceNumber: string,
