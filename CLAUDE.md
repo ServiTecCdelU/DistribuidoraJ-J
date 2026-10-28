@@ -103,6 +103,7 @@ Hacer UN SOLO commit y push cuando el usuario confirme que todo funciona o cuand
   - Saldo del cliente → `moverSaldoCliente()` (`services/supabase-helpers.ts`, RPC `mover_saldo_cliente`, cuenta `minorista`/`mayorista`).
   - Totales del vendedor → `moverTotalesVendedor()` (RPC `mover_totales_vendedor`, con `clave` para no aplicar dos veces).
   - Remito de un pedido → `saveRemitoToOrder(id, nro, pdf, movs)` (RPC `guardar_remito_pedido`): descuenta stock, marca `stock_descontado` y graba el remito en una transacción.
+- Saldo por boleta (`transacciones.saldo`) → `recomputarSaldosDeudas()` / `aplicarPagoADeudas()` (`services/payments-service.ts`, RPC `recomputar_saldos_deudas` / `aplicar_pago_a_deudas`, misma lógica que `lib/utils/saldo-imputacion.ts`).
 - Stock → `registrarMovimiento()` (`services/stock-service.ts`, RPC `mover_stock`, con lock de fila). `clave` opcional = idempotente: los reintentos de un cobro no vuelven a descontar/reponer.
   - Pago de comisiones → RPC `pagar_comisiones` (registra el pago y pone en cero los totales en la misma transacción).
   - Números: `next_venta_number`, `next_remito_number` (contador único para Pedidos y Ventas), `next_devolucion_number`, `next_hoja_ruta_number`, `next_recibo_number`. Nunca calcular "último + 1".
@@ -233,7 +234,5 @@ Ordenados por prioridad. Al resolver uno, borrarlo de esta lista.
 - El carrito legacy (tienda con rol admin/seller) baja los ~2000 productos habilitados para armar la grilla. Pedido mayorista y Recepción ya traen solo los productos que usan (`getMayoristaProductosByIds`).
 - PDFs base64 en las filas (`remito_pdf_base64`, ~6 KB c/u; base 99 MB): moverlos a Storage no rinde todavía. Los listados, los updates de pedidos y el realtime ya no los traen.
 - Clientes se cargan completos varias veces por navegación (`clientsApi.getAll`): búsqueda server-side en los selectores.
-- `recomputarSaldosDeudas` / `aplicarPagoADeudas`: un UPDATE por boleta en serie; pasar a RPC.
-- Cuenta corriente recarga todas las transacciones del cliente tras cada acción y `getComprobantes()` trae los de todos los clientes.
-- Historial de ventas: paginar en la base en vez de traer todo el período.
-- `getProductosARevisar` agrupa miles de movimientos en JS.
+- Cuenta corriente recarga todas las transacciones del cliente tras cada acción (son livianas, sin PDFs). La carga general (`loadData`) sigue trayendo los comprobantes de todos los clientes.
+- Historial de ventas: trae todo el período elegido (hoy por defecto; un mes ≈ 500 ventas, ~450 KB). Paginar en la base si crece.

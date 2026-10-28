@@ -18,7 +18,7 @@ import { NOTA_DEBITO_CONCEPTO, esNotaDebito, motivoNotaDebito } from '@/lib/util
 import type { ComprobantePago, Sale, Transaction } from '@/lib/types'
 import type { Devolucion } from '@/services/devoluciones-service'
 import { supabase } from '@/lib/supabase'
-import { clientsApi } from '@/lib/api'
+import { clientsApi, salesApi } from '@/lib/api'
 import { toast } from 'sonner'
 
 interface MovimientoDeudaCardProps {
@@ -53,13 +53,16 @@ function DiasCell({ date }: { date: Date }) {
   return <span className={`text-xs font-bold tabular-nums ${COLOR_DIA[estado]}`}>{numero}</span>
 }
 
-function descargarRemito(sale: Sale) {
-  if (sale.remitoPdfBase64) {
-    descargarDocumento(sale.remitoPdfBase64, 'remito', sale.remitoNumber, sale.clientName)
+// Las ventas del cliente llegan sin el PDF (peso): se baja recién al descargarlo.
+async function descargarRemito(sale: Sale) {
+  const pdf = sale.remitoPdfBase64 ?? (await salesApi.getRemitoPdf(sale.id).catch(() => undefined))
+  if (pdf) {
+    descargarDocumento(pdf, 'remito', sale.remitoNumber, sale.clientName)
     return
   }
   const url = sale.remitoPdfUrl || sale.remitoDriveUrl
   if (url) window.open(url, '_blank', 'noopener,noreferrer')
+  else toast.error(`No se encontró el PDF del remito ${sale.remitoNumber ?? ''}`.trim())
 }
 
 // El listado no trae el PDF del recibo (peso): se baja recién al descargarlo.

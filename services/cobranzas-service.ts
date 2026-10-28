@@ -177,6 +177,7 @@ export const uploadComprobante = async (data: {
 export const getComprobantes = async (filters?: {
   status?: string
   sellerId?: string
+  clientId?: string
 }): Promise<ComprobantePago[]> => {
   try {
     let query = supabase
@@ -189,6 +190,9 @@ export const getComprobantes = async (filters?: {
     }
     if (filters?.sellerId) {
       query = query.eq('seller_id', filters.sellerId)
+    }
+    if (filters?.clientId) {
+      query = query.eq('client_id', filters.clientId)
     }
 
     const { data, error } = await query

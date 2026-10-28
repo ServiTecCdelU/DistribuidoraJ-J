@@ -369,7 +369,7 @@ export default function CuentaCorrientePage() {
     try {
       const [txs, comps, sales, faltantes, devols] = await Promise.all([
         clientsApi.getTransactions(client.id),
-        cobranzasApi.getComprobantes(),
+        cobranzasApi.getComprobantes({ clientId: client.id }),
         salesApi.getByClient(client.id),
         faltantesApi.getByCliente(client.id),
         devolucionesApi.getByClient(client.id),

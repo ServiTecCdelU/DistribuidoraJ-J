@@ -1,5 +1,4 @@
 import { supabase } from '@/lib/supabase'
-import { paginarTodo } from '@/lib/utils/paginar'
 import type { StockMovimiento } from '@/lib/types'
 
 function mapMovimiento(d: Record<string, any>): StockMovimiento {
@@ -69,76 +68,22 @@ export interface ProductoARevisar {
  * registrado como stock_anterior + cantidad < 0.
  */
 export const getProductosARevisar = async (): Promise<ProductoARevisar[]> => {
-  // Candidatos: salidas que quedaron clampeadas en 0. Paginado: hay 3573 movimientos que
-  // cumplen la condición, sin esto se revisaban solo los 1000 más recientes.
-  const movs = await paginarTodo<Record<string, any>>((desde, hasta) =>
-    supabase
-      .from('stock_movimientos')
-      .select('mayorista_producto_id, cantidad, stock_anterior, stock_posterior, motivo, created_at')
-      .eq('stock_posterior', 0)
-      .lt('cantidad', 0)
-      .order('created_at', { ascending: false })
-      .order('id', { ascending: true }) // desempate: sin orden único la paginación repite filas
-      .range(desde, hasta),
-  )
-
-  if (movs.length === 0) return []
-
-  // Solo los que realmente intentaron descontar más de lo que había.
-  const irregulares = movs.filter(
-    (m) => Number(m.stock_anterior) + Number(m.cantidad) < 0
-  )
-  if (irregulares.length === 0) return []
-
-  // Agrupar por producto.
-  const porProducto = new Map<
-    string,
-    { cantidad: number; faltante: number; ultimaFecha: Date; ultimoMotivo: string }
-  >()
-  for (const m of irregulares) {
-    const mpId = String(m.mayorista_producto_id)
-    if (!mpId) continue
-    const faltanteMov = -(Number(m.stock_anterior) + Number(m.cantidad))
-    const prev = porProducto.get(mpId)
-    if (prev) {
-      prev.cantidad += 1
-      prev.faltante += faltanteMov
-    } else {
-      porProducto.set(mpId, {
-        cantidad: 1,
-        faltante: faltanteMov,
-        ultimaFecha: new Date(m.created_at), // primer registro = más reciente (orden desc)
-        ultimoMotivo: m.motivo ?? '',
-      })
-    }
-  }
-
-  const mpIds = [...porProducto.keys()]
-  const prodIds = mpIds.map((id) => `prod_${id}`)
-
-  const { data: prods } = await supabase
-    .from('productos')
-    .select('id, name, codigo, stock')
-    .in('id', prodIds)
-
-  const prodById = new Map((prods ?? []).map((p) => [String(p.id), p]))
-
-  return mpIds
-    .map((mpId) => {
-      const agg = porProducto.get(mpId)!
-      const p = prodById.get(`prod_${mpId}`)
-      return {
-        productoId: `prod_${mpId}`,
-        mayoristaProductoId: mpId,
-        nombre: p?.name ?? mpId,
-        codigo: String(p?.codigo ?? mpId.replace(/^mp_/, '')),
-        stockActual: Number(p?.stock ?? 0),
-        cantidadMovimientos: agg.cantidad,
-        unidadesFaltantes: agg.faltante,
-        ultimaFecha: agg.ultimaFecha,
-        ultimoMotivo: agg.ultimoMotivo,
-      }
-    })
+  // Agrupado en la base (RPC productos_a_revisar): antes se bajaban ~3600 movimientos en
+  // páginas de 1000 y se agrupaban acá.
+  const { data, error } = await supabase.rpc('productos_a_revisar')
+  if (error) throw new Error(`No se pudieron cargar los productos a revisar: ${error.message}`)
+  return ((data ?? []) as Record<string, any>[])
+    .map((r) => ({
+      productoId: `prod_${r.mayorista_producto_id}`,
+      mayoristaProductoId: String(r.mayorista_producto_id),
+      nombre: r.nombre,
+      codigo: String(r.codigo),
+      stockActual: Number(r.stock_actual) || 0,
+      cantidadMovimientos: Number(r.cantidad_movimientos) || 0,
+      unidadesFaltantes: Number(r.unidades_faltantes) || 0,
+      ultimaFecha: new Date(r.ultima_fecha),
+      ultimoMotivo: r.ultimo_motivo ?? '',
+    }))
     .sort((a, b) => b.ultimaFecha.getTime() - a.ultimaFecha.getTime())
 }
 

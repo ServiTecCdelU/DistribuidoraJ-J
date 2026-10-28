@@ -1,12 +1,11 @@
 import { supabase } from '@/lib/supabase'
 import type { Transaction } from '@/lib/types'
 import { generateReadableId, moverSaldoCliente } from '@/services/supabase-helpers'
-import { imputarADeuda, imputarFIFO, recomputarSaldos } from '@/lib/utils/saldo-imputacion'
 import { descripcionDeudaAnterior } from '@/lib/utils/deuda-anterior'
 import { descripcionNotaDebito } from '@/lib/utils/nota-debito'
 import { metodoPagoDesdeDescripcion, type MetodoPago } from '@/lib/utils/metodo-pago'
 
-// Baja el saldo de las deudas (remitos/ventas) del cliente.
+// Baja el saldo de las deudas (remitos/ventas) del cliente, en la base (RPC aplicar_pago_a_deudas).
 // - Con debtTxId: imputa el pago a ESA deuda puntual.
 // - Sin debtTxId: FIFO — cancela las deudas más antiguas primero.
 // Las deudas legacy (saldo null, sin backfill) no se tocan.
@@ -17,31 +16,13 @@ export const aplicarPagoADeudas = async (
   amount: number,
   debtTxId?: string,
 ): Promise<void> => {
-  if (debtTxId) {
-    const { data: debt } = await supabase
-      .from('transacciones')
-      .select('id, saldo, amount')
-      .eq('id', debtTxId)
-      .single()
-    if (!debt) return
-    const saldoActual = debt.saldo != null ? Number(debt.saldo) : Number(debt.amount)
-    const nuevoSaldo = imputarADeuda(saldoActual, amount)
-    await supabase.from('transacciones').update({ saldo: nuevoSaldo }).eq('id', debtTxId)
-    return
-  }
-
-  const { data: debts } = await supabase
-    .from('transacciones')
-    .select('id, saldo')
-    .eq('client_id', clientId)
-    .eq('type', 'debt')
-    .gt('saldo', 0)
-    .or(cuenta === 'minorista' ? 'cuenta.eq.minorista,cuenta.is.null' : 'cuenta.eq.mayorista')
-    .order('date', { ascending: true })
-
-  for (const upd of imputarFIFO(debts ?? [], amount)) {
-    await supabase.from('transacciones').update({ saldo: upd.nuevoSaldo }).eq('id', upd.id)
-  }
+  const { error } = await supabase.rpc('aplicar_pago_a_deudas', {
+    p_client_id: clientId,
+    p_cuenta: cuenta,
+    p_monto: amount,
+    p_debt_id: debtTxId ?? null,
+  })
+  if (error) throw new Error(`No se pudo imputar el pago a las boletas: ${error.message}`)
 }
 
 // Recalcula desde cero el saldo por-boleta de un cliente/cuenta replayeando
@@ -50,50 +31,17 @@ export const aplicarPagoADeudas = async (
 // residuos que deja imputar cada pago suelto contra las deudas abiertas "en ese
 // momento" (pagos retroactivos, previos a su venta, o devoluciones). Idempotente.
 // No toca current_balance (ese lo maneja quien registra el pago/devolución).
+// Lo calcula la base (RPC recomputar_saldos_deudas, misma lógica que recomputarSaldos de
+// lib/utils/saldo-imputacion.ts): antes eran dos consultas + un UPDATE por boleta en serie.
 export const recomputarSaldosDeudas = async (
   clientId: string,
   cuenta: 'minorista' | 'mayorista',
 ): Promise<void> => {
-  const cuentaFilter = cuenta === 'minorista' ? 'cuenta.eq.minorista,cuenta.is.null' : 'cuenta.eq.mayorista'
-
-  // Deudas con saldo trackeado (las legacy de saldo null no se tocan), FIFO.
-  const { data: debts } = await supabase
-    .from('transacciones')
-    .select('id, amount, saldo')
-    .eq('client_id', clientId)
-    .eq('type', 'debt')
-    .eq('anulado', false)
-    .not('saldo', 'is', null)
-    .or(cuentaFilter)
-    .order('date', { ascending: true })
-  if (!debts || debts.length === 0) return
-
-  // Pagos/devoluciones vigentes, en orden cronológico.
-  const { data: pagos } = await supabase
-    .from('transacciones')
-    .select('amount, debt_id, afecta_saldo')
-    .eq('client_id', clientId)
-    .eq('type', 'payment')
-    .eq('anulado', false)
-    .or(cuentaFilter)
-    .order('date', { ascending: true })
-
-  // Los movimientos con afecta_saldo=false (ej. devolución sin CC habilitada) no bajan
-  // la deuda en el extracto: tampoco deben bajar las boletas.
-  const nuevos = recomputarSaldos(
-    debts.map((d) => ({ id: d.id, amount: Number(d.amount) })),
-    (pagos ?? [])
-      .filter((p) => (p as any).afecta_saldo !== false)
-      .map((p) => ({ monto: Number(p.amount), debtId: (p as any).debt_id ?? undefined })),
-  )
-
-  // Persistir solo las boletas cuyo saldo cambió.
-  for (const d of debts) {
-    const nuevo = nuevos.get(d.id)
-    if (nuevo != null && Math.abs(nuevo - Number(d.saldo)) > 1e-9) {
-      await supabase.from('transacciones').update({ saldo: nuevo }).eq('id', d.id)
-    }
-  }
+  const { error } = await supabase.rpc('recomputar_saldos_deudas', {
+    p_client_id: clientId,
+    p_cuenta: cuenta,
+  })
+  if (error) throw new Error(`No se pudieron recalcular los saldos por boleta: ${error.message}`)
 }
 
 const registerPayment = async (

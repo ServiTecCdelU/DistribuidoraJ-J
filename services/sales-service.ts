@@ -132,14 +132,25 @@ export const getSalesBySeller = async (sellerId: string): Promise<Sale[]> => {
   return (data ?? []).map(mapSale)
 }
 
+// Sin PDFs (cuenta corriente las carga al abrir un cliente): el remito se baja con getSaleRemitoPdf.
 export const getSalesByClient = async (clientId: string): Promise<Sale[]> => {
   const { data } = await supabase
     .from('ventas')
-    .select('*')
+    .select(SALE_COLS_SIN_PDF)
     .eq('client_id', clientId)
     .order('created_at', { ascending: false })
 
-  return (data ?? []).map(mapSale)
+  return ((data ?? []) as Record<string, any>[]).map(mapSale)
+}
+
+export const getSaleRemitoPdf = async (saleId: string): Promise<string | undefined> => {
+  const { data, error } = await supabase
+    .from('ventas')
+    .select('remito_pdf_base64')
+    .eq('id', saleId)
+    .maybeSingle()
+  if (error) throw new Error(`No se pudo bajar el PDF del remito: ${error.message}`)
+  return data?.remito_pdf_base64 ?? undefined
 }
 
 export const getSaleById = async (id: string): Promise<Sale | null> => {

@@ -34,6 +34,7 @@ import {
   getSalesByDateRange,
   getSalesBySeller,
   getSalesByClient,
+  getSaleRemitoPdf,
   getSaleById,
   processSale,
   cobrarPedido,
@@ -278,6 +279,9 @@ export const salesApi = {
   },
   async getByClient(clientId: string): Promise<Sale[]> {
     return getSalesByClient(clientId)
+  },
+  async getRemitoPdf(saleId: string): Promise<string | undefined> {
+    return getSaleRemitoPdf(saleId)
   },
   // Mismo tipo que el service (antes era una copia que no incluía discount ni remitoNumber).
   async processSale(data: Parameters<typeof processSale>[0]): Promise<Sale> {
@@ -622,7 +626,7 @@ export const cobranzasApi = {
   }) {
     return uploadComprobantePagoAdmin(data)
   },
-  async getComprobantes(filters?: { status?: string; sellerId?: string }) {
+  async getComprobantes(filters?: { status?: string; sellerId?: string; clientId?: string }) {
     return getComprobantes(filters)
   },
   async getComprobantesBySeller(sellerId: string) {
