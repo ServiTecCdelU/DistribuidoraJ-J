@@ -359,7 +359,7 @@ export function useCart(role: UserRole, userEmail?: string, externalProducts?: P
       } else {
         // Admin/seller: cargar desde mayorista_productos (legacy)
         const [mayoristaData, clientsData, sellersData] = await Promise.all([
-          getMayoristaProductos(),
+          getMayoristaProductos(false, true, true),
           clientsApi.getAll(),
           sellersApi.getList(),
         ]);

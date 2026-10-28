@@ -230,7 +230,8 @@ Ordenados por prioridad. Al resolver uno, borrarlo de esta lista.
 - `app/pedidos/page.tsx`: `payment-modal` toma el precio de la primera línea si un producto aparece en dos renglones.
 
 ### Rendimiento (pendiente)
-- `getMayoristaProductos` baja toda `mayorista_productos` (~7400 filas) en el carrito legacy, Pedido mayorista y Recepción: reemplazar por búsqueda en la base.
+- El carrito legacy (tienda con rol admin/seller) baja los ~2000 productos habilitados para armar la grilla. Pedido mayorista y Recepción ya traen solo los productos que usan (`getMayoristaProductosByIds`).
+- PDFs base64 en las filas (`remito_pdf_base64`, ~6 KB c/u; base 99 MB): moverlos a Storage no rinde todavía. Los listados, los updates de pedidos y el realtime ya no los traen.
 - Clientes se cargan completos varias veces por navegación (`clientsApi.getAll`): búsqueda server-side en los selectores.
 - `recomputarSaldosDeudas` / `aplicarPagoADeudas`: un UPDATE por boleta en serie; pasar a RPC.
 - Cuenta corriente recarga todas las transacciones del cliente tras cada acción y `getComprobantes()` trae los de todos los clientes.

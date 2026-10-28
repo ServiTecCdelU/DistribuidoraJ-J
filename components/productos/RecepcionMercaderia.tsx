@@ -12,7 +12,7 @@ import {
   actualizarUnidadesRecibidas,
   actualizarEstadoPedidoMayorista,
 } from "@/services/pedidos-mayorista-service";
-import { getMayoristaProductos } from "@/services/mayorista-service";
+import { getMayoristaProductosByIds } from "@/services/mayorista-service";
 import { registrarMovimiento, actualizarVentasPendientesFIFO } from "@/services/stock-service";
 import type { PedidoMayorista, MayoristaProducto } from "@/lib/types";
 import { cn } from "@/lib/utils";
@@ -49,10 +49,11 @@ export function RecepcionMercaderia() {
   const cargar = useCallback(async () => {
     setLoading(true);
     try {
-      const [pedidoActivo, productos] = await Promise.all([
-        getPedidoMayoristaActivo(),
-        getMayoristaProductos(),
-      ]);
+      const pedidoActivo = await getPedidoMayoristaActivo();
+      // Solo los productos del pedido activo (antes se bajaba todo el catálogo mayorista).
+      const productos = pedidoActivo
+        ? await getMayoristaProductosByIds(pedidoActivo.productos.map((p) => p.productoId))
+        : [];
 
       const map = new Map<string, MayoristaProducto>();
       productos.forEach((p) => map.set(p.id, p));

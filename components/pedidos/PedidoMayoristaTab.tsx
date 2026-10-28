@@ -9,7 +9,7 @@ import {
   RefreshCw, FileText, MessageCircle, Send, Package, CheckCircle2, Loader2,
 } from "lucide-react";
 import { getSalesPendientesMayorista } from "@/services/sales-service";
-import { getMayoristaProductos } from "@/services/mayorista-service";
+import { getMayoristaProductosByIds } from "@/services/mayorista-service";
 import {
   crearPedidoMayorista,
   actualizarEstadoPedidoMayorista,
@@ -52,12 +52,17 @@ export function PedidoMayoristaTab() {
     setLoading(true);
     setOverrides(new Map());
     try {
-      const [ventas, productos, pedidosData, ordenes] = await Promise.all([
+      const [ventas, pedidosData, ordenes] = await Promise.all([
         getSalesPendientesMayorista(),
-        getMayoristaProductos(),
         getPedidosMayorista(),
         ordersApi.getActive(),
       ]);
+      // Solo los productos que aparecen en ventas pendientes y pedidos activos.
+      const ids = [
+        ...ventas.flatMap((v) => ((v.items ?? []) as any[]).map((i) => i.productId)),
+        ...ordenes.flatMap((o) => o.items.map((i) => i.productId)),
+      ];
+      const productos = await getMayoristaProductosByIds(ids);
       setVentasPendientes(ventas);
       const map = new Map<string, MayoristaProducto>();
       productos.forEach((p) => {

@@ -38,7 +38,6 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { formatCurrency, formatCompactNumber } from "@/lib/utils/format";
 import { downloadBase64Pdf } from "@/services/pdf-service";
 import {
-  getMayoristaProductos,
   applyGananciaToProducts,
   updateProductoPrecioVenta,
   sincronizarHabilitadoEnMayorista,

@@ -119,7 +119,7 @@ export const updateOrderStatus = async (id: string, status: OrderStatus): Promis
     .from('pedidos')
     .update({ status })
     .eq('id', id)
-    .select()
+    .select(LIGHT_COLUMNS)
     .single()
 
   if (!data) throw new Error('Order not found')
@@ -136,7 +136,7 @@ export const updateOrderItems = async (
     .from('pedidos')
     .update({ items })
     .eq('id', id)
-    .select()
+    .select(LIGHT_COLUMNS)
     .single()
 
   if (!data) throw new Error('Order not found')
@@ -148,7 +148,7 @@ export const completeOrder = async (id: string, saleId: string): Promise<Order> 
     .from('pedidos')
     .update({ status: 'completed', sale_id: saleId })
     .eq('id', id)
-    .select()
+    .select(LIGHT_COLUMNS)
     .single()
 
   if (error) throw new Error(`No se pudo completar el pedido: ${error.message}`)
@@ -167,7 +167,7 @@ export const rejectOrder = async (id: string): Promise<Order> => {
     .update({ status: 'rechazado', held: false })
     .eq('id', id)
     .not('status', 'in', '(completed,rechazado,anulado)')
-    .select()
+    .select(LIGHT_COLUMNS)
     .maybeSingle()
 
   if (error) throw new Error(`No se pudo rechazar el pedido: ${error.message}`)
@@ -184,7 +184,7 @@ export const assignTransportista = async (id: string, transportistaId: string, t
       status: 'delivery',
     })
     .eq('id', id)
-    .select()
+    .select(LIGHT_COLUMNS)
     .single()
 
   if (!data) throw new Error('Order not found')
@@ -199,7 +199,7 @@ export const assignSeller = async (id: string, sellerId: string, sellerName: str
       seller_name: sellerName,
     })
     .eq('id', id)
-    .select()
+    .select(LIGHT_COLUMNS)
     .single()
 
   if (!data) throw new Error('Order not found')
@@ -214,7 +214,7 @@ export const removeTransportista = async (id: string): Promise<Order> => {
       transportista_name: null,
     })
     .eq('id', id)
-    .select()
+    .select(LIGHT_COLUMNS)
     .single()
 
   if (!data) throw new Error('Order not found')
@@ -246,7 +246,7 @@ export const cancelOrder = async (
     .update(camposAnulacion(responsable, motivo))
     .eq('id', id)
     .not('status', 'in', '(completed,rechazado,anulado)')
-    .select()
+    .select(LIGHT_COLUMNS)
     .maybeSingle()
 
   if (error) throw error
@@ -276,7 +276,7 @@ export const deleteRemitoFromOrder = async (id: string): Promise<Order> => {
     // Solo pedidos sin cobrar y con remito: un doble click o la lista vieja no reponen dos veces.
     .not('status', 'in', '(completed,rechazado,anulado)')
     .not('remito_number', 'is', null)
-    .select()
+    .select(LIGHT_COLUMNS)
     .maybeSingle()
 
   if (error) throw error

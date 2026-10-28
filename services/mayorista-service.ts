@@ -227,15 +227,19 @@ export const searchProductosParaVenta = async (params: VentaProductSearchParams)
   }
 }
 
-export const getMayoristaProductos = async (_forceRefresh = false, includeJoin = true): Promise<MayoristaProducto[]> => {
+// soloHabilitados: trae solo los ~2000 habilitados en vez de las ~8400 filas (el carrito no usa el resto).
+export const getMayoristaProductos = async (_forceRefresh = false, includeJoin = true, soloHabilitados = false): Promise<MayoristaProducto[]> => {
   const all: any[] = []
   const PAGE = 1000
   let from = 0
   while (true) {
-    const { data, error } = await supabase
+    let query = supabase
       .from('mayorista_productos')
       .select('*')
+    if (soloHabilitados) query = query.eq('habilitado', true)
+    const { data, error } = await query
       .order('descripcion', { ascending: true })
+      .order('id', { ascending: true }) // desempate: sin orden único la paginación repite filas
       .range(from, from + PAGE - 1)
     if (error) throw error
     if (!data || data.length === 0) break
@@ -245,9 +249,31 @@ export const getMayoristaProductos = async (_forceRefresh = false, includeJoin =
   }
 
   const productos = all.map(mapDoc)
+  if (includeJoin) await unirConProductos(productos)
+  return productos
+}
 
-  // Join con "productos" para los habilitados
-  if (includeJoin) {
+// Solo los productos mayoristas pedidos (acepta ids `mp_X` o `prod_mp_X`), ya unidos con
+// `productos`. Antes Pedido mayorista y Recepción bajaban las ~8400 filas para usar unas pocas.
+export const getMayoristaProductosByIds = async (ids: string[]): Promise<MayoristaProducto[]> => {
+  const mpIds = [...new Set(ids.filter(Boolean).map((id) => (id.startsWith('prod_') ? id.slice(5) : id)))]
+  const all: any[] = []
+  for (let i = 0; i < mpIds.length; i += 300) {
+    const { data, error } = await supabase
+      .from('mayorista_productos')
+      .select('*')
+      .in('id', mpIds.slice(i, i + 300))
+    if (error) throw error
+    all.push(...(data ?? []))
+  }
+  const productos = all.map(mapDoc)
+  await unirConProductos(productos)
+  return productos
+}
+
+// Join con "productos" para los habilitados: precio de venta, ganancia, stock, bulto, descuento.
+async function unirConProductos(productos: MayoristaProducto[]): Promise<void> {
+  {
     const habilitados = productos.filter((p) => p.habilitado && p.productoId)
     if (habilitados.length > 0) {
       const prodIds = habilitados.map((p) => p.productoId!)
@@ -276,8 +302,6 @@ export const getMayoristaProductos = async (_forceRefresh = false, includeJoin =
       }
     }
   }
-
-  return productos
 }
 
 export const upsertMayoristaProductos = async (
