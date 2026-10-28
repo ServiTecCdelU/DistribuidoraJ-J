@@ -811,7 +811,7 @@ export default function TransportePage() {
     try {
       const [ordersData, sellersData] = await Promise.all([
         ordersApi.getActive(),
-        sellersApi.getAll(),
+        sellersApi.getList(),
       ]);
       if (isMounted && !isMounted()) return;
       setOrders(

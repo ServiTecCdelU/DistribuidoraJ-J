@@ -91,38 +91,20 @@ export const searchMayoristaProductos = async (params: MayoristaSearchParams): P
   }
 }
 
+// Los distintos los saca la base (vista rubros_mayorista): antes se traían las filas sin
+// paginar y PostgREST cortaba en 1000 de ~7400, así que faltaban rubros.
 export const getMayoristaRubros = async (): Promise<string[]> => {
-  const { data, error } = await supabase
-    .from('mayorista_productos')
-    .select('rubro')
-    .not('rubro', 'is', null)
-    .not('rubro', 'eq', '')
+  const { data, error } = await supabase.from('rubros_mayorista').select('rubro')
   if (error) throw error
-  const set = new Set((data ?? []).map((d: any) => d.rubro as string))
-  return Array.from(set).sort()
+  return (data ?? []).map((d: any) => d.rubro as string).sort()
 }
 
 // Rubros para el filtro de la venta: category de productos habilitados (misma
-// fuente que searchProductosParaVenta). Paginado para superar el límite de 1000 filas.
+// fuente que searchProductosParaVenta). Los distintos los saca la base (vista rubros_habilitados).
 export const getRubrosHabilitados = async (): Promise<string[]> => {
-  const set = new Set<string>()
-  const PAGE = 1000
-  let from = 0
-  while (true) {
-    const { data, error } = await supabase
-      .from('productos')
-      .select('category')
-      .or('disabled.eq.false,disabled.is.null')
-      .not('category', 'is', null)
-      .not('category', 'eq', '')
-      .range(from, from + PAGE - 1)
-    if (error) throw error
-    if (!data || data.length === 0) break
-    for (const r of data as any[]) { if (r.category) set.add(r.category as string) }
-    if (data.length < PAGE) break
-    from += PAGE
-  }
-  return Array.from(set).sort()
+  const { data, error } = await supabase.from('rubros_habilitados').select('category')
+  if (error) throw error
+  return (data ?? []).map((r: any) => r.category as string).sort()
 }
 
 export interface VentaProductSearchParams {

@@ -229,7 +229,7 @@ export default function CuentaCorrientePage() {
       const [clientsData, compData, sellersData] = await Promise.all([
         scopeClientsFetch(),
         cobranzasApi.getComprobantes(),
-        sellersApi.getAll(),
+        sellersApi.getList(),
       ])
       setDebtClients(clientsData)
       setComprobantes(compData)

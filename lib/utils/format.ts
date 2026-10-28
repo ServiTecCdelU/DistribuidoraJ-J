@@ -125,6 +125,25 @@ export const formatDateFull = (date: unknown): string => {
   }
 };
 
+const dateWeekdayFormatter = new Intl.DateTimeFormat("es-AR", {
+  weekday: "long",
+  day: "numeric",
+  month: "long",
+  year: "numeric",
+});
+
+/** Fecha con día de la semana: "lunes, 27 de octubre de 2026" */
+export const formatDateWeekday = (date: unknown): string => {
+  if (!date) return "-";
+  try {
+    const d = toDate(date);
+    if (isNaN(d.getTime()) || d.getTime() === 0) return "-";
+    return dateWeekdayFormatter.format(d);
+  } catch {
+    return "-";
+  }
+};
+
 /** Formato compacto para numeros grandes: 1.5M, 200K, etc. */
 export const formatCompactNumber = (value: number): string => {
   const safe = typeof value === "number" && !isNaN(value) ? value : 0;

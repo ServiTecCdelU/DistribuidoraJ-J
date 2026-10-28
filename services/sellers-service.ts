@@ -39,6 +39,17 @@ function withTotalesPendientes(seller: Seller, commissions: SellerCommission[]):
 
 // mapCommission removido — comisiones se derivan de ventas via commissions-service
 
+// Vendedores sin derivar comisiones: para selectores, filtros y nombres. getSellers hace
+// 4 consultas por vendedor y trae todas sus ventas; solo Empleados necesita esos totales.
+export const getSellersBasic = async (): Promise<Seller[]> => {
+  const { data, error } = await supabase
+    .from('vendedores')
+    .select('*')
+    .order('created_at', { ascending: false })
+  if (error) throw new Error(`No se pudieron cargar los vendedores: ${error.message}`)
+  return (data ?? []).map(mapSeller)
+}
+
 export const getSellers = async (): Promise<Seller[]> => {
   const { data } = await supabase
     .from('vendedores')
@@ -407,7 +418,7 @@ export const resetCommissions = async (sellerId: string, sellerName: string, not
     .single()
 
   if (error) throw new Error(error.message)
-  return mapPago(data)
+  return mapPago(data as Record<string, any>)
 }
 
 export const getPagosComisiones = async (sellerId: string): Promise<PagoComision[]> => {

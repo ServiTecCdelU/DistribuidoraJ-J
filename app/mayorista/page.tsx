@@ -42,7 +42,6 @@ import {
   Save,
   SlidersHorizontal,
 } from "lucide-react";
-import * as XLSX from "xlsx";
 import type { MayoristaProducto, MayoristaPrefs } from "@/lib/types";
 import {
   upsertMayoristaProductos,
@@ -1132,8 +1131,10 @@ function PriceUpdateDialog({
     const file = e.target.files?.[0];
     if (!file) return;
     const reader = new FileReader();
-    reader.onload = (ev) => {
+    reader.onload = async (ev) => {
       try {
+        // xlsx se carga recién al importar un archivo (no en el bundle inicial de Mayorista).
+        const XLSX = await import("xlsx");
         const data = new Uint8Array(ev.target!.result as ArrayBuffer);
         const workbook = XLSX.read(data, { type: "array" });
         const sheet = workbook.Sheets[workbook.SheetNames[0]];
@@ -1452,8 +1453,10 @@ function ExcelImportDialog({
     const file = e.target.files?.[0];
     if (!file) return;
     const reader = new FileReader();
-    reader.onload = (ev) => {
+    reader.onload = async (ev) => {
       try {
+        // xlsx se carga recién al importar un archivo (no en el bundle inicial de Mayorista).
+        const XLSX = await import("xlsx");
         const data = new Uint8Array(ev.target!.result as ArrayBuffer);
         const workbook = XLSX.read(data, { type: "array" });
         const sheet = workbook.Sheets[workbook.SheetNames[0]];

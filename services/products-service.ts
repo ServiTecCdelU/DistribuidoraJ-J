@@ -56,6 +56,20 @@ export const getProducts = async (_forceRefresh = false): Promise<Product[]> => 
   return all.map(mapRow)
 }
 
+// Precio vigente de cada producto con precio > 0 (id → precio). Solo dos columnas:
+// Pedidos lo usa para mostrar el precio actual y antes bajaba el catálogo completo con *.
+export const getProductPrices = async (): Promise<Map<string, number>> => {
+  const rows = await paginarTodo<{ id: string; price: number | null }>((desde, hasta) =>
+    supabase
+      .from('productos')
+      .select('id, price')
+      .gt('price', 0)
+      .order('id', { ascending: true })
+      .range(desde, hasta),
+  )
+  return new Map(rows.map((r) => [r.id, Number(r.price) || 0]))
+}
+
 /**
  * Trae productos por una lista de IDs (batch). Para resolver config de oferta
  * vigente o stock de productos regalados sin cargar todo el catálogo.
@@ -176,21 +190,10 @@ export const getProductStats = async (): Promise<{
     supabase.from('productos').select('ganancia_global').ilike('category', '%medicamento%').gt('ganancia_global', 0).limit(1),
   ])
 
-  // Valor de inventario: paginar para sumar todo
-  let totalInventoryValue = 0
-  let from = 0
-  const batchSize = 1000
-  while (true) {
-    const { data } = await supabase
-      .from('productos')
-      .select('stock, price')
-      .or(activeFilter)
-      .range(from, from + batchSize - 1)
-    if (!data || data.length === 0) break
-    totalInventoryValue += data.reduce((sum, r) => sum + (Number(r.price) || 0) * (r.stock ?? 0), 0)
-    if (data.length < batchSize) break
-    from += batchSize
-  }
+  // Valor de inventario: lo suma la base (antes, 8 requests para sumar price*stock acá)
+  const { data: valorInv, error: valorErr } = await supabase.rpc('valor_inventario')
+  if (valorErr) throw new Error(`No se pudo calcular el valor del inventario: ${valorErr.message}`)
+  const totalInventoryValue = Number(valorInv) || 0
 
   const gananciaRow = gananciaRes.data?.[0]
   const gananciaActual = gananciaRow ? Number(gananciaRow.ganancia_global) : null
@@ -208,25 +211,11 @@ export const getProductStats = async (): Promise<{
   }
 }
 
+// Rubros de productos habilitados: los distintos los saca la base (vista rubros_habilitados).
 export const getProductCategories = async (): Promise<string[]> => {
-  const all: string[] = []
-  let from = 0
-  const PAGE = 1000
-  while (true) {
-    const { data, error } = await supabase
-      .from('productos')
-      .select('category')
-      .or('disabled.eq.false,disabled.is.null')
-      .range(from, from + PAGE - 1)
-    if (error) throw error
-    if (!data || data.length === 0) break
-    for (const r of data) {
-      if (r.category) all.push(r.category)
-    }
-    if (data.length < PAGE) break
-    from += PAGE
-  }
-  return [...new Set(all)].sort()
+  const { data, error } = await supabase.from('rubros_habilitados').select('category')
+  if (error) throw error
+  return (data ?? []).map((r: any) => r.category as string).sort()
 }
 
 export const renameProductCategory = async (

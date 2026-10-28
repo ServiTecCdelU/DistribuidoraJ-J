@@ -22,7 +22,7 @@ import {
   DropdownMenuCheckboxItem,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
-import { clientsApi, sellersApi, salesApi, auditApi } from '@/lib/api'
+import { clientsApi, sellersApi, auditApi } from '@/lib/api'
 import { useAuth } from '@/hooks/use-auth'
 import {
   Select,
@@ -145,7 +145,7 @@ export default function ClientesPage() {
   useEffect(() => {
     let mounted = true
     loadClients(() => mounted)
-    sellersApi.getAll().then((data) =>
+    sellersApi.getList().then((data) =>
       setSellers(data.filter((s) => s.isActive).map((s) => ({ id: s.id, name: s.name, codigoVendedor: s.codigoVendedor })))
     )
     return () => { mounted = false }
@@ -329,14 +329,10 @@ export default function ClientesPage() {
     }
     setExporting(true)
     try {
-      // Contar compras por cliente
-      const purchasesByClient = new Map<string, number>()
+      // Contar compras por cliente (lo cuenta la base)
+      let purchasesByClient = new Map<string, number>()
       try {
-        const sales = await salesApi.getAll()
-        for (const s of sales) {
-          if (!s.clientId) continue
-          purchasesByClient.set(s.clientId, (purchasesByClient.get(s.clientId) || 0) + 1)
-        }
+        purchasesByClient = await clientsApi.getComprasPorCliente()
       } catch {
         toast.error('No se pudo contar las compras; se exporta sin ese dato')
       }

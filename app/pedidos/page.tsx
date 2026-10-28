@@ -215,21 +215,19 @@ export default function PedidosPage() {
   // Datos que casi no cambian: una sola carga al montar la página
   const loadStaticData = useCallback(async (isMounted?: () => boolean) => {
     try {
-      const [clientsData, sellersData, productsData] = await Promise.all([
+      const [clientsData, sellersData, precios] = await Promise.all([
         clientsApi.getAll(),
-        sellersApi.getAll(),
-        productsApi.getAll(),
+        sellersApi.getList(),
+        productsApi.getPrices(),
       ]);
       if (isMounted && !isMounted()) return;
       setClients(clientsData);
       setSellers(sellersData);
       // Mapa de precio actual: indexado por id de producto (prod_mp_XXX) y su alias mayorista (mp_XXX)
       const pm = new Map<string, number>();
-      productsData.forEach((p) => {
-        const precio = Number(p.price) || 0;
-        if (precio <= 0) return;
-        pm.set(p.id, precio);
-        if (p.id.startsWith("prod_")) pm.set(p.id.slice(5), precio);
+      precios.forEach((precio, id) => {
+        pm.set(id, precio);
+        if (id.startsWith("prod_")) pm.set(id.slice(5), precio);
       });
       setPriceMap(pm);
     } catch {

@@ -1,7 +1,32 @@
 import { supabase } from '@/lib/supabase'
 import type { Client, Transaction } from '@/lib/types'
 import { generateReadableId } from '@/services/supabase-helpers'
-import { SALDO_EPSILON } from '@/lib/utils/saldo-imputacion'
+
+export interface DeudaDesde {
+  debtSince: Date
+  deudaAnterior: boolean
+}
+
+// Deuda pendiente más antigua por cliente (y si tiene deuda anterior), calculada en la base
+// (vista cliente_deuda_desde). Antes se bajaban todas las deudas con .in(cientos de ids) y
+// .limit(20000) para recorrerlas en el navegador, y PostgREST cortaba en 1000 filas.
+export const getDeudaDesdeMap = async (): Promise<Map<string, DeudaDesde>> => {
+  const { data, error } = await supabase
+    .from('cliente_deuda_desde')
+    .select('client_id, debt_since, deuda_anterior')
+  if (error) throw new Error(`No se pudo leer la antigüedad de las deudas: ${error.message}`)
+  return new Map(
+    (data ?? []).map((d: any) => [d.client_id as string, { debtSince: new Date(d.debt_since), deudaAnterior: !!d.deuda_anterior }]),
+  )
+}
+
+// Cantidad de compras por cliente (vista compras_por_cliente). Antes el export de Clientes
+// bajaba todas las ventas, con sus PDFs, solo para contarlas.
+export const getComprasPorCliente = async (): Promise<Map<string, number>> => {
+  const { data, error } = await supabase.from('compras_por_cliente').select('client_id, compras')
+  if (error) throw new Error(`No se pudieron contar las compras: ${error.message}`)
+  return new Map((data ?? []).map((d: any) => [d.client_id as string, Number(d.compras) || 0]))
+}
 
 function mapClient(d: Record<string, any>): Client {
   return {
@@ -40,23 +65,10 @@ export const getClients = async (): Promise<Client[]> => {
   const clients = (data ?? []).map(mapClient)
 
   // Fecha de la deuda pendiente más antigua por cliente (define la clasificación por días)
-  const deudores = clients.filter((c) => c.currentBalance > 0).map((c) => c.id)
-  if (deudores.length > 0) {
-    const { data: debts } = await supabase
-      .from('transacciones')
-      .select('client_id, date, saldo, amount')
-      .in('client_id', deudores)
-      .eq('type', 'debt')
-      .order('date', { ascending: true })
-      .limit(20000)
-    const debtSinceMap: Record<string, Date> = {}
-    for (const t of debts ?? []) {
-      const saldo = t.saldo != null ? Number(t.saldo) : Number(t.amount)
-      if (saldo <= SALDO_EPSILON) continue
-      if (!debtSinceMap[t.client_id]) debtSinceMap[t.client_id] = new Date(t.date)
-    }
+  if (clients.some((c) => c.currentBalance > 0)) {
+    const deudaDesde = await getDeudaDesdeMap()
     for (const c of clients) {
-      if (debtSinceMap[c.id]) c.debtSince = debtSinceMap[c.id]
+      if (c.currentBalance > 0 && deudaDesde.has(c.id)) c.debtSince = deudaDesde.get(c.id)!.debtSince
     }
   }
 
@@ -155,14 +167,27 @@ export const getClientsPaginated = async (
   }
 }
 
+// Sin el PDF del recibo (base64): cuenta corriente recarga los movimientos después de cada
+// acción. `tiene_recibo_pdf` (columna calculada) dice si hay PDF; se baja con getReciboPdf.
+const TX_COLUMNS =
+  'id, client_id, type, amount, description, sale_id, date, created_at, cuenta, recibo_numero, ' +
+  'recibo_generado_at, saldo, debt_id, anulado, anulado_motivo, anulado_by, anulado_at, foto_url, afecta_saldo, tiene_recibo_pdf'
+
+/** PDF del recibo de un pago (on-demand). */
+export const getReciboPdf = async (txId: string): Promise<string | undefined> => {
+  const { data, error } = await supabase.from('transacciones').select('recibo_pdf_base64').eq('id', txId).maybeSingle()
+  if (error) throw new Error(`No se pudo bajar el recibo: ${error.message}`)
+  return data?.recibo_pdf_base64 ?? undefined
+}
+
 export const getClientTransactions = async (clientId: string): Promise<Transaction[]> => {
   const { data } = await supabase
     .from('transacciones')
-    .select('*')
+    .select(TX_COLUMNS)
     .eq('client_id', clientId)
     .order('date', { ascending: false })
 
-  return (data ?? []).map((d) => ({
+  return ((data ?? []) as Record<string, any>[]).map((d) => ({
     id: d.id,
     clientId: d.client_id,
     type: d.type as 'debt' | 'payment',
@@ -175,7 +200,7 @@ export const getClientTransactions = async (clientId: string): Promise<Transacti
     debtId: d.debt_id ?? undefined,
     fotoUrl: d.foto_url ?? undefined,
     reciboNumero: d.recibo_numero ?? undefined,
-    reciboPdfBase64: d.recibo_pdf_base64 ?? undefined,
+    tieneReciboPdf: d.tiene_recibo_pdf ?? false,
     anulado: d.anulado ?? false,
     anuladoMotivo: d.anulado_motivo ?? undefined,
     anuladoBy: d.anulado_by ?? undefined,

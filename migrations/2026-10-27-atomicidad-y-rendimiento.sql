@@ -263,3 +263,16 @@ as $$
     from productos
    where coalesce(disabled, false) = false
 $$;
+
+-- Rubros del listado mayorista (antes: select sin paginar → solo las primeras 1000 de ~7400 filas).
+create or replace view rubros_mayorista as
+select distinct rubro
+  from mayorista_productos
+ where rubro is not null
+   and rubro <> '';
+
+-- Columna calculada para PostgREST (select=...,tiene_recibo_pdf): saber si el pago tiene
+-- PDF de recibo sin bajar el base64. Cuenta corriente lo baja recién al descargarlo.
+create or replace function tiene_recibo_pdf(t transacciones) returns boolean
+language sql stable
+as $$ select t.recibo_pdf_base64 is not null $$;

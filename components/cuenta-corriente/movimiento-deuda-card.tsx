@@ -18,6 +18,8 @@ import { NOTA_DEBITO_CONCEPTO, esNotaDebito, motivoNotaDebito } from '@/lib/util
 import type { ComprobantePago, Sale, Transaction } from '@/lib/types'
 import type { Devolucion } from '@/services/devoluciones-service'
 import { supabase } from '@/lib/supabase'
+import { clientsApi } from '@/lib/api'
+import { toast } from 'sonner'
 
 interface MovimientoDeudaCardProps {
   tx: Transaction
@@ -58,6 +60,17 @@ function descargarRemito(sale: Sale) {
   }
   const url = sale.remitoPdfUrl || sale.remitoDriveUrl
   if (url) window.open(url, '_blank', 'noopener,noreferrer')
+}
+
+// El listado no trae el PDF del recibo (peso): se baja recién al descargarlo.
+async function descargarRecibo(tx: Transaction) {
+  try {
+    const pdf = tx.reciboPdfBase64 ?? (await clientsApi.getReciboPdf(tx.id))
+    if (!pdf) { toast.error('El recibo no tiene PDF guardado'); return }
+    descargarDocumento(pdf, 'recibo', tx.reciboNumero)
+  } catch (err) {
+    toast.error(err instanceof Error ? err.message : 'No se pudo bajar el recibo')
+  }
 }
 
 const MOTIVO_LABELS: Record<string, string> = {
@@ -639,11 +652,11 @@ export function MovimientoDeudaCard({
               </Button>
             )}
             {!isDevolucion && !isRechazo && (
-              tx.reciboPdfBase64 ? (
+              tx.reciboPdfBase64 || tx.tieneReciboPdf ? (
                 <>
                   <Button
                     variant="outline" size="sm" className="gap-1.5 text-xs h-7 text-teal-600 border-teal-300 hover:bg-teal-50"
-                    onClick={(e) => { e.stopPropagation(); descargarDocumento(tx.reciboPdfBase64!, 'recibo', tx.reciboNumero) }}
+                    onClick={(e) => { e.stopPropagation(); descargarRecibo(tx) }}
                   >
                     <Receipt className="h-3.5 w-3.5" />{tx.reciboNumero || 'Recibo'}
                   </Button>

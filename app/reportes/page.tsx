@@ -55,7 +55,7 @@ export default function ReportesPage() {
       try {
         const [salesData, sellersData] = await Promise.all([
           salesApi.getAll(),
-          sellersApi.getAll(),
+          sellersApi.getList(),
         ]);
         if (!mounted) return;
         setSales(salesData);

@@ -2,7 +2,8 @@ import { supabase } from '@/lib/supabase'
 import type { Client, ComprobantePago, Transaction } from '@/lib/types'
 import { generateReadableId, moverSaldoCliente } from '@/services/supabase-helpers'
 import { getSellerIdsByCodigo } from '@/services/sellers-service'
-import { SALDO_EPSILON, recomputarSaldos } from '@/lib/utils/saldo-imputacion'
+import { getDeudaDesdeMap, type DeudaDesde } from '@/services/clients-service'
+import { recomputarSaldos } from '@/lib/utils/saldo-imputacion'
 import { esDeudaAnterior } from '@/lib/utils/deuda-anterior'
 
 // Clientes con deuda asignados a un vendedor (incluye clientes de vendedores anteriores
@@ -62,25 +63,7 @@ export const getDebtClients = async (
   const { data } = await query
 
   // Fecha de la deuda pendiente más antigua por cliente (entrada a cuenta corriente)
-  const clientIds = (data ?? []).map((d: any) => d.id)
-  const debtSinceMap: Record<string, Date> = {}
-  const deudaAnteriorSet = new Set<string>()
-  if (clientIds.length > 0) {
-    const { data: debts } = await supabase
-      .from('transacciones')
-      .select('client_id, date, saldo, amount, description')
-      .in('client_id', clientIds)
-      .eq('type', 'debt')
-      .order('date', { ascending: true })
-      .limit(20000)
-    for (const t of debts ?? []) {
-      const saldo = t.saldo != null ? Number(t.saldo) : Number(t.amount)
-      if (saldo <= SALDO_EPSILON) continue
-      // Orden ascendente: la primera deuda pendiente encontrada es la más antigua
-      if (!debtSinceMap[t.client_id]) debtSinceMap[t.client_id] = new Date(t.date)
-      if (esDeudaAnterior(t.description)) deudaAnteriorSet.add(t.client_id)
-    }
-  }
+  const deudaDesde = (data ?? []).length > 0 ? await getDeudaDesdeMap() : new Map<string, DeudaDesde>()
 
   // Obtener nombres de vendedores si hay seller_ids
   const sellerIds = [...new Set((data ?? []).map((d: any) => d.seller_id).filter(Boolean))]
@@ -111,8 +94,8 @@ export const getDebtClients = async (
     sellerName: d.seller_id ? (sellerMap[d.seller_id] || undefined) : undefined,
     debtClassification: d.debt_classification ?? 'normal',
     diaCobro: d.dia_cobro ?? undefined,
-    debtSince: debtSinceMap[d.id] ?? undefined,
-    hasDeudaAnterior: deudaAnteriorSet.has(d.id),
+    debtSince: deudaDesde.get(d.id)?.debtSince ?? undefined,
+    hasDeudaAnterior: deudaDesde.get(d.id)?.deudaAnterior ?? false,
     activo: d.activo ?? true,
     notes: d.notes ?? '',
     createdAt: new Date(d.created_at),

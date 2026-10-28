@@ -352,7 +352,7 @@ export function useCart(role: UserRole, userEmail?: string, externalProducts?: P
         // Productos manejados externamente (paginación server-side)
         const [clientsData, sellersData] = await Promise.all([
           clientsApi.getAll(),
-          sellersApi.getAll(),
+          sellersApi.getList(),
         ]);
         setClients(role === "seller" ? clientsData.filter((c) => c.activo !== false) : clientsData);
         setSellers(sellersData.filter((s) => s.isActive));
@@ -361,7 +361,7 @@ export function useCart(role: UserRole, userEmail?: string, externalProducts?: P
         const [mayoristaData, clientsData, sellersData] = await Promise.all([
           getMayoristaProductos(),
           clientsApi.getAll(),
-          sellersApi.getAll(),
+          sellersApi.getList(),
         ]);
         const productsData = mayoristaData.filter((p) => p.habilitado).map((p) => {
           const precioLote =

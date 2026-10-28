@@ -102,6 +102,8 @@ export interface Transaction {
   reciboNumero?: string;
   /** Pagos: PDF del recibo (base64) */
   reciboPdfBase64?: string;
+  /** Pagos: hay PDF de recibo guardado (el listado no trae el base64; ver getReciboPdf) */
+  tieneReciboPdf?: boolean;
   /** Pagos: si fue anulado por un admin (se conserva en el historial, no se borra) */
   anulado?: boolean;
   anuladoMotivo?: string;

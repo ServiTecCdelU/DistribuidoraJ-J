@@ -45,7 +45,7 @@ export default function ClientDetailPage() {
 
   useEffect(() => {
     loadData()
-    sellersApi.getAll().then((s) => setSellers(s.filter((x) => x.isActive))).catch(() => {})
+    sellersApi.getList().then((s) => setSellers(s.filter((x) => x.isActive))).catch(() => {})
     faltantesApi.getByCliente(params.id as string).then(setFaltantes).catch(() => {})
   }, [params.id])
 

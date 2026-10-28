@@ -109,10 +109,11 @@ function mapSale(d: Record<string, any>): Sale {
 export const getSales = async (): Promise<Sale[]> => {
   // Paginado: sin esto devolvía 1000 ventas de 1685 y las páginas de Clientes y Reportes
   // calculaban sobre datos incompletos sin ningún aviso.
+  // Sin PDFs: son ~15 MB en total y el listado no los usa (Reportes).
   const data = await paginarTodo<Record<string, any>>((desde, hasta) =>
     supabase
       .from('ventas')
-      .select('*')
+      .select(SALE_COLS_SIN_PDF)
       .order('created_at', { ascending: false })
       .order('id', { ascending: true }) // desempate: sin orden único la paginación repite filas
       .range(desde, hasta),

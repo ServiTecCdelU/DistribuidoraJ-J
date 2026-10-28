@@ -56,7 +56,7 @@ export const getOrders = async (): Promise<Order[]> => {
   const data = await paginarTodo<Record<string, any>>((desde, hasta) =>
     supabase
       .from('pedidos')
-      .select('*')
+      .select(LIGHT_COLUMNS) // sin PDFs base64: se bajan on-demand con getRemitoPdf
       .order('created_at', { ascending: false })
       .order('id', { ascending: true }) // desempate: sin orden único la paginación repite filas
       .range(desde, hasta),
@@ -87,24 +87,31 @@ export const getRemitoPdf = async (orderId: string): Promise<string | undefined>
   return data?.remito_pdf_base64 ?? undefined
 }
 
+// Sin PDFs y paginados (PostgREST corta en 1000 filas).
 export const getOrdersByTransportista = async (transportistaId: string): Promise<Order[]> => {
-  const { data } = await supabase
-    .from('pedidos')
-    .select('*')
-    .eq('transportista_id', transportistaId)
-    .order('created_at', { ascending: false })
-
-  return (data ?? []).map(mapOrder)
+  const data = await paginarTodo<Record<string, any>>((desde, hasta) =>
+    supabase
+      .from('pedidos')
+      .select(LIGHT_COLUMNS)
+      .eq('transportista_id', transportistaId)
+      .order('created_at', { ascending: false })
+      .order('id', { ascending: true })
+      .range(desde, hasta),
+  )
+  return data.map(mapOrder)
 }
 
 export const getOrdersBySeller = async (sellerId: string): Promise<Order[]> => {
-  const { data } = await supabase
-    .from('pedidos')
-    .select('*')
-    .eq('seller_id', sellerId)
-    .order('created_at', { ascending: false })
-
-  return (data ?? []).map(mapOrder)
+  const data = await paginarTodo<Record<string, any>>((desde, hasta) =>
+    supabase
+      .from('pedidos')
+      .select(LIGHT_COLUMNS)
+      .eq('seller_id', sellerId)
+      .order('created_at', { ascending: false })
+      .order('id', { ascending: true })
+      .range(desde, hasta),
+  )
+  return data.map(mapOrder)
 }
 
 export const updateOrderStatus = async (id: string, status: OrderStatus): Promise<Order> => {

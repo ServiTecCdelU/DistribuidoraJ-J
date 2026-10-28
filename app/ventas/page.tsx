@@ -29,7 +29,7 @@ function VentasInner() {
     clientsApi.getAll().then((data) =>
       setClients(data.map((c) => ({ id: c.id, name: c.name, city: (c as any).city })))
     ).catch(() => {});
-    sellersApi.getAll().then((data) =>
+    sellersApi.getList().then((data) =>
       setSellers(data.map((s) => ({ id: s.id, name: s.name })))
     ).catch(() => {});
   }, []);

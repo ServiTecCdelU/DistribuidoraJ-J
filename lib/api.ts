@@ -1,9 +1,10 @@
-import type { Client, Product, Sale, Seller, SellerCommission, Transaction, CartItem, Order, OrderStatus } from './types'
+import type { Client, Product, Sale, Seller, SellerCommission, Transaction, Order, OrderStatus } from './types'
 import {
   createProduct,
   deleteProduct,
   getProductById,
   getProducts,
+  getProductPrices,
   getProductsByIds,
   getProductosConOfertas,
   getProductsPaginated,
@@ -22,6 +23,8 @@ import {
   getClientById,
   getClientTransactions,
   getClients,
+  getComprasPorCliente,
+  getReciboPdf,
   getClientsPaginated,
   updateClient,
 } from '@/services/clients-service'
@@ -54,6 +57,7 @@ import {
   getSellerById,
   getSellerCommissions,
   getSellers,
+  getSellersBasic,
   updateSeller,
   replaceSeller,
   resetCommissions,
@@ -166,6 +170,9 @@ export const productsApi = {
   async getAll(): Promise<Product[]> {
     return getProducts()
   },
+  async getPrices(): Promise<Map<string, number>> {
+    return getProductPrices()
+  },
   async getByIds(ids: string[]): Promise<Product[]> {
     return getProductsByIds(ids)
   },
@@ -232,6 +239,12 @@ export const clientsApi = {
   async getById(id: string): Promise<Client | undefined> {
     return getClientById(id)
   },
+  async getComprasPorCliente(): Promise<Map<string, number>> {
+    return getComprasPorCliente()
+  },
+  async getReciboPdf(txId: string): Promise<string | undefined> {
+    return getReciboPdf(txId)
+  },
   async create(client: Omit<Client, 'id' | 'createdAt' | 'currentBalance'>): Promise<Client> {
     return createClient(client)
   },
@@ -265,24 +278,8 @@ export const salesApi = {
   async getByClient(clientId: string): Promise<Sale[]> {
     return getSalesByClient(clientId)
   },
-  async processSale(data: {
-    clientId?: string
-    clientName?: string
-    clientPhone?: string
-    sellerId?: string
-    sellerName?: string
-    items: CartItem[]
-    paymentType: 'cash' | 'credit' | 'mixed'
-    paymentMethod?: 'efectivo' | 'transferencia'
-    cashAmount?: number
-    creditAmount?: number
-    source?: 'direct' | 'order'
-    createOrder: boolean
-    orderId?: string
-    deliveryMethod: 'pickup' | 'delivery'
-    deliveryAddress: string
-    skipStock?: boolean
-  }): Promise<Sale> {
+  // Mismo tipo que el service (antes era una copia que no incluía discount ni remitoNumber).
+  async processSale(data: Parameters<typeof processSale>[0]): Promise<Sale> {
     return processSale(data)
   },
   async emitInvoice(saleId: string, client?: { name?: string; phone?: string; email?: string }) {
@@ -473,8 +470,13 @@ export const ordersApi = {
 }
 
 export const sellersApi = {
+  /** Con totales de comisiones derivados (pesado: solo Empleados). */
   async getAll(): Promise<Seller[]> {
     return getSellers()
+  },
+  /** Solo los datos del vendedor, sin calcular comisiones: selectores y filtros. */
+  async getList(): Promise<Seller[]> {
+    return getSellersBasic()
   },
   async getById(id: string): Promise<Seller | undefined> {
     return getSellerById(id)

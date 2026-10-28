@@ -2,7 +2,7 @@
 import { supabase } from '@/lib/supabase'
 import type { Client, Product, Sale } from '@/lib/types'
 import { incidenciasVenta } from '@/lib/utils/incidencias'
-import { SALDO_EPSILON } from '@/lib/utils/saldo-imputacion'
+import { getDeudaDesdeMap } from '@/services/clients-service'
 
 export function invalidateDashboardCache(): void {
   // No-op con Supabase
@@ -387,29 +387,12 @@ export const getDeudoresAntiguedad = async (): Promise<DeudorAntiguedad[]> => {
     .gt('current_balance', 0)
 
   const clientes = cli ?? []
-  const ids = clientes.map((c: any) => c.id)
-  const debtSinceMap: Record<string, Date> = {}
-
-  if (ids.length > 0) {
-    const { data: debts } = await supabase
-      .from('transacciones')
-      .select('client_id, date, saldo, amount')
-      .in('client_id', ids)
-      .eq('type', 'debt')
-      .order('date', { ascending: true })
-      .limit(20000)
-    for (const t of debts ?? []) {
-      const saldo = (t as any).saldo != null ? Number((t as any).saldo) : Number((t as any).amount)
-      if (saldo <= SALDO_EPSILON) continue
-      const cid = (t as any).client_id as string
-      if (!debtSinceMap[cid]) debtSinceMap[cid] = new Date((t as any).date)
-    }
-  }
+  const deudaDesde = clientes.length > 0 ? await getDeudaDesdeMap() : new Map()
 
   const ahora = Date.now()
   return clientes
     .map((c: any) => {
-      const ds = debtSinceMap[c.id]
+      const ds = deudaDesde.get(c.id)?.debtSince
       return {
         id: c.id,
         name: c.name,
