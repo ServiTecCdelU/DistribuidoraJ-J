@@ -12,8 +12,16 @@ export function tokenizarBusqueda(texto: string): string[] {
   return texto
     .replace(/[,()*%:"'\\]/g, " ")
     .split(/\s+/)
-    .map((t) => t.trim())
+    .map((t) => completarRemito(t.trim()))
     .filter(Boolean);
+}
+
+// Remito escrito sin ceros o sin guion: "R-2026-2654" / "r2026-2654" → "r-2026-02654"
+// (el número va con 5 dígitos).
+function completarRemito(palabra: string): string {
+  const m = palabra.match(/^(r-?)?(\d{4})-(\d{1,4})$/i);
+  if (!m) return palabra;
+  return `${m[1] ? "r-" : ""}${m[2]}-${m[3].padStart(5, "0")}`;
 }
 
 interface VentaBuscable {

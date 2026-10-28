@@ -5,6 +5,13 @@ describe("tokenizarBusqueda", () => {
   it("separa por espacios y quita caracteres que rompen el filtro", () => {
     expect(tokenizarBusqueda("  zapata, (joaquin) ")).toEqual(["zapata", "joaquin"]);
   });
+
+  it("completa con ceros el número de remito escrito sin ellos", () => {
+    expect(tokenizarBusqueda("r-2026-2654")).toEqual(["r-2026-02654"]);
+    expect(tokenizarBusqueda("R2026-12")).toEqual(["r-2026-00012"]);
+    expect(tokenizarBusqueda("2026-2654")).toEqual(["2026-02654"]);
+    expect(tokenizarBusqueda("r-2026-02654")).toEqual(["r-2026-02654"]);
+  });
 });
 
 describe("normalizarBusqueda", () => {
