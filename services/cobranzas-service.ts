@@ -222,7 +222,7 @@ async function adjuntarImputacion(comps: ComprobantePago[]): Promise<Comprobante
       .order('date', { ascending: true }),
     supabase
       .from('transacciones')
-      .select('id, client_id, amount, cuenta, debt_id, afecta_saldo')
+      .select('id, client_id, amount, cuenta, debt_id, afecta_saldo, recibo_numero')
       .in('client_id', clientIds)
       .eq('type', 'payment')
       .eq('anulado', false)
@@ -268,9 +268,11 @@ async function adjuntarImputacion(comps: ComprobantePago[]): Promise<Comprobante
     imputadoByTx.set(c.transactionId as string, ids?.length ? ids.map(etiqueta) : ['A cuenta (sin deuda pendiente)'])
   }
 
+  const reciboByTx = new Map((pagos ?? []).filter((p: any) => p.recibo_numero).map((p: any) => [p.id, String(p.recibo_numero)]))
+
   return comps.map((c) =>
     c.transactionId && imputadoByTx.has(c.transactionId)
-      ? { ...c, imputadoA: imputadoByTx.get(c.transactionId) }
+      ? { ...c, imputadoA: imputadoByTx.get(c.transactionId), reciboNumero: reciboByTx.get(c.transactionId) }
       : c,
   )
 }

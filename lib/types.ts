@@ -386,4 +386,6 @@ export interface ComprobantePago {
   autorizadoAt?: Date;
   /** Qué paga el cobro, una entrada por deuda: "N° X" (remito), "Deuda anterior ..." o "A cuenta" */
   imputadoA?: string[];
+  /** N° de recibo del pago (transacciones.recibo_numero) */
+  reciboNumero?: string;
 }

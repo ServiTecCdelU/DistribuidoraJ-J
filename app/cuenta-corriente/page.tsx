@@ -3380,6 +3380,7 @@ ${renderTabla('Cuenta Mayorista', mayorista, balanceMay)}
                         <TableHead>Cliente</TableHead>
                         <TableHead>Fecha</TableHead>
                         <TableHead>Cobrado por</TableHead>
+                        <TableHead>Recibo</TableHead>
                         <TableHead className="text-right">Monto</TableHead>
                         <TableHead className="text-center">Comp.</TableHead>
                         <TableHead className="text-right">Acciones</TableHead>
@@ -3394,6 +3395,7 @@ ${renderTabla('Cuenta Mayorista', mayorista, balanceMay)}
                           </TableCell>
                           <TableCell className="text-xs text-muted-foreground whitespace-nowrap">{formatDate(comp.createdAt)}</TableCell>
                           <TableCell className="text-xs text-muted-foreground">{comp.sellerName || comp.reviewedBy || '—'}</TableCell>
+                          <TableCell className="text-xs whitespace-nowrap">{comp.reciboNumero || '—'}</TableCell>
                           <TableCell className="text-right font-semibold text-green-600 whitespace-nowrap">{formatCurrency(comp.amount)}</TableCell>
                           <TableCell className="text-center" onClick={(e) => e.stopPropagation()}>
                             {comp.fileUrl ? (
