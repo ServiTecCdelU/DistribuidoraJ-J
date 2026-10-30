@@ -411,6 +411,12 @@ export function MovimientoDeudaCard({
   // (mismo documento que la devolución del admin), sin tocar saldo ni comisión.
   const rechazoItems = noEntregadosSource.filter((it) => it.motivo === 'no_quiso')
   const tieneRechazo = rechazoItems.length > 0
+  // Monto rechazado: nunca entró en la deuda (el rechazo se graba en $0), se muestra solo como referencia
+  const montoNoCobrado = isRechazo
+    ? noEntregadosVenta
+        .filter((it) => it.motivo === 'no_quiso')
+        .reduce((acc, it) => acc + it.price * (1 - (it.itemDiscount ?? 0) / 100) * it.quantity, 0)
+    : 0
 
   // Cálculos de totales
   const entregados: TableRow[] = (sale?.items ?? []).map((it) => ({
@@ -610,9 +616,19 @@ export function MovimientoDeudaCard({
               {!isPayment ? formatCurrencyDecimals(tx.amount) : '—'}
             </span>
             {/* Haber (pagos) */}
-            <span className="text-sm font-bold tabular-nums text-right text-green-600">
-              {isPayment ? formatCurrencyDecimals(tx.amount) : '—'}
-            </span>
+            {isRechazo && Number(tx.amount) === 0 && montoNoCobrado > 0 ? (
+              <span
+                className="flex flex-col items-end leading-tight tabular-nums text-amber-600"
+                title="Productos rechazados: no se cargaron a la deuda, no hay nada que devolver"
+              >
+                <span className="text-[10px] font-medium uppercase">No cobrado</span>
+                <span className="text-sm font-bold">{formatCurrencyDecimals(montoNoCobrado)}</span>
+              </span>
+            ) : (
+              <span className="text-sm font-bold tabular-nums text-right text-green-600">
+                {isPayment ? formatCurrencyDecimals(tx.amount) : '—'}
+              </span>
+            )}
             {/* Saldo acumulado */}
             <span className={`text-sm font-semibold tabular-nums text-right ${
               saldoAcumulado == null ? 'text-muted-foreground'
