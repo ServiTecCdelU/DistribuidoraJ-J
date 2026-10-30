@@ -73,7 +73,7 @@ export function HistorialVerificacionDialog({ open, onOpenChange, items, onVolve
     () => [...new Set(items.map(cobradoPor).filter((n) => n !== '—'))].sort((a, b) => a.localeCompare(b)),
     [items]
   )
-  // Cliente escrito: todas las palabras, en cualquier orden, sin mayúsculas ni tildes.
+  // Cliente o N° de recibo: todas las palabras, en cualquier orden, sin mayúsculas ni tildes.
   const palabrasCliente = useMemo(() => tokenizarBusqueda(normalizarBusqueda(cliente)), [cliente])
 
   const filtrados = useMemo(() => {
@@ -83,8 +83,8 @@ export function HistorialVerificacionDialog({ open, onOpenChange, items, onVolve
       if (periodo === 'rango' && ((desde && f < desde) || (hasta && f > hasta))) return false
       if (vendedor !== TODOS && cobradoPor(c) !== vendedor) return false
       if (palabrasCliente.length > 0) {
-        const nombre = normalizarBusqueda(c.clientName || '')
-        if (!palabrasCliente.every((p) => nombre.includes(p))) return false
+        const texto = normalizarBusqueda(`${c.clientName || ''} ${c.reciboNumero || ''}`)
+        if (!palabrasCliente.every((p) => texto.includes(p))) return false
       }
       if (estado === 'confirmados' && !c.autorizado) return false
       if (estado === 'anulados' && c.status !== 'rejected') return false
@@ -108,7 +108,7 @@ export function HistorialVerificacionDialog({ open, onOpenChange, items, onVolve
     if (periodo === 'dia') partes.push(`Día ${formatDate(new Date(`${dia}T12:00:00`))}`)
     if (periodo === 'rango') partes.push(`Del ${desde ? formatDate(new Date(`${desde}T12:00:00`)) : '…'} al ${hasta ? formatDate(new Date(`${hasta}T12:00:00`)) : '…'}`)
     if (vendedor !== TODOS) partes.push(`Cobrado por ${vendedor}`)
-    if (palabrasCliente.length > 0) partes.push(`Cliente: ${cliente.trim()}`)
+    if (palabrasCliente.length > 0) partes.push(`Búsqueda: ${cliente.trim()}`)
     if (estado !== 'todos') partes.push(estado === 'confirmados' ? 'Solo confirmados' : 'Solo anulados')
     return partes.length > 0 ? partes.join(' · ') : 'Todos los cobros'
   }
@@ -233,10 +233,10 @@ export function HistorialVerificacionDialog({ open, onOpenChange, items, onVolve
             </Select>
           </div>
           <div className="space-y-1">
-            <Label className="text-xs">Cliente</Label>
+            <Label className="text-xs">Cliente o recibo</Label>
             <Input
               className="h-8 text-xs"
-              placeholder="Buscar cliente..."
+              placeholder="Cliente o N° de recibo..."
               value={cliente}
               onChange={(e) => setCliente(e.target.value)}
             />
