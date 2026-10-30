@@ -124,6 +124,7 @@ function mapComprobante(d: any): ComprobantePago {
     autorizadoBy: d.autorizado_by ?? undefined,
     autorizadoAt: d.autorizado_at ? new Date(d.autorizado_at) : undefined,
     imputadoA: Array.isArray(d.remitos) && d.remitos.length > 0 ? d.remitos : undefined,
+    reciboNumero: d.transacciones?.recibo_numero ? String(d.transacciones.recibo_numero) : undefined,
   }
 }
 
@@ -182,7 +183,7 @@ export const getComprobantes = async (filters?: {
   try {
     let query = supabase
       .from('comprobantes_pago')
-      .select('*, clientes(name), vendedores(name)')
+      .select('*, clientes(name), vendedores(name), transacciones(recibo_numero)')
       .order('created_at', { ascending: false })
 
     if (filters?.status) {
@@ -222,7 +223,7 @@ async function adjuntarImputacion(comps: ComprobantePago[]): Promise<Comprobante
       .order('date', { ascending: true }),
     supabase
       .from('transacciones')
-      .select('id, client_id, amount, cuenta, debt_id, afecta_saldo, recibo_numero')
+      .select('id, client_id, amount, cuenta, debt_id, afecta_saldo')
       .in('client_id', clientIds)
       .eq('type', 'payment')
       .eq('anulado', false)
@@ -268,11 +269,9 @@ async function adjuntarImputacion(comps: ComprobantePago[]): Promise<Comprobante
     imputadoByTx.set(c.transactionId as string, ids?.length ? ids.map(etiqueta) : ['A cuenta (sin deuda pendiente)'])
   }
 
-  const reciboByTx = new Map((pagos ?? []).filter((p: any) => p.recibo_numero).map((p: any) => [p.id, String(p.recibo_numero)]))
-
   return comps.map((c) =>
     c.transactionId && imputadoByTx.has(c.transactionId)
-      ? { ...c, imputadoA: imputadoByTx.get(c.transactionId), reciboNumero: reciboByTx.get(c.transactionId) }
+      ? { ...c, imputadoA: imputadoByTx.get(c.transactionId) }
       : c,
   )
 }

@@ -122,6 +122,7 @@ export function HistorialVerificacionDialog({ open, onOpenChange, items, onVolve
       <td>${esc(c.clientName || 'Cliente')}${c.imputadoA?.length ? `<br><small>${c.imputadoA.some((r) => r.startsWith('N° ')) ? 'Remito<br>' : ''}${c.imputadoA.map(esc).join('<br>')}</small>` : ''}</td>
       <td class="center">${esc(formatDate(c.createdAt))}</td>
       <td>${esc(cobradoPor(c))}</td>
+      <td>${esc(c.reciboNumero || '—')}</td>
       <td class="right">${esc(formatCurrency(c.amount))}</td>
       <td class="center ${c.autorizado ? 'ok' : 'anulado'}">${c.autorizado ? 'Confirmado' : 'Anulado'}</td>
       <td>${esc(revisadoPor(c))}</td>
@@ -144,7 +145,7 @@ export function HistorialVerificacionDialog({ open, onOpenChange, items, onVolve
       </style></head><body>
       <h1>Historial de verificación de cobros · ${esc(fecha)}</h1>
       <p class="sub">${esc(titulo)}</p>
-      <table><thead><tr><th>Cliente</th><th class="center">Fecha</th><th>Cobrado por</th><th class="right">Monto</th><th class="center">Estado</th><th>Revisado por</th></tr></thead>
+      <table><thead><tr><th>Cliente</th><th class="center">Fecha</th><th>Cobrado por</th><th>Recibo</th><th class="right">Monto</th><th class="center">Estado</th><th>Revisado por</th></tr></thead>
       <tbody>${filas}</tbody></table>
       <div class="tot">${lista.length} cobro(s) · Confirmados: <b>${esc(formatCurrency(totalConfirmado))}</b> · Anulados: <b>${esc(formatCurrency(totalAnulado))}</b></div>
       </body></html>`
@@ -298,6 +299,7 @@ export function HistorialVerificacionDialog({ open, onOpenChange, items, onVolve
                   <TableHead>Cliente</TableHead>
                   <TableHead>Fecha</TableHead>
                   <TableHead>Cobrado por</TableHead>
+                  <TableHead>Recibo</TableHead>
                   <TableHead className="text-right">Monto</TableHead>
                   <TableHead>Estado</TableHead>
                   <TableHead>Revisado por</TableHead>
@@ -313,6 +315,7 @@ export function HistorialVerificacionDialog({ open, onOpenChange, items, onVolve
                     </TableCell>
                     <TableCell className="text-xs text-muted-foreground whitespace-nowrap">{formatDate(comp.createdAt)}</TableCell>
                     <TableCell className="text-xs text-muted-foreground">{cobradoPor(comp)}</TableCell>
+                    <TableCell className="text-xs whitespace-nowrap">{comp.reciboNumero || '—'}</TableCell>
                     <TableCell className="text-right font-semibold whitespace-nowrap">{formatCurrency(comp.amount)}</TableCell>
                     <TableCell>
                       {comp.autorizado ? (
